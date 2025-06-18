@@ -1,1 +1,143 @@
-# tasks.yaml configuration
+summarizer:
+  description: "A versatile AI assistant for comprehensive Q&A scenarios, providing intelligent responses across diverse domains with high accuracy and user-focused solutions."
+
+  version: "2.0"
+
+  metadata:
+    service_type: "general_purpose"
+    response_formats: ["text", "markdown", "json", "code"]
+    supported_languages: ["en", "zh", "es", "fr", "de", "ja", "ko"]
+    max_context_length: 4000
+    default_temperature: 0.7
+
+  capabilities:
+    # Core text processing capabilities
+    summarize:
+      description: "Generate concise, accurate summaries preserving key information and context"
+      parameters:
+        - length: ["brief", "medium", "detailed"]
+        - style: ["bullet_points", "paragraph", "executive"]
+        - focus: ["main_points", "key_insights", "action_items"]
+      examples:
+        - "Summarize this research paper in bullet points"
+        - "Provide a brief executive summary of this report"
+
+    explain:
+      description: "Provide clear, structured explanations with appropriate depth and examples"
+      parameters:
+        - complexity: ["beginner", "intermediate", "advanced"]
+        - format: ["simple", "detailed", "with_examples"]
+        - audience: ["general", "technical", "academic"]
+      examples:
+        - "Explain quantum computing for beginners"
+        - "What is machine learning and how does it work?"
+
+    compare:
+      description: "Deliver balanced comparative analysis with clear criteria and evidence"
+      parameters:
+        - criteria: ["features", "cost", "performance", "usability"]
+        - format: ["table", "pros_cons", "narrative"]
+        - depth: ["overview", "detailed", "comprehensive"]
+      examples:
+        - "Compare Python vs JavaScript for web development"
+        - "What are the pros and cons of remote work?"
+
+    recommend:
+      description: "Provide personalized recommendations based on user context and preferences"
+      parameters:
+        - basis: ["features", "budget", "use_case", "preferences"]
+        - confidence: ["high", "medium", "low"]
+        - alternatives: ["include", "exclude"]
+      examples:
+        - "Recommend a laptop for graphic design under $2000"
+        - "What programming language should I learn first?"
+
+    translate:
+      description: "Accurate translation with cultural context and nuance preservation"
+      parameters:
+        - target_language: "any supported language"
+        - style: ["formal", "casual", "technical", "literary"]
+        - preserve_formatting: ["yes", "no"]
+      examples:
+        - "Translate this business email to Spanish"
+        - "Convert this technical document to simplified Chinese"
+
+    code:
+      description: "Generate well-documented, functional code with best practices"
+      parameters:
+        - language: ["python", "javascript", "java", "cpp", "go", "rust"]
+        - style: ["clean", "commented", "production_ready"]
+        - complexity: ["simple", "intermediate", "advanced"]
+      examples:
+        - "Write a Python function to sort a list of dictionaries"
+        - "Create a React component for a user profile card"
+
+    recipe:
+      description: "Provide detailed cooking instructions with ingredients and techniques"
+      parameters:
+        - cuisine: ["any", "italian", "asian", "mexican", "indian"]
+        - difficulty: ["easy", "medium", "hard"]
+        - dietary: ["none", "vegetarian", "vegan", "gluten_free"]
+      examples:
+        - "Recipe for vegetarian lasagna"
+        - "How to make authentic ramen broth?"
+
+    tutorial:
+      description: "Create comprehensive step-by-step guides with clear progression"
+      parameters:
+        - format: ["numbered_steps", "sections", "interactive"]
+        - depth: ["quick_start", "comprehensive", "expert"]
+        - include_troubleshooting: ["yes", "no"]
+      examples:
+        - "Tutorial: Setting up a React development environment"
+        - "How to create a personal budget spreadsheet"
+
+    review:
+      description: "Write balanced, evidence-based reviews with clear evaluation criteria"
+      parameters:
+        - type: ["product", "service", "book", "movie", "software"]
+        - perspective: ["user", "expert", "comparative"]
+        - rating_scale: ["stars", "score", "qualitative"]
+      examples:
+        - "Review the latest iPhone model"
+        - "Evaluate this project management software"
+
+    list:
+      description: "Generate organized, categorized lists with relevant details"
+      parameters:
+        - organization: ["alphabetical", "priority", "category", "chronological"]
+        - detail_level: ["brief", "descriptive", "comprehensive"]
+        - include_links: ["yes", "no"]
+      examples:
+        - "List the top 10 productivity apps for students"
+        - "Essential tools for web developers in 2024"
+
+    general_query:
+      description: "Handle diverse queries with intelligent routing and comprehensive responses"
+      parameters:
+        - response_style: ["conversational", "formal", "technical"]
+        - follow_up: ["suggest", "none"]
+        - clarification: ["auto", "ask_when_needed"]
+      examples:
+        - "What's the current state of renewable energy?"
+        - "How does blockchain technology work?"
+
+  # Quality assurance parameters
+  quality_metrics:
+    accuracy_threshold: 0.95
+    relevance_score: 0.90
+    completeness_check: true
+    fact_verification: "when_possible"
+
+  # Error handling and fallbacks
+  error_handling:
+    unknown_capability: "route_to_general_query"
+    insufficient_context: "ask_clarification"
+    technical_failure: "provide_graceful_fallback"
+
+  # Performance optimization
+  optimization:
+    cache_common_queries: true
+    parallel_processing: "when_applicable"
+    response_streaming: true
+    context_compression: "smart"

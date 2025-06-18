@@ -1,0 +1,101 @@
+[tool.black]
+line-length = 100
+target-version = ['py38']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.5"                               # Testing framework
+pytest-asyncio = "^1.0.0"                       # Async testing support
+black = "^25.1.0"                               # Code formatter
+flake8 = "^7.2.0"                               # Code linter
+mypy = "^1.15.0"                                # Static type checker
+
+[project]
+name = "python-middleware"
+version = "1.0.0"
+description = "Python Middleware for AI Service System"
+authors = [
+    {name = "iretbl@gmail.com"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    # Core dependencies - Web framework and API
+    "fastapi (>=0.115.12,<0.116.0)",                # Web framework for building APIs
+    "httpx (>=0.28.1,<0.29.0)",                     # HTTP client for Python
+    "uvicorn[standard] (>=0.34.2,<0.35.0)",         # ASGI server for FastAPI and websockets
+    "python-dotenv (>=1.1.0,<2.0.0)",               # Environment variable management
+    "pydantic (>=2.11.5,<3.0.0)",                   # Data validation and settings management
+    "pydantic-settings (>=2.9.1,<3.0.0)",           # Settings management for Pydantic
+    "cachetools (>=5.0.0,<6.0.0)",                  # Caching utilities
+    # Messaging and task queue
+    "celery (>=5.5.2,<6.0.0)",                      # Distributed task queue
+    "redis (>=6.2.0,<7.0.0)",                       # In-memory data structure store, used as broker/backend
+    "python-socketio (>=5.13.0,<6.0.0)",            # WebSocket implementation
+    "python-engineio (>=4.12.1,<5.0.0)",            # Engine.IO implementation
+    "tenacity (>=9.1.2,<10.0.0)",                   # Retry library with exponential backoff
+    # LLM and AI services
+    "openai (>=1.68.2,<1.76.0)",                    # OpenAI API client
+    "vertexai (>=1.71.1,<2.0.0)",                   # Vertex AI client for Google Cloud
+    "crewai (>=0.121.1,<0.122.0)",                  # CrewAI for multi-agent AI systems
+    # NLP and text processing
+    "spacy (>=3.8.7,<4.0.0)",                       # Natural language processing
+    "rake-nltk (>=1.0.6,<2.0.0)",                   # Rapid Automatic Keyword Extraction
+    # Data processing and analysis
+    "numpy (>=2.2.6,<3.0.0)",                       # Numerical computing
+    "pandas (>=2.2.3,<3.0.0)",                      # Data analysis and manipulation
+    "scipy (>=1.15.3,<2.0.0)",                      # Scientific computing
+    # Document processing
+    "pyyaml (>=6.0.2,<7.0.0)",                      # YAML parser and emitter
+    "python-docx (>=1.1.2,<2.0.0)",                 # Microsoft Word document processing
+    "python-pptx (>=1.0.2,<2.0.0)",                 # Microsoft PowerPoint document processing
+    "markdown (>=3.8,<4.0)",                        # Markdown parser
+    "bleach (>=6.2.0,<7.0.0)",                      # HTML sanitizing library
+    # File operations
+    "typing-extensions (>=4.13.2,<5.0.0)",          # Extended typing capabilities
+    # Visualization and reporting
+    "matplotlib (>=3.10.3,<4.0.0)",                 # Plotting library
+    "seaborn (>=0.13.2,<0.14.0)",                   # Statistical data visualization
+    "pyreadstat (>=1.2.9,<2.0.0)",                  # Read/write SAS, SPSS, and Stata files
+    "statsmodels (>=0.14.4,<0.15.0)",               # Statistical models
+    "jinja2 (>=3.1.6,<4.0.0)",                      # Template engine
+    "weasyprint (>=65.1,<66.0)",                    # HTML to PDF converter
+    # Web scraping and HTTP
+    "beautifulsoup4 (>=4.13.4,<5.0.0)",             # HTML/XML parser
+    "lxml (>=5.4.0,<6.0.0)",                        # XML and HTML processing
+    "playwright (>=1.52.0,<2.0.0)",                 # Browser automation library
+    "pdfplumber (>=0.11.6,<0.12.0)",                # PDF text extraction and table parsing
+    "pytesseract (>=0.3.13,<0.4.0)",                # OCR (Optical Character Recognition) engine wrapper
+    "pillow (>=11.2.1,<12.0.0)",                    # Image processing library (PIL fork)
+    "tika (>=3.1.0,<4.0.0)",                        # Content analysis toolkit for document parsing
+    # Database drivers
+    "asyncpg (>=0.30.0,<1.0.0)",                    # PostgreSQL async driver
+    # Monitoring and metrics
+    "prometheus-client (>=0.21.1,<1.0.0)",          # Prometheus metrics client
+    # Distributed tracing
+    "jaeger-client (>=4.8.0,<5.0.0)",               # Jaeger distributed tracing client
+    "opentracing (>=2.4.0,<3.0.0)"                  # OpenTracing API for distributed tracing
+]
+
+
+[tool.poetry]
+package-mode = false
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

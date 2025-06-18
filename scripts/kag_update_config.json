@@ -1,0 +1,17 @@
+{
+  "rules": [
+    {
+      "pattern": "\\bfrom kag\\.",
+      "replacement": "from app.services.domain.kag_core.",
+      "description": "KAG核心模块导入路径重命名"
+    }
+  ],
+  "exclude_patterns": [
+    "knext\\.",
+    "__pycache__",
+    "\\.pyc$"
+  ],
+  "description": "KAG项目导入路径更新配置",
+  "version": "1.0",
+  "last_updated": "2025-06-03"
+}

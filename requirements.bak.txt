@@ -1,0 +1,21 @@
+# =========================================================
+# LLM and AI services
+# =========================================================
+vertexai
+
+# =========================================================
+# Vector database
+# =========================================================
+qdrant-client             # Vector database client
+scikit-learn              # Machine learning library for vector operations
+
+# =========================================================
+# Document processing
+# =========================================================
+textract                  # Extract text from various document formats
+
+# =========================================================
+# Image processing
+# =========================================================
+pillow                    # Python Imaging Library
+opencv-python             # Computer vision library
