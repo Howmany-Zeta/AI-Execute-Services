@@ -1,11 +1,12 @@
+import json
 import asyncio
 import logging
 from typing import Dict, Any, Optional, List, AsyncGenerator
-import httpx
+from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from .base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
-from app.core.config import get_settings
+from app.config.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ class XAIClient(BaseLLMClient):
     def __init__(self):
         super().__init__("xAI")
         self.settings = get_settings()
-        self._http_client: Optional[httpx.AsyncClient] = None
+        self._openai_client: Optional[AsyncOpenAI] = None
 
         # Enhanced model mapping for all Grok models
         self.model_map = {
@@ -51,14 +52,27 @@ class XAIClient(BaseLLMClient):
             "Grok 3 Mini Reasoning Normal": "grok-3-mini-reasoning",
             "grok-3-mini-reasoning": "grok-3-mini-reasoning",
             "Grok 3 Mini Reasoning Fast": "grok-3-mini-reasoning-fast",
-            "grok-3-mini-reasoning-fast": "grok-3-mini-reasoning-fast"
+            "grok-3-mini-reasoning-fast": "grok-3-mini-reasoning-fast",
+
+            # Grok 4 models
+            "Grok 4 Normal": "grok-4",
+            "grok-4": "grok-4",
+            "Grok 4 Fast": "grok-4-fast",
+            "grok-4-fast": "grok-4-fast",
+            "Grok 4 0709": "grok-4-0709",
+            "grok-4-0709": "grok-4-0709",
         }
 
-    def _get_http_client(self) -> httpx.AsyncClient:
-        """Lazy initialization of HTTP client"""
-        if not self._http_client:
-            self._http_client = httpx.AsyncClient(timeout=60.0)
-        return self._http_client
+    def _get_openai_client(self) -> AsyncOpenAI:
+        """Lazy initialization of OpenAI client for XAI"""
+        if not self._openai_client:
+            api_key = self._get_api_key()
+            self._openai_client = AsyncOpenAI(
+                api_key=api_key,
+                base_url="https://api.x.ai/v1",
+                timeout=360.0  # Override default timeout with longer timeout for reasoning models
+            )
+        return self._openai_client
 
     def _get_api_key(self) -> str:
         """Get API key with backward compatibility"""
@@ -71,7 +85,7 @@ class XAIClient(BaseLLMClient):
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type((httpx.RequestError, RateLimitError))
+        retry=retry_if_exception_type((Exception, RateLimitError))
     )
     async def generate_text(
         self,
@@ -81,42 +95,31 @@ class XAIClient(BaseLLMClient):
         max_tokens: Optional[int] = None,
         **kwargs
     ) -> LLMResponse:
-        """Generate text using xAI API (supports all Grok models)"""
+        """Generate text using xAI API via OpenAI library (supports all Grok models)"""
+        # Check API key availability
         api_key = self._get_api_key()
-        http_client = self._get_http_client()
+        if not api_key:
+            raise ProviderNotAvailableError("xAI API key is not configured.")
 
-        selected_model = model or "grok-2"
+        client = self._get_openai_client()
+
+        selected_model = model or "grok-4"  # Default to grok-4 as in the example
         api_model = self.model_map.get(selected_model, selected_model)
 
-        # Convert to xAI API format (OpenAI-compatible)
-        xai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-
-        payload = {
-            "messages": xai_messages,
-            "model": api_model,
-            "temperature": temperature,
-            "stream": False
-        }
-
-        if max_tokens:
-            payload["max_tokens"] = max_tokens
+        # Convert to OpenAI format
+        openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
 
         try:
-            response = await http_client.post(
-                "https://api.x.ai/v1/chat/completions",
-                headers=headers,
-                json=payload
+            completion = await client.chat.completions.create(
+                model=api_model,
+                messages=openai_messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                **kwargs
             )
-            response.raise_for_status()
 
-            data = response.json()
-            content = data["choices"][0]["message"]["content"]
-            tokens_used = data.get("usage", {}).get("total_tokens")
+            content = completion.choices[0].message.content
+            tokens_used = completion.usage.total_tokens if completion.usage else None
 
             return LLMResponse(
                 content=content,
@@ -126,9 +129,10 @@ class XAIClient(BaseLLMClient):
                 cost_estimate=0.0  # xAI pricing not available yet
             )
 
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 429:
+        except Exception as e:
+            if "rate limit" in str(e).lower() or "429" in str(e):
                 raise RateLimitError(f"xAI rate limit exceeded: {str(e)}")
+            logger.error(f"xAI API error: {str(e)}")
             raise
 
     async def stream_text(
@@ -139,62 +143,42 @@ class XAIClient(BaseLLMClient):
         max_tokens: Optional[int] = None,
         **kwargs
     ) -> AsyncGenerator[str, None]:
-        """Stream text using xAI API (supports all Grok models)"""
+        """Stream text using xAI API via OpenAI library (supports all Grok models)"""
+        # Check API key availability
         api_key = self._get_api_key()
-        http_client = self._get_http_client()
+        if not api_key:
+            raise ProviderNotAvailableError("xAI API key is not configured.")
 
-        selected_model = model or "grok-2"
+        client = self._get_openai_client()
+
+        selected_model = model or "grok-4"  # Default to grok-4
         api_model = self.model_map.get(selected_model, selected_model)
 
-        # Convert to xAI API format (OpenAI-compatible)
-        xai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-
-        payload = {
-            "messages": xai_messages,
-            "model": api_model,
-            "temperature": temperature,
-            "stream": True
-        }
-
-        if max_tokens:
-            payload["max_tokens"] = max_tokens
+        # Convert to OpenAI format
+        openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
 
         try:
-            async with http_client.stream(
-                "POST",
-                "https://api.x.ai/v1/chat/completions",
-                headers=headers,
-                json=payload
-            ) as response:
-                response.raise_for_status()
+            stream = await client.chat.completions.create(
+                model=api_model,
+                messages=openai_messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=True,
+                **kwargs
+            )
 
-                async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        data_str = line[6:]  # Remove "data: " prefix
-                        if data_str.strip() == "[DONE]":
-                            break
-                        try:
-                            data = httpx._content.json_loads(data_str)
-                            if "choices" in data and len(data["choices"]) > 0:
-                                delta = data["choices"][0].get("delta", {})
-                                if "content" in delta and delta["content"]:
-                                    yield delta["content"]
-                        except Exception as e:
-                            self.logger.warning(f"Error parsing streaming response: {e}")
-                            continue
+            async for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    yield chunk.choices[0].delta.content
 
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 429:
+        except Exception as e:
+            if "rate limit" in str(e).lower() or "429" in str(e):
                 raise RateLimitError(f"xAI rate limit exceeded: {str(e)}")
+            logger.error(f"xAI API streaming error: {str(e)}")
             raise
 
     async def close(self):
         """Clean up resources"""
-        if self._http_client:
-            await self._http_client.aclose()
-            self._http_client = None
+        if self._openai_client:
+            await self._openai_client.close()
+            self._openai_client = None

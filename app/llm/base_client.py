@@ -17,8 +17,21 @@ class LLMResponse:
     provider: str
     model: str
     tokens_used: Optional[int] = None
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
     cost_estimate: Optional[float] = None
     response_time: Optional[float] = None
+
+    def __post_init__(self):
+        """确保token数据的一致性"""
+        # 如果有详细的token信息但没有总数，计算总数
+        if self.prompt_tokens is not None and self.completion_tokens is not None and self.tokens_used is None:
+            self.tokens_used = self.prompt_tokens + self.completion_tokens
+
+        # 如果只有总数但没有详细信息，尝试估算（这种情况下无法准确分配）
+        elif self.tokens_used is not None and self.prompt_tokens is None and self.completion_tokens is None:
+            # 这种情况下我们无法准确分配，保持原样
+            pass
 
 class LLMClientError(Exception):
     """Base exception for LLM client errors"""

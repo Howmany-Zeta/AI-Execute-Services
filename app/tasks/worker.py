@@ -1,7 +1,7 @@
 from celery import Celery
-from app.core.config import get_settings
-from app.core.task_context import build_context
-from app.core.registry import get_ai_service
+from app.config.config import get_settings
+from app.domain.task.task_context import build_context
+from app.config.registry import get_ai_service
 from app.ws.socket_server import push_progress
 import logging
 import json
@@ -30,12 +30,7 @@ celery_app.conf.update(
     }
 )
 
-class TaskStatus(Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    TIMED_OUT = "timed_out"
+from app.domain.execution.model import TaskStatus
 
 @celery_app.task(bind=True, name="app.tasks.worker.execute_task")
 def execute_task(self, task_name: str, user_id: str, task_id: str, step: int,
@@ -71,11 +66,11 @@ def _execute_service_task(self, task_name: str, user_id: str, task_id: str, step
             "task": task_name,
             "message": f"Executing task: {task_name}"
         })
-        
+
         # 2. Get the service instance
         service_cls = get_ai_service(mode, service)
         service_instance = service_cls()
-        
+
         # 3. Execute the task
         if hasattr(service_instance, task_name) and callable(getattr(service_instance, task_name)):
             method = getattr(service_instance, task_name)
@@ -83,7 +78,7 @@ def _execute_service_task(self, task_name: str, user_id: str, task_id: str, step
         else:
             # Fallback to a generic execution method if the specific task method doesn't exist
             result = service_instance.execute_task(task_name, input_data, context)
-        
+
         # 4. Push completed status
         push_progress(user_id, {
             "status": TaskStatus.COMPLETED.value,
@@ -92,7 +87,7 @@ def _execute_service_task(self, task_name: str, user_id: str, task_id: str, step
             "result": result,
             "message": f"Completed task: {task_name}"
         })
-        
+
         return {
             "status": TaskStatus.COMPLETED.value,
             "task": task_name,
@@ -108,7 +103,7 @@ def _execute_service_task(self, task_name: str, user_id: str, task_id: str, step
             "error": str(e),
             "message": f"Failed to execute task: {task_name}"
         })
-        
+
         return {
             "status": TaskStatus.FAILED.value,
             "task": task_name,

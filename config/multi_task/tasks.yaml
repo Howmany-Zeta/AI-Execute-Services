@@ -1,0 +1,1618 @@
+# System tasks orchestrate the overall workflow of the MultiTaskSummarizer
+system_tasks:
+  parse_intent:
+    description: "Analyze user input to provide comprehensive intent parsing with detailed step breakdown, category mapping, and primary intent identification."
+    agent: "intent_parser"
+    expected_output: "A JSON object containing analysis_summary with query_description, reasoning, sub_steps_identified (each with step_name, description, categories, purpose), and primary_intent."
+    task_type: "fast"
+    tools: {}  # Intent parsing relies on NLP, not tools
+
+  breakdown_subTask:
+    description: "Break down the identified intent categories into executable sub-tasks, mapping each category to specific sub-tasks defined in the system (for example, collect -> collect_scrape, collect_search)."
+    agent: "task_decomposer"
+    expected_output: "A JSON mapping of intent categories to sub-tasks, for example, {'collect': {'collect_scrape', 'collect_search'}, 'analyze': {'analyze_dataoutcome'}}"
+    task_type: "fast"
+    tools: {}  # Decomposition relies on logic, not tools
+
+  plan_sequence:
+    description: "Create a dynamic task sequence using a DSL with conditional branching and parallel blocks, based on the broken-down sub-tasks, optimizing for efficiency and domain relevance. Only include sub-tasks that passed examination."
+    agent: "planner"
+    expected_output: "A JSON list of DSL steps defining the task sequence, for example, {{'if': 'subtasks.includes(\"collect_scrape\")', 'then': {{'task': 'collect_scrape', 'tools': {'scraper.get_aiohttp'}}}}, {'task': 'generate_report', 'tools': {'report.generate_pdf'}}}"
+    task_type: "fast"
+    tools: {}  # Planning does not use tools directly
+
+  examination:
+    description: "Examine results from collect and process sub-tasks, assigning credibility and confidence scores. Results below the threshold (for example, credibility < 0.8 or confidence < 0.7) are rejected with modification suggestions."
+    agent: "supervisor"
+    expected_output: "A JSON object with examination results, for example, {'task': 'collect_scrape', 'credibility': 0.9, 'confidence': 0.85, 'passed': true} or {'task': 'process_dataCleaning', 'credibility': 0.6, 'confidence': 0.5, 'passed': false, 'suggestions': 'Increase data source reliability'}"
+    task_type: "fast"
+    tools:
+      research:
+        operations:
+          - mill_agreement  # To identify common factors in data quality
+          - mill_difference  # To detect discrepancies
+          - summarize  # To summarize examination findings
+    conditions:
+      - if: "task.category in {'collect', 'process'}"  # Only examine collect and process tasks
+        then: "execute"
+
+  acceptance:
+    description: "Review results from analyze and generate sub-tasks, ensuring they meet user requests, are accurate, and do not exhibit AI-generated synthetic data behavior. Provide modification suggestions for failed results."
+    agent: "director"
+    expected_output: "A JSON object with acceptance results, for example, {'task': 'analyze_dataoutcome', 'passed': true, 'criteria': {'meets_request': true, 'accurate': true, 'no_synthetic_data': true}} or {'task': 'generate_report', 'passed': false, 'criteria': {'meets_request': false, 'accurate': true, 'no_synthetic_data': true}, 'suggestions': 'Include more detailed user-specific data'}"
+    task_type: "fast"
+    tools:
+      research:
+        operations:
+          - mill_agreement  # To check for consistent patterns
+          - mill_difference  # To detect anomalies
+          - summarize  # To summarize acceptance findings
+    conditions:
+      - if: "task.category in {'analyze', 'generate'}"  # Only review analyze and generate tasks
+        then: "execute"
+
+# Special tasks
+  construct_blueprint:
+    description: "Analyze SPECIFIC problems using mining context to construct targeted strategic blueprints with context-aware framework selection and dynamic output formatting."
+    agent: "meta_architect"
+    expected_output: "A targeted strategic blueprint in JSON format with context-driven analysis, framework selections, and execution plan tailored to the specific problem and intent categories."
+    task_type: "fast"
+    tools: {}  # Meta-architect uses mining context and targeted analysis
+    parameters:
+      context_utilization_mode: "enhanced"  # Enhanced mining context utilization
+      framework_selection_mode: "intent_driven"  # Select frameworks based on intent categories
+      output_format_mode: "dynamic"  # Dynamic output format based on intent categories
+      validation_mode: "context_aware"  # Validate against original problem and mining context
+    conditions:
+      - if: "mining_context.intent_categories contains 'analyze'"
+        then: "use_analysis_template"
+      - if: "mining_context.intent_categories contains 'generate'"
+        then: "use_generation_template"
+      - if: "mining_context.intent_categories contains 'process'"
+        then: "use_process_template"
+      - if: "mining_context.complexity_level in {'high', 'medium'}"
+        then: "enable_detailed_analysis"
+
+  analyze_specific_problem:
+    description: "Analyze a specific problem using mining context with targeted framework selection for analysis-focused requests."
+    agent: "meta_architect"
+    expected_output: "A detailed analysis blueprint with context-specific frameworks, analysis steps, and actionable insights for the exact problem provided."
+    task_type: "fast"
+    tools: {}
+    parameters:
+      analysis_focus: "problem_specific"  # Focus on the specific problem provided
+      framework_selection: "intent_category_driven"  # Select frameworks based on intent categories
+      context_validation: "mandatory"  # Mandatory validation against mining context
+      output_structure: "analysis_focused"  # Analysis-focused output structure
+    conditions:
+      - if: "intent_categories contains 'analyze'"
+        then: "execute"
+      - if: "entities_keywords.entities is not empty"
+        then: "use_entity_context"
+
+  generate_content_strategy:
+    description: "Generate content, strategies, or solutions using mining context with targeted framework selection for generation-focused requests."
+    agent: "meta_architect"
+    expected_output: "A generation blueprint with context-specific approaches, content structure, and implementation plan for the exact generation task provided."
+    task_type: "fast"
+    tools: {}
+    parameters:
+      generation_focus: "problem_specific"  # Focus on the specific generation task
+      framework_selection: "generation_optimized"  # Select frameworks optimized for generation
+      context_validation: "mandatory"  # Mandatory validation against mining context
+      output_structure: "generation_focused"  # Generation-focused output structure
+    conditions:
+      - if: "intent_categories contains 'generate'"
+        then: "execute"
+      - if: "complexity_level in {'medium', 'high'}"
+        then: "enable_detailed_planning"
+
+  process_workflow_design:
+    description: "Design processes or workflows using mining context with targeted framework selection for process-focused requests."
+    agent: "meta_architect"
+    expected_output: "A process blueprint with context-specific methodologies, process steps, and implementation plan for the exact process task provided."
+    task_type: "fast"
+    tools: {}
+    parameters:
+      process_focus: "problem_specific"  # Focus on the specific process task
+      framework_selection: "process_optimized"  # Select frameworks optimized for process design
+      context_validation: "mandatory"  # Mandatory validation against mining context
+      output_structure: "process_focused"  # Process-focused output structure
+    conditions:
+      - if: "intent_categories contains 'process'"
+        then: "execute"
+      - if: "entities_keywords.keywords contains process-related terms"
+        then: "use_process_context"
+
+  validate_context_usage:
+    description: "Validate that the meta_architect output properly utilizes the mining context and addresses the specific problem provided."
+    agent: "meta_architect"
+    expected_output: "A validation report confirming context usage, problem specificity, and framework appropriateness."
+    task_type: "fast"
+    tools: {}
+    parameters:
+      validation_criteria:
+        problem_specificity: true  # Validates output addresses the exact problem
+        context_utilization: true  # Validates mining context is properly used
+        framework_appropriateness: true  # Validates frameworks match intent categories
+        output_relevance: true  # Validates output is relevant to the problem
+    conditions:
+      - if: "output.generated == true"  # Validate after output generation
+        then: "execute"
+
+# Sub-tasks support the intent categories and are executed as part of the DSL sequence
+sub_tasks:
+  # Intent Category: Answer
+  answer_discuss:
+    description: "Engage in an in-depth discussion to clarify unclear user intentions (for example, too broad, high cost, long time span, or implicit), confirming an explicit intention that meets the SMART principle."
+    agent: "researcher_discussionfacilitator"
+    expected_output: "A clarified user intention in JSON format, meeting SMART criteria."
+    task_type: "fast"
+    tools:
+      classifier:
+        operations:
+          - summarize:
+              conditions:
+                - if: "input.length > 100"  # Summarize if input is lengthy
+                  then: "execute"
+          - keyword_extract:
+              conditions:
+                - if: "input.contains('keywords')"  # Extract keywords if explicitly requested
+                  then: "execute"
+
+  answer_conclusion:
+    description: "Provide a conclusive answer based on prior discussions or analysis, summarizing findings without further sub-tasks."
+    agent: "writer_conclusionspecialist"
+    expected_output: "A concise conclusion in text format, summarizing the answer."
+    task_type: "fast"
+    tools:
+      classifier:
+        operations:
+          - summarize:
+              conditions:
+                - if: "input.length > 50"  # Summarize if input is lengthy
+                  then: "execute"
+
+  answer_questions:
+    description: "Answer user questions directly without additional sub-tasks, focusing on clarity and accuracy."
+    agent: "researcher_knowledgeprovider"
+    expected_output: "Direct answer to the user's question in text format."
+    task_type: "fast"
+    tools:
+      research:
+        operations:
+          - summarize:
+              conditions:
+                - if: "question.type == 'summary'"  # Summarize if question asks for a summary
+                  then: "execute"
+          - deduction:
+              conditions:
+                - if: "question.requires_logic == true"  # Use deduction for logical reasoning
+                  then: "execute"
+          - induction:
+              conditions:
+                - if: "question.needs_generalization == true"  # Use induction for generalization
+                  then: "execute"
+
+  answer_brainstorming:
+    description: "Generate ideas or solutions through brainstorming, providing creative insights for the user's query."
+    agent: "researcher_ideagenerator"
+    expected_output: "A JSON list of brainstormed ideas or solutions."
+    task_type: "fast"
+    tools:
+      research:
+        operations:
+          - deduction:
+              conditions:
+                - if: "query.needs_validation == true"  # Validate ideas if required
+                  then: "execute"
+          - induction:
+              conditions:
+                - if: "query.needs_ideas == true"  # Generate ideas if explicitly requested
+                  then: "execute"
+      classifier:
+        operations:
+          - keyword_extract:
+              conditions:
+                - if: "query.contains('keywords')"  # Extract keywords if requested
+                  then: "execute"
+
+  # Intent Category: Collect
+  collect_scrape:
+    description: "Scrape data from web sources relevant to the user's query, focusing on domain-specific content (for example, financial websites for economics, medical journals for healthcare)."
+    agent: "fieldwork_webscraper"
+    expected_output: "Scraped data in JSON format, including metadata (for example, URLs, timestamps)."
+    task_type: "fast"
+    tools:
+      scraper:
+        operations:
+          - get_requests:
+              conditions:
+                - if: "domain == 'simple'"  # Use synchronous requests for simple sites
+                  then: "execute"
+          - get_aiohttp:
+              conditions:
+                - if: "domain == 'async'"  # Use async requests for performance
+                  then: "execute"
+          - get_urllib:
+              conditions:
+                - if: "domain == 'legacy'"  # Use urllib for legacy compatibility
+                  then: "execute"
+          - render:
+              conditions:
+                - if: "site.is_dynamic == true"  # Render if JavaScript is required
+                  then: "execute"
+          - parse_html:
+              conditions:
+                - if: "data.type == 'structured'"  # Parse HTML for structured data
+                  then: "execute"
+
+  collect_search:
+    description: "Search for data using external APIs (for example, Google, PubMed) to gather relevant information for the user's query."
+    agent: "fieldwork_apisearcher"
+    expected_output: "Search results in JSON format, including source metadata."
+    task_type: "fast"
+    tools:
+      search_api:
+        operations: []  # Placeholder for external API searches
+
+  collect_internalResources:
+    description: "Collect data from internal resources (for example, internal documents, databases) relevant to the user's query."
+    agent: "fieldwork_internaldatacollector"
+    expected_output: "Internal resource data in JSON format, with source metadata."
+    task_type: "fast"
+    tools:
+      office:
+        operations:
+          - read_docx:
+              conditions:
+                - if: "resource.format == 'docx'"  # Read DOCX files
+                  then: "execute"
+          - read_pptx:
+              conditions:
+                - if: "resource.format == 'pptx'"  # Read PPTX files
+                  then: "execute"
+          - read_xlsx:
+              conditions:
+                - if: "resource.format == 'xlsx'"  # Read XLSX files
+                  then: "execute"
+          - extract_text:
+              conditions:
+                - if: "resource.format == 'other'"  # Extract text from other formats
+                  then: "execute"
+
+  collect_externalResources:
+    description: "Collect data from external resources (for example, public datasets, online repositories) relevant to the user's query."
+    agent: "fieldwork_externaldatacollector"
+    expected_output: "External resource data in JSON format, with source metadata."
+    task_type: "fast"
+    tools:
+      scraper:
+        operations:
+          - get_aiohttp:
+              conditions:
+                - if: "resource.access == 'online'"  # Use async requests for online resources
+                  then: "execute"
+      office:
+        operations:
+          - read_xlsx:
+              conditions:
+                - if: "resource.format == 'xlsx'"  # Read XLSX datasets
+                  then: "execute"
+          - extract_text:
+              conditions:
+                - if: "resource.format == 'other'"  # Extract text from other formats
+                  then: "execute"
+
+  # Intent Category: Process
+  process_dataCleaning:
+    description: "Clean the collected data by removing inconsistencies, handling missing values, and applying desensitization treatment to protect sensitive information (for example, PII in healthcare data)."
+    agent: "fieldwork_dataoperator"
+    expected_output: "Cleaned dataset in JSON format, with metadata on cleaning operations applied."
+    task_type: "heavy"
+    tools:
+      pandas:
+        operations:
+          - dropna:
+              conditions:
+                - if: "data.missing_values > 0"  # Remove missing values if present
+                  then: "execute"
+          - fill_na:
+              conditions:
+                - if: "data.missing_values > 0 && imputation.strategy == 'fill'"  # Impute missing values if strategy is fill
+                  then: "execute"
+          - strip_strings:
+              conditions:
+                - if: "data.contains_strings == true"  # Clean strings if present
+                  then: "execute"
+          - replace_values:
+              conditions:
+                - if: "data.sensitive_info == true"  # Desensitize if sensitive data is present
+                  then: "execute"
+
+  process_dataNormalization:
+    description: "Normalize the data to ensure consistency in scales, formats, or units, preparing it for analysis."
+    agent: "fieldwork_dataengineer"
+    expected_output: "Normalized dataset in JSON format, with metadata on normalization methods."
+    task_type: "heavy"
+    tools:
+      stats:
+        operations:
+          - preprocess:
+              conditions:
+                - if: "data.needs_scaling == true"  # Scale data if required
+                  then: "execute"
+      pandas:
+        operations:
+          - to_numeric:
+              conditions:
+                - if: "data.numeric_conversion_needed == true"  # Convert to numeric if needed
+                  then: "execute"
+          - astype:
+              conditions:
+                - if: "data.type_conversion_needed == true"  # Convert data types if needed
+                  then: "execute"
+
+  process_dataStatistics:
+    description: "Compute basic statistical metrics on the data to understand its distribution and characteristics."
+    agent: "fieldwork_statistician"
+    expected_output: "Statistical summary in JSON format, including metrics like mean, median, and standard deviation."
+    task_type: "heavy"
+    tools:
+      pandas:
+        operations:
+          - describe:
+              conditions:
+                - if: "data.needs_summary == true"  # Generate summary if required
+                  then: "execute"
+          - mean:
+              conditions:
+                - if: "metrics.needed.includes('mean')"  # Compute mean if requested
+                  then: "execute"
+          - min:
+              conditions:
+                - if: "metrics.needed.includes('min')"  # Compute min if requested
+                  then: "execute"
+          - max:
+              conditions:
+                - if: "metrics.needed.includes('max')"  # Compute max if requested
+                  then: "execute"
+      stats:
+        operations:
+          - describe:
+              conditions:
+                - if: "data.needs_detailed_stats == true"  # Generate detailed stats if required
+                  then: "execute"
+
+  process_dataModeling:
+    description: "Apply data modeling techniques (for example, regression, time series) to prepare the data for predictive analysis."
+    agent: "fieldwork_datascientist"
+    expected_output: "Modeled data or model parameters in JSON format, with metadata on modeling techniques."
+    task_type: "heavy"
+    tools:
+      stats:
+        operations:
+          - ttest:
+              conditions:
+                - if: "model.type == 'ttest'"  # Use t-test if specified
+                  then: "execute"
+          - ttest_ind:
+              conditions:
+                - if: "model.type == 'ttest_ind'"  # Use independent t-test if specified
+                  then: "execute"
+          - anova:
+              conditions:
+                - if: "model.type == 'anova'"  # Use ANOVA if specified
+                  then: "execute"
+          - correlation:
+              conditions:
+                - if: "model.type == 'correlation'"  # Use correlation if specified
+                  then: "execute"
+          - chi_square:
+              conditions:
+                - if: "model.type == 'chi_square'"  # Use chi-square if specified
+                  then: "execute"
+          - non_parametric:
+              conditions:
+                - if: "model.type == 'non_parametric'"  # Use non-parametric tests if specified
+                  then: "execute"
+          - regression:
+              conditions:
+                - if: "model.type == 'regression'"  # Use regression if specified
+                  then: "execute"
+          - time_series:
+              conditions:
+                - if: "model.type == 'time_series'"  # Use time series if specified
+                  then: "execute"
+
+  process_dataIntegration:
+    description: "Integrate multiple datasets into a unified dataset, ensuring consistency and alignment."
+    agent: "fieldwork_dataengineer"
+    expected_output: "Integrated dataset in JSON format, with metadata on integration steps."
+    task_type: "heavy"
+    tools:
+      pandas:
+        operations:
+          - merge:
+              conditions:
+                - if: "datasets.join_type == 'merge'"  # Merge datasets if specified
+                  then: "execute"
+          - concat:
+              conditions:
+                - if: "datasets.join_type == 'concat'"  # Concatenate datasets if specified
+                  then: "execute"
+
+  process_dataCompression:
+    description: "Compress the dataset to reduce size while preserving essential information, suitable for storage or faster processing."
+    agent: "fieldwork_dataengineer"
+    expected_output: "Compressed dataset in JSON format, with metadata on compression techniques."
+    task_type: "heavy"
+    tools:
+      pandas:
+        operations:
+          - drop_columns:
+              conditions:
+                - if: "data.redundant_columns > 0"  # Drop redundant columns if present
+                  then: "execute"
+          - astype:
+              conditions:
+                - if: "data.can_reduce_types == true"  # Reduce data types if possible
+                  then: "execute"
+
+  process_dataEnrichment:
+    description: "Enrich the dataset by adding derived features or external data to enhance its value for analysis."
+    agent: "fieldwork_dataengineer"
+    expected_output: "Enriched dataset in JSON format, with metadata on added features."
+    task_type: "heavy"
+    tools:
+      pandas:
+        operations:
+          - apply:
+              conditions:
+                - if: "enrichment.needs_derived_features == true"  # Create derived features if needed
+                  then: "execute"
+          - merge:
+              conditions:
+                - if: "enrichment.needs_external_data == true"  # Add external data if needed
+                  then: "execute"
+
+  process_dataTransformation:
+    description: "Transform the data by applying operations like pivoting, melting, or reshaping to suit analysis needs."
+    agent: "fieldwork_dataengineer"
+    expected_output: "Transformed dataset in JSON format, with metadata on transformations applied."
+    task_type: "heavy"
+    tools:
+      pandas:
+        operations:
+          - pivot:
+              conditions:
+                - if: "transform.type == 'pivot'"  # Pivot data if specified
+                  then: "execute"
+          - melt:
+              conditions:
+                - if: "transform.type == 'melt'"  # Melt data if specified
+                  then: "execute"
+          - stack:
+              conditions:
+                - if: "transform.type == 'stack'"  # Stack data if specified
+                  then: "execute"
+          - unstack:
+              conditions:
+                - if: "transform.type == 'unstack'"  # Unstack data if specified
+                  then: "execute"
+
+  process_dataFiltering:
+    description: "Filter the data based on specific conditions to focus on relevant subsets for analysis."
+    agent: "fieldwork_dataoperator"
+    expected_output: "Filtered dataset in JSON format, with metadata on filtering conditions."
+    task_type: "heavy"
+    tools:
+      pandas:
+        operations:
+          - filter:
+              conditions:
+                - if: "filter.conditions != null"  # Filter data if conditions are provided
+                  then: "execute"
+          - select_columns:
+              conditions:
+                - if: "filter.needs_columns == true"  # Select columns if specified
+                  then: "execute"
+
+  process_dataFormatting:
+    description: "Format the data to ensure consistency in presentation, such as date formats or string capitalization."
+    agent: "fieldwork_dataoperator"
+    expected_output: "Formatted dataset in JSON format, with metadata on formatting changes."
+    task_type: "heavy"
+    tools:
+      pandas:
+        operations:
+          - to_datetime:
+              conditions:
+                - if: "data.has_dates == true"  # Format dates if present
+                  then: "execute"
+          - apply:
+              conditions:
+                - if: "data.needs_string_formatting == true"  # Format strings if needed
+                  then: "execute"
+
+  process_dataSorting:
+    description: "Sort the data based on specific columns or criteria to facilitate analysis or reporting."
+    agent: "fieldwork_dataoperator"
+    expected_output: "Sorted dataset in JSON format, with metadata on sorting criteria."
+    task_type: "heavy"
+    tools:
+      pandas:
+        operations:
+          - sort_values:
+              conditions:
+                - if: "sort.criteria != null"  # Sort data if criteria are provided
+                  then: "execute"
+
+  process_documentFormatConversion:
+    description: "Convert documents between formats (for example, DOCX to PDF) to support further processing or analysis."
+    agent: "fieldwork_documentconverter"
+    expected_output: >
+      A JSON object containing the results of the conversion, with the following structure:
+      {
+        "file_path": "string, the absolute path to the newly created converted file",
+        "original_format": "string, the format of the source file (for example, 'docx')",
+        "converted_format": "string, the format of the new file (for example, 'pdf')",
+        "status": "string, 'success' or 'failed'"
+      }
+    task_type: "fast"
+    tools:
+      office:
+        operations:
+          - write_docx:
+              conditions:
+                - if: "target.format == 'docx'"  # Convert to DOCX if specified
+                  then: "execute"
+          - write_pptx:
+              conditions:
+                - if: "target.format == 'pptx'"  # Convert to PPTX if specified
+                  then: "execute"
+          - write_xlsx:
+              conditions:
+                - if: "target.format == 'xlsx'"  # Convert to XLSX if specified
+                  then: "execute"
+
+  process_documentCleaning:
+    description: "Clean documents by removing sensitive information (desensitization treatment) and inconsistencies, preparing them for analysis."
+    agent: "fieldwork_documentcleaner"
+    expected_output: "Cleaned document content in JSON format, with metadata on cleaning operations."
+    task_type: "fast"
+    tools:
+      office:
+        operations:
+          - read_docx:
+              conditions:
+                - if: "document.format == 'docx'"  # Read DOCX if format matches
+                  then: "execute"
+          - read_pptx:
+              conditions:
+                - if: "document.format == 'pptx'"  # Read PPTX if format matches
+                  then: "execute"
+          - read_xlsx:
+              conditions:
+                - if: "document.format == 'xlsx'"  # Read XLSX if format matches
+                  then: "execute"
+          - extract_text:
+              conditions:
+                - if: "document.format == 'other'"  # Extract text from other formats
+                  then: "execute"
+      classifier:
+        operations:
+          - tokenize:
+              conditions:
+                - if: "cleaning.needs_tokens == true"  # Tokenize if needed for cleaning
+                  then: "execute"
+          - ner:
+              conditions:
+                - if: "cleaning.needs_desensitization == true"  # Desensitize if required
+                  then: "execute"
+
+  process_documentSegmentation:
+    description: "Segment documents into logical sections (for example, paragraphs, chapters) for easier processing or analysis."
+    agent: "fieldwork_documentsegmenter"
+    expected_output: "Segmented document content in JSON format, with metadata on sections."
+    task_type: "fast"
+    tools:
+      classifier:
+        operations:
+          - tokenize:
+              conditions:
+                - if: "segmentation.needs_tokens == true"  # Tokenize if needed for segmentation
+                  then: "execute"
+          - dependency_parse:
+              conditions:
+                - if: "segmentation.needs_structure == true"  # Parse structure if required
+                  then: "execute"
+
+  process_wordTokenization:
+    description: "Tokenize text into words or tokens to support further text processing or analysis."
+    agent: "fieldwork_textprocessor"
+    expected_output: "Tokenized text in JSON format, with metadata on tokens."
+    task_type: "fast"
+    tools:
+      classifier:
+        operations:
+          - tokenize:
+              conditions:
+                - if: "text.needs_tokens == true"  # Tokenize if required
+                  then: "execute"
+          - pos_tag:
+              conditions:
+                - if: "text.needs_pos == true"  # Tag POS if required
+                  then: "execute"
+
+  process_tableExtraction:
+    description: "Extract tables from documents or images for data processing or analysis."
+    agent: "fieldwork_dataextractor"
+    expected_output: "Extracted table data in JSON format, with metadata on table structure."
+    task_type: "fast"
+    tools:
+      office:
+        operations:
+          - read_xlsx:
+              conditions:
+                - if: "source.format == 'xlsx'"  # Read XLSX if format matches
+                  then: "execute"
+          - extract_text:
+              conditions:
+                - if: "source.format == 'other'"  # Extract text if other format
+                  then: "execute"
+      image:
+        operations:
+          - ocr:
+              conditions:
+                - if: "source.type == 'image'"  # Use OCR if source is an image
+                  then: "execute"
+
+  process_textExtraction:
+    description: "Extract text from documents or images to support further processing or analysis."
+    agent: "fieldwork_dataextractor"
+    expected_output: "Extracted text in JSON format, with metadata on the source."
+    task_type: "fast"
+    tools:
+      office:
+        operations:
+          - extract_text:
+              conditions:
+                - if: "source.type == 'document'"  # Extract text from documents
+                  then: "execute"
+      image:
+        operations:
+          - ocr:
+              conditions:
+                - if: "source.type == 'image'"  # Extract text from images
+                  then: "execute"
+
+  process_dataExtraction:
+    description: "Extract structured data (for example, key-value pairs) from unstructured sources like web pages or documents."
+    agent: "fieldwork_dataextractor"
+    expected_output: "Extracted data in JSON format, with metadata on the source."
+    task_type: "fast"
+    tools:
+      scraper:
+        operations:
+          - parse_html:
+              conditions:
+                - if: "source.type == 'web'"  # Parse HTML from web pages
+                  then: "execute"
+      classifier:
+        operations:
+          - ner:
+              conditions:
+                - if: "data.needs_entities == true"  # Extract entities if needed
+                  then: "execute"
+          - keyword_extract:
+              conditions:
+                - if: "data.needs_keywords == true"  # Extract keywords if needed
+                  then: "execute"
+
+  process_listExtraction:
+    description: "Extract lists (for example, bullet points, numbered lists) from documents or web pages."
+    agent: "fieldwork_dataextractor"
+    expected_output: "Extracted lists in JSON format, with metadata on the source."
+    task_type: "fast"
+    tools:
+      scraper:
+        operations:
+          - parse_html:
+              conditions:
+                - if: "source.type == 'web'"  # Extract lists from web pages
+                  then: "execute"
+      office:
+        operations:
+          - extract_text:
+              conditions:
+                - if: "source.type == 'document'"  # Extract lists from documents
+                  then: "execute"
+
+  process_imageExtraction:
+    description: "Extract images from documents or web pages for further processing or analysis."
+    agent: "fieldwork_imageextractor"
+    expected_output: >
+      A JSON list of objects, where each object represents one successfully extracted image and its metadata. The structure for each object in the list is as follows:
+      {
+        "image_path": "string, the local path where the extracted image file is saved",
+        "source_url": "string, the original URL of the image on the web",
+        "source_page_url": "string, the URL of the page from which the image was extracted",
+        "status": "string, 'success' or 'failed'"
+      }
+    task_type: "fast"
+    tools:
+      scraper:
+        operations:
+          - parse_html:
+              conditions:
+                - if: "source.type == 'web'"  # Extract image URLs from web pages
+                  then: "execute"
+      image:
+        operations:
+          - load:
+              conditions:
+                - if: "image.needs_verification == true"  # Load and verify images
+                  then: "execute"
+
+  process_chartExtraction:
+    description: "Extract charts from documents or images, converting them into data or images for analysis."
+    agent: "fieldwork_imageextractor"
+    expected_output: "Extracted chart data or image paths in JSON format, with metadata on the source."
+    task_type: "fast"
+    tools:
+      image:
+        operations:
+          - ocr:
+              conditions:
+                - if: "chart.source == 'image'"  # Extract data from chart images
+                  then: "execute"
+      office:
+        operations:
+          - extract_text:
+              conditions:
+                - if: "chart.source == 'document'"  # Extract chart descriptions from documents
+                  then: "execute"
+
+  process_structureExtraction:
+    description: "Extract structured elements (for example, headings, sections) from documents or web pages."
+    agent: "fieldwork_dataextractor"
+    expected_output: "Structured elements in JSON format, with metadata on the source."
+    task_type: "fast"
+    tools:
+      scraper:
+        operations:
+          - parse_html:
+              conditions:
+                - if: "source.type == 'web'"  # Extract structured elements from web pages
+                  then: "execute"
+      classifier:
+        operations:
+          - dependency_parse:
+              conditions:
+                - if: "structure.needs_parsing == true"  # Parse structure if required
+                  then: "execute"
+
+  process_linking:
+    description: "Link related data elements (for example, entities, references) across datasets or documents to create a connected dataset."
+    agent: "fieldwork_dataengineer"
+    expected_output: "Linked dataset in JSON format, with metadata on linked relationships."
+    task_type: "heavy"
+    tools:
+      classifier:
+        operations:
+          - ner:
+              conditions:
+                - if: "linking.needs_entities == true"  # Identify entities for linking
+                  then: "execute"
+      pandas:
+        operations:
+          - merge:
+              conditions:
+                - if: "linking.type == 'merge'"  # Merge datasets for linking
+                  then: "execute"
+
+  process_image:
+    description: "Process images using AI models (for example, resizing, filtering, edge detection) to prepare them for analysis or reporting."
+    agent: "fieldwork_imageprocessor"
+    expected_output: "Processed image paths in JSON format, with metadata on processing steps."
+    task_type: "fast"
+    tools:
+      image:
+        operations:
+          - resize:
+              conditions:
+                - if: "image.needs_resize == true"  # Resize if needed
+                  then: "execute"
+          - filter:
+              conditions:
+                - if: "image.needs_filter == true"  # Apply filters if needed
+                  then: "execute"
+          - detect_edges:
+              conditions:
+                - if: "image.needs_edges == true"  # Detect edges if needed
+                  then: "execute"
+
+  # Intent Category: Analyze
+  analyze_comprehensive:
+    description: "Conduct comprehensive analysis of the provided data. Data to Analyze: {data_to_analyze} Analysis Parameters: - Type: {analysis_type} - Focus Areas: {focus_areas} - Depth Level: {depth_level} - Domain Specialization: {domain_specialization} The analysis should examine the data thoroughly and systematically, identify key patterns, trends, and relationships, perform statistical analysis where appropriate, look for anomalies, outliers, or unusual patterns, generate actionable insights and conclusions, provide evidence-based recommendations, and assess data quality and limitations. Follow the Analysis Framework: Descriptive Analysis (What happened?), Diagnostic Analysis (Why did it happen?), Predictive Analysis (What might happen?), and Prescriptive Analysis (What should be done?)."
+    agent: "analyst"
+    expected_output: "Comprehensive analysis report with insights, findings, and recommendations in JSON format following the analyst role's tools_instruction structure."
+    task_type: "heavy"
+    tools:
+      stats:
+        operations:
+          - ttest:
+              conditions:
+                - if: "analysis_type == 'statistical' or analysis_type == 'hypothesis_testing'"
+                  then: "execute"
+          - ttest_ind:
+              conditions:
+                - if: "analysis_type == 'comparative' or analysis_type == 'independent_groups'"
+                  then: "execute"
+          - anova:
+              conditions:
+                - if: "analysis_type == 'multi_group' or analysis_type == 'variance_analysis'"
+                  then: "execute"
+          - correlation:
+              conditions:
+                - if: "analysis_type == 'relationship' or analysis_type == 'correlation'"
+                  then: "execute"
+          - chi_square:
+              conditions:
+                - if: "analysis_type == 'categorical' or analysis_type == 'independence'"
+                  then: "execute"
+          - non_parametric:
+              conditions:
+                - if: "analysis_type == 'non_parametric' or depth_level == 'robust'"
+                  then: "execute"
+          - regression:
+              conditions:
+                - if: "analysis_type == 'predictive' or analysis_type == 'regression'"
+                  then: "execute"
+          - time_series:
+              conditions:
+                - if: "analysis_type == 'temporal' or analysis_type == 'time_series'"
+                  then: "execute"
+          - describe:
+              conditions:
+                - if: "analysis_type == 'descriptive' or depth_level in ['basic', 'medium']"
+                  then: "execute"
+      pandas:
+        operations:
+          - describe:
+              conditions:
+                - if: "analysis_type == 'descriptive' or analysis_type == 'general'"
+                  then: "execute"
+          - groupby:
+              conditions:
+                - if: "analysis_type == 'segmented' or focus_areas contains 'groups'"
+                  then: "execute"
+          - apply:
+              conditions:
+                - if: "analysis_type == 'custom' or depth_level == 'advanced'"
+                  then: "execute"
+      research:
+        operations:
+          - mill_agreement:
+              conditions:
+                - if: "analysis_type == 'pattern_recognition' or focus_areas contains 'patterns'"
+                  then: "execute"
+          - mill_difference:
+              conditions:
+                - if: "analysis_type == 'anomaly_detection' or focus_areas contains 'anomalies'"
+                  then: "execute"
+          - mill_concomitant:
+              conditions:
+                - if: "analysis_type == 'relationship' or focus_areas contains 'correlations'"
+                  then: "execute"
+          - mill_joint:
+              conditions:
+                - if: "analysis_type == 'multi_factor' or depth_level == 'advanced'"
+                  then: "execute"
+          - mill_residues:
+              conditions:
+                - if: "analysis_type == 'residual_analysis' or depth_level == 'deep'"
+                  then: "execute"
+          - induction:
+              conditions:
+                - if: "analysis_type == 'pattern_recognition' or focus_areas contains 'generalization'"
+                  then: "execute"
+          - deduction:
+              conditions:
+                - if: "analysis_type == 'validation' or depth_level in ['medium', 'advanced']"
+                  then: "execute"
+          - summarize:
+              conditions:
+                - if: "analysis_type == 'general' or depth_level in ['basic', 'medium']"
+                  then: "execute"
+
+  analyze_dataoutcome:
+    description: "Analyze data to determine outcomes, focusing on statistical or predictive insights relevant to the domain."
+    agent: "analyst_dataoutcomespecialist"
+    expected_output: "Analysis results in JSON format, including outcome metrics and insights."
+    task_type: "heavy"
+    tools:
+      stats:
+        operations:
+          - ttest:
+              conditions:
+                - if: "analysis.type == 'ttest'"  # Use t-test if specified
+                  then: "execute"
+          - ttest_ind:
+              conditions:
+                - if: "analysis.type == 'ttest_ind'"  # Use independent t-test if specified
+                  then: "execute"
+          - anova:
+              conditions:
+                - if: "analysis.type == 'anova'"  # Use ANOVA if specified
+                  then: "execute"
+          - correlation:
+              conditions:
+                - if: "analysis.type == 'correlation'"  # Use correlation if specified
+                  then: "execute"
+          - chi_square:
+              conditions:
+                - if: "analysis.type == 'chi_square'"  # Use chi-square if specified
+                  then: "execute"
+          - non_parametric:
+              conditions:
+                - if: "analysis.type == 'non_parametric'"  # Use non-parametric tests if specified
+                  then: "execute"
+          - regression:
+              conditions:
+                - if: "analysis.type == 'regression'"  # Use regression if specified
+                  then: "execute"
+          - time_series:
+              conditions:
+                - if: "analysis.type == 'time_series'"  # Use time series if specified
+                  then: "execute"
+      pandas:
+        operations:
+          - describe:
+              conditions:
+                - if: "analysis.needs_summary == true"  # Summarize data if needed
+                  then: "execute"
+
+  analyze_context:
+    description: "Analyze the context of the data, identifying relationships, patterns, or causal factors."
+    agent: "analyst_contextspecialist"
+    expected_output: "Contextual analysis results in JSON format, including identified patterns or relationships."
+    task_type: "heavy"
+    tools:
+      research:
+        operations:
+          - mill_agreement:
+              conditions:
+                - if: "context.needs_common_factors == true"  # Identify common factors if needed
+                  then: "execute"
+          - mill_difference:
+              conditions:
+                - if: "context.needs_causal_differences == true"  # Identify causal differences if needed
+                  then: "execute"
+          - mill_concomitant:
+              conditions:
+                - if: "context.needs_correlation == true"  # Analyze correlation if needed
+                  then: "execute"
+          - mill_joint:
+              conditions:
+                - if: "context.needs_joint_analysis == true"  # Perform joint analysis if needed
+                  then: "execute"
+          - mill_residues:
+              conditions:
+                - if: "context.needs_residuals == true"  # Analyze residuals if needed
+                  then: "execute"
+          - induction:
+              conditions:
+                - if: "context.needs_generalization == true"  # Generalize patterns if needed
+                  then: "execute"
+          - deduction:
+              conditions:
+                - if: "context.needs_validation == true"  # Validate conclusions if needed
+                  then: "execute"
+          - summarize:
+              conditions:
+                - if: "context.needs_summary == true"  # Summarize findings if needed
+                  then: "execute"
+      stats:
+        operations:
+          - correlation:
+              conditions:
+                - if: "context.needs_relationships == true"  # Analyze relationships if needed
+                  then: "execute"
+
+  analyze_image:
+    description: "Analyze images using AI models to extract insights, such as object detection or pattern recognition."
+    agent: "analyst_imageanalyst"
+    expected_output: "Image analysis results in JSON format, including detected features or patterns."
+    task_type: "heavy"
+    tools:
+      image:
+        operations:
+          - detect_edges:
+              conditions:
+                - if: "image.needs_patterns == true"  # Detect patterns if needed
+                  then: "execute"
+          - metadata:
+              conditions:
+                - if: "image.needs_metadata == true"  # Extract metadata if needed
+                  then: "execute"
+
+  analyze_classification:
+    description: "Classify data or text into categories using classification models or techniques."
+    agent: "analyst_classificationspecialist"
+    expected_output: "Classification results in JSON format, with metadata on categories and confidence scores."
+    task_type: "heavy"
+    tools:
+      classifier:
+        operations:
+          - classify:
+              conditions:
+                - if: "data.needs_classification == true"  # Classify if needed
+                  then: "execute"
+          - batch_process:
+              conditions:
+                - if: "data.is_batch == true"  # Batch process if multiple items
+                  then: "execute"
+
+  analyze_code:
+    description: "Analyze code snippets or scripts to identify patterns, errors, or optimizations."
+    agent: "analyst_codespecialist"
+    expected_output: "Code analysis results in JSON format, including identified issues or recommendations."
+    task_type: "heavy"
+    tools:
+      classifier:
+        operations:
+          - tokenize:
+              conditions:
+                - if: "code.needs_tokens == true"  # Tokenize code if needed
+                  then: "execute"
+          - dependency_parse:
+              conditions:
+                - if: "code.needs_structure == true"  # Parse structure if needed
+                  then: "execute"
+
+  analyze_predict:
+    description: "Perform predictive analysis on the data to forecast future trends or outcomes."
+    agent: "analyst_predictivespecialist"
+    expected_output: "Predictive analysis results in JSON format, including forecasts and confidence intervals."
+    task_type: "heavy"
+    tools:
+      stats:
+        operations:
+          - time_series:
+              conditions:
+                - if: "prediction.type == 'time_series'"  # Use time series if specified
+                  then: "execute"
+          - regression:
+              conditions:
+                - if: "prediction.type == 'regression'"  # Use regression if specified
+                  then: "execute"
+      research:
+        operations:
+          - mill_agreement:
+              conditions:
+                - if: "prediction.needs_common_factors == true"  # Identify common factors if needed
+                  then: "execute"
+          - mill_difference:
+              conditions:
+                - if: "prediction.needs_causal_differences == true"  # Identify causal differences if needed
+                  then: "execute"
+          - mill_concomitant:
+              conditions:
+                - if: "prediction.needs_correlation == true"  # Analyze correlation if needed
+                  then: "execute"
+          - mill_joint:
+              conditions:
+                - if: "prediction.needs_joint_analysis == true"  # Perform joint analysis if needed
+                  then: "execute"
+          - mill_residues:
+              conditions:
+                - if: "prediction.needs_residuals == true"  # Analyze residuals if needed
+                  then: "execute"
+          - induction:
+              conditions:
+                - if: "prediction.needs_generalization == true"  # Generalize patterns if needed
+                  then: "execute"
+          - deduction:
+              conditions:
+                - if: "prediction.needs_validation == true"  # Validate conclusions if needed
+                  then: "execute"
+          - summarize:
+              conditions:
+                - if: "prediction.needs_summary == true"  # Summarize findings if needed
+                  then: "execute"
+
+  analyze_refining:
+    description: "Refine analysis by iterating on results, improving accuracy or clarity of insights."
+    agent: "analyst_refiningspecialist"
+    expected_output: "Refined analysis results in JSON format, with metadata on refinements applied."
+    task_type: "heavy"
+    tools:
+      stats:
+        operations:
+          - non_parametric:
+              conditions:
+                - if: "refinement.needs_non_parametric == true"  # Use non-parametric tests if needed
+                  then: "execute"
+      pandas:
+        operations:
+          - groupby:
+              conditions:
+                - if: "refinement.needs_grouping == true"  # Refine grouped analysis if needed
+                  then: "execute"
+
+  # Intent Category: Generate
+  generate_format:
+    description: "Format data or content into a user-specified structure or style for reporting or presentation."
+    agent: "writer_formatspecialist"
+    expected_output: "Formatted content in JSON format, with metadata on the format applied."
+    task_type: "fast"
+    tools:
+      pandas:
+        operations:
+          - apply:
+              conditions:
+                - if: "format.needs_string_formatting == true"  # Format strings if needed
+                  then: "execute"
+      office:
+        operations:
+          - write_docx:
+              conditions:
+                - if: "format.target == 'docx'"  # Format as DOCX if specified
+                  then: "execute"
+
+  generate_table:
+    description: "Generate tables from data for inclusion in reports or presentations."
+    agent: "writer_tablespecialist"
+    expected_output: "Table data in JSON format or as a file path, with metadata on table structure."
+    task_type: "fast"
+    tools:
+      pandas:
+        operations:
+          - pivot_table:
+              conditions:
+                - if: "table.type == 'pivot'"  # Generate pivot table if specified
+                  then: "execute"
+      office:
+        operations:
+          - write_xlsx:
+              conditions:
+                - if: "table.target == 'xlsx'"  # Save as Excel if specified
+                  then: "execute"
+
+  generate_contents:
+    description: "Generate textual content (for example, articles, summaries) based on analysis results or collected data."
+    agent: "writer_contentspecialist"
+    expected_output: "Generated content in text format, with metadata on content type."
+    task_type: "fast"
+    tools:
+      research:
+        operations:
+          - summarize:
+              conditions:
+                - if: "content.type == 'summary'"  # Summarize if content type is summary
+                  then: "execute"
+      classifier:
+        operations:
+          - summarize:
+              conditions:
+                - if: "content.type == 'summary'"  # Additional summarization if needed
+                  then: "execute"
+
+  generate_summarize:
+    description: "Generate a summary of the data, analysis, or content, focusing on key points."
+    agent: "writer_summarizationspecialist"
+    expected_output: "Summary in text format, with metadata on summarized content."
+    task_type: "fast"
+    tools:
+      research:
+        operations:
+          - summarize:
+              conditions:
+                - if: "summary.needs_research == true"  # Summarize research findings if needed
+                  then: "execute"
+      classifier:
+        operations:
+          - summarize:
+              conditions:
+                - if: "summary.needs_classifier == true"  # Summarize text data if needed
+                  then: "execute"
+
+  generate_chart:
+    description: "Generate charts or visualizations from data for inclusion in reports or presentations."
+    agent: "writer_visualizationspecialist"
+    expected_output: >
+      A JSON object detailing the generated chart file and its metadata. The structure is as follows:
+      {
+        "chart_file_path": "string, the absolute path to the newly created chart image file (for example, /path/to/chart.png)",
+        "chart_type": "string, the type of chart generated (for example, 'bar', 'pie', 'line_graph')",
+        "source_data_reference": "string, an identifier for the data source used to create the chart",
+        "status": "string, 'success' or 'failed'"
+      }
+    task_type: "fast"
+    tools:
+      chart:
+        operations:
+          - visualize:
+              conditions:
+                - if: "chart.type != null"  # Visualize if chart type is specified
+                  then: "execute"
+      report:
+        operations:
+          - generate_image:
+              conditions:
+                - if: "chart.format == 'image'"  # Generate image if specified
+                  then: "execute"
+
+  generate_image:
+    description: "Generate images (for example, diagrams, processed images) for inclusion in reports or presentations."
+    agent: "writer_imagespecialist"
+    expected_output: >
+      A JSON object containing the path to the generated image and its detailed metadata. The structure is as follows:
+      {
+        "image_file_path": "string, the absolute path to the generated image file",
+        "image_format": "string, the file format of the image (for example, 'png', 'jpeg', 'svg')",
+        "image_category": "string, the category of the image (for example, 'diagram', 'photo', 'illustration')",
+        "dimensions": {
+          "width": "integer, the width of the image in pixels",
+          "height": "integer, the height of the image in pixels"
+        },
+        "status": "string, 'success' or 'failed'"
+      }
+    task_type: "fast"
+    tools:
+      image:
+        operations:
+          - resize:
+              conditions:
+                - if: "image.needs_resize == true"  # Resize if needed
+                  then: "execute"
+          - filter:
+              conditions:
+                - if: "image.needs_filter == true"  # Apply filters if needed
+                  then: "execute"
+      report:
+        operations:
+          - generate_image:
+              conditions:
+                - if: "image.source == 'data'"  # Generate image from data if specified
+                  then: "execute"
+
+  generate_report:
+    description: "Generate a comprehensive report in the user-specified format (for example, PDF, Word) based on analysis results or generated content."
+    agent: "writer_reportspecialist"
+    expected_output: >
+      A JSON object with the path to the final report and structured metadata about its content. The structure is as follows:
+      {
+        "report_file_path": "string, the absolute path to the generated report file",
+        "report_format": "string, the format of the report (for example, 'pdf', 'docx', 'markdown')",
+        "content_metadata": {
+          "word_count": "integer, the total word count of the report",
+          "page_count": "integer, the total page count (if applicable, for example, for PDF)",
+          "section_headers": "list[string], a list of the main section titles in the report"
+        },
+        "status": "string, 'success' or 'failed'"
+      }
+    task_type: "fast"
+    tools:
+      report:
+        operations:
+          - generate_html:
+              conditions:
+                - if: "report.format == 'html'"  # Generate HTML if specified
+                  then: "execute"
+          - generate_pdf:
+              conditions:
+                - if: "report.format == 'pdf'"  # Generate PDF if specified
+                  then: "execute"
+          - generate_excel:
+              conditions:
+                - if: "report.format == 'excel'"  # Generate Excel if specified
+                  then: "execute"
+          - generate_pptx:
+              conditions:
+                - if: "report.format == 'pptx'"  # Generate PPTX if specified
+                  then: "execute"
+          - generate_markdown:
+              conditions:
+                - if: "report.format == 'markdown'"  # Generate Markdown if specified
+                  then: "execute"
+          - generate_word:
+              conditions:
+                - if: "report.format == 'word'"  # Generate Word if specified
+                  then: "execute"
+      office:
+        operations:
+          - write_docx:
+              conditions:
+                - if: "report.format == 'docx'"  # Write DOCX if specified
+                  then: "execute"
+          - write_pptx:
+              conditions:
+                - if: "report.format == 'pptx'"  # Write PPTX if specified
+                  then: "execute"
+          - write_xlsx:
+              conditions:
+                - if: "report.format == 'xlsx'"  # Write XLSX if specified
+                  then: "execute"
+
+  generate_code:
+    description: "Generate code snippets or scripts based on user requirements or analysis results."
+    agent: "writer_codespecialist"
+    expected_output: "Generated code in text format, with metadata on code type."
+    task_type: "fast"
+    tools:
+      classifier:
+        operations:
+          - tokenize:
+              conditions:
+                - if: "code.needs_tokens == true"  # Tokenize code if needed
+                  then: "execute"
+          - dependency_parse:
+              conditions:
+                - if: "code.needs_structure == true"  # Parse structure if needed
+                  then: "execute"
+
+  # General Tasks for Multi-Purpose Agents
+  general_research:
+    description: "Conduct comprehensive research and information gathering to support analysis and content generation, following systematic fieldwork, analysis, and writing methodologies."
+    agent: "general_researcher"
+    expected_output: "Comprehensive research report with structured findings, analysis, and prepared content in JSON format following the three-phase methodology (Fieldwork → Analysis → Writing preparation)."
+    task_type: "heavy"
+    tools:
+      research:
+        operations:
+          - mill_agreement:
+              conditions:
+                - if: "research.needs_pattern_identification == true"  # Identify common patterns if needed
+                  then: "execute"
+          - mill_difference:
+              conditions:
+                - if: "research.needs_gap_analysis == true"  # Analyze contrasting viewpoints if needed
+                  then: "execute"
+          - mill_concomitant:
+              conditions:
+                - if: "research.needs_correlation_analysis == true"  # Establish correlations if needed
+                  then: "execute"
+          - mill_joint:
+              conditions:
+                - if: "research.needs_comprehensive_analysis == true"  # Comprehensive analysis if needed
+                  then: "execute"
+          - mill_residues:
+              conditions:
+                - if: "research.needs_residual_investigation == true"  # Identify unexplained elements if needed
+                  then: "execute"
+          - induction:
+              conditions:
+                - if: "research.needs_generalization == true"  # Derive general principles if needed
+                  then: "execute"
+          - deduction:
+              conditions:
+                - if: "research.needs_validation == true"  # Validate conclusions if needed
+                  then: "execute"
+          - summarize:
+              conditions:
+                - if: "research.needs_summary == true"  # Summarize findings if needed
+                  then: "execute"
+      scraper:
+        operations:
+          - get_requests:
+              conditions:
+                - if: "research.source_type == 'static_web'"  # Collect from static sources if needed
+                  then: "execute"
+          - get_aiohttp:
+              conditions:
+                - if: "research.source_type == 'multiple_sources'"  # Efficient collection from multiple sources if needed
+                  then: "execute"
+          - render:
+              conditions:
+                - if: "research.source_type == 'dynamic_web'"  # Handle JavaScript-heavy sites if needed
+                  then: "execute"
+          - parse_html:
+              conditions:
+                - if: "research.needs_structured_extraction == true"  # Extract structured information if needed
+                  then: "execute"
+      classifier:
+        operations:
+          - summarize:
+              conditions:
+                - if: "research.needs_content_summarization == true"  # Create concise summaries if needed
+                  then: "execute"
+          - keyword_extract:
+              conditions:
+                - if: "research.needs_key_concepts == true"  # Identify key concepts if needed
+                  then: "execute"
+          - classify:
+              conditions:
+                - if: "research.needs_categorization == true"  # Categorize findings if needed
+                  then: "execute"
+
+  general_fieldwork:
+    description: "Execute fieldwork tasks including data collection, verification, testing, and real-world validation activities with systematic methodology and quality assurance."
+    agent: "general_fieldwork"
+    expected_output: "Comprehensive fieldwork execution report with collected data, methodology documentation, quality assessment results, and recommendations in JSON format."
+    task_type: "heavy"
+    tools:
+      scraper:
+        operations:
+          - get_requests:
+              conditions:
+                - if: "fieldwork.collection_method == 'web_data'"  # Collect data from web sources if needed
+                  then: "execute"
+          - get_aiohttp:
+              conditions:
+                - if: "fieldwork.collection_method == 'async_web_data'"  # Async data collection if needed
+                  then: "execute"
+          - parse_html:
+              conditions:
+                - if: "fieldwork.needs_structured_data == true"  # Extract structured data if needed
+                  then: "execute"
+      office:
+        operations:
+          - read_docx:
+              conditions:
+                - if: "fieldwork.source_format == 'docx'"  # Document-based data collection if needed
+                  then: "execute"
+          - read_xlsx:
+              conditions:
+                - if: "fieldwork.source_format == 'xlsx'"  # Spreadsheet data collection if needed
+                  then: "execute"
+          - extract_text:
+              conditions:
+                - if: "fieldwork.needs_text_extraction == true"  # Text extraction if needed
+                  then: "execute"
+      classifier:
+        operations:
+          - ner:
+              conditions:
+                - if: "fieldwork.needs_entity_identification == true"  # Entity identification if needed
+                  then: "execute"
+          - keyword_extract:
+              conditions:
+                - if: "fieldwork.needs_key_data_points == true"  # Key data point extraction if needed
+                  then: "execute"
+      stats:
+        operations:
+          - describe:
+              conditions:
+                - if: "fieldwork.needs_statistical_validation == true"  # Statistical validation if needed
+                  then: "execute"
+          - correlation:
+              conditions:
+                - if: "fieldwork.needs_relationship_analysis == true"  # Relationship analysis if needed
+                  then: "execute"
+      pandas:
+        operations:
+          - describe:
+              conditions:
+                - if: "fieldwork.needs_data_quality_assessment == true"  # Data quality assessment if needed
+                  then: "execute"
+          - filter:
+              conditions:
+                - if: "fieldwork.needs_data_validation == true"  # Data validation and cleaning if needed
+                  then: "execute"
+
+  general_analysis:
+    description: "Conduct comprehensive analysis of provided data, identifying patterns, trends, and relationships to generate actionable insights and evidence-based recommendations."
+    agent: "general_analyst"
+    expected_output: "Comprehensive analysis report with insights, findings, patterns, recommendations, data quality assessment, and confidence scores in JSON format following the analyst framework structure."
+    task_type: "heavy"
+    tools:
+      stats:
+        operations:
+          - ttest:
+              conditions:
+                - if: "analysis.type == 'hypothesis_testing'"  # T-tests if specified
+                  then: "execute"
+          - ttest_ind:
+              conditions:
+                - if: "analysis.type == 'independent_groups'"  # Independent t-tests if specified
+                  then: "execute"
+          - anova:
+              conditions:
+                - if: "analysis.type == 'multi_group_analysis'"  # ANOVA tests if specified
+                  then: "execute"
+          - correlation:
+              conditions:
+                - if: "analysis.type == 'relationship_analysis'"  # Correlation analysis if specified
+                  then: "execute"
+          - chi_square:
+              conditions:
+                - if: "analysis.type == 'categorical_analysis'"  # Chi-square tests if specified
+                  then: "execute"
+          - non_parametric:
+              conditions:
+                - if: "analysis.type == 'robust_analysis'"  # Non-parametric tests if specified
+                  then: "execute"
+          - regression:
+              conditions:
+                - if: "analysis.type == 'predictive_modeling'"  # Regression modeling if specified
+                  then: "execute"
+          - time_series:
+              conditions:
+                - if: "analysis.type == 'temporal_analysis'"  # Time series modeling if specified
+                  then: "execute"
+          - describe:
+              conditions:
+                - if: "analysis.needs_statistical_summary == true"  # Statistical summaries if needed
+                  then: "execute"
+      pandas:
+        operations:
+          - describe:
+              conditions:
+                - if: "analysis.needs_data_characteristics == true"  # Summarize data characteristics if needed
+                  then: "execute"
+          - groupby:
+              conditions:
+                - if: "analysis.needs_segmentation == true"  # Grouped analysis and segmentation if needed
+                  then: "execute"
+          - apply:
+              conditions:
+                - if: "analysis.needs_custom_transformations == true"  # Custom data transformations if needed
+                  then: "execute"
+      research:
+        operations:
+          - mill_agreement:
+              conditions:
+                - if: "analysis.needs_pattern_identification == true"  # Identify common factors and patterns if needed
+                  then: "execute"
+          - mill_difference:
+              conditions:
+                - if: "analysis.needs_anomaly_detection == true"  # Identify causal differences and anomalies if needed
+                  then: "execute"
+          - mill_concomitant:
+              conditions:
+                - if: "analysis.needs_correlation_analysis == true"  # Analyze correlations and relationships if needed
+                  then: "execute"
+          - mill_joint:
+              conditions:
+                - if: "analysis.needs_multi_factor_analysis == true"  # Joint analysis of multiple factors if needed
+                  then: "execute"
+          - mill_residues:
+              conditions:
+                - if: "analysis.needs_residual_analysis == true"  # Analyze residuals and unexplained variance if needed
+                  then: "execute"
+          - induction:
+              conditions:
+                - if: "analysis.needs_pattern_generalization == true"  # Generalize patterns from observations if needed
+                  then: "execute"
+          - deduction:
+              conditions:
+                - if: "analysis.needs_conclusion_validation == true"  # Validate analytical conclusions if needed
+                  then: "execute"
+          - summarize:
+              conditions:
+                - if: "analysis.needs_findings_summary == true"  # Summarize analytical findings if needed
+                  then: "execute"
+
+  general_writing:
+    description: "Generate high-quality content based on provided source data, adapting to specified requirements for content type, format, audience, and style."
+    agent: "general_writer"
+    expected_output: "High-quality content document with proper structure, clarity, and professional presentation that meets all specified requirements, including executive summary, key points, and supporting references in structured format."
+    task_type: "fast"
+    tools:
+      research:
+        operations:
+          - summarize:
+              conditions:
+                - if: "writing.needs_content_summarization == true"  # Create concise and structured content summaries if needed
+                  then: "execute"
+          - deduction:
+              conditions:
+                - if: "writing.needs_logical_validation == true"  # Validate logical conclusions in content if needed
+                  then: "execute"
+          - induction:
+              conditions:
+                - if: "writing.needs_pattern_insights == true"  # Generalize patterns and insights from source data if needed
+                  then: "execute"
+      classifier:
+        operations:
+          - summarize:
+              conditions:
+                - if: "writing.needs_additional_summarization == true"  # Additional content summarization and structuring if needed
+                  then: "execute"
+          - keyword_extract:
+              conditions:
+                - if: "writing.needs_key_concepts == true"  # Identify key concepts and themes if needed
+                  then: "execute"

@@ -1,0 +1,193 @@
+# LLM Binding Configuration
+# This file maps each agent role to specific LLM providers and models
+# The role names must match exactly with those defined in prompts.yaml
+
+metadata:
+  version: "1.0.0"
+  description: "LLM provider bindings for multi-task agents"
+  created_at: "2024-01-01"
+  updated_at: "2024-01-01"
+
+llm_bindings:
+  # System Task Agents - Core system functionality
+  intent_parser:
+    llm_provider: "xAI"
+    llm_model: "grok-4-0709"
+
+  task_decomposer:
+    llm_provider: "xAI"
+    llm_model: "grok-4-0709"
+
+  supervisor:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+
+  planner:
+    llm_provider:
+    llm_model:
+
+  director:
+    llm_provider: "xAI"
+    llm_model: "grok-4-0709"
+
+  meta_architect:
+    llm_provider: "Vertex"
+    llm_model: "gemini-2.5-pro"
+
+  # Answer Category Agents - Research and knowledge provision
+  general_researcher:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+
+  researcher_discussionfacilitator:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+
+  researcher_knowledgeprovider:
+    llm_provider: "Vertex"
+    llm_model: "gemini-2.5-flash"
+
+  researcher_ideagenerator:
+    llm_provider: "Vertex"
+    llm_model: "gemini-2.5-flash"
+
+  writer_conclusionspecialist:
+    llm_provider: "xAI"
+    llm_model: "grok-4-0709"
+
+  # Collect Category Agents - Data collection and scraping
+  fieldwork_webscraper:
+    llm_provider:
+    llm_model:
+
+  fieldwork_apisearcher:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+
+  fieldwork_internaldatacollector:
+    llm_provider: "xAI"
+    llm_model: "grok-4-0709"
+
+  fieldwork_externaldatacollector:
+    llm_provider:
+    llm_model:
+
+  # Process Category Agents - Data processing and transformation
+  general_fieldwork:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+
+  fieldwork_dataoperator:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+
+  fieldwork_dataengineer:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+
+  fieldwork_statistician:
+    llm_provider: "xAI"
+    llm_model: "grok-4-0709"
+
+  fieldwork_datascientist:
+    llm_provider: "Vertex"
+    llm_model: "gemini-2.5-flash"
+
+  fieldwork_documentconverter:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+
+  fieldwork_documentcleaner:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+
+  fieldwork_documentsegmenter:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+
+  fieldwork_textprocessor:
+    llm_provider: "xAI"
+    llm_model: "grok-4-0709"
+
+  fieldwork_dataextractor:
+    llm_provider: "xAI"
+    llm_model: "grok-4-0709"
+
+  fieldwork_imageextractor:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+
+  fieldwork_imageprocessor:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+
+  # Analyze Category Agents - Data analysis and insights
+  general_analyst:
+    llm_provider: "Vertex"
+    llm_model: "gemini-2.5-flash"
+
+  analyst_dataoutcomespecialist:
+    llm_provider: "Vertex"
+    llm_model: "gemini-2.5-flash"
+
+  analyst_contextspecialist:
+    llm_provider: "Vertex"
+    llm_model: "gemini-2.5-flash"
+
+  analyst_imageanalyst:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+
+  analyst_classificationspecialist:
+    llm_provider: "xAI"
+    llm_model: "grok-4-0709"
+
+  analyst_codespecialist:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+
+  analyst_predictivespecialist:
+    llm_provider: "Vertex"
+    llm_model: "gemini-2.5-pro"
+
+  analyst_refiningspecialist:
+    llm_provider: "xAI"
+    llm_model: "grok-4-0709"
+
+  # Generate Category Agents - Content and report generation
+  general_writer:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+
+  writer_formatspecialist:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+
+  writer_tablespecialist:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+
+  writer_contentspecialist:
+    llm_provider: "Vertex"
+    llm_model: "gemini-2.5-flash"
+
+  writer_summarizationspecialist:
+    llm_provider: "xAI"
+    llm_model: "grok-4-0709"
+
+  writer_visualizationspecialist:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+
+  writer_imagespecialist:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+
+  writer_reportspecialist:
+    llm_provider: "Vertex"
+    llm_model: "gemini-2.5-flash"
+
+  writer_codespecialist:
+    llm_provider: "xAI"
+    llm_model: "grok-3"
+

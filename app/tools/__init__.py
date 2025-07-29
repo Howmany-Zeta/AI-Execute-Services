@@ -19,10 +19,10 @@ TOOL_CONFIGS = {}
 def register_tool(name):
     """
     装饰器，用于注册工具类
-    
+
     Args:
         name: 工具名称
-        
+
     Returns:
         装饰后的类
     """
@@ -38,13 +38,13 @@ def register_tool(name):
 def get_tool(name):
     """
     获取工具实例
-    
+
     Args:
         name: 工具名称
-        
+
     Returns:
         工具实例
-        
+
     Raises:
         ValueError: 如果工具未注册
     """
@@ -53,16 +53,16 @@ def get_tool(name):
         tool_class = TOOL_CLASSES[name]
         config = TOOL_CONFIGS.get(name, {})
         TOOL_REGISTRY[name] = tool_class(config)
-        
+
     if name not in TOOL_REGISTRY:
         raise ValueError(f"Tool '{name}' is not registered")
-        
+
     return TOOL_REGISTRY[name]
 
 def list_tools():
     """
     列出所有已注册的工具
-    
+
     Returns:
         工具名称列表
     """
@@ -71,13 +71,13 @@ def list_tools():
 def discover_tools(package_path: str = "app.tools"):
     """
     发现并注册包中的所有工具
-    
+
     Args:
         package_path: 要搜索的包路径
     """
     package = importlib.import_module(package_path)
     package_dir = os.path.dirname(package.__file__)
-    
+
     for _, module_name, is_pkg in pkgutil.iter_modules([package_dir]):
         if is_pkg:
             # 递归搜索子包中的工具
@@ -94,17 +94,30 @@ from app.tools.base_tool import BaseTool
 
 # 导入所有工具模块以确保它们被注册
 # 这些导入将通过装饰器触发工具的注册
-from . import rag
-from . import embed
-from . import search_api
-from . import db_api
-from . import chart_tool
-from . import classfire_tool
-from . import image_tool
-from . import office_tool
-from . import pandas_tool
-from . import report_tool
-from . import research_tool
-from . import scraper_tool
-from . import stats_tool
-from . import vector_search
+
+# 导入任务工具模块 - 包含所有专门的任务工具
+from . import task_tools
+
+# 尝试导入其他可能存在的工具模块
+try:
+    from . import rag
+except ImportError:
+    pass
+
+try:
+    from . import embed
+except ImportError:
+    pass
+
+try:
+    from . import db_api
+except ImportError:
+    pass
+
+try:
+    from . import vector_search
+except ImportError:
+    pass
+
+# 自动发现并注册所有工具
+discover_tools("app.tools")

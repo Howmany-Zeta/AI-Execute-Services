@@ -1,5 +1,5 @@
 import socketio
-from app.core.config import get_settings
+from app.config.config import get_settings
 
 settings = get_settings()
 # In production, this should be set to specific origins

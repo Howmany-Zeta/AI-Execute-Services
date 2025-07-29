@@ -1,0 +1,83 @@
+# Agent List Configuration
+# This file defines all available agent names organized by categories
+# Only agents listed here can be configured in prompts.yaml and llm_binding.yaml
+
+metadata:
+  version: "1.0.0"
+  description: "Complete list of agents organized by functional categories"
+  total_agents: 44
+  created_at: "2024-01-01"
+  updated_at: "2024-01-01"
+
+agent_categories:
+  system:
+    description: "Core system agents for orchestration and management"
+    agents:
+      - intent_parser
+      - task_decomposer
+      - supervisor
+      - planner
+      - director
+
+  answer:
+    description: "Agents specialized in research and answering questions"
+    agents:
+      - general_researcher
+      - researcher_discussionfacilitator
+      - researcher_knowledgeprovider
+      - researcher_ideagenerator
+      - writer_conclusionspecialist
+
+  collect:
+    description: "Agents for data collection and gathering"
+    agents:
+      - fieldwork_webscraper
+      - fieldwork_apisearcher
+      - fieldwork_internaldatacollector
+      - fieldwork_externaldatacollector
+
+  process:
+    description: "Agents for data processing and transformation"
+    agents:
+      - general_fieldwork
+      - fieldwork_dataoperator
+      - fieldwork_dataengineer
+      - fieldwork_statistician
+      - fieldwork_datascientist
+      - fieldwork_documentconverter
+      - fieldwork_documentcleaner
+      - fieldwork_documentsegmenter
+      - fieldwork_textprocessor
+      - fieldwork_dataextractor
+      - fieldwork_imageextractor
+      - fieldwork_imageprocessor
+
+  analyze:
+    description: "Agents for data analysis and insights"
+    agents:
+      - general_analyst
+      - analyst_dataoutcomespecialist
+      - analyst_contextspecialist
+      - analyst_imageanalyst
+      - analyst_classificationspecialist
+      - analyst_codespecialist
+      - analyst_predictivespecialist
+      - analyst_refiningspecialist
+
+  generate:
+    description: "Agents for content generation and reporting"
+    agents:
+      - general_writer
+      - writer_formatspecialist
+      - writer_tablespecialist
+      - writer_contentspecialist
+      - writer_summarizationspecialist
+      - writer_visualizationspecialist
+      - writer_imagespecialist
+      - writer_reportspecialist
+      - writer_codespecialist
+
+  specialized:
+    description: "Specialized agents for specific tasks"
+    agents:
+      - meta_architect

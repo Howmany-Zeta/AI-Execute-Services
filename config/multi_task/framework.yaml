@@ -1,0 +1,150 @@
+# Analysis Frameworks Configuration
+# This file defines all available analytical frameworks that the Meta-Architect can use
+# to construct strategic blueprints for problem-solving
+
+frameworks:
+  - name: PEST
+    description: "Analyzes the Political, Economic, Social, and Technological external factors affecting an organization."
+    tags: "market_analysis,external_environment,strategy,macro"
+    components: "Political,Economic,Social,Technological"
+    solves_problem_type: "external_macro_environment_analysis"
+    complexity_level: "medium"
+    estimated_duration: "2-4 hours"
+    required_data_types: ["market_data", "regulatory_data", "social_trends", "technology_trends"]
+    output_format: "structured_analysis"
+
+  - name: SWOT
+    description: "Evaluates Strengths, Weaknesses, Opportunities, and Threats for strategic planning."
+    tags: "business_analysis,strategy,internal_external,assessment"
+    components: "Strengths,Weaknesses,Opportunities,Threats"
+    solves_problem_type: "internal_and_external_assessment"
+    complexity_level: "low"
+    estimated_duration: "1-2 hours"
+    required_data_types: ["internal_data", "market_data", "competitive_data"]
+    output_format: "matrix_analysis"
+
+  - name: "Porter's Five Forces"
+    description: "A model that identifies and analyzes five competitive forces that shape every industry."
+    tags: "competition_analysis,industry_analysis,strategy"
+    components: "Competitive_Rivalry,Supplier_Power,Buyer_Power,Threat_of_Substitution,Threat_of_New_Entry"
+    solves_problem_type: "industry_competition_analysis"
+    complexity_level: "high"
+    estimated_duration: "3-5 hours"
+    required_data_types: ["industry_data", "competitive_data", "supplier_data", "customer_data"]
+    output_format: "force_analysis"
+
+  - name: AIDA Model
+    description: "A model that describes the steps a customer goes through in the process of purchasing a product."
+    tags: "marketing,sales_funnel,customer_journey"
+    components: "Attention,Interest,Desire,Action"
+    solves_problem_type: "customer_journey_mapping"
+    complexity_level: "medium"
+    estimated_duration: "2-3 hours"
+    required_data_types: ["customer_data", "behavioral_data", "marketing_data"]
+    output_format: "journey_map"
+
+  - name: "Value Chain Analysis"
+    description: "Analyzes the activities within and around an organization to understand sources of competitive advantage."
+    tags: "operations,strategy,value_creation,efficiency"
+    components: "Primary_Activities,Support_Activities,Margin_Analysis"
+    solves_problem_type: "operational_efficiency_analysis"
+    complexity_level: "high"
+    estimated_duration: "4-6 hours"
+    required_data_types: ["operational_data", "cost_data", "process_data"]
+    output_format: "value_chain_diagram"
+
+  - name: "BCG Matrix"
+    description: "Portfolio analysis tool that categorizes business units based on market growth and market share."
+    tags: "portfolio_analysis,strategy,resource_allocation"
+    components: "Stars,Cash_Cows,Question_Marks,Dogs"
+    solves_problem_type: "portfolio_optimization"
+    complexity_level: "medium"
+    estimated_duration: "2-3 hours"
+    required_data_types: ["financial_data", "market_data", "product_data"]
+    output_format: "matrix_analysis"
+
+  - name: "Balanced Scorecard"
+    description: "Strategic planning and management system that aligns business activities to vision and strategy."
+    tags: "performance_management,strategy,kpi,measurement"
+    components: "Financial,Customer,Internal_Process,Learning_Growth"
+    solves_problem_type: "performance_measurement"
+    complexity_level: "high"
+    estimated_duration: "5-8 hours"
+    required_data_types: ["financial_data", "customer_data", "operational_data", "hr_data"]
+    output_format: "scorecard"
+
+  - name: "Root Cause Analysis"
+    description: "Problem-solving method aimed at identifying the root causes of faults or problems."
+    tags: "problem_solving,quality,process_improvement"
+    components: "Problem_Definition,Data_Collection,Cause_Identification,Solution_Development"
+    solves_problem_type: "problem_diagnosis"
+    complexity_level: "medium"
+    estimated_duration: "3-4 hours"
+    required_data_types: ["incident_data", "process_data", "historical_data"]
+    output_format: "cause_tree"
+
+  - name: "Stakeholder Analysis"
+    description: "Identifies and analyzes the influence and interest of key stakeholders in a project or organization."
+    tags: "stakeholder_management,communication,influence"
+    components: "Stakeholder_Identification,Interest_Assessment,Influence_Mapping,Engagement_Strategy"
+    solves_problem_type: "stakeholder_management"
+    complexity_level: "low"
+    estimated_duration: "1-2 hours"
+    required_data_types: ["stakeholder_data", "organizational_data"]
+    output_format: "stakeholder_map"
+
+  - name: "Risk Assessment Matrix"
+    description: "Evaluates and prioritizes risks based on their probability and impact."
+    tags: "risk_management,assessment,prioritization"
+    components: "Risk_Identification,Probability_Assessment,Impact_Assessment,Risk_Prioritization"
+    solves_problem_type: "risk_evaluation"
+    complexity_level: "medium"
+    estimated_duration: "2-4 hours"
+    required_data_types: ["risk_data", "historical_data", "impact_data"]
+    output_format: "risk_matrix"
+
+  - name: "Customer Persona Development"
+    description: "Creates detailed profiles of target customers based on research and data."
+    tags: "customer_research,marketing,user_experience"
+    components: "Demographics,Psychographics,Behaviors,Pain_Points,Goals"
+    solves_problem_type: "customer_understanding"
+    complexity_level: "medium"
+    estimated_duration: "3-5 hours"
+    required_data_types: ["customer_data", "survey_data", "behavioral_data"]
+    output_format: "persona_profiles"
+
+  - name: "Gap Analysis"
+    description: "Compares current state with desired future state to identify gaps and improvement opportunities."
+    tags: "strategy,improvement,planning,assessment"
+    components: "Current_State,Future_State,Gap_Identification,Action_Planning"
+    solves_problem_type: "improvement_planning"
+    complexity_level: "medium"
+    estimated_duration: "2-3 hours"
+    required_data_types: ["current_state_data", "benchmark_data", "target_data"]
+    output_format: "gap_analysis_report"
+
+# Meta-framework combinations for complex problems
+meta_frameworks:
+  - name: "Full Business Strategy Creation"
+    description: "Comprehensive business strategy development using multiple frameworks"
+    component_frameworks: ["PEST", "Porter's Five Forces", "SWOT", "Value Chain Analysis"]
+    solves_problem_type: "full_business_strategy_creation"
+    complexity_level: "very_high"
+    estimated_duration: "10-20 hours"
+    strategy: "decomposition"
+
+  - name: "Market Entry Analysis"
+    description: "Complete analysis for entering new markets"
+    component_frameworks: ["PEST", "Porter's Five Forces", "Stakeholder Analysis", "Risk Assessment Matrix"]
+    solves_problem_type: "market_entry_planning"
+    complexity_level: "high"
+    estimated_duration: "8-12 hours"
+    strategy: "decomposition"
+
+  - name: "Digital Transformation Planning"
+    description: "Comprehensive digital transformation strategy"
+    component_frameworks: ["Gap Analysis", "Stakeholder Analysis", "Risk Assessment Matrix", "Balanced Scorecard"]
+    solves_problem_type: "digital_transformation"
+    complexity_level: "very_high"
+    estimated_duration: "15-25 hours"
+    strategy: "decomposition"

@@ -1,10 +1,10 @@
 import asyncio
 import logging
 from typing import Dict, Any, AsyncGenerator, Optional
-from app.core.registry import register_ai_service
+from app.config.registry import register_ai_service
 from app.services.general.base import GeneralServiceBase
 from app.llm import get_llm_manager, LLMMessage, AIProvider, LLMResponse
-from app.core.task_context import TaskContext
+from app.domain.task.model import TaskContext
 
 logger = logging.getLogger(__name__)
 

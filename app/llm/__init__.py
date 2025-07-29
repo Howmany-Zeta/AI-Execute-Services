@@ -28,9 +28,6 @@ from .openai_client import OpenAIClient
 from .vertex_client import VertexAIClient
 from .xai_client import XAIClient
 
-# Legacy client for backward compatibility
-from .llm_client import LLMClient, get_llm_client
-
 __all__ = [
     # Base classes and types
     'BaseLLMClient',
@@ -50,10 +47,6 @@ __all__ = [
     'OpenAIClient',
     'VertexAIClient',
     'XAIClient',
-
-    # Legacy compatibility
-    'LLMClient',
-    'get_llm_client',
 
     # Convenience functions
     'generate_text',

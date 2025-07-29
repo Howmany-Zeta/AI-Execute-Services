@@ -1,17 +1,18 @@
 import logging
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional, Union, List
 from enum import Enum
 
 from .base_client import BaseLLMClient, LLMMessage, LLMResponse
 from .openai_client import OpenAIClient
 from .vertex_client import VertexAIClient
 from .xai_client import XAIClient
+from ..utils.base_callback import CustomAsyncCallbackHandler
 
 logger = logging.getLogger(__name__)
 
 class AIProvider(str, Enum):
     OPENAI = "OpenAI"
-    VERTEX = "vertex"
+    VERTEX = "Vertex"
     XAI = "xAI"
 
 class LLMClientFactory:
@@ -79,14 +80,15 @@ class LLMClientManager:
         if not context:
             return None, None
 
-        # Check for aiPreference in metadata
         metadata = context.get('metadata', {})
-        ai_preference = metadata.get('aiPreference', {})
 
+        # First, check for aiPreference in metadata
+        ai_preference = metadata.get('aiPreference', {})
         if isinstance(ai_preference, dict):
             provider = ai_preference.get('provider')
             model = ai_preference.get('model')
-            return provider, model
+            if provider is not None:
+                return provider, model
 
         # Fallback to direct provider/model in metadata
         provider = metadata.get('provider')
@@ -101,6 +103,7 @@ class LLMClientManager:
         context: Optional[Dict[str, Any]] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        callbacks: Optional[List[CustomAsyncCallbackHandler]] = None,
         **kwargs
     ) -> LLMResponse:
         """
@@ -113,6 +116,7 @@ class LLMClientManager:
             context: TaskContext or dict containing aiPreference
             temperature: Sampling temperature (0.0 to 2.0)
             max_tokens: Maximum tokens to generate
+            callbacks: List of callback handlers to execute during LLM calls
             **kwargs: Additional provider-specific parameters
 
         Returns:
@@ -129,20 +133,62 @@ class LLMClientManager:
         if isinstance(messages, str):
             messages = [LLMMessage(role="user", content=messages)]
 
-        # Get the appropriate client
-        client = self.factory.get_client(final_provider)
+        # Execute on_llm_start callbacks
+        if callbacks:
+            # Convert LLMMessage objects to dictionaries for callbacks
+            messages_dict = [{"role": msg.role, "content": msg.content} for msg in messages]
+            for callback in callbacks:
+                try:
+                    await callback.on_llm_start(messages_dict, provider=final_provider, model=final_model, **kwargs)
+                except Exception as e:
+                    logger.error(f"Error in callback on_llm_start: {e}")
 
-        # Generate text
-        response = await client.generate_text(
-            messages=messages,
-            model=final_model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            **kwargs
-        )
+        try:
+            # Get the appropriate client
+            client = self.factory.get_client(final_provider)
 
-        logger.info(f"Generated text using {final_provider}/{response.model}")
-        return response
+            # Generate text
+            response = await client.generate_text(
+                messages=messages,
+                model=final_model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                **kwargs
+            )
+
+            # Execute on_llm_end callbacks
+            if callbacks:
+                # Convert LLMResponse object to dictionary for callbacks
+                response_dict = {
+                    "content": response.content,
+                    "provider": response.provider,
+                    "model": response.model,
+                    "tokens_used": response.tokens_used,
+                    "prompt_tokens": response.prompt_tokens,
+                    "completion_tokens": response.completion_tokens,
+                    "cost_estimate": response.cost_estimate,
+                    "response_time": response.response_time
+                }
+                for callback in callbacks:
+                    try:
+                        await callback.on_llm_end(response_dict, provider=final_provider, model=final_model, **kwargs)
+                    except Exception as e:
+                        logger.error(f"Error in callback on_llm_end: {e}")
+
+            logger.info(f"Generated text using {final_provider}/{response.model}")
+            return response
+
+        except Exception as e:
+            # Execute on_llm_error callbacks
+            if callbacks:
+                for callback in callbacks:
+                    try:
+                        await callback.on_llm_error(e, provider=final_provider, model=final_model, **kwargs)
+                    except Exception as callback_error:
+                        logger.error(f"Error in callback on_llm_error: {callback_error}")
+
+            # Re-raise the original exception
+            raise
 
     async def stream_text(
         self,
@@ -152,10 +198,21 @@ class LLMClientManager:
         context: Optional[Dict[str, Any]] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        callbacks: Optional[List[CustomAsyncCallbackHandler]] = None,
         **kwargs
     ):
         """
         Stream text generation using context-aware provider selection
+
+        Args:
+            messages: Either a string prompt or list of LLMMessage objects
+            provider: AI provider to use (can be overridden by context)
+            model: Specific model to use (can be overridden by context)
+            context: TaskContext or dict containing aiPreference
+            temperature: Sampling temperature (0.0 to 2.0)
+            max_tokens: Maximum tokens to generate
+            callbacks: List of callback handlers to execute during LLM calls
+            **kwargs: Additional provider-specific parameters
 
         Yields:
             str: Incremental text chunks
@@ -171,18 +228,74 @@ class LLMClientManager:
         if isinstance(messages, str):
             messages = [LLMMessage(role="user", content=messages)]
 
-        # Get the appropriate client
-        client = self.factory.get_client(final_provider)
+        # Execute on_llm_start callbacks
+        if callbacks:
+            # Convert LLMMessage objects to dictionaries for callbacks
+            messages_dict = [{"role": msg.role, "content": msg.content} for msg in messages]
+            for callback in callbacks:
+                try:
+                    await callback.on_llm_start(messages_dict, provider=final_provider, model=final_model, **kwargs)
+                except Exception as e:
+                    logger.error(f"Error in callback on_llm_start: {e}")
 
-        # Stream text
-        async for chunk in client.stream_text(
-            messages=messages,
-            model=final_model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            **kwargs
-        ):
-            yield chunk
+        try:
+            # Get the appropriate client
+            client = self.factory.get_client(final_provider)
+
+            # Collect streamed content for token counting
+            collected_content = ""
+
+            # Stream text
+            async for chunk in await client.stream_text(
+                messages=messages,
+                model=final_model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                **kwargs
+            ):
+                collected_content += chunk
+                yield chunk
+
+            # Create a response object for callbacks (streaming doesn't return LLMResponse directly)
+            # We need to estimate token usage for streaming responses
+            estimated_tokens = len(collected_content) // 4  # Rough estimation
+            stream_response = LLMResponse(
+                content=collected_content,
+                provider=str(final_provider),
+                model=final_model or "unknown",
+                tokens_used=estimated_tokens
+            )
+
+            # Execute on_llm_end callbacks
+            if callbacks:
+                # Convert LLMResponse object to dictionary for callbacks
+                response_dict = {
+                    "content": stream_response.content,
+                    "provider": stream_response.provider,
+                    "model": stream_response.model,
+                    "tokens_used": stream_response.tokens_used,
+                    "prompt_tokens": stream_response.prompt_tokens,
+                    "completion_tokens": stream_response.completion_tokens,
+                    "cost_estimate": stream_response.cost_estimate,
+                    "response_time": stream_response.response_time
+                }
+                for callback in callbacks:
+                    try:
+                        await callback.on_llm_end(response_dict, provider=final_provider, model=final_model, **kwargs)
+                    except Exception as e:
+                        logger.error(f"Error in callback on_llm_end: {e}")
+
+        except Exception as e:
+            # Execute on_llm_error callbacks
+            if callbacks:
+                for callback in callbacks:
+                    try:
+                        await callback.on_llm_error(e, provider=final_provider, model=final_model, **kwargs)
+                    except Exception as callback_error:
+                        logger.error(f"Error in callback on_llm_error: {callback_error}")
+
+            # Re-raise the original exception
+            raise
 
     async def close(self):
         """Close all clients"""
@@ -201,20 +314,26 @@ async def generate_text(
     provider: Optional[Union[str, AIProvider]] = None,
     model: Optional[str] = None,
     context: Optional[Dict[str, Any]] = None,
+    temperature: float = 0.7,
+    max_tokens: Optional[int] = None,
+    callbacks: Optional[List[CustomAsyncCallbackHandler]] = None,
     **kwargs
 ) -> LLMResponse:
     """Generate text using the global LLM manager"""
     manager = await get_llm_manager()
-    return await manager.generate_text(messages, provider, model, context, **kwargs)
+    return await manager.generate_text(messages, provider, model, context, temperature, max_tokens, callbacks, **kwargs)
 
 async def stream_text(
     messages: Union[str, list[LLMMessage]],
     provider: Optional[Union[str, AIProvider]] = None,
     model: Optional[str] = None,
     context: Optional[Dict[str, Any]] = None,
+    temperature: float = 0.7,
+    max_tokens: Optional[int] = None,
+    callbacks: Optional[List[CustomAsyncCallbackHandler]] = None,
     **kwargs
 ):
     """Stream text using the global LLM manager"""
     manager = await get_llm_manager()
-    async for chunk in manager.stream_text(messages, provider, model, context, **kwargs):
+    async for chunk in manager.stream_text(messages, provider, model, context, temperature, max_tokens, callbacks, **kwargs):
         yield chunk

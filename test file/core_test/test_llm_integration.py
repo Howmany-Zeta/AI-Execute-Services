@@ -20,11 +20,11 @@ async def test_service_registration():
 
     try:
         # Import services to ensure they are registered
-        import app.services.domain.services
+        import app.services.scholar.services
         import app.services.general.services
         import app.services.multi_task.services
 
-        from app.core.registry import AI_SERVICE_REGISTRY
+        from app.config.registry import AI_SERVICE_REGISTRY
 
         print("Registered services:")
         for (mode, service), cls in AI_SERVICE_REGISTRY.items():

@@ -4,11 +4,11 @@ Test script to verify service registration
 """
 
 # Import services to ensure they are registered
-import app.services.domain.services
+import app.services.scholar.services
 import app.services.general.services
 import app.services.multi_task.services
 
-from app.core.registry import AI_SERVICE_REGISTRY
+from app.config.registry import AI_SERVICE_REGISTRY
 
 def test_service_registration():
     """Test that all expected services are registered"""

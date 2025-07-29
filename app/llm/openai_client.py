@@ -6,7 +6,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 import httpx
 
 from .base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
-from app.core.config import get_settings
+from app.config.config import get_settings
 
 logger = logging.getLogger(__name__)
 
