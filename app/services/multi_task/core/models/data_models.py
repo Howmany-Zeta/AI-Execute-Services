@@ -4,7 +4,7 @@ Data Models
 Data models for storage and persistence operations in the multi-task service.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field, field_serializer
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 from enum import Enum
@@ -80,12 +80,12 @@ class StorageMetadata(BaseModel):
 
     # Custom metadata
     custom_metadata: Dict[str, Any] = Field(default_factory=dict, description="Custom metadata")
+    model_config = ConfigDict(use_enum_values=True)
 
-    class Config:
-        use_enum_values = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('created_at', 'updated_at', 'accessed_at', 'expires_at')
+    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime fields to ISO format."""
+        return value.isoformat() if value else None
 
 
 class StorageConfig(BaseModel):
@@ -118,9 +118,7 @@ class StorageConfig(BaseModel):
     enable_backup: bool = Field(default=False, description="Enable automatic backup")
     backup_interval_hours: int = Field(default=24, description="Backup interval in hours")
     retention_days: int = Field(default=30, description="Data retention in days")
-
-    class Config:
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
 
 
 class DataRecord(BaseModel):
@@ -147,11 +145,12 @@ class DataRecord(BaseModel):
     # Audit trail
     created_by: Optional[str] = Field(None, description="Creator user ID")
     updated_by: Optional[str] = Field(None, description="Last updater user ID")
+    model_config = ConfigDict()
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('metadata')
+    def serialize_metadata(self, value: StorageMetadata) -> dict:
+        """Serialize metadata with proper datetime handling."""
+        return value.model_dump()
 
 
 class StorageOperation(BaseModel):
@@ -186,12 +185,12 @@ class StorageOperation(BaseModel):
     # Timestamps
     started_at: datetime = Field(..., description="Operation start timestamp")
     completed_at: Optional[datetime] = Field(None, description="Operation completion timestamp")
+    model_config = ConfigDict(use_enum_values=True)
 
-    class Config:
-        use_enum_values = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('started_at', 'completed_at')
+    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime fields to ISO format."""
+        return value.isoformat() if value else None
 
 
 class BackupRecord(BaseModel):
@@ -228,12 +227,12 @@ class BackupRecord(BaseModel):
 
     # Metadata
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional backup metadata")
+    model_config = ConfigDict(use_enum_values=True)
 
-    class Config:
-        use_enum_values = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('created_at', 'expires_at')
+    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime fields to ISO format."""
+        return value.isoformat() if value else None
 
 
 class CacheEntry(BaseModel):
@@ -264,11 +263,12 @@ class CacheEntry(BaseModel):
     # Metadata
     tags: List[str] = Field(default_factory=list, description="Cache tags")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    model_config = ConfigDict()
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('created_at', 'accessed_at', 'expires_at')
+    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime fields to ISO format."""
+        return value.isoformat() if value else None
 
 
 class DataIndex(BaseModel):
@@ -297,8 +297,9 @@ class DataIndex(BaseModel):
 
     # Metadata
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional index metadata")
+    model_config = ConfigDict()
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('last_updated')
+    def serialize_datetime(self, value: datetime) -> str:
+        """Serialize datetime fields to ISO format."""
+        return value.isoformat()

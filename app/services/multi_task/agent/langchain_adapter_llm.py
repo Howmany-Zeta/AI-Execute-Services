@@ -9,13 +9,18 @@ It can operate in two modes:
 
 import logging
 import asyncio
-from typing import Any, List, Optional, Dict, Union
+from typing import Any, List, Optional, Dict, Union, TYPE_CHECKING
 from langchain.llms.base import LLM
 from langchain.schema import LLMResult, Generation
 from langchain.callbacks.manager import CallbackManagerForLLMRun
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
-from app.services.llm_integration import LLMIntegrationManager
+# Use TYPE_CHECKING to avoid circular imports and runtime validation issues
+if TYPE_CHECKING:
+    from app.services.llm_integration import LLMIntegrationManager
+else:
+    # Import for runtime use
+    from app.services.llm_integration import LLMIntegrationManager
 
 logger = logging.getLogger(__name__)
 
@@ -28,15 +33,15 @@ class LangChainAdapterLLM(LLM):
     providing intelligent routing based on whether static configuration is provided.
     """
 
-    # Declare Pydantic fields
-    llm_integration_manager: LLMIntegrationManager = Field(...)
+    # Declare Pydantic fields with relaxed validation for llm_integration_manager
+    llm_integration_manager: Any = Field(...)
     context: Dict[str, Any] = Field(...)
     static_provider: Optional[str] = Field(default=None)
     static_model: Optional[str] = Field(default=None)
 
     def __init__(
         self,
-        manager: LLMIntegrationManager,
+        manager: Any,  # Changed from LLMIntegrationManager to Any
         context: Dict[str, Any],
         static_provider: Optional[str] = None,
         static_model: Optional[str] = None,
@@ -51,6 +56,13 @@ class LangChainAdapterLLM(LLM):
             static_provider: Optional static LLM provider (overrides context)
             static_model: Optional static LLM model (overrides context)
         """
+        # Runtime validation to ensure manager has required methods
+        if not hasattr(manager, 'generate_with_context'):
+            raise TypeError(
+                f"manager must be an LLMIntegrationManager instance with generate_with_context method. "
+                f"Got: {type(manager)}"
+            )
+
         super().__init__(
             llm_integration_manager=manager,
             context=context,
@@ -67,6 +79,9 @@ class LangChainAdapterLLM(LLM):
             )
         else:
             logger.debug("LangChain adapter initialized in context-aware mode")
+
+        # Additional debug logging for type validation
+        logger.debug(f"LLM manager type: {type(manager)}, module: {manager.__class__.__module__}")
 
     @property
     def _llm_type(self) -> str:
@@ -297,7 +312,4 @@ class LangChainAdapterLLM(LLM):
             "static_model": self.static_model,
             "context_aware": self.static_provider is None
         }
-
-    class Config:
-        """Pydantic configuration."""
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)

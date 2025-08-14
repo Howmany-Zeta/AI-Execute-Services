@@ -4,7 +4,7 @@ LLM Binding Schema
 Pydantic schema definitions for llm_binding.yaml configuration validation.
 """
 
-from pydantic import BaseModel, Field, validator
+from pydantic import field_validator, ConfigDict, BaseModel, Field, model_validator
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
@@ -15,7 +15,8 @@ class LLMBindingEntrySchema(BaseModel):
     llm_provider: Optional[str] = Field(None, description="LLM provider name (OpenAI, Vertex, etc.)")
     llm_model: Optional[str] = Field(None, description="Specific model name")
 
-    @validator('llm_provider')
+    @field_validator('llm_provider')
+    @classmethod
     def validate_provider(cls, v):
         """Validate LLM provider."""
         if v is None:
@@ -26,15 +27,18 @@ class LLMBindingEntrySchema(BaseModel):
             raise ValueError(f"Invalid provider: {v}. Valid providers: {valid_providers}")
         return v
 
-    @validator('llm_model')
-    def validate_model(cls, v, values):
-        """Validate LLM model based on provider."""
-        if v is None:
-            return v
+    @model_validator(mode='after')
+    def validate_model_against_provider(self) -> 'LLMBindingEntrySchema':
+        """Validate that the llm_model is compatible with the specified llm_provider."""
+        # Use self to access the model's fields
+        llm_model = self.llm_model
+        llm_provider = self.llm_provider
 
-        provider = values.get('llm_provider')
-        if provider is None:
-            raise ValueError("llm_model cannot be set without llm_provider")
+        if llm_model is None:
+            return self
+
+        if llm_provider is None:
+            raise ValueError("'llm_model' cannot be set without an 'llm_provider'.")
 
         valid_models = {
             "OpenAI": ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo", "gpt-4o", "gpt-4o-mini"],
@@ -47,26 +51,27 @@ class LLMBindingEntrySchema(BaseModel):
             ]
         }
 
-        if provider in valid_models and valid_models[provider]:
-            if v not in valid_models[provider]:
-                raise ValueError(f"Invalid model '{v}' for provider '{provider}'. Valid models: {valid_models[provider]}")
+        if llm_provider in valid_models:
+            if llm_model not in valid_models[llm_provider]:
+                raise ValueError(f"Invalid model '{llm_model}' for provider '{llm_provider}'. Valid models are: {valid_models[llm_provider]}")
 
-        return v
+        # Always return the self instance at the end
+        return self
 
-    @validator('llm_model', always=True)
-    def validate_provider_model_consistency(cls, v, values):
-        """Ensure provider and model are both set or both None."""
-        provider = values.get('llm_provider')
+    @model_validator(mode='after')
+    def validate_provider_model_consistency(self) -> 'LLMBindingEntrySchema':
+        """Ensures that llm_provider and llm_model are either both set or both None."""
+        # Use self to access the model's fields
+        provider_is_set = self.llm_provider is not None
+        model_is_set = self.llm_model is not None
 
-        # Both should be set or both should be None for context-aware selection
-        if (provider is None) != (v is None):
-            raise ValueError("llm_provider and llm_model must both be set or both be None")
+        if provider_is_set != model_is_set:
+            raise ValueError("llm_provider and llm_model must either both be set, or both be None.")
 
-        return v
+        # Always return the self instance at the end
+        return self
 
-    class Config:
-        """Pydantic configuration."""
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class LLMBindingSchema(BaseModel):
@@ -75,7 +80,8 @@ class LLMBindingSchema(BaseModel):
     metadata: Dict[str, Any] = Field(..., description="Configuration metadata")
     llm_bindings: Dict[str, LLMBindingEntrySchema] = Field(..., description="Agent to LLM bindings")
 
-    @validator('metadata')
+    @field_validator('metadata')
+    @classmethod
     def validate_metadata(cls, v):
         """Validate metadata structure."""
         required_fields = ['version', 'description']
@@ -91,7 +97,8 @@ class LLMBindingSchema(BaseModel):
 
         return v
 
-    @validator('llm_bindings')
+    @field_validator('llm_bindings')
+    @classmethod
     def validate_bindings(cls, v):
         """Validate LLM bindings structure."""
         if not v:
@@ -148,11 +155,7 @@ class LLMBindingSchema(BaseModel):
             'context_aware_agents': context_aware_count,
             'total_agents': len(bindings)
         }
-
-    class Config:
-        """Pydantic configuration."""
-        extra = "forbid"
-        validate_assignment = True
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
 
 class LLMBindingValidationSchema(BaseModel):
@@ -167,10 +170,7 @@ class LLMBindingValidationSchema(BaseModel):
     missing_agents: List[str] = Field(default_factory=list, description="Agents missing from bindings")
     extra_agents: List[str] = Field(default_factory=list, description="Unknown agents in bindings")
     validation_timestamp: datetime = Field(default_factory=datetime.utcnow, description="Validation timestamp")
-
-    class Config:
-        """Pydantic configuration."""
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class LLMProviderStatsSchema(BaseModel):
@@ -180,7 +180,4 @@ class LLMProviderStatsSchema(BaseModel):
     agent_count: int = Field(..., description="Number of agents using this provider")
     agents: List[str] = Field(..., description="List of agents using this provider")
     models_used: List[str] = Field(default_factory=list, description="Models used by this provider")
-
-    class Config:
-        """Pydantic configuration."""
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")

@@ -55,7 +55,8 @@ class PromptValidator:
         self.optional_role_fields = {
             'tools': list,
             'tools_instruction': str,
-            'domain_specialization': str
+            'domain_specialization': str,
+            'reasoning_guidance': str
         }
 
         # Valid tool names (should match available tools)
@@ -194,6 +195,7 @@ class PromptValidator:
         self._validate_role_tools(role_name, role_config.get('tools', []), result)
         self._validate_role_tools_instruction(role_name, role_config.get('tools_instruction', ''), result)
         self._validate_role_domain_specialization(role_name, role_config.get('domain_specialization', ''), result)
+        self._validate_role_reasoning_guidance(role_name, role_config.get('reasoning_guidance', ''), result)
 
     def _validate_role_goal(self, role_name: str, goal: str, result: ValidationResult) -> None:
         """Validate a role's goal."""
@@ -275,6 +277,33 @@ class PromptValidator:
 
         if not has_examples:
             result.add_warning(f"Role '{role_name}' domain specialization should include specific domain examples")
+
+    def _validate_role_reasoning_guidance(self, role_name: str, reasoning_guidance: str, result: ValidationResult) -> None:
+        """Validate a role's reasoning guidance."""
+        if not reasoning_guidance:
+            return  # Optional field
+
+        # Check for ReAct framework components
+        react_components = ['Thought', 'Action', 'Observation', 'Reflection']
+        missing_components = []
+
+        for component in react_components:
+            if component not in reasoning_guidance:
+                missing_components.append(component)
+
+        if missing_components:
+            result.add_warning(f"Role '{role_name}' reasoning guidance missing ReAct components: {missing_components}")
+
+        # Check for ReAct pattern keywords
+        react_keywords = ['ReAct', 'framework', 'reasoning', 'systematic']
+        has_react_keywords = any(keyword.lower() in reasoning_guidance.lower() for keyword in react_keywords)
+
+        if not has_react_keywords:
+            result.add_warning(f"Role '{role_name}' reasoning guidance should reference ReAct framework or systematic reasoning")
+
+        # Check minimum length for meaningful guidance
+        if len(reasoning_guidance.strip()) < 50:
+            result.add_warning(f"Role '{role_name}' reasoning guidance is very short (less than 50 characters)")
 
     def validate_role_consistency(self, roles: Dict[str, Any]) -> ValidationResult:
         """

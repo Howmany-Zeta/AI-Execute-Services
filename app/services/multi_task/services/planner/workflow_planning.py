@@ -27,7 +27,7 @@ from langgraph.graph import StateGraph, END
 # Import system components
 from ...agent.system.task_decomposer import TaskDecomposerAgent
 from ...agent.system.planner import PlannerAgent
-from .validation.plan_validator import PlanValidatorService
+from .validation import PlanValidatorService
 from ...core.models.agent_models import AgentConfig, AgentRole
 from ...core.models.services_models import WorkflowPlanningState
 from ...core.exceptions.services_exceptions import WorkflowPlanningError

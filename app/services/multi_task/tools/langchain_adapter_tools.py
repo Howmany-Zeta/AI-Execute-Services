@@ -17,7 +17,7 @@ import asyncio
 from typing import Dict, List, Any, Optional, Union, Type
 from langchain.tools import BaseTool
 from langchain.schema import BaseMessage
-from pydantic import Field, BaseModel
+from pydantic import ConfigDict, Field, BaseModel
 
 from .tool_manager import ToolManager
 from ..core.exceptions.task_exceptions import TaskValidationError, TaskExecutionError
@@ -39,10 +39,7 @@ class LangChainToolAdapter(BaseTool):
     tool_name: str = Field(...)
     operation_name: str = Field(...)
     return_direct: bool = Field(default=False)
-
-    class Config:
-        """Pydantic configuration."""
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __init__(
         self,

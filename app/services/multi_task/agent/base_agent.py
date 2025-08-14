@@ -11,10 +11,8 @@ from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 import logging
 
-from langchain.agents import AgentExecutor, BaseSingleActionAgent
-from langchain.schema import AgentAction, AgentFinish
+from langchain.agents import AgentExecutor, create_react_agent
 from langchain.tools import BaseTool
-from langchain.callbacks.manager import CallbackManagerForChainRun
 from langchain.prompts import PromptTemplate
 from pydantic import Field, ConfigDict
 
@@ -27,197 +25,6 @@ from app.services.llm_integration import LLMIntegrationManager
 from ..tools.langchain_integration_manager import LangChainIntegrationManager
 
 logger = logging.getLogger(__name__)
-
-
-class LangChainAgent(BaseSingleActionAgent):
-    """
-    LangChain-based agent implementation that wraps our custom agent logic.
-
-    This class bridges our custom agent system with LangChain's agent framework,
-    providing compatibility while maintaining our existing functionality.
-    """
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    base_agent: 'BaseAgent' = Field(...)
-    llm: LangChainAdapterLLM = Field(...)
-    tools: List[BaseTool] = Field(default_factory=list)
-    prompt_template: PromptTemplate = Field(...)
-
-    def __init__(
-        self,
-        base_agent: 'BaseAgent',
-        llm: LangChainAdapterLLM,
-        tools: List[BaseTool],
-        prompt_template: PromptTemplate,
-        **kwargs
-    ):
-        """
-        Initialize the LangChain agent wrapper.
-
-        Args:
-            base_agent: The base agent instance
-            llm: LangChain-compatible LLM adapter
-            tools: List of available tools
-            prompt_template: Prompt template for the agent
-        """
-        super().__init__(
-            base_agent=base_agent,
-            llm=llm,
-            tools=tools,
-            prompt_template=prompt_template,
-            **kwargs
-        )
-
-    @property
-    def input_keys(self) -> List[str]:
-        """Return the input keys for the agent."""
-        return ["input"]
-
-    def plan(
-        self,
-        intermediate_steps: List[tuple],
-        callbacks: Optional[CallbackManagerForChainRun] = None,
-        **kwargs: Any,
-    ) -> Union[AgentAction, AgentFinish]:
-        """
-        Plan the next action for the agent.
-
-        Args:
-            intermediate_steps: Previous actions and observations
-            callbacks: Callback manager for the chain run
-            **kwargs: Additional arguments
-
-        Returns:
-            Next action to take or finish signal
-        """
-        # Get the input from kwargs
-        user_input = kwargs.get("input", "")
-
-        # Format the prompt with current context - only use input_variables
-        prompt_vars = {
-            "input": user_input,
-            "agent_scratchpad": self._format_intermediate_steps(intermediate_steps)
-        }
-
-        formatted_prompt = self.prompt_template.format(**prompt_vars)
-
-        # Get response from LLM - use sync method that handles event loop properly
-        try:
-            import asyncio
-            # Check if we're in an async context
-            try:
-                loop = asyncio.get_running_loop()
-                # We're in an async context, but this is a sync method
-                # Use the sync call method which should handle this properly
-                response = self.llm._call(formatted_prompt)
-            except RuntimeError:
-                # No running loop, safe to use regular call
-                response = self.llm(formatted_prompt)
-        except Exception as e:
-            logger.error(f"Error calling LLM in plan method: {e}")
-            # Fallback to a simple response
-            response = f"Error: {str(e)}"
-
-        # Parse the response to determine action
-        return self._parse_response(response)
-
-    async def aplan(
-        self,
-        intermediate_steps: List[tuple],
-        callbacks: Optional[CallbackManagerForChainRun] = None,
-        **kwargs: Any,
-    ) -> Union[AgentAction, AgentFinish]:
-        """
-        Async version of plan method.
-
-        Args:
-            intermediate_steps: Previous actions and observations
-            callbacks: Callback manager for the chain run
-            **kwargs: Additional arguments
-
-        Returns:
-            Next action to take or finish signal
-        """
-        # Get the input from kwargs
-        user_input = kwargs.get("input", "")
-
-        # Format the prompt with current context - only use input_variables
-        prompt_vars = {
-            "input": user_input,
-            "agent_scratchpad": self._format_intermediate_steps(intermediate_steps)
-        }
-
-        formatted_prompt = self.prompt_template.format(**prompt_vars)
-
-        # Get response from LLM using async method
-        response = await self.llm._acall(formatted_prompt)
-
-        # Parse the response to determine action
-        return self._parse_response(response)
-
-    def _format_intermediate_steps(self, intermediate_steps: List[tuple]) -> str:
-        """Format intermediate steps for the prompt."""
-        if not intermediate_steps:
-            return ""
-
-        formatted_steps = []
-        for action, observation in intermediate_steps:
-            formatted_steps.append(f"Action: {action.tool}\nAction Input: {action.tool_input}\nObservation: {observation}")
-
-        return "\n".join(formatted_steps)
-
-    def _format_tools(self) -> str:
-        """Format tools description for the prompt."""
-        tool_descriptions = []
-        for tool in self.tools:
-            tool_descriptions.append(f"{tool.name}: {tool.description}")
-        return "\n".join(tool_descriptions)
-
-    def _parse_response(self, response: str) -> Union[AgentAction, AgentFinish]:
-        """
-        Parse LLM response to determine next action.
-
-        Args:
-            response: Raw LLM response
-
-        Returns:
-            AgentAction or AgentFinish
-        """
-        # Simple parsing logic - can be enhanced with more sophisticated parsing
-        response = response.strip()
-
-        # Check if this is a final answer
-        if "Final Answer:" in response:
-            final_answer = response.split("Final Answer:")[-1].strip()
-            return AgentFinish(
-                return_values={"output": final_answer},
-                log=response
-            )
-
-        # Try to extract action and input
-        if "Action:" in response and "Action Input:" in response:
-            try:
-                action_part = response.split("Action:")[1].split("Action Input:")[0].strip()
-                input_part = response.split("Action Input:")[1].strip()
-
-                # Find matching tool
-                tool_name = action_part
-                for tool in self.tools:
-                    if tool.name.lower() == tool_name.lower():
-                        return AgentAction(
-                            tool=tool.name,
-                            tool_input=input_part,
-                            log=response
-                        )
-            except Exception as e:
-                logger.warning(f"Failed to parse action from response: {e}")
-
-        # Default to finishing if we can't parse an action
-        return AgentFinish(
-            return_values={"output": response},
-            log=response
-        )
 
 
 class BaseAgent(ABC):
@@ -254,9 +61,6 @@ class BaseAgent(ABC):
         self.failed_tasks = 0
         self.average_execution_time = None
         self.average_quality_score = None
-
-        # LangChain agent instance
-        self._langchain_agent: Optional[AgentExecutor] = None
 
         # Memory and context
         self.memory_data: Dict[str, Any] = {}
@@ -331,16 +135,16 @@ class BaseAgent(ABC):
 
     async def create_langchain_agent(self, context: Dict[str, Any], tools: Optional[List[BaseTool]] = None) -> AgentExecutor:
         """
-        Create a LangChain AgentExecutor instance using the assembled configuration and smart adapter.
+        Create a LangChain AgentExecutor instance using the ReAct framework.
 
         Args:
-            context: Runtime context for LLM selection
-            tools: Optional list of tools to assign to the agent
+            context: Runtime context for LLM selection.
+            tools: Optional list of tools to assign to the agent.
 
         Returns:
-            LangChain AgentExecutor instance with smart LLM adapter and integrated tools
+            A LangChain AgentExecutor instance configured for ReAct.
         """
-        # Get tools from integration manager if available and no tools provided
+        # --- Step 1: Get tools (logic unchanged) ---
         if tools is None:
             if self.tool_integration_manager:
                 try:
@@ -358,7 +162,7 @@ class BaseAgent(ABC):
         if tools is None:
             tools = []
 
-        # Create the smart adapter LLM
+        # --- Step 2: Create LLM adapter (logic unchanged) ---
         adapter_llm = LangChainAdapterLLM(
             manager=self.llm_manager,
             context=context,
@@ -366,71 +170,58 @@ class BaseAgent(ABC):
             static_model=self.static_llm_model
         )
 
-        # Prepare backstory with tools instruction if available
+        # --- Step 3: Build ReAct-specific prompt ---
+        # ReAct prompt template needs to include `tools`, `tool_names`, `input`, `agent_scratchpad` variables
+        prompt_template_str = """
+**Your Role:** You are {role}, an AI assistant with the following goal: {goal}
+**Background:** {backstory}
+
+**Available Tools:**
+You have access to the following tools to help you achieve your goal:
+{tools}
+
+**Instructions on How to Respond:**
+Use the following format for your thought process:
+
+Thought: you should always think about what to do to solve the user's request.
+Action: the action to take, should be one of [{tool_names}]
+Action Input: the input to the action
+Observation: the result of the action
+... (this Thought/Action/Action Input/Observation sequence can repeat N times)
+Thought: I now have enough information to provide the final answer.
+Final Answer: the final answer to the original input question.
+
+Begin!
+
+**User's Request:** {input}
+**Your Thought Process:**
+{agent_scratchpad}
+"""
+
         backstory = self.backstory
         if self.config.tools_instruction:
             backstory = f"{backstory}\n\n{self.config.tools_instruction}"
 
-        # Create prompt template for the agent
         role_value = self.config.role.value if hasattr(self.config.role, 'value') else str(self.config.role)
 
-        # Format tools for the prompt
-        if tools:
-            tools_description = "\n".join([f"{tool.name}: {tool.description}" for tool in tools])
-            tool_names = ", ".join([tool.name for tool in tools])
-        else:
-            tools_description = "No tools available"
-            tool_names = "none"
-
-        prompt_template = PromptTemplate(
-            input_variables=["input", "agent_scratchpad"],
-            template="""You are {role}, an AI assistant with the following goal: {goal}
-
-Background: {backstory}
-
-You have access to the following tools:
-{tools}
-
-Use the following format:
-
-Question: the input question you must answer
-Thought: you should always think about what to do
-Action: the action to take, should be one of [{tool_names}]
-Action Input: the input to the action
-Observation: the result of the action
-... (this Thought/Action/Action Input/Observation can repeat N times)
-Thought: I now know the final answer
-Final Answer: the final answer to the original input question
-
-Begin!
-
-Question: {input}
-Thought: {agent_scratchpad}""",
-            partial_variables={
-                "role": role_value,
-                "goal": self.goal,
-                "backstory": backstory,
-                "tools": tools_description,
-                "tool_names": tool_names
-            }
+        prompt = PromptTemplate.from_template(prompt_template_str).partial(
+            role=role_value,
+            goal=self.goal,
+            backstory=backstory
         )
 
-        # Create the LangChain agent wrapper
-        langchain_agent = LangChainAgent(
-            base_agent=self,
-            llm=adapter_llm,
-            tools=tools or [],
-            prompt_template=prompt_template
-        )
+        # --- Step 4: Create ReAct Agent ---
+        agent = create_react_agent(adapter_llm, tools, prompt)
 
-        # Create AgentExecutor
+        # --- Step 5: Create Agent Executor ---
         agent_executor = AgentExecutor(
-            agent=langchain_agent,
-            tools=tools or [],
+            agent=agent,
+            tools=tools,
             verbose=self.config.verbose,
             max_iterations=self.config.max_iter,
             max_execution_time=self.config.max_execution_time,
-            return_intermediate_steps=True
+            return_intermediate_steps=True,
+            handle_parsing_errors=True  # Enable for increased robustness
         )
 
         return agent_executor

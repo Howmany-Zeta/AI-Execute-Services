@@ -5,7 +5,7 @@ Data models for planner-related entities in the multi-task service.
 These models define the structure and validation for planning operations.
 """
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import ConfigDict, BaseModel, Field, field_validator, field_serializer
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 from enum import Enum
@@ -93,9 +93,7 @@ class PlannerConfig(BaseModel):
     enable_parallel_optimization: bool = Field(default=True, description="Enable parallel execution optimization")
     enable_conditional_planning: bool = Field(default=True, description="Enable conditional execution planning")
     enable_adaptive_planning: bool = Field(default=False, description="Enable adaptive planning based on context")
-
-    class Config:
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
 
 
 class PlanningContext(BaseModel):
@@ -134,11 +132,12 @@ class PlanningContext(BaseModel):
     # Temporal context
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Context creation timestamp")
     expires_at: Optional[datetime] = Field(None, description="Context expiration timestamp")
+    model_config = ConfigDict()
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('created_at', 'expires_at', 'deadline')
+    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime fields to ISO format."""
+        return value.isoformat() if value else None
 
 
 class IntentParsingResult(BaseModel):
@@ -221,10 +220,7 @@ class DSLStep(BaseModel):
     estimated_duration_seconds: Optional[float] = Field(None, description="Estimated execution time")
     priority: int = Field(default=0, description="Step priority")
     retry_count: int = Field(default=0, description="Number of retry attempts")
-
-    class Config:
-        # Allow forward references for recursive model
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 # Update forward reference
@@ -285,12 +281,12 @@ class WorkflowPlan(BaseModel):
 
     # Context
     planning_context: PlanningContext = Field(..., description="Context used for planning")
+    model_config = ConfigDict(use_enum_values=True)
 
-    class Config:
-        use_enum_values = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('created_at', 'updated_at')
+    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime fields to ISO format."""
+        return value.isoformat() if value else None
 
 
 class PlanValidationResult(BaseModel):
@@ -313,11 +309,12 @@ class PlanValidationResult(BaseModel):
     # Metadata
     validated_at: datetime = Field(default_factory=datetime.utcnow, description="Validation timestamp")
     validator_version: str = Field(..., description="Version of the validator used")
+    model_config = ConfigDict()
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('validated_at')
+    def serialize_datetime(self, value: datetime) -> str:
+        """Serialize datetime fields to ISO format."""
+        return value.isoformat()
 
 
 class PlanMetrics(BaseModel):
@@ -348,8 +345,9 @@ class PlanMetrics(BaseModel):
 
     # Metadata
     calculated_at: datetime = Field(default_factory=datetime.utcnow, description="Metrics calculation timestamp")
+    model_config = ConfigDict()
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('calculated_at')
+    def serialize_datetime(self, value: datetime) -> str:
+        """Serialize datetime fields to ISO format."""
+        return value.isoformat()

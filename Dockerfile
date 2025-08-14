@@ -40,6 +40,20 @@ COPY pyproject.toml poetry.lock* ./
 RUN poetry install --only=main --no-root && \
     rm -rf $POETRY_CACHE_DIR
 
+# 先安装编译 cryptography 所需的系统级依赖
+# 使用 --no-install-recommends 可以保持镜像更小
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    libssl-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY pyproject.toml poetry.lock ./
+
+# 现在再运行 poetry install，它就能找到系统依赖并成功编译了
+RUN poetry install --no-root --no-dev
+
 # 下载 spaCy 模型
 RUN poetry run python -m spacy download en_core_web_sm && \
     poetry run python -m spacy download zh_core_web_sm

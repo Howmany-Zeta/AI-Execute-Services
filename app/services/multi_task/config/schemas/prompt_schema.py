@@ -4,7 +4,7 @@ Prompt Configuration Schema
 Pydantic schema definitions for prompt configuration validation.
 """
 
-from pydantic import BaseModel, Field, validator
+from pydantic import field_validator, ConfigDict, BaseModel, Field, model_validator
 from typing import Dict, List, Optional, Any, Union
 import re
 
@@ -17,8 +17,10 @@ class RoleSchema(BaseModel):
     tools: Optional[List[str]] = Field(None, description="List of tools available to this role")
     tools_instruction: Optional[str] = Field(None, description="Instructions for using tools")
     domain_specialization: Optional[str] = Field(None, description="Domain-specific specialization instructions")
+    reasoning_guidance: Optional[str] = Field(None, description="ReAct framework reasoning guidance for the role")
 
-    @validator('goal')
+    @field_validator('goal')
+    @classmethod
     def validate_goal(cls, v):
         """Validate the goal field."""
         if not v.strip():
@@ -31,14 +33,16 @@ class RoleSchema(BaseModel):
 
         return v.strip()
 
-    @validator('backstory')
+    @field_validator('backstory')
+    @classmethod
     def validate_backstory(cls, v):
         """Validate the backstory field."""
         if not v.strip():
             raise ValueError("Backstory cannot be empty or whitespace only")
         return v.strip()
 
-    @validator('tools')
+    @field_validator('tools')
+    @classmethod
     def validate_tools(cls, v):
         """Validate the tools list."""
         if v is None:
@@ -57,36 +61,45 @@ class RoleSchema(BaseModel):
 
         return v
 
-    @validator('tools_instruction')
-    def validate_tools_instruction(cls, v, values):
-        """Validate the tools instruction field."""
-        if v is None:
-            return v
+
+    @model_validator(mode='after')
+    def validate_tools_instruction(self) -> 'YourModelName': # Replace 'YourModelName' with your model's class name
+        """Validates the consistency between the 'tools' list and the 'tools_instruction' text."""
+        # Use self to access the model's fields
+        tools_instruction = self.tools_instruction
+        tools = self.tools
+
+        if tools_instruction is None:
+            return self
 
         # Check for unclosed thinking tags
-        if '<thinking>' in v and '</thinking>' not in v:
-            raise ValueError("Unclosed <thinking> tag in tools instruction")
+        if '<thinking>' in tools_instruction and '</thinking>' not in tools_instruction:
+            raise ValueError("Unclosed <thinking> tag in tools_instruction")
 
         # Check if tools are mentioned in instructions when tools list is provided
-        tools = values.get('tools', [])
         if tools:
             for tool in tools:
-                if tool not in v:
+                if tool not in tools_instruction:
                     raise ValueError(f"Tool '{tool}' is listed but not mentioned in tools_instruction")
 
         # Check for proper sub-operation format (tool.operation)
         sub_op_pattern = r'(\w+)\.(\w+)'
-        sub_operations = re.findall(sub_op_pattern, v)
+        sub_operations = re.findall(sub_op_pattern, tools_instruction)
 
         if tools and sub_operations:
             mentioned_tools = {op[0] for op in sub_operations}
             for tool in tools:
                 if tool not in mentioned_tools:
-                    raise ValueError(f"Tool '{tool}' is listed but no sub-operations are specified")
+                    raise ValueError(f"Tool '{tool}' is listed, but no sub-operations like 'tool_name.operation_name' are specified in the instructions.")
 
-        return v.strip()
+        # It's good practice to assign back the stripped value if validation passes
+        self.tools_instruction = tools_instruction.strip()
 
-    @validator('domain_specialization')
+        # Always return the self instance at the end
+        return self
+
+    @field_validator('domain_specialization')
+    @classmethod
     def validate_domain_specialization(cls, v):
         """Validate the domain specialization field."""
         if v is None:
@@ -110,7 +123,8 @@ class PromptSchema(BaseModel):
     system_prompt: str = Field(..., min_length=50, description="The main system prompt")
     roles: Dict[str, RoleSchema] = Field(..., description="Dictionary of role configurations")
 
-    @validator('system_prompt')
+    @field_validator('system_prompt')
+    @classmethod
     def validate_system_prompt(cls, v):
         """Validate the system prompt."""
         if not v.strip():
@@ -125,7 +139,8 @@ class PromptSchema(BaseModel):
 
         return v.strip()
 
-    @validator('roles')
+    @field_validator('roles')
+    @classmethod
     def validate_roles(cls, v):
         """Validate the roles dictionary."""
         if not v:
@@ -272,11 +287,7 @@ class PromptSchema(BaseModel):
                 )
 
         return domain_analysis
-
-    class Config:
-        """Pydantic configuration."""
-        extra = "forbid"  # Don't allow extra fields
-        validate_assignment = True  # Validate on assignment
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
 
 class PromptValidationSchema(BaseModel):
@@ -293,10 +304,7 @@ class PromptValidationSchema(BaseModel):
     analyze_roles_count: int = Field(default=0, description="Number of analyze category roles defined")
     generate_roles_count: int = Field(default=0, description="Number of generate category roles defined")
     domain_roles_count: int = Field(..., description="Number of domain-specific roles defined")
-
-    class Config:
-        """Pydantic configuration."""
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class RoleConsistencySchema(BaseModel):
@@ -309,10 +317,7 @@ class RoleConsistencySchema(BaseModel):
     missing_categories: List[str] = Field(default_factory=list, description="Categories without dedicated roles")
     domain_specialization_coverage: Dict[str, List[str]] = Field(default_factory=dict, description="Roles with domain specialization by category")
     roles_without_domain_specialization: List[str] = Field(default_factory=list, description="Roles missing domain specialization")
-
-    class Config:
-        """Pydantic configuration."""
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class ToolSubOperationSchema(BaseModel):
@@ -321,10 +326,7 @@ class ToolSubOperationSchema(BaseModel):
     tool_name: str = Field(..., description="Name of the tool")
     sub_operations: List[str] = Field(default_factory=list, description="List of sub-operations for this tool")
     roles_using: List[str] = Field(default_factory=list, description="Roles that use this tool")
-
-    class Config:
-        """Pydantic configuration."""
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class DomainSpecializationSchema(BaseModel):
@@ -334,7 +336,4 @@ class DomainSpecializationSchema(BaseModel):
     mentioned_domains: List[str] = Field(default_factory=list, description="Domains explicitly mentioned")
     has_dynamic_specialization: bool = Field(..., description="Whether it uses dynamic specialization pattern")
     tool_domain_mapping: Dict[str, List[str]] = Field(default_factory=dict, description="Tools mapped to specific domains")
-
-    class Config:
-        """Pydantic configuration."""
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")

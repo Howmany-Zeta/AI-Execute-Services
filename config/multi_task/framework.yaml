@@ -123,6 +123,116 @@ frameworks:
     required_data_types: ["current_state_data", "benchmark_data", "target_data"]
     output_format: "gap_analysis_report"
 
+  - name: "Design Thinking"
+    description: "Human-centered approach to innovation that integrates the needs of people, possibilities of technology, and requirements for business success."
+    tags: "innovation,user_experience,problem_solving,creativity,human_centered"
+    components: "Empathize,Define,Ideate,Prototype,Test"
+    solves_problem_type: "innovation_and_user_experience"
+    complexity_level: "medium"
+    estimated_duration: "4-8 hours"
+    required_data_types: ["user_data", "behavioral_data", "feedback_data", "market_research"]
+    output_format: "design_solution"
+
+  - name: "Lean Startup Methodology"
+    description: "Methodology for developing businesses and products that aims to shorten product development cycles through validated learning."
+    tags: "startup,product_development,validation,iteration,mvp"
+    components: "Build,Measure,Learn,Pivot_or_Persevere"
+    solves_problem_type: "product_development_validation"
+    complexity_level: "medium"
+    estimated_duration: "3-6 hours"
+    required_data_types: ["customer_feedback", "usage_data", "market_data", "financial_data"]
+    output_format: "validation_report"
+
+  - name: "OKRs Framework"
+    description: "Objectives and Key Results framework for setting and tracking goals and outcomes."
+    tags: "goal_setting,performance,measurement,alignment,objectives"
+    components: "Objectives,Key_Results,Initiatives,Progress_Tracking"
+    solves_problem_type: "goal_setting_and_tracking"
+    complexity_level: "low"
+    estimated_duration: "2-3 hours"
+    required_data_types: ["strategic_goals", "performance_data", "team_data"]
+    output_format: "okr_framework"
+
+  - name: "Agile Retrospective"
+    description: "Framework for teams to reflect on their process and continuously improve."
+    tags: "agile,continuous_improvement,team_development,process_optimization"
+    components: "What_Went_Well,What_Didn't_Go_Well,Action_Items,Experiments"
+    solves_problem_type: "team_process_improvement"
+    complexity_level: "low"
+    estimated_duration: "1-2 hours"
+    required_data_types: ["team_feedback", "process_data", "performance_metrics"]
+    output_format: "improvement_plan"
+
+  - name: "Financial Ratio Analysis"
+    description: "Systematic analysis of financial ratios to evaluate company performance and financial health."
+    tags: "financial_analysis,performance,ratios,profitability,liquidity"
+    components: "Liquidity_Ratios,Profitability_Ratios,Efficiency_Ratios,Leverage_Ratios"
+    solves_problem_type: "financial_performance_analysis"
+    complexity_level: "medium"
+    estimated_duration: "2-4 hours"
+    required_data_types: ["financial_statements", "industry_benchmarks", "historical_data"]
+    output_format: "financial_analysis_report"
+
+  - name: "Data Analysis Framework"
+    description: "Structured approach to analyzing data to extract insights and support decision-making."
+    tags: "data_analysis,insights,statistics,visualization,decision_support"
+    components: "Data_Collection,Data_Cleaning,Exploratory_Analysis,Statistical_Analysis,Visualization,Interpretation"
+    solves_problem_type: "data_driven_insights"
+    complexity_level: "medium"
+    estimated_duration: "3-6 hours"
+    required_data_types: ["raw_data", "metadata", "business_context"]
+    output_format: "data_insights_report"
+
+  - name: "Change Management Framework"
+    description: "Structured approach to transitioning individuals, teams, and organizations from current state to desired future state."
+    tags: "change_management,transformation,organizational_development,communication"
+    components: "Change_Readiness,Communication_Plan,Training_Plan,Resistance_Management,Success_Metrics"
+    solves_problem_type: "organizational_change"
+    complexity_level: "high"
+    estimated_duration: "4-8 hours"
+    required_data_types: ["organizational_data", "stakeholder_data", "change_requirements"]
+    output_format: "change_management_plan"
+
+  - name: "Supply Chain Analysis"
+    description: "Framework for analyzing and optimizing supply chain operations and performance."
+    tags: "supply_chain,operations,logistics,optimization,efficiency"
+    components: "Supplier_Analysis,Inventory_Management,Distribution_Analysis,Cost_Analysis,Risk_Assessment"
+    solves_problem_type: "supply_chain_optimization"
+    complexity_level: "high"
+    estimated_duration: "4-6 hours"
+    required_data_types: ["supplier_data", "inventory_data", "logistics_data", "cost_data"]
+    output_format: "supply_chain_report"
+
+  - name: "Technology Assessment Framework"
+    description: "Systematic evaluation of technology solutions and their impact on business objectives."
+    tags: "technology,assessment,digital,innovation,evaluation"
+    components: "Technology_Landscape,Requirements_Analysis,Solution_Evaluation,Risk_Assessment,Implementation_Plan"
+    solves_problem_type: "technology_evaluation"
+    complexity_level: "medium"
+    estimated_duration: "3-5 hours"
+    required_data_types: ["technical_requirements", "vendor_data", "cost_data", "performance_data"]
+    output_format: "technology_assessment_report"
+
+  - name: "Competitive Intelligence Framework"
+    description: "Systematic approach to gathering, analyzing, and acting on information about competitors and market dynamics."
+    tags: "competitive_analysis,market_intelligence,strategy,monitoring"
+    components: "Competitor_Identification,Information_Gathering,Analysis,Intelligence_Synthesis,Strategic_Implications"
+    solves_problem_type: "competitive_intelligence"
+    complexity_level: "medium"
+    estimated_duration: "3-5 hours"
+    required_data_types: ["competitor_data", "market_data", "financial_data", "product_data"]
+    output_format: "competitive_intelligence_report"
+
+  - name: "Process Optimization Framework"
+    description: "Systematic approach to analyzing and improving business processes for efficiency and effectiveness."
+    tags: "process_improvement,optimization,efficiency,workflow,automation"
+    components: "Process_Mapping,Bottleneck_Analysis,Improvement_Opportunities,Solution_Design,Implementation_Plan"
+    solves_problem_type: "process_optimization"
+    complexity_level: "medium"
+    estimated_duration: "3-4 hours"
+    required_data_types: ["process_data", "performance_metrics", "resource_data", "workflow_data"]
+    output_format: "process_optimization_plan"
+
 # Meta-framework combinations for complex problems
 meta_frameworks:
   - name: "Full Business Strategy Creation"
@@ -143,8 +253,32 @@ meta_frameworks:
 
   - name: "Digital Transformation Planning"
     description: "Comprehensive digital transformation strategy"
-    component_frameworks: ["Gap Analysis", "Stakeholder Analysis", "Risk Assessment Matrix", "Balanced Scorecard"]
+    component_frameworks: ["Gap Analysis", "Stakeholder Analysis", "Risk Assessment Matrix", "Balanced Scorecard", "Technology Assessment Framework", "Change Management Framework"]
     solves_problem_type: "digital_transformation"
     complexity_level: "very_high"
     estimated_duration: "15-25 hours"
+    strategy: "decomposition"
+
+  - name: "Product Development Strategy"
+    description: "Comprehensive product development and validation strategy"
+    component_frameworks: ["Design Thinking", "Lean Startup Methodology", "Customer Persona Development", "Competitive Intelligence Framework"]
+    solves_problem_type: "product_development_strategy"
+    complexity_level: "high"
+    estimated_duration: "10-15 hours"
+    strategy: "decomposition"
+
+  - name: "Operational Excellence Program"
+    description: "Comprehensive operational improvement and optimization program"
+    component_frameworks: ["Process Optimization Framework", "Supply Chain Analysis", "Balanced Scorecard", "Change Management Framework"]
+    solves_problem_type: "operational_excellence"
+    complexity_level: "very_high"
+    estimated_duration: "12-20 hours"
+    strategy: "decomposition"
+
+  - name: "Data-Driven Decision Making Framework"
+    description: "Comprehensive framework for implementing data-driven decision making"
+    component_frameworks: ["Data Analysis Framework", "Technology Assessment Framework", "Gap Analysis", "OKRs Framework"]
+    solves_problem_type: "data_driven_transformation"
+    complexity_level: "high"
+    estimated_duration: "8-12 hours"
     strategy: "decomposition"

@@ -457,7 +457,7 @@ Multi-task mode is specifically designed for business and research workflows tha
                 }},
                 "confidence": 0.0-1.0,
                 "reasoning": "Detailed explanation of the classification",
-                "clarification_needed": ["List of questions to clarify unclear aspects"],
+                "clarification_needed": ["List of questions to clarify unclear aspects, each questions should have a specific reason why you need to ask this question, use markedown format, each question should be a new line wiht a '-' at the beginning."],
                 "scope_assessment": {{
                     "complexity": "low|medium|high",
                     "time_span": "short|medium|long",
@@ -477,7 +477,6 @@ Multi-task mode is specifically designed for business and research workflows tha
 
             # DEBUG: Log the raw LLM output for debugging
             logger.debug(f"DEBUG_INTERACTER: Raw LLM output: {actual_output}")
-            logger.debug(f"DEBUG_INTERACTER: Raw LLM output type: {type(actual_output)}")
 
             # Clean LLM output to extract pure JSON
             cleaned_json_string = self._extract_json_from_llm_output(actual_output)

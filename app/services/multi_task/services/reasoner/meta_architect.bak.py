@@ -14,81 +14,18 @@ from typing import Dict, List, Any, Optional
 from langchain.agents import AgentExecutor
 from langchain.tools import BaseTool
 from langchain.schema import AgentAction, AgentFinish
-from pydantic import BaseModel, Field
-from typing import Type
 
 # Import our system's core components
 from ..base_agent import BaseAgent
 from ...core.models.agent_models import AgentConfig
 from ...core.models.architect_models import (
-    BlueprintConstructionRequest, BlueprintConstructionResult,
-    FrameworkRecommendation, DecompositionResult
+    StrategicPlan, BlueprintConstructionRequest, BlueprintConstructionResult,
+    FrameworkRecommendation, FrameworkStrategy, DecompositionResult
 )
 from ...config.config_manager import ConfigManager
 from app.services.llm_integration import LLMIntegrationManager
-from ...data.storage.knowledge_database import KnowledgeDatabase
 
 logger = logging.getLogger(__name__)
-
-
-# Framework Search Tool for LangChain integration
-class FrameworkSearchInput(BaseModel):
-    query: str = Field(description="A search query describing the problem or desired framework features.")
-
-
-class FrameworkSearchTool(BaseTool):
-    name: str = "framework_search"
-    description: str = (
-        "Use this tool to search for suitable analytical frameworks from the knowledge base. "
-        "Provide a query describing the problem you need to solve, for example 'business growth strategy' or 'root cause analysis'."
-    )
-    args_schema: Type[BaseModel] = FrameworkSearchInput
-    knowledge_db: KnowledgeDatabase
-
-    def _run(self, query: str) -> str:
-        """Use the tool."""
-        try:
-            # Use the database's search_frameworks method for query
-            frameworks = self.knowledge_db.search_frameworks(query=query, limit=5)
-            if not frameworks:
-                return "No suitable frameworks found for this query."
-
-            # Format query results for LLM-friendly string
-            response = "Found relevant frameworks:\n"
-            for fw in frameworks:
-                response += f"- **{fw.name}**: {fw.description} (Tags: {', '.join(fw.tags) if fw.tags else 'None'})\n"
-            return response
-        except Exception as e:
-            return f"Error searching for frameworks: {e}"
-
-    async def _arun(self, query: str) -> str:
-        """Use the tool asynchronously."""
-        try:
-            # Import asyncio for running sync method in thread pool
-            import asyncio
-
-            # Run the synchronous search_frameworks method in a thread pool
-            # to avoid blocking the event loop
-            loop = asyncio.get_event_loop()
-            frameworks = await loop.run_in_executor(
-                None,
-                self.knowledge_db.search_frameworks,
-                query,
-                5
-            )
-
-            if not frameworks:
-                return "No suitable frameworks found for this query."
-
-            # Format query results for LLM-friendly string
-            response = "Found relevant frameworks:\n"
-            for fw in frameworks:
-                response += f"- **{fw.name}**: {fw.description} (Tags: {', '.join(fw.tags) if fw.tags else 'None'})\n"
-            return response
-
-        except Exception as e:
-            logger.error(f"Async framework search failed: {e}")
-            return f"Error searching for frameworks: {e}"
 
 
 class MetaArchitectAgent(BaseAgent):
@@ -102,9 +39,7 @@ class MetaArchitectAgent(BaseAgent):
     """
 
     def __init__(self, config: AgentConfig, config_manager: ConfigManager,
-                 llm_manager: LLMIntegrationManager,
-                 knowledge_database: KnowledgeDatabase,
-                 tool_integration_manager=None):
+                 llm_manager: LLMIntegrationManager, tool_integration_manager=None):
         """
         Initialize the meta-architect agent.
 
@@ -112,14 +47,10 @@ class MetaArchitectAgent(BaseAgent):
             config: Agent's basic configuration (such as agent_id, role)
             config_manager: Configuration manager for reading prompts.yaml and llm_bindings.yaml
             llm_manager: LLM integration manager for actual LLM calls
-            knowledge_database: Knowledge database for framework search
             tool_integration_manager: Optional tool integration manager for LangChain tools
         """
         # Call parent's initialization method, which handles role definition and LLM binding loading
         super().__init__(config, config_manager, llm_manager, tool_integration_manager)
-
-        # Store knowledge database instance
-        self.knowledge_db = knowledge_database
 
         # Configuration-driven properties (no hardcoded values)
         self.max_recursion_depth = config.metadata.get('max_recursion_depth', 3) if config.metadata else 3
@@ -163,7 +94,9 @@ class MetaArchitectAgent(BaseAgent):
             task_type = self._determine_task_type(task_data, context, mining_context)
 
             # Execute the appropriate task using enhanced context
-            if task_type == "blueprint_construction" or task_type == "detailed_blueprint_construction":
+            if task_type == "decomposition":
+                result = await self._execute_decomposition_task(problem_description, context, mining_context)
+            elif task_type == "blueprint_construction" or task_type == "detailed_blueprint_construction":
                 result = await self._execute_enhanced_blueprint_construction_task(
                     problem_description, domain, complexity, requirements, mining_context, context
                 )
@@ -179,10 +112,17 @@ class MetaArchitectAgent(BaseAgent):
                         "requirements": requirements
                     }
                 result = self.generate_execution_roadmap(blueprint_result)
+            elif task_type == "recursive_blueprint_task":
+                # Handle recursive blueprint construction task
+                result = await self._execute_recursive_blueprint_task(
+                    problem_description, domain, complexity, requirements,
+                    max_recursion_depth, context, mining_context
+                )
             else:
-                # Default to enhanced blueprint construction with enhanced context
-                result = await self._execute_enhanced_blueprint_construction_task(
-                    problem_description, domain, complexity, requirements, mining_context, context
+                # Default to recursive blueprint construction with enhanced context
+                result = await self._execute_recursive_blueprint_task(
+                    problem_description, domain, complexity, requirements,
+                    max_recursion_depth, context, mining_context
                 )
 
             # Store in memory for future reference
@@ -201,16 +141,191 @@ class MetaArchitectAgent(BaseAgent):
             logger.error(f"Blueprint construction failed: {e}")
             raise
 
+    async def _execute_decomposition_task(self, problem_description: str, context: Dict[str, Any],
+                                        mining_context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Execute decomposition task using LangChain-based configuration-driven approach.
+        Enhanced to use mining context when available and support recursive context.
+
+        Args:
+            problem_description: Problem to decompose
+            context: Execution context
+            mining_context: Enhanced context from mining service
+
+        Returns:
+            Decomposition result
+        """
+        # Create LangChain agent executor for this task
+        agent_executor = await self.create_langchain_agent(context)
+
+        # Check for recursive context
+        is_recursive = mining_context and mining_context.get("recursive_context", False)
+        parent_analysis = mining_context.get("parent_analysis") if mining_context else None
+        recursion_depth = mining_context.get("recursion_depth", 1) if mining_context else 1
+
+        # Prepare enhanced decomposition input if mining context is available
+        if mining_context and mining_context.get("has_enhanced_context"):
+            intent_categories = mining_context.get("intent_categories", [])
+            framework_hints = mining_context.get("framework_hints", [])
+            analysis_focus = mining_context.get("analysis_focus", [])
+
+            # Build recursive context section
+            recursive_context_section = ""
+            if is_recursive and parent_analysis:
+                recursive_context_section = f"""
+
+                RECURSIVE CONTEXT (Depth {recursion_depth}):
+                Parent Problem: {parent_analysis.get('problem', 'N/A')}
+                Parent Strategy: {parent_analysis.get('strategy', 'N/A')}
+                Parent Frameworks: {', '.join(parent_analysis.get('frameworks', []))}
+                Parent Reasoning: {parent_analysis.get('reasoning', 'N/A')}
+
+                IMPORTANT: Build upon the parent analysis above. Your decomposition should:
+                - Reference and extend the parent's approach
+                - Avoid duplicating parent frameworks unless specifically needed
+                - Create sub-problems that logically follow from the parent analysis
+                - Maintain consistency with the overall analytical direction
+                """
+
+            decomposition_input = {
+                "input": f"Decompose complex problem using mining analysis insights{' and recursive context' if is_recursive else ''}",
+                "task_description": f"""
+                Problem Description: {problem_description}
+
+                MINING CONTEXT:
+                Intent Categories: {', '.join(intent_categories)}
+                Suggested Frameworks: {', '.join(framework_hints)}
+                Analysis Focus: {', '.join(analysis_focus)}
+                {recursive_context_section}
+
+                Analyze this complex problem using the mining insights{' and building upon parent analysis' if is_recursive else ''} and provide a targeted decomposition:
+
+                1. INTENT-DRIVEN ANALYSIS:
+                   - Focus decomposition on identified intent categories: {', '.join(intent_categories)}
+                   - Align sub-problems with analysis focus areas: {', '.join(analysis_focus)}
+                   {f'- Build upon parent strategy: {parent_analysis.get("strategy", "N/A")}' if is_recursive and parent_analysis else ''}
+
+                2. FRAMEWORK-GUIDED DECOMPOSITION:
+                   - Prioritize suggested frameworks: {', '.join(framework_hints)}
+                   - Map frameworks to intent categories
+                   {f'- Consider parent frameworks: {", ".join(parent_analysis.get("frameworks", []))}' if is_recursive and parent_analysis else ''}
+
+                3. STRUCTURED BREAKDOWN:
+                   - Identify sub-problems aligned with intent categories
+                   - Recommend frameworks based on mining analysis
+                   - Define dependencies considering analysis focus
+                   {f'- Ensure logical progression from parent problem: {parent_analysis.get("problem", "N/A")[:100]}...' if is_recursive and parent_analysis else ''}
+
+                Provide response in JSON format:
+                {{
+                    "rationale": "Decomposition reasoning based on mining analysis{' and parent context' if is_recursive else ''}",
+                    "frameworks": [
+                        {{
+                            "framework_name": "Framework name (prioritize: {', '.join(framework_hints[:3])})",
+                            "rationale": "Why this framework suits the identified intent categories{' and builds on parent analysis' if is_recursive else ''}",
+                            "application_focus": "Specific aspect aligned with analysis focus",
+                            "expected_outcome": "Expected results for intent categories",
+                            "estimated_duration": "Time estimate",
+                            "intent_alignment": ["intent_category_1", "intent_category_2"]
+                            {f', "parent_relationship": "How this relates to parent frameworks: {", ".join(parent_analysis.get("frameworks", []))}"' if is_recursive and parent_analysis else ''}
+                        }}
+                    ],
+                    "sub_problems": [
+                        "Sub-problem aligned with intent categories{' and parent context' if is_recursive else ''}",
+                        "Sub-problem focused on analysis areas"
+                    ],
+                    "dependencies": [
+                        {{
+                            "from": "Component A",
+                            "to": "Component B",
+                            "type": "prerequisite",
+                            "intent_category": "relevant_intent"
+                        }}
+                    ],
+                    "mining_integration": {{
+                        "intent_categories_addressed": {intent_categories},
+                        "frameworks_selected": "Based on mining hints{' and parent analysis' if is_recursive else ''}",
+                        "analysis_focus_covered": {analysis_focus}
+                        {f', "recursive_depth": {recursion_depth}, "parent_integration": "Built upon parent analysis"' if is_recursive else ''}
+                    }}
+                }}
+                """,
+                "expected_output": f"Mining-enhanced structured problem decomposition{' with recursive context' if is_recursive else ''}",
+                "input_data": {
+                    "problem_description": problem_description,
+                    "mining_context": mining_context,
+                    "recursive_context": {"is_recursive": is_recursive, "depth": recursion_depth, "parent_analysis": parent_analysis} if is_recursive else None
+                }
+            }
+        else:
+            # Standard decomposition input when no mining context
+            decomposition_input = {
+                "input": f"Decompose complex problem into manageable components",
+                "task_description": f"""
+                Problem Description: {problem_description}
+
+                Analyze this complex problem and provide a structured decomposition including:
+                1. Problem analysis and understanding
+                2. Identification of sub-problems or components
+                3. Recommended analytical frameworks for each component
+                4. Rationale for the decomposition approach
+                5. Dependencies and relationships between components
+
+                Provide response in JSON format:
+                {{
+                    "rationale": "Detailed reasoning for decomposition approach",
+                    "frameworks": [
+                        {{
+                            "framework_name": "Framework name",
+                            "rationale": "Why this framework is suitable",
+                            "application_focus": "What aspect it addresses",
+                            "expected_outcome": "Expected results",
+                            "estimated_duration": "Time estimate"
+                        }}
+                    ],
+                    "sub_problems": [
+                        "Sub-problem 1 description",
+                        "Sub-problem 2 description"
+                    ],
+                    "dependencies": [
+                        {{
+                            "from": "Component A",
+                            "to": "Component B",
+                            "type": "prerequisite"
+                        }}
+                    ]
+                }}
+                """,
+                "expected_output": "Structured problem decomposition with frameworks and sub-problems",
+                "input_data": {"problem_description": problem_description}
+            }
+
+        # Execute the decomposition task using LangChain agent
+        logger.debug(f"[META_ARCHITECT_DEBUG] _execute_decomposition_task - Invoking LangChain agent executor...")
+        result = await agent_executor.ainvoke(decomposition_input)
+
+        # Extract the actual output from LangChain result
+        actual_output = result.get('output', str(result))
+
+        # Parse the result
+        if isinstance(actual_output, str):
+            try:
+                parsed_result = json.loads(actual_output)
+            except json.JSONDecodeError:
+                # Fallback: create structured result
+                logger.warning("Failed to parse LLM output as JSON. Accepting raw string output.")
+                parsed_result = actual_output
+        else:
+            parsed_result = actual_output
+
+        return parsed_result
+
+
     async def _execute_enhanced_blueprint_construction_task(self, problem_description: str, domain: str,
                                                           complexity: str, requirements: Dict[str, Any],
                                                           mining_context: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute enhanced blueprint construction task using mining context for targeted analysis.
-
-        The LLM is instructed to:
-        1. First use analysis_focus and intent_parsing_output to construct search queries
-        2. Use framework_search tool to find suitable frameworks from knowledge base
-        3. Only fall back to pre-selected frameworks if search fails or returns insufficient results
 
         Args:
             problem_description: Problem to analyze
@@ -223,23 +338,20 @@ class MetaArchitectAgent(BaseAgent):
         Returns:
             Enhanced blueprint construction result
         """
-        # Create LangChain agent executor for this task with framework search tool
+        # Create LangChain agent executor for this task
         agent_executor = await self.create_langchain_agent(context)
 
         # Extract enhanced context
         intent_categories = mining_context.get("intent_categories", [])
-        intent_parsing_reasoning = mining_context.get("intent_parsing_reasoning", "")
-        intent_parsing_output = mining_context.get("intent_parsing_output", "")
         entities_keywords = mining_context.get("entities_keywords", {})
         framework_hints = mining_context.get("framework_hints", [])
         analysis_focus = mining_context.get("analysis_focus", [])
+        intent_parsing_reasoning = mining_context.get("intent_parsing_reasoning", "")
+        intent_parsing_output = mining_context.get("intent_parsing_output", "")
         complexity_assessment = mining_context.get("complexity_assessment", {"complexity_level": complexity})
 
-        # Pre-select fallback frameworks using RAG-based approach with context-aware selection
-        # Note: LLM will be instructed to use framework_search tool first, these are fallback only
-        selected_frameworks = self._select_frameworks_with_rag_fallback(
-            analysis_focus, intent_categories, domain, entities_keywords, mining_context
-        )
+        # Generate context-aware frameworks based on intent categories
+        selected_frameworks = self._select_context_aware_frameworks(intent_categories, domain, entities_keywords)
 
         # Determine dynamic output template based on intent categories
         output_template = self._get_dynamic_output_template(intent_categories)
@@ -255,12 +367,8 @@ class MetaArchitectAgent(BaseAgent):
             1. You MUST analyze the EXACT problem: "{problem_description}"
             2. You MUST NOT create your own example problems or scenarios
             3. You MUST use the provided mining context to guide your analysis
-            4. You MUST structure output according to the intent-specific template
-            5. **FRAMEWORK SELECTION PROCESS (MANDATORY STEPS):**
-               a) FIRST: Use analysis_focus and intent_parsing_output to construct reasonable search queries
-               b) THEN: Use the framework_search tool to search for suitable frameworks from the knowledge base
-               c) ONLY IF search fails or returns insufficient results: Fall back to the pre-selected frameworks below
-               d) Do NOT invent frameworks not available in the knowledge base
+            4. You MUST select frameworks based on intent_categories: {', '.join(intent_categories)}
+            5. You MUST structure output according to the intent-specific template
 
             **SPECIFIC PROBLEM TO ANALYZE:** {problem_description}
 
@@ -268,21 +376,12 @@ class MetaArchitectAgent(BaseAgent):
             - Intent Categories: {intent_categories}
             - Intent Parsing Reasoning: {intent_parsing_reasoning}
             - Intent Parsing Output: {intent_parsing_output}
-            - Analysis Focus: {analysis_focus}
             - Key Entities: {entities_keywords.get('entities', [])}
             - Key Terms: {entities_keywords.get('keywords', [])}
             - Complexity Level: {complexity_assessment.get('complexity_level', 'medium')}
             - Domain: {domain}
 
-            **FRAMEWORK SEARCH GUIDANCE:**
-            Based on the analysis_focus ({analysis_focus}) and intent_parsing_output ("{intent_parsing_output}"),
-            construct search queries like:
-            - For analysis_focus containing "data_analysis": search "data analysis framework"
-            - For analysis_focus containing "performance_metrics": search "performance measurement framework"
-            - For analysis_focus containing "strategy_development": search "strategic planning framework"
-            - Combine intent_parsing_output keywords with analysis_focus terms for more targeted searches
-
-            **FALLBACK FRAMEWORKS (use only if framework_search fails):**
+            **CONTEXT-SELECTED FRAMEWORKS (use these, not generic ones):**
             {self._format_selected_frameworks(selected_frameworks)}
 
             **CONTEXT EXAMPLES FOR GUIDANCE:**
@@ -293,8 +392,7 @@ class MetaArchitectAgent(BaseAgent):
 
             **VALIDATION CHECKLIST (your output MUST satisfy all):**
             ✓ Addresses the EXACT problem: "{problem_description}"
-            ✓ Used framework_search tool FIRST to find suitable frameworks
-            ✓ Uses frameworks from knowledge base search results, not generic ones
+            ✓ Uses context-selected frameworks, not generic ones
             ✓ Incorporates entities: {entities_keywords.get('entities', [])}
             ✓ Aligns with intent categories: {', '.join(intent_categories)}
             ✓ Aligns with Intent Parsing Reasoning: {intent_parsing_reasoning}
@@ -332,28 +430,160 @@ class MetaArchitectAgent(BaseAgent):
 
         return parsed_result
 
-    async def create_langchain_agent(self, context: Dict[str, Any], tools: Optional[List[BaseTool]] = None) -> AgentExecutor:
+    async def _execute_recursive_blueprint_task(self, problem_description: str, domain: str,
+                                              complexity: str, requirements: Dict[str, Any],
+                                              max_recursion_depth: int, context: Dict[str, Any],
+                                              mining_context: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        Override base method to include framework search tool for enhanced blueprint construction.
+        Execute recursive blueprint construction using LangChain-based configuration-driven approach.
 
         Args:
-            context: Runtime context for LLM selection
-            tools: Optional list of tools to assign to the agent
+            problem_description: Problem to analyze
+            domain: Problem domain
+            complexity: Problem complexity
+            requirements: Additional requirements
+            max_recursion_depth: Maximum recursion depth
+            context: Execution context
 
         Returns:
-            LangChain AgentExecutor instance with framework search tool
+            Recursive blueprint result
         """
-        # Create framework search tool
-        framework_tool = FrameworkSearchTool(knowledge_db=self.knowledge_db)
+        import time
+        start_time = time.time()
 
-        # Add framework tool to existing tools
-        if tools is None:
-            tools = []
-        tools = tools + [framework_tool]
+        try:
+            logger.info(f"Initiating recursive blueprint construction for: {problem_description[:100]}...")
 
-        # Call parent method with enhanced tools
-        return await super().create_langchain_agent(context, tools)
+            # Start the recursive process from the top-level problem
+            root_node = await self._recursive_construct_plan(
+                problem_description=problem_description,
+                domain=domain,
+                complexity=complexity,
+                current_depth=1,
+                max_depth=max_recursion_depth,
+                context=context,
+                mining_context=mining_context
+            )
 
+            processing_time = (time.time() - start_time) * 1000
+
+            # Create result using configuration-driven approach
+            result = {
+                "plan_tree_root": root_node.dict() if hasattr(root_node, 'dict') else root_node,
+                "total_estimated_duration": self._calculate_tree_duration(root_node),
+                "overall_complexity": self._determine_overall_complexity(root_node),
+                "confidence_score": self._calculate_tree_confidence(root_node),
+                "reasoning": "The strategic plan was constructed via recursive decomposition using LangChain-based configuration-driven approach.",
+                "processing_time_ms": processing_time,
+                "architect_version": "4.0-langchain-driven"
+            }
+
+            logger.info("Successfully constructed recursive strategic blueprint tree.")
+            return result
+
+        except Exception as e:
+            logger.error(f"Recursive blueprint construction failed: {e}")
+            raise
+
+    async def _recursive_construct_plan(self, problem_description: str, domain: str, complexity: str,
+                                      current_depth: int, max_depth: int, context: Dict[str, Any],
+                                      mining_context: Dict[str, Any] = None, parent_analysis: Dict[str, Any] = None) -> StrategicPlan:
+        """
+        Recursively constructs a strategic plan node using LangChain-based configuration-driven approach.
+        Enhanced to support mining context for targeted analysis and preserve previous analysis context.
+
+        Args:
+            problem_description: Current problem to analyze
+            domain: Problem domain
+            complexity: Problem complexity
+            current_depth: Current recursion depth
+            max_depth: Maximum recursion depth
+            context: Execution context
+            mining_context: Enhanced context from mining service
+            parent_analysis: Analysis results from parent level for context continuity
+        """
+        # Termination Condition: Prevent infinite recursion
+        if current_depth > max_depth:
+            logger.warning(f"Max recursion depth reached at level {current_depth}. Treating as leaf node.")
+            return StrategicPlan(
+                problem_description=problem_description,
+                strategy=FrameworkStrategy.APPLY_FRAMEWORKS,
+                reasoning="Max depth reached; this problem should be addressed directly.",
+                selected_frameworks=await self._get_default_frameworks(domain, complexity)
+            )
+
+        # Enhance mining context with parent analysis for recursive continuity
+        enhanced_mining_context = mining_context.copy() if mining_context else {}
+        if parent_analysis:
+            enhanced_mining_context["parent_analysis"] = parent_analysis
+            enhanced_mining_context["recursion_depth"] = current_depth
+            enhanced_mining_context["recursive_context"] = True
+            logger.debug(f"Enhanced mining context with parent analysis at depth {current_depth}")
+
+        # Execute decomposition task using LangChain with enhanced context
+        if enhanced_mining_context:
+            logger.debug(f"[META_ARCHITECT_DEBUG] _recursive_construct_plan - Calling decomposition with enhanced context")
+            decomposition_result = await self._execute_decomposition_task(problem_description, context, enhanced_mining_context)
+        else:
+            logger.debug(f"[META_ARCHITECT_DEBUG] _recursive_construct_plan - Calling decomposition without enhanced context")
+            decomposition_result = await self._execute_decomposition_task(problem_description, context)
+
+        # DEBUG: Log decomposition result
+        logger.debug(f"[META_ARCHITECT_DEBUG] _recursive_construct_plan - Decomposition result: {decomposition_result}")
+
+        sub_problems = decomposition_result.get("sub_problems", [])
+        frameworks_data = decomposition_result.get("frameworks", [])
+
+        # Create the current plan node with enhanced reasoning
+        strategy = FrameworkStrategy.DECOMPOSITION if sub_problems else FrameworkStrategy.APPLY_FRAMEWORKS
+
+        # Build reasoning that incorporates parent context
+        reasoning = decomposition_result.get("rationale", "No rationale provided.")
+        if parent_analysis and current_depth > 1:
+            reasoning = f"Building on parent analysis: {reasoning}"
+
+        current_plan_node = StrategicPlan(
+            problem_description=problem_description,
+            strategy=strategy,
+            reasoning=reasoning,
+            selected_frameworks=self._parse_framework_recommendations_from_result(frameworks_data)
+        )
+
+        # Store current analysis for child nodes
+        current_analysis = {
+            "problem": problem_description,
+            "strategy": strategy.value if hasattr(strategy, 'value') else str(strategy),
+            "frameworks": [f.framework_name for f in current_plan_node.selected_frameworks] if current_plan_node.selected_frameworks else [],
+            "reasoning": reasoning,
+            "depth": current_depth,
+            "decomposition_result": decomposition_result
+        }
+
+        # Recursive Step: If there are sub-problems, recurse with enhanced context
+        if strategy == FrameworkStrategy.DECOMPOSITION:
+            import asyncio
+            child_tasks = []
+            for i, sub_problem in enumerate(sub_problems):
+                # Create an awaitable task for each recursive call with parent analysis
+                child_task = self._recursive_construct_plan(
+                    problem_description=sub_problem,
+                    domain=domain,
+                    complexity=complexity,
+                    current_depth=current_depth + 1,
+                    max_depth=max_depth,
+                    context=context,
+                    mining_context=enhanced_mining_context,
+                    parent_analysis=current_analysis  # Pass current analysis to child
+                )
+                child_tasks.append(child_task)
+
+            # Execute recursive calls concurrently
+            child_nodes = await asyncio.gather(*child_tasks)
+            current_plan_node.sub_plans = child_nodes
+
+            logger.debug(f"Completed recursive analysis at depth {current_depth} with {len(child_nodes)} child nodes")
+
+        return current_plan_node
 
     def _extract_mining_context(self, requirements: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -445,6 +675,38 @@ class MetaArchitectAgent(BaseAgent):
 
         return list(set(framework_hints))  # 去重并返回
 
+    def _extract_framework_hints(self, mining_context: Dict[str, Any]) -> List[str]:
+        """Extract framework hints from mining context."""
+        # First check if framework_hints are directly provided
+        direct_hints = mining_context.get("framework_hints", [])
+        if direct_hints:
+            return direct_hints
+
+        hints = []
+        intent_categories = mining_context.get("intent_categories", [])
+
+        # Map intent categories to framework hints
+        category_framework_map = {
+            "collect": ["Data Collection Framework", "Information Gathering Framework"],
+            "process": ["Data Processing Framework", "Workflow Optimization Framework"],
+            "analyze": ["Analytical Framework", "SWOT Analysis", "Root Cause Analysis"],
+            "generate": ["Content Generation Framework", "Creative Problem Solving"],
+            "compare": ["Comparative Analysis Framework", "Benchmarking Framework"],
+            "evaluate": ["Evaluation Framework", "Assessment Framework"],
+            "plan": ["Strategic Planning Framework", "Project Planning Framework"],
+            "monitor": ["Monitoring Framework", "Performance Tracking Framework"]
+        }
+
+        for category in intent_categories:
+            if category in category_framework_map:
+                hints.extend(category_framework_map[category])
+
+        # Extract from smart_analysis if available
+        smart_analysis = mining_context.get("smart_analysis", {})
+        if smart_analysis:
+            hints.extend(smart_analysis.get("framework_recommendations", []))
+
+        return list(set(hints))  # Remove duplicates
 
     def _extract_analysis_focus(self, intent_analysis: Dict[str, Any]) -> List[str]:
         """
@@ -474,6 +736,46 @@ class MetaArchitectAgent(BaseAgent):
 
         return list(set(analysis_focus))  # 去重
 
+    def _determine_analysis_focus(self, mining_context: Dict[str, Any]) -> List[str]:
+        """Determine analysis focus areas from mining context."""
+        # First check if analysis_focus is directly provided
+        direct_focus = mining_context.get("analysis_focus", [])
+        if direct_focus:
+            return direct_focus
+
+        focus_areas = []
+
+        # Extract from sub_steps_identified
+        sub_steps = mining_context.get("sub_steps_identified", [])
+        for step in sub_steps:
+            if "analyze" in step.lower():
+                focus_areas.append("detailed_analysis")
+            elif "plan" in step.lower():
+                focus_areas.append("planning")
+            elif "implement" in step.lower():
+                focus_areas.append("implementation")
+
+        # Extract from entities and keywords
+        entities_keywords = mining_context.get("entities_keywords", {})
+        entities = entities_keywords.get("entities", [])
+        keywords = entities_keywords.get("keywords", [])
+
+        # Business focus indicators
+        business_indicators = ["revenue", "profit", "growth", "market", "customer", "sales"]
+        if any(keyword.lower() in business_indicators for keyword in keywords):
+            focus_areas.append("business_analysis")
+
+        # Technical focus indicators
+        technical_indicators = ["system", "data", "process", "automation", "integration"]
+        if any(keyword.lower() in technical_indicators for keyword in keywords):
+            focus_areas.append("technical_analysis")
+
+        # Strategic focus indicators
+        strategic_indicators = ["strategy", "plan", "roadmap", "vision", "goal"]
+        if any(keyword.lower() in strategic_indicators for keyword in keywords):
+            focus_areas.append("strategic_planning")
+
+        return focus_areas if focus_areas else ["general_analysis"]
 
     def _determine_task_type(self, task_data: Dict[str, Any], context: Dict[str, Any], mining_context: Dict[str, Any] = None) -> str:
         """
@@ -492,11 +794,227 @@ class MetaArchitectAgent(BaseAgent):
         if explicit_task_type:
             if explicit_task_type == "generate_execution_roadmap":
                 return "generate_execution_roadmap"
+            elif explicit_task_type == "recursive_blueprint_task":
+                return "recursive_blueprint_task"
             return explicit_task_type
 
-        # Default to enhanced blueprint construction for all cases
+        # Since mining service flow primarily uses enhanced blueprint construction,
+        # default to that for most cases
+        problem_description = task_data.get("problem_description", "")
+
+        # Only use decomposition for explicit decomposition requests
+        if any(keyword in problem_description.lower() for keyword in ["decompose", "break down", "components"]):
+            return "decomposition"
+
+        # Default to enhanced blueprint construction for all other cases
         return "detailed_blueprint_construction"
 
+    def _create_fallback_decomposition_result(self, problem_description: str, result_text: str,
+                                            mining_context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Create fallback decomposition result when JSON parsing fails.
+        Enhanced to use mining context when available.
+        """
+        if mining_context and mining_context.get("has_enhanced_context"):
+            framework_hints = mining_context.get("framework_hints", [])
+            intent_categories = mining_context.get("intent_categories", [])
+
+            return {
+                "rationale": f"Mining-enhanced analysis of: {problem_description[:50]}... using intent categories: {', '.join(intent_categories)}",
+                "frameworks": [
+                    {
+                        "framework_name": framework_hints[0] if framework_hints else "Generic Analysis Framework",
+                        "rationale": f"Selected based on mining analysis for intent categories: {', '.join(intent_categories)}",
+                        "application_focus": f"Focused on {', '.join(mining_context.get('analysis_focus', ['general analysis']))}",
+                        "expected_outcome": "Mining-guided analysis results",
+                        "estimated_duration": "1-2 weeks",
+                        "intent_alignment": intent_categories
+                    }
+                ],
+                "sub_problems": [],
+                "dependencies": [],
+                "mining_integration": {
+                    "intent_categories_addressed": intent_categories,
+                    "frameworks_selected": framework_hints[:3],
+                    "analysis_focus_covered": mining_context.get("analysis_focus", [])
+                }
+            }
+        else:
+            return {
+                "rationale": f"Analysis of: {problem_description[:50]}...",
+                "frameworks": [
+                    {
+                        "framework_name": "Generic Analysis Framework",
+                        "rationale": "Fallback framework for problem analysis",
+                        "application_focus": "General problem solving",
+                        "expected_outcome": "Structured analysis results",
+                        "estimated_duration": "1-2 weeks"
+                    }
+                ],
+                "sub_problems": [],
+                "dependencies": []
+            }
+
+    def _create_enhanced_fallback_blueprint_result(self, problem_description: str, domain: str,
+                                                 complexity: str, mining_context: Dict[str, Any],
+                                                 result_text: str) -> Dict[str, Any]:
+        """
+        Create enhanced fallback blueprint result when JSON parsing fails.
+        Uses mining context for targeted fallback.
+        """
+        framework_hints = mining_context.get("framework_hints", [])
+        intent_categories = mining_context.get("intent_categories", [])
+        analysis_focus = mining_context.get("analysis_focus", [])
+        entities_keywords = mining_context.get("entities_keywords", {})
+
+        return {
+            "problem_analysis": {
+                "complexity": complexity,
+                "domain": domain,
+                "intent_categories": intent_categories,
+                "analysis_focus": analysis_focus,
+                "key_entities": entities_keywords.get('entities', []),
+                "key_terms": entities_keywords.get('keywords', []),
+                "decomposition_potential": "medium",
+                "key_challenges": ["Mining-guided analysis required"],
+                "stakeholders": ["To be identified based on entities"]
+            },
+            "framework_selection": {
+                "primary_frameworks": framework_hints[:3] if framework_hints else ["Generic Analysis Framework"],
+                "framework_rationale": "Selected based on mining analysis and intent categories",
+                "application_sequence": framework_hints[:2] if len(framework_hints) >= 2 else ["Primary Analysis"],
+                "expected_outcomes": ["Mining-guided results", "Intent-aligned analysis"]
+            },
+            "tree_structure": {
+                "root_problem": problem_description,
+                "strategy": "mining_guided_framework_application",
+                "reasoning": f"Strategy based on mining analysis with intent categories: {', '.join(intent_categories)}",
+                "estimated_depth": 2,
+                "estimated_breadth": len(intent_categories) if intent_categories else 1,
+                "intent_alignment": intent_categories
+            },
+            "execution_guidance": {
+                "recommended_sequence": "intent_category_driven",
+                "critical_path": [f"Analysis for {cat}" for cat in intent_categories[:2]] if intent_categories else ["Analysis"],
+                "monitoring_points": [f"Checkpoint for {focus}" for focus in analysis_focus[:2]] if analysis_focus else ["Phase completion"],
+                "resource_allocation": "mining_complexity_based",
+                "success_criteria": ["Intent category completion", "Mining goal achievement"]
+            },
+            "risk_assessment": {
+                "complexity_risks": ["Mining context interpretation"],
+                "domain_risks": [f"Domain-specific challenges in {domain}"],
+                "mitigation_strategies": ["Leverage mining insights", "Focus on intent categories"]
+            },
+            "mining_integration": {
+                "intent_categories_used": intent_categories,
+                "entities_leveraged": entities_keywords.get('entities', []),
+                "frameworks_applied": framework_hints,
+                "analysis_focus_addressed": analysis_focus
+            }
+        }
+
+    def _parse_framework_recommendations_from_result(self, frameworks_data: List[Dict]) -> List[FrameworkRecommendation]:
+        """Safely parses framework data from the agent into a list of FrameworkRecommendation models."""
+        recommendations = []
+        if not isinstance(frameworks_data, list):
+            return recommendations
+
+        for fw_data in frameworks_data:
+            if isinstance(fw_data, dict):
+                try:
+                    recommendation = FrameworkRecommendation(
+                        framework_name=fw_data.get("framework_name", "Unknown Framework"),
+                        rationale=fw_data.get("rationale", "Framework selected for analysis"),
+                        application_focus=fw_data.get("application_focus", "General analysis"),
+                        expected_outcome=fw_data.get("expected_outcome", "Analysis results"),
+                        estimated_duration=fw_data.get("estimated_duration", "1-2 weeks")
+                    )
+                    recommendations.append(recommendation)
+                except Exception as e:
+                    logger.warning(f"Skipping malformed framework data: {fw_data}. Error: {e}")
+        return recommendations
+
+    async def _get_default_frameworks(self, domain: str, complexity: str) -> List[FrameworkRecommendation]:
+        """Get default framework recommendations for leaf nodes."""
+        return [
+            FrameworkRecommendation(
+                framework_name="Problem Analysis Framework",
+                rationale="Default framework for direct problem analysis",
+                application_focus="Comprehensive problem understanding",
+                expected_outcome="Structured problem analysis",
+                estimated_duration="1-2 weeks"
+            )
+        ]
+
+    def _calculate_tree_duration(self, root_node: StrategicPlan) -> str:
+        """Calculate total duration by traversing the tree structure."""
+        def calculate_node_duration(node: StrategicPlan) -> int:
+            # Base duration for this node (in weeks)
+            base_duration = 2
+
+            if not hasattr(node, 'sub_plans') or not node.sub_plans:
+                return base_duration
+
+            # For decomposed problems, calculate max duration of sub-plans
+            max_sub_duration = max(calculate_node_duration(sub_plan) for sub_plan in node.sub_plans)
+            return base_duration + max_sub_duration
+
+        total_weeks = calculate_node_duration(root_node)
+
+        if total_weeks <= 4:
+            return f"{total_weeks}-{total_weeks + 2} weeks"
+        elif total_weeks <= 8:
+            return f"{total_weeks}-{total_weeks + 4} weeks"
+        else:
+            return f"{total_weeks}-{total_weeks + 6} weeks"
+
+    def _determine_overall_complexity(self, root_node: StrategicPlan) -> str:
+        """Determine overall complexity based on tree depth and breadth."""
+        def calculate_tree_metrics(node: StrategicPlan, depth: int = 0) -> tuple:
+            max_depth = depth
+            total_nodes = 1
+
+            if hasattr(node, 'sub_plans') and node.sub_plans:
+                for sub_plan in node.sub_plans:
+                    sub_depth, sub_nodes = calculate_tree_metrics(sub_plan, depth + 1)
+                    max_depth = max(max_depth, sub_depth)
+                    total_nodes += sub_nodes
+
+            return max_depth, total_nodes
+
+        max_depth, total_nodes = calculate_tree_metrics(root_node)
+
+        if max_depth <= 1 and total_nodes <= 3:
+            return "low"
+        elif max_depth <= 2 and total_nodes <= 7:
+            return "medium"
+        else:
+            return "high"
+
+    def _calculate_tree_confidence(self, root_node: StrategicPlan) -> float:
+        """Calculate confidence score for the entire tree."""
+        def calculate_node_confidence(node: StrategicPlan) -> float:
+            base_confidence = 0.8
+
+            # Adjust based on framework availability
+            if hasattr(node, 'selected_frameworks') and node.selected_frameworks:
+                base_confidence += 0.1
+
+            # Adjust based on reasoning quality
+            if hasattr(node, 'reasoning') and node.reasoning and len(node.reasoning) > 20:
+                base_confidence += 0.05
+
+            # For leaf nodes, return base confidence
+            if not hasattr(node, 'sub_plans') or not node.sub_plans:
+                return min(base_confidence, 1.0)
+
+            # For decomposed nodes, average with sub-plan confidences
+            sub_confidences = [calculate_node_confidence(sub_plan) for sub_plan in node.sub_plans]
+            avg_sub_confidence = sum(sub_confidences) / len(sub_confidences)
+
+            return min((base_confidence + avg_sub_confidence) / 2, 1.0)
+
+        return calculate_node_confidence(root_node)
 
     def get_capabilities(self) -> List[str]:
         """Get the capabilities of this agent."""
@@ -507,6 +1025,8 @@ class MetaArchitectAgent(BaseAgent):
             "blueprint_construction",
             "complexity_assessment",
             "stakeholder_analysis",
+            "recursive_decomposition",
+            "tree_based_planning",
             "configuration_driven_execution",
             "langchain_based_execution"
         ]
@@ -524,6 +1044,18 @@ class MetaArchitectAgent(BaseAgent):
             history.append(last_blueprint)
         return history
 
+    def get_recursive_capabilities(self) -> List[str]:
+        """Get the recursive capabilities of this agent."""
+        return [
+            "recursive_strategic_planning",
+            "problem_decomposition",
+            "tree_based_planning",
+            "concurrent_sub_problem_processing",
+            "depth_controlled_recursion",
+            "framework_selection_per_node",
+            "confidence_scoring_across_tree",
+            "langchain_driven_recursion"
+        ]
 
     async def conduct_specialized_analysis(self, analysis_type: str, problem_data: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -613,235 +1145,6 @@ class MetaArchitectAgent(BaseAgent):
         ])
 
         return roadmap
-
-    def _select_frameworks_with_rag_fallback(
-        self,
-        analysis_focus: List[str],
-        intent_categories: List[str],
-        domain: str,
-        entities_keywords: Dict[str, Any],
-        mining_context: Dict[str, Any]
-    ) -> List[Dict[str, str]]:
-        """
-        Select frameworks using RAG-based approach with fallback to context-aware selection.
-
-        Core strategy:
-        1. Use analysis_focus to generate search query for KnowledgeDatabase
-        2. Retrieve relevant frameworks from database
-        3. If RAG approach fails or returns insufficient results, fallback to context-aware selection
-
-        Args:
-            analysis_focus: Analysis focus areas from mining context
-            intent_categories: List of intent categories from mining context
-            domain: Problem domain
-            entities_keywords: Entities and keywords from mining context
-            mining_context: Complete mining context for enhanced query generation
-
-        Returns:
-            List of selected frameworks with rationale and application focus
-        """
-        logger.info("Executing RAG-based framework selection workflow...")
-
-        # Step 1: Generate enhanced search query from analysis focus
-        search_query = self._generate_enhanced_search_query(analysis_focus, intent_categories, domain, entities_keywords, mining_context)
-        logger.debug(f"Generated enhanced search query: '{search_query}'")
-
-        # Step 2: Attempt RAG-based framework retrieval
-        retrieved_frameworks = self._retrieve_frameworks_from_knowledge_base(search_query)
-
-        # Step 3: Evaluate RAG results and decide on fallback
-        if self._is_rag_result_sufficient(retrieved_frameworks, intent_categories):
-            logger.info(f"RAG approach successful, using {len(retrieved_frameworks)} retrieved frameworks")
-            return retrieved_frameworks
-        else:
-            logger.info("RAG approach insufficient, falling back to context-aware selection")
-            fallback_frameworks = self._select_context_aware_frameworks(intent_categories, domain, entities_keywords)
-
-            # Combine RAG results with fallback results (avoiding duplicates)
-            combined_frameworks = self._combine_framework_results(retrieved_frameworks, fallback_frameworks)
-            logger.info(f"Combined approach: {len(combined_frameworks)} total frameworks")
-            return combined_frameworks
-
-    def _generate_enhanced_search_query(
-        self,
-        analysis_focus: List[str],
-        intent_categories: List[str],
-        domain: str,
-        entities_keywords: Dict[str, Any],
-        mining_context: Dict[str, Any]
-    ) -> str:
-        """
-        Generate enhanced search query for framework retrieval.
-
-        Args:
-            analysis_focus: Analysis focus areas
-            intent_categories: Intent categories
-            domain: Problem domain
-            entities_keywords: Entities and keywords
-            mining_context: Complete mining context
-
-        Returns:
-            Enhanced search query string
-        """
-        # Start with analysis focus as primary query
-        query_parts = analysis_focus.copy()
-
-        # Add intent categories for context
-        if intent_categories:
-            query_parts.extend(intent_categories)
-
-        # Add domain-specific terms
-        if domain and domain.lower() != "business":
-            query_parts.append(domain)
-
-        # Add key entities (limit to most relevant ones)
-        entities = entities_keywords.get('entities', [])
-        if entities:
-            # Take first 3 entities to avoid query bloat
-            relevant_entities = entities[:3]
-            query_parts.extend([str(e) for e in relevant_entities])
-
-        # Add key keywords (limit to most relevant ones)
-        keywords = entities_keywords.get('keywords', [])
-        if keywords:
-            # Take first 3 keywords to avoid query bloat
-            relevant_keywords = keywords[:3]
-            query_parts.extend([str(k) for k in relevant_keywords])
-
-        # Join all parts and clean up
-        enhanced_query = " ".join(query_parts)
-
-        # Remove duplicates and clean up
-        enhanced_query = " ".join(set(enhanced_query.split()))
-
-        return enhanced_query
-
-    def _retrieve_frameworks_from_knowledge_base(self, search_query: str) -> List[Dict[str, str]]:
-        """
-        Retrieve frameworks from KnowledgeDatabase using search query.
-
-        Args:
-            search_query: Search query string
-
-        Returns:
-            List of framework dictionaries with name, rationale, and application_focus
-        """
-        try:
-            logger.debug(f"Searching KnowledgeDatabase with query: '{search_query}'")
-
-            # Search for frameworks
-            retrieved_frameworks_obj = self.knowledge_db.search_frameworks(query=search_query, limit=5)
-
-            # Convert database objects to dictionary format
-            retrieved_frameworks_dicts = []
-            for fw in retrieved_frameworks_obj:
-                framework_dict = {
-                    "framework_name": fw.name,
-                    "rationale": f"Retrieved from knowledge base for query: '{search_query}'. {fw.description}",
-                    "application_focus": fw.solves_problem_type,
-                    "source": "knowledge_base",
-                    "tags": fw.tags,
-                    "complexity_level": fw.complexity_level,
-                    "estimated_duration": fw.estimated_duration
-                }
-                retrieved_frameworks_dicts.append(framework_dict)
-
-            logger.debug(f"Retrieved {len(retrieved_frameworks_dicts)} frameworks from KnowledgeDatabase")
-            return retrieved_frameworks_dicts
-
-        except Exception as e:
-            logger.error(f"Failed to retrieve frameworks from KnowledgeDatabase: {e}")
-            return []
-
-    def _is_rag_result_sufficient(self, retrieved_frameworks: List[Dict[str, str]], intent_categories: List[str]) -> bool:
-        """
-        Evaluate if RAG results are sufficient for the current task.
-
-        Args:
-            retrieved_frameworks: Retrieved frameworks from knowledge base
-            intent_categories: Intent categories for the task
-
-        Returns:
-            True if RAG results are sufficient, False otherwise
-        """
-        # Check if we have any frameworks at all
-        if not retrieved_frameworks:
-            logger.debug("No frameworks retrieved from knowledge base")
-            return False
-
-        # Check if we have at least 2 frameworks for variety
-        if len(retrieved_frameworks) < 2:
-            logger.debug(f"Only {len(retrieved_frameworks)} framework(s) retrieved, may need fallback")
-            return False
-
-        # Check if frameworks align with intent categories
-        framework_names = [fw['framework_name'].lower() for fw in retrieved_frameworks]
-        framework_text = " ".join(framework_names)
-
-        # Simple alignment check based on intent categories
-        alignment_score = 0
-        for intent in intent_categories:
-            if intent == "analyze" and any(term in framework_text for term in ["analysis", "analytical", "assessment"]):
-                alignment_score += 1
-            elif intent == "generate" and any(term in framework_text for term in ["strategy", "planning", "design", "creation"]):
-                alignment_score += 1
-            elif intent == "process" and any(term in framework_text for term in ["process", "workflow", "pipeline"]):
-                alignment_score += 1
-            elif intent == "collect" and any(term in framework_text for term in ["collection", "gathering", "data"]):
-                alignment_score += 1
-
-        # Consider sufficient if at least 50% of intents are covered
-        sufficient_alignment = alignment_score >= len(intent_categories) * 0.5
-        logger.debug(f"RAG alignment score: {alignment_score}/{len(intent_categories)}, sufficient: {sufficient_alignment}")
-
-        return sufficient_alignment
-
-    def _combine_framework_results(
-        self,
-        rag_frameworks: List[Dict[str, str]],
-        fallback_frameworks: List[Dict[str, str]]
-    ) -> List[Dict[str, str]]:
-        """
-        Combine RAG and fallback framework results, avoiding duplicates.
-
-        Args:
-            rag_frameworks: Frameworks from RAG approach
-            fallback_frameworks: Frameworks from fallback approach
-
-        Returns:
-            Combined list of frameworks without duplicates
-        """
-        combined_frameworks = []
-        used_names = set()
-
-        # Add RAG frameworks first (they have higher priority)
-        for framework in rag_frameworks:
-            name = framework['framework_name'].lower()
-            if name not in used_names:
-                combined_frameworks.append(framework)
-                used_names.add(name)
-
-        # Add fallback frameworks (avoiding duplicates)
-        for framework in fallback_frameworks:
-            name = framework['framework_name'].lower()
-            if name not in used_names:
-                # Mark as fallback source
-                framework['source'] = 'fallback'
-                combined_frameworks.append(framework)
-                used_names.add(name)
-
-        # Ensure we have at least 2 frameworks
-        if len(combined_frameworks) < 2 and fallback_frameworks:
-            # Add more fallback frameworks if needed
-            for framework in fallback_frameworks:
-                name = framework['framework_name'].lower()
-                if name not in used_names and len(combined_frameworks) < 3:
-                    framework['source'] = 'fallback'
-                    combined_frameworks.append(framework)
-                    used_names.add(name)
-
-        logger.debug(f"Combined {len(rag_frameworks)} RAG + {len(fallback_frameworks)} fallback = {len(combined_frameworks)} total frameworks")
-        return combined_frameworks
 
     # Context-Aware Framework Selection Methods for Meta-Architect
     def _select_context_aware_frameworks(self, intent_categories: List[str], domain: str, entities_keywords: Dict[str, Any]) -> List[Dict[str, str]]:

@@ -17,7 +17,7 @@ class UserConfirmation(BaseModel):
 
 class TaskStepResult(BaseModel):
     step: str
-    result: Any
+    result: Any = None
     completed: bool = False
     message: str
     status: str

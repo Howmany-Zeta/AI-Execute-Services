@@ -8,7 +8,7 @@ Following the Single Responsibility Principle (SRP), this module is responsible
 solely for defining the structure and validation of task configurations.
 """
 
-from pydantic import BaseModel, Field, validator
+from pydantic import field_validator, ConfigDict, BaseModel, Field
 from typing import Dict, List, Optional, Any, Union, Callable
 from enum import Enum
 from langchain.chains import LLMChain
@@ -50,22 +50,22 @@ class ConditionConfig(BaseModel):
     if_clause: str = Field(..., alias="if", description="Condition expression to evaluate")
     then_clause: str = Field(..., alias="then", description="Action to take when condition is true")
 
-    @validator('if_clause')
+    @field_validator('if_clause')
+    @classmethod
     def validate_condition_expression(cls, v):
         """Validate that the condition expression is not empty."""
         if not v or not v.strip():
             raise ValueError("Condition expression cannot be empty")
         return v.strip()
 
-    @validator('then_clause')
+    @field_validator('then_clause')
+    @classmethod
     def validate_then_clause(cls, v):
         """Validate that the then clause is not empty."""
         if not v or not v.strip():
             raise ValueError("Then clause cannot be empty")
         return v.strip()
-
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class ToolOperationConfig(BaseModel):
@@ -81,7 +81,8 @@ class ToolOperationConfig(BaseModel):
         description="List of conditions that must be met for this operation to execute"
     )
 
-    @validator('operation_name')
+    @field_validator('operation_name')
+    @classmethod
     def validate_operation_name(cls, v):
         """Validate operation name format."""
         if not v or not v.strip():
@@ -107,14 +108,16 @@ class ToolConfig(BaseModel):
         description="Operations configuration - can be list of strings, list of dicts, or dict"
     )
 
-    @validator('tool_name')
+    @field_validator('tool_name')
+    @classmethod
     def validate_tool_name(cls, v):
         """Validate tool name format."""
         if not v or not v.strip():
             raise ValueError("Tool name cannot be empty")
         return v.strip()
 
-    @validator('operations')
+    @field_validator('operations')
+    @classmethod
     def validate_operations(cls, v):
         """Validate operations configuration."""
         if v is None:
@@ -153,7 +156,8 @@ class TaskConfig(BaseModel):
         description="Task-level execution conditions"
     )
 
-    @validator('description')
+    @field_validator('description')
+    @classmethod
     def validate_description(cls, v):
         """Validate task description contains action words."""
         if not v or not v.strip():
@@ -175,7 +179,8 @@ class TaskConfig(BaseModel):
 
         return v.strip()
 
-    @validator('agent')
+    @field_validator('agent')
+    @classmethod
     def validate_agent(cls, v):
         """Validate agent name follows naming convention."""
         if not v or not v.strip():
@@ -188,7 +193,8 @@ class TaskConfig(BaseModel):
 
         return v.strip()
 
-    @validator('expected_output')
+    @field_validator('expected_output')
+    @classmethod
     def validate_expected_output(cls, v):
         """Validate expected output description."""
         if not v or not v.strip():
@@ -233,7 +239,8 @@ class TasksConfig(BaseModel):
         description="Sub-tasks organized by intent categories"
     )
 
-    @validator('system_tasks')
+    @field_validator('system_tasks')
+    @classmethod
     def validate_system_tasks(cls, v):
         """Validate system tasks configuration."""
         if not v:
@@ -251,7 +258,8 @@ class TasksConfig(BaseModel):
 
         return v
 
-    @validator('sub_tasks')
+    @field_validator('sub_tasks')
+    @classmethod
     def validate_sub_tasks(cls, v):
         """Validate sub-tasks configuration."""
         if not v:
@@ -272,11 +280,7 @@ class TasksConfig(BaseModel):
             raise ValueError(f"Missing sub-tasks for categories: {missing_categories}")
 
         return v
-
-    class Config:
-        """Pydantic configuration."""
-        use_enum_values = True
-        validate_assignment = True
+    model_config = ConfigDict(use_enum_values=True, validate_assignment=True)
 
 
 # Type aliases for better code readability

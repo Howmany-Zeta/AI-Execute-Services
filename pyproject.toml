@@ -83,7 +83,6 @@ dependencies = [
     "beautifulsoup4 (>=4.13.4,<5.0.0)",             # HTML/XML parser
     "lxml (>=5.4.0,<6.0.0)",                        # XML and HTML processing
     "playwright (>=1.52.0,<2.0.0)",                 # Browser automation library
-    "pdfplumber (>=0.11.6,<0.12.0)",                # PDF text extraction and table parsing
     "pytesseract (>=0.3.13,<0.4.0)",                # OCR (Optical Character Recognition) engine wrapper
     "pillow (>=11.2.1,<12.0.0)",                    # Image processing library (PIL fork)
     "tika (>=2.6.0,<3.0.0)",                        # Content analysis toolkit for document parsing
@@ -99,7 +98,11 @@ dependencies = [
     "psutil (>=7.0.0,<8.0.0)",
     "aiofiles (>=24.1.0,<25.0.0)",
     "langchain (>=0.3.26,<0.4.0)",
-    "langgraph (>=0.5.3,<0.6.0)"
+    "langgraph (>=0.5.3,<0.6.0)",
+    "weasel (==0.4.1)",
+    "pdfplumber (>=0.11.7,<0.12.0)",
+    "pdfminer-six (==20250506)"
+
 ]
 
 

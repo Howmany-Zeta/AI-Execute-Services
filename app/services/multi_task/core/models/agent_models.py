@@ -4,7 +4,7 @@ Agent Models
 Data models for agent-related entities in the multi-task service.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field, model_serializer
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 from enum import Enum
@@ -148,10 +148,7 @@ class AgentConfig(BaseModel):
     # Metadata
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
     tags: List[str] = Field(default_factory=list, description="Tags for categorization")
-
-    class Config:
-        # Remove use_enum_values to keep enums as enum objects instead of strings
-        pass
+    model_config = ConfigDict()
 
 
 class AgentModel(BaseModel):
@@ -220,12 +217,16 @@ class AgentModel(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
     tags: List[str] = Field(default_factory=list, description="Tags for categorization")
     version: str = Field(default="1.0.0", description="Agent version")
+    model_config = ConfigDict(use_enum_values=True)
 
-    class Config:
-        use_enum_values = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @model_serializer
+    def serialize_model(self):
+        """Custom serializer for datetime fields."""
+        data = self.__dict__.copy()
+        for key, value in data.items():
+            if isinstance(value, datetime):
+                data[key] = value.isoformat()
+        return data
 
 
 class AgentExecution(BaseModel):
@@ -260,11 +261,16 @@ class AgentExecution(BaseModel):
 
     # Metadata
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    model_config = ConfigDict()
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @model_serializer
+    def serialize_model(self):
+        """Custom serializer for datetime fields."""
+        data = self.__dict__.copy()
+        for key, value in data.items():
+            if isinstance(value, datetime):
+                data[key] = value.isoformat()
+        return data
 
 
 class AgentTeam(BaseModel):
@@ -291,8 +297,13 @@ class AgentTeam(BaseModel):
 
     # Metadata
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    model_config = ConfigDict()
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @model_serializer
+    def serialize_model(self):
+        """Custom serializer for datetime fields."""
+        data = self.__dict__.copy()
+        for key, value in data.items():
+            if isinstance(value, datetime):
+                data[key] = value.isoformat()
+        return data

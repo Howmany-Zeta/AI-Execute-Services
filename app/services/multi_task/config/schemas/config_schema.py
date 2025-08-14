@@ -5,7 +5,7 @@ Main schema that combines all configuration schemas and provides
 unified validation for the entire multi-task service configuration.
 """
 
-from pydantic import BaseModel, Field, validator
+from pydantic import field_validator, model_validator, ConfigDict, BaseModel, Field, field_serializer
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
 
@@ -24,7 +24,8 @@ class ConfigMetadataSchema(BaseModel):
     description: Optional[str] = Field(None, description="Configuration description")
     environment: str = Field(default="development", description="Target environment")
 
-    @validator('version')
+    @field_validator('version')
+    @classmethod
     def validate_version(cls, v):
         """Validate version format."""
         import re
@@ -32,7 +33,8 @@ class ConfigMetadataSchema(BaseModel):
             raise ValueError("Version must be in format X.Y.Z")
         return v
 
-    @validator('environment')
+    @field_validator('environment')
+    @classmethod
     def validate_environment(cls, v):
         """Validate environment."""
         valid_environments = {'development', 'testing', 'staging', 'production'}
@@ -40,9 +42,14 @@ class ConfigMetadataSchema(BaseModel):
             raise ValueError(f"Invalid environment: {v}. Valid: {valid_environments}")
         return v
 
-    class Config:
-        """Pydantic configuration."""
-        extra = "forbid"
+    @field_serializer('created_at', 'updated_at')
+    def serialize_datetime(self, dt: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime to ISO format."""
+        if dt is None:
+            return None
+        return dt.isoformat()
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class ConfigValidationResultSchema(BaseModel):
@@ -66,30 +73,33 @@ class ConfigValidationResultSchema(BaseModel):
     error_categories: Dict[str, int] = Field(default_factory=dict, description="Error count by category")
     warning_categories: Dict[str, int] = Field(default_factory=dict, description="Warning count by category")
 
-    @validator('is_valid')
-    def validate_overall_status(cls, v, values):
+    @model_validator(mode='after')
+    def validate_overall_status(self) -> 'ConfigValidationResultSchema':
         """Validate overall status based on individual validations."""
         # Check if any individual validation failed
         validations = [
-            values.get('prompts_validation'),
-            values.get('tasks_validation'),
-            values.get('domains_validation')
+            self.prompts_validation,
+            self.tasks_validation,
+            self.domains_validation
         ]
 
         for validation in validations:
             if validation and hasattr(validation, 'is_valid') and not validation.is_valid:
-                if v:  # If marked as valid but has invalid components
+                if self.is_valid:  # If marked as valid but has invalid components
                     raise ValueError("Overall validation cannot be valid when individual validations fail")
 
         # Check cross-validation errors
-        if values.get('cross_validation_errors') and v:
+        if self.cross_validation_errors and self.is_valid:
             raise ValueError("Overall validation cannot be valid when cross-validation errors exist")
 
-        return v
+        return self
 
-    class Config:
-        """Pydantic configuration."""
-        extra = "allow"
+    @field_serializer('validation_timestamp')
+    def serialize_datetime(self, dt: datetime) -> str:
+        """Serialize datetime to ISO format."""
+        return dt.isoformat()
+
+    model_config = ConfigDict(extra="allow")
 
 
 class ConfigInfoSchema(BaseModel):
@@ -109,7 +119,8 @@ class ConfigInfoSchema(BaseModel):
     health_status: str = Field(default="unknown", description="Overall health status")
     last_validation: Optional[datetime] = Field(None, description="Last validation timestamp")
 
-    @validator('health_status')
+    @field_validator('health_status')
+    @classmethod
     def validate_health_status(cls, v):
         """Validate health status."""
         valid_statuses = {'healthy', 'warning', 'error', 'unknown'}
@@ -117,9 +128,14 @@ class ConfigInfoSchema(BaseModel):
             raise ValueError(f"Invalid health status: {v}. Valid: {valid_statuses}")
         return v
 
-    class Config:
-        """Pydantic configuration."""
-        extra = "allow"
+    @field_serializer('last_validation')
+    def serialize_datetime(self, dt: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime to ISO format."""
+        if dt is None:
+            return None
+        return dt.isoformat()
+
+    model_config = ConfigDict(extra="allow")
 
 
 class ConfigUpdateSchema(BaseModel):
@@ -131,17 +147,15 @@ class ConfigUpdateSchema(BaseModel):
     updated_by: Optional[str] = Field(None, description="User who made the update")
     backup_created: bool = Field(default=False, description="Whether a backup was created")
 
-    @validator('config_type')
+    @field_validator('config_type')
+    @classmethod
     def validate_config_type(cls, v):
         """Validate configuration type."""
         valid_types = {'prompts', 'tasks', 'domains', 'metadata'}
         if v not in valid_types:
             raise ValueError(f"Invalid config type: {v}. Valid: {valid_types}")
         return v
-
-    class Config:
-        """Pydantic configuration."""
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class ConfigBackupSchema(BaseModel):
@@ -153,9 +167,12 @@ class ConfigBackupSchema(BaseModel):
     backup_reason: str = Field(..., description="Reason for creating the backup")
     backup_size: Optional[int] = Field(None, description="Backup size in bytes")
 
-    class Config:
-        """Pydantic configuration."""
-        extra = "forbid"
+    @field_serializer('backup_timestamp')
+    def serialize_datetime(self, dt: datetime) -> str:
+        """Serialize datetime to ISO format."""
+        return dt.isoformat()
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class ConfigSchema(BaseModel):
@@ -174,8 +191,10 @@ class ConfigSchema(BaseModel):
     # Validation and status
     validation_result: Optional[ConfigValidationResultSchema] = Field(None, description="Last validation result")
     config_info: Optional[ConfigInfoSchema] = Field(None, description="Configuration information")
+    last_validated_at: Optional[datetime] = Field(None, description="Last validation timestamp")
 
-    @validator('prompts')
+    @field_validator('prompts')
+    @classmethod
     def validate_prompts_config(cls, v):
         """Validate prompts configuration."""
         if v is None:
@@ -184,7 +203,8 @@ class ConfigSchema(BaseModel):
         # Additional validation logic can be added here
         return v
 
-    @validator('tasks')
+    @field_validator('tasks')
+    @classmethod
     def validate_tasks_config(cls, v):
         """Validate tasks configuration."""
         if v is None:
@@ -193,7 +213,8 @@ class ConfigSchema(BaseModel):
         # Additional validation logic can be added here
         return v
 
-    @validator('domains')
+    @field_validator('domains')
+    @classmethod
     def validate_domains_config(cls, v):
         """Validate domains configuration."""
         if v is None:
@@ -241,13 +262,14 @@ class ConfigSchema(BaseModel):
 
         return summary
 
-    class Config:
-        """Pydantic configuration."""
-        extra = "allow"
-        validate_assignment = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    model_config = ConfigDict(extra="allow", validate_assignment=True,)
+
+    @field_serializer('last_validated_at')
+    def serialize_datetime(self, dt: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime to ISO format."""
+        if dt is None:
+            return None
+        return dt.isoformat()
 
 
 class ConfigManagerStateSchema(BaseModel):
@@ -260,10 +282,13 @@ class ConfigManagerStateSchema(BaseModel):
     last_reload: Optional[datetime] = Field(None, description="Last configuration reload time")
     error_count: int = Field(default=0, description="Number of configuration errors")
     warning_count: int = Field(default=0, description="Number of configuration warnings")
+    last_validated_at: datetime = Field(default_factory=datetime.utcnow, description="Last validation timestamp")
 
-    class Config:
-        """Pydantic configuration."""
-        extra = "allow"
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    model_config = ConfigDict(extra="allow")
+
+    @field_serializer('last_reload', 'last_validated_at')
+    def serialize_datetime(self, dt: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime objects to ISO format strings."""
+        if dt is None:
+            return None
+        return dt.isoformat()

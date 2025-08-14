@@ -4,7 +4,7 @@ Task Models
 Data models for task-related entities in the multi-task service.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field, field_serializer
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 from enum import Enum
@@ -85,12 +85,12 @@ class TaskModel(BaseModel):
     # Metrics
     execution_time_seconds: Optional[float] = Field(None, description="Task execution time in seconds")
     memory_usage_mb: Optional[float] = Field(None, description="Memory usage in MB")
+    model_config = ConfigDict(use_enum_values=True)
 
-    class Config:
-        use_enum_values = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('created_at', 'updated_at', 'started_at', 'completed_at')
+    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime fields to ISO format."""
+        return value.isoformat() if value else None
 
 
 class TaskRequest(BaseModel):
@@ -125,9 +125,7 @@ class TaskRequest(BaseModel):
 
     # Additional metadata
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
-
-    class Config:
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
 
 
 class TaskResponse(BaseModel):
@@ -168,12 +166,12 @@ class TaskResponse(BaseModel):
 
     # Sub-results for complex tasks
     sub_results: List[Dict[str, Any]] = Field(default_factory=list, description="Results from sub-tasks")
+    model_config = ConfigDict(use_enum_values=True)
 
-    class Config:
-        use_enum_values = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('started_at', 'completed_at')
+    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime fields to ISO format."""
+        return value.isoformat() if value else None
 
 
 class TaskStep(BaseModel):
@@ -201,12 +199,12 @@ class TaskStep(BaseModel):
     started_at: Optional[datetime] = Field(None, description="Step start timestamp")
     completed_at: Optional[datetime] = Field(None, description="Step completion timestamp")
     execution_time_seconds: Optional[float] = Field(None, description="Step execution time in seconds")
+    model_config = ConfigDict(use_enum_values=True)
 
-    class Config:
-        use_enum_values = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('started_at', 'completed_at')
+    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime fields to ISO format."""
+        return value.isoformat() if value else None
 
 
 class TaskWorkflow(BaseModel):
@@ -228,12 +226,12 @@ class TaskWorkflow(BaseModel):
     # Metadata
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Workflow creation timestamp")
     user_id: str = Field(..., description="ID of the user who created the workflow")
+    model_config = ConfigDict(use_enum_values=True)
 
-    class Config:
-        use_enum_values = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('created_at')
+    def serialize_datetime(self, value: datetime) -> str:
+        """Serialize datetime fields to ISO format."""
+        return value.isoformat()
 
 
 class ExecutionContext(BaseModel):
@@ -283,8 +281,9 @@ class ExecutionContext(BaseModel):
 
     # Performance tracking
     performance_metrics: Dict[str, Any] = Field(default_factory=dict, description="Performance metrics")
+    model_config = ConfigDict()
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('started_at', 'timeout_at')
+    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime fields to ISO format."""
+        return value.isoformat() if value else None

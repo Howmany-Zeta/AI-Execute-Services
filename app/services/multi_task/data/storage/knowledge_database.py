@@ -446,8 +446,11 @@ class KnowledgeDatabase:
 
     def _get_default_config_path(self) -> str:
         """Get the default path to framework.yaml."""
-        current_dir = Path(__file__).parent.parent.parent
-        return str(current_dir / "framework.yaml")
+        # Navigate from current file to the config directory
+        # Current file: app/services/multi_task/data/storage/knowledge_database.py
+        # Target path: config/multi_task/framework.yaml
+        current_dir = Path(__file__).parent.parent.parent.parent.parent.parent  # Go to project root
+        return str(current_dir / "config" / "multi_task" / "framework.yaml")
 
     def _validate_config(self) -> Tuple[bool, Optional[FrameworkConfigModel], List[str], List[str]]:
         """Validate the framework configuration file."""

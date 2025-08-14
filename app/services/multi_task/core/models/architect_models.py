@@ -6,12 +6,12 @@ strategic plans, and blueprint construction results. Updated to support
 recursive blueprint construction with tree-based strategic plans.
 """
 
-from pydantic import BaseModel, Field, validator
+from pydantic import field_validator, ConfigDict, BaseModel, Field, validator, model_validator, model_serializer
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 from enum import Enum
 from sqlalchemy import Column, Integer, String, Text, DateTime, Float, Boolean, JSON
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 
@@ -164,7 +164,8 @@ class FrameworkMatchResult(BaseModel):
     complexity_level: ComplexityLevel = Field(..., description="Complexity level")
     required_data_types: List[str] = Field(..., description="Required data types")
 
-    @validator('match_score')
+    @field_validator('match_score')
+    @classmethod
     def validate_match_score(cls, v):
         """Validate match score is between 0 and 1."""
         if not 0.0 <= v <= 1.0:
@@ -220,12 +221,10 @@ class StrategicPlan(BaseModel):
     risk_factors: Optional[List[str]] = Field(default_factory=list, description="Risk factors")
     success_criteria: Optional[List[str]] = Field(default_factory=list, description="Success criteria")
     resource_requirements: Optional[List[str]] = Field(default_factory=list, description="Resource requirements")
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    class Config:
-        # Allow forward references for recursive model
-        arbitrary_types_allowed = True
-
-    @validator('confidence_score')
+    @field_validator('confidence_score')
+    @classmethod
     def validate_confidence_score(cls, v):
         """Validate confidence score is between 0 and 1."""
         if v is not None and not 0.0 <= v <= 1.0:
@@ -288,19 +287,26 @@ class BlueprintConstructionResult(BaseModel):
     architect_version: str = Field(..., description="Version of the Meta-Architect used")
     execution_id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Unique execution identifier")
 
-    @validator('confidence_score')
+    @field_validator('confidence_score')
+    @classmethod
     def validate_confidence_score(cls, v):
         """Validate confidence score is between 0 and 1."""
         if not 0.0 <= v <= 1.0:
             raise ValueError("Confidence score must be between 0.0 and 1.0")
         return v
 
-    @validator('plan_tree_root', 'strategic_plan')
-    def validate_plan_exists(cls, v, values):
-        """Ensure at least one plan structure exists."""
-        if not v and not values.get('strategic_plan') and not values.get('plan_tree_root'):
-            raise ValueError("Either plan_tree_root or strategic_plan must be provided")
-        return v
+    @model_validator(mode='after')
+    def validate_plan_exists(self) -> 'BlueprintConstructionResult':
+        """Ensures that either 'plan_tree_root' or 'strategic_plan' is provided."""
+        # Use self to access the model's fields
+        plan_tree_root = self.plan_tree_root
+        strategic_plan = self.strategic_plan
+
+        if not plan_tree_root and not strategic_plan:
+            raise ValueError("Either 'plan_tree_root' or 'strategic_plan' must be provided.")
+
+        # Always return the self instance at the end
+        return self
 
 
 class ArchitectMetrics(BaseModel):
@@ -332,11 +338,16 @@ class ArchitectMetrics(BaseModel):
 
     # Temporal metrics
     last_updated: datetime = Field(default_factory=datetime.utcnow, description="Last metrics update timestamp")
+    model_config = ConfigDict()
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @model_serializer
+    def serialize_model(self):
+        """Custom serializer for datetime fields."""
+        data = self.__dict__.copy()
+        for key, value in data.items():
+            if isinstance(value, datetime):
+                data[key] = value.isoformat()
+        return data
 
 
 class DecompositionResult(BaseModel):
@@ -353,7 +364,8 @@ class DecompositionResult(BaseModel):
     estimated_complexity: ComplexityLevel = Field(..., description="Estimated complexity of the problem")
     confidence_score: float = Field(..., description="Confidence in the decomposition decision")
 
-    @validator('confidence_score')
+    @field_validator('confidence_score')
+    @classmethod
     def validate_confidence_score(cls, v):
         """Validate confidence score is between 0 and 1."""
         if not 0.0 <= v <= 1.0:
@@ -377,7 +389,8 @@ class TreeAnalysisResult(BaseModel):
         description="Distribution of complexity levels across nodes"
     )
 
-    @validator('overall_confidence')
+    @field_validator('overall_confidence')
+    @classmethod
     def validate_confidence_score(cls, v):
         """Validate confidence score is between 0 and 1."""
         if not 0.0 <= v <= 1.0:

@@ -6,13 +6,15 @@ import time
 from typing import Dict, Any, List, Optional, Union, Tuple
 from enum import Enum
 
-import spacy
 from pydantic import BaseModel, Field, field_validator, ValidationError, ConfigDict
 from rake_nltk import Rake
 try:
     import pke
 except ImportError:
     pke = None
+
+# Delay spacy import to avoid Pydantic v1/v2 conflicts
+spacy = None
 
 from app.tools import register_tool
 from app.tools.base_tool import BaseTool
@@ -309,6 +311,14 @@ class ClassifierTool(BaseTool):
         Returns:
             Any: spaCy NLP object.
         """
+        global spacy
+        if spacy is None:
+            try:
+                import spacy as spacy_module
+                spacy = spacy_module
+            except ImportError:
+                raise ImportError("spaCy is required but not installed. Please install it with: pip install spacy")
+
         model = self.config.spacy_model_zh if language == 'zh' else self.config.spacy_model_en
         return spacy.load(model, disable=["textcat"])
 

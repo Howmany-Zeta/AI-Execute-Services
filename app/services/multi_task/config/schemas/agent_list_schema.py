@@ -4,7 +4,7 @@ Agent List Schema
 Pydantic schema definitions for agent_list.yaml configuration validation.
 """
 
-from pydantic import BaseModel, Field, validator
+from pydantic import field_validator, model_validator, ConfigDict, BaseModel, Field
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
@@ -15,14 +15,16 @@ class AgentCategorySchema(BaseModel):
     description: str = Field(..., description="Description of the agent category")
     agents: List[str] = Field(..., description="List of agent names in this category")
 
-    @validator('description')
+    @field_validator('description')
+    @classmethod
     def validate_description(cls, v):
         """Validate category description."""
         if not v.strip():
             raise ValueError("Category description cannot be empty")
         return v.strip()
 
-    @validator('agents')
+    @field_validator('agents')
+    @classmethod
     def validate_agents(cls, v):
         """Validate agents list."""
         if not v:
@@ -41,10 +43,7 @@ class AgentCategorySchema(BaseModel):
                 raise ValueError("Agent name cannot be empty")
 
         return [agent.strip() for agent in v]
-
-    class Config:
-        """Pydantic configuration."""
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class AgentListSchema(BaseModel):
@@ -53,7 +52,8 @@ class AgentListSchema(BaseModel):
     metadata: Dict[str, Any] = Field(..., description="Configuration metadata")
     agent_categories: Dict[str, AgentCategorySchema] = Field(..., description="Agent categories and their agents")
 
-    @validator('metadata')
+    @field_validator('metadata')
+    @classmethod
     def validate_metadata(cls, v):
         """Validate metadata structure."""
         required_fields = ['version', 'description', 'total_agents']
@@ -74,7 +74,8 @@ class AgentListSchema(BaseModel):
 
         return v
 
-    @validator('agent_categories')
+    @field_validator('agent_categories')
+    @classmethod
     def validate_categories(cls, v):
         """Validate agent categories structure."""
         if not v:
@@ -90,7 +91,8 @@ class AgentListSchema(BaseModel):
 
         return v
 
-    @validator('agent_categories')
+    @field_validator('agent_categories')
+    @classmethod
     def validate_agent_uniqueness(cls, v):
         """Ensure no agent appears in multiple categories."""
         all_agents = []
@@ -106,18 +108,19 @@ class AgentListSchema(BaseModel):
 
         return v
 
-    @validator('agent_categories')
-    def validate_total_count(cls, v, values):
+    @model_validator(mode='after')
+    def validate_total_count(self) -> 'AgentListSchema':
         """Validate that total agent count matches metadata."""
-        metadata = values.get('metadata', {})
-        expected_total = metadata.get('total_agents', 0)
+        metadata = self.metadata or {}
+        agent_categories = self.agent_categories or {}
 
-        actual_total = sum(len(category.agents) for category in v.values())
+        expected_total = metadata.get('total_agents', 0)
+        actual_total = sum(len(category.agents) for category in agent_categories.values())
 
         if actual_total != expected_total:
             raise ValueError(f"Total agent count mismatch: metadata says {expected_total}, but found {actual_total}")
 
-        return v
+        return self
 
     def get_all_agents(self) -> List[str]:
         """Get a flat list of all agents across all categories."""
@@ -177,11 +180,7 @@ class AgentListSchema(BaseModel):
             'total_agents': total_agents,
             'category_count': len(categories)
         }
-
-    class Config:
-        """Pydantic configuration."""
-        extra = "forbid"
-        validate_assignment = True
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
 
 class AgentListValidationSchema(BaseModel):
@@ -197,10 +196,7 @@ class AgentListValidationSchema(BaseModel):
     extra_agents: List[str] = Field(default_factory=list, description="Extra agents in list")
     duplicate_agents: List[str] = Field(default_factory=list, description="Agents appearing in multiple categories")
     validation_timestamp: datetime = Field(default_factory=datetime.utcnow, description="Validation timestamp")
-
-    class Config:
-        """Pydantic configuration."""
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class AgentCategoryStatsSchema(BaseModel):
@@ -211,7 +207,4 @@ class AgentCategoryStatsSchema(BaseModel):
     agents: List[str] = Field(..., description="List of agents in this category")
     description: str = Field(..., description="Category description")
     percentage: float = Field(..., description="Percentage of total agents")
-
-    class Config:
-        """Pydantic configuration."""
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")

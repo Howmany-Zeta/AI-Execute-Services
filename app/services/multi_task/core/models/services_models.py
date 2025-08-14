@@ -7,7 +7,7 @@ These models have been extracted from individual service files for unified maint
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Any, Optional, Annotated
+from typing import Dict, List, Any, Optional, Annotated, TypedDict
 from datetime import datetime
 
 # Import for LangGraph message handling
@@ -170,7 +170,7 @@ class MiningContext:
 
 
 @dataclass
-class MiningState:
+class MiningState(TypedDict):
     """State object for langgraph workflow"""
     user_input: str
     demand_state: Optional[str] = None
@@ -182,11 +182,18 @@ class MiningState:
     error: Optional[str] = None
     completed: bool = False
 
+
     # New fields for enhanced workflow
     intent_analysis: Optional[Dict[str, Any]] = None
     meta_architect_result: Optional[Dict[str, Any]] = None
+    roadmap_result: Optional[Dict[str, Any]] = None
     simple_strategy_result: Optional[Dict[str, Any]] = None
-    summarizer_result: Optional[Dict[str, Any]] = None
+    package_result: Optional[Dict[str, Any]] = None
+
+    # Unified feedback handling
+    feedback_type: Optional[str] = None
+    status: Optional[str] = None
+    user_feedback: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -198,6 +205,25 @@ class MiningResult:
     smart_analysis: Dict[str, Any]
     clarification_history: List[Dict[str, str]]
     processing_time_ms: float
+    intent_analysis: Optional[Dict[str, Any]] = None
+    meta_architect_result: Optional[Dict[str, Any]] = None
+    roadmap_result: Optional[Dict[str, Any]] = None
+    simple_strategy_result: Optional[Dict[str, Any]] = None
+    messages: Annotated[List[Dict], add_messages] = None
+    status: str = "completed"
+    error: Optional[str] = None
+    session_id: Optional[str] = None
+    task_id: Optional[str] = None
+
+
+# Service Status Constants
+class ServiceStatus(Enum):
+    """Service status constants for consistent status handling"""
+    COMPLETED = "completed"
+    IN_PROGRESS = "in_progress"
+    WAITING_FOR_USER_FEEDBACK = "waiting_for_user_feedback"
+    FAILED = "failed"
+    PENDING = "pending"
 
 
 # Summarizer Service Models
@@ -268,6 +294,11 @@ class SummarizerState:
     streaming_updates: List[Dict[str, Any]] = None
     user_feedback: Optional[Dict[str, Any]] = None
     feedback_requested: bool = False
+
+    # --- NEW: Enhanced feedback handling fields ---
+    clarification_needed: bool = False
+    clarification_questions: Optional[str] = None
+    clarification_reasoning: Optional[str] = None
 
     # Error handling and completion
     error: Optional[str] = None

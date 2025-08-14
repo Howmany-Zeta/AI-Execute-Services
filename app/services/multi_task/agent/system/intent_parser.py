@@ -177,7 +177,6 @@ class IntentParserAgent(BaseAgent):
 
             # DEBUG: Log the raw LLM output for debugging
             logger.debug(f"DEBUG_INTENT_PARSER: Raw LLM output: {actual_output}")
-            logger.debug(f"DEBUG_INTENT_PARSER: Raw LLM output type: {type(actual_output)}")
 
             # Extract reasoning from LangChain's intermediate steps (Thought process)
             reasoning = ""
@@ -528,38 +527,6 @@ class IntentParserAgent(BaseAgent):
             "complexity": "high" if len(categories) > 2 else "medium" if len(categories) == 2 else "low"
         }
 
-    async def parse_specialized_intent(self, intent_type: str, user_text: str, context: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Parse specialized intent based on specific intent type.
-
-        Args:
-            intent_type: Type of specialized intent parsing
-            user_text: User text to parse
-            context: Execution context
-
-        Returns:
-            Specialized intent parsing result
-        """
-        specialized_types = {
-            "question_analysis": "Analyze question type and information needs",
-            "task_decomposition": "Break down complex requests into subtasks",
-            "domain_classification": "Classify request by domain or subject area",
-            "urgency_assessment": "Assess urgency and priority level",
-            "resource_requirements": "Identify required resources and capabilities"
-        }
-
-        if intent_type not in specialized_types:
-            raise ValueError(f"Unsupported specialized intent type: {intent_type}")
-
-        # Create specialized task data
-        specialized_task_data = {
-            "text": user_text,
-            "intent_type": intent_type,
-            "analysis_focus": specialized_types[intent_type]
-        }
-
-        return await self.execute_task(specialized_task_data, context)
-
     def classify_question_type(self, user_text: str) -> Dict[str, Any]:
         """
         Classify the type of question being asked.
@@ -763,45 +730,5 @@ class IntentParserAgent(BaseAgent):
             strategy["notes"] = "Data processing should precede content generation"
 
         return strategy
-
-    def get_intent_templates(self) -> Dict[str, Dict[str, Any]]:
-        """
-        Get intent parsing templates for different types of requests.
-
-        Returns:
-            Dictionary of intent templates
-        """
-        return {
-            "simple_question": {
-                "description": "Direct questions requiring factual answers",
-                "typical_categories": ["answer"],
-                "keywords": ["what", "who", "when", "where"],
-                "complexity": "low"
-            },
-            "research_request": {
-                "description": "Requests for information gathering and research",
-                "typical_categories": ["collect", "analyze"],
-                "keywords": ["research", "find", "investigate", "study"],
-                "complexity": "medium"
-            },
-            "data_processing": {
-                "description": "Requests for data transformation and processing",
-                "typical_categories": ["process", "analyze"],
-                "keywords": ["clean", "transform", "process", "format"],
-                "complexity": "medium"
-            },
-            "content_creation": {
-                "description": "Requests for content generation and writing",
-                "typical_categories": ["generate"],
-                "keywords": ["create", "write", "generate", "produce"],
-                "complexity": "medium"
-            },
-            "complex_workflow": {
-                "description": "Multi-step requests requiring multiple capabilities",
-                "typical_categories": ["collect", "process", "analyze", "generate"],
-                "keywords": ["comprehensive", "complete", "full analysis"],
-                "complexity": "high"
-            }
-        }
 
 

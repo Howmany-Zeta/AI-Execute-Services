@@ -4,7 +4,7 @@ Task Configuration Schema
 Pydantic schema definitions for task configuration validation.
 """
 
-from pydantic import BaseModel, Field, validator
+from pydantic import field_validator, ConfigDict, BaseModel, Field
 from typing import Dict, List, Optional, Any, Union
 from enum import Enum
 
@@ -21,7 +21,8 @@ class ConditionSchema(BaseModel):
     if_clause: str = Field(..., alias="if", description="Condition expression")
     then_clause: str = Field(..., alias="then", description="Action to take if condition is true")
 
-    @validator('if_clause')
+    @field_validator('if_clause')
+    @classmethod
     def validate_condition_expression(cls, v):
         """Validate the condition expression."""
         if not v.strip():
@@ -41,10 +42,7 @@ class ConditionSchema(BaseModel):
             raise ValueError(f"Invalid condition expression pattern: {v}")
 
         return v
-
-    class Config:
-        """Pydantic configuration."""
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class OperationConditionSchema(BaseModel):
@@ -52,7 +50,8 @@ class OperationConditionSchema(BaseModel):
 
     conditions: List[ConditionSchema] = Field(..., description="List of conditions for this operation")
 
-    @validator('conditions')
+    @field_validator('conditions')
+    @classmethod
     def validate_conditions_list(cls, v):
         """Validate the conditions list."""
         if not v:
@@ -66,7 +65,8 @@ class ToolOperationSchema(BaseModel):
     operation_name: str = Field(..., description="Name of the operation")
     conditions: Optional[OperationConditionSchema] = Field(None, description="Conditions for this operation")
 
-    @validator('operation_name')
+    @field_validator('operation_name')
+    @classmethod
     def validate_operation_name(cls, v):
         """Validate the operation name."""
         if not v.strip():
@@ -87,7 +87,8 @@ class ToolConfigSchema(BaseModel):
         ..., description="List of operations for this tool"
     )
 
-    @validator('operations')
+    @field_validator('operations')
+    @classmethod
     def validate_operations(cls, v):
         """Validate the operations list."""
         if not isinstance(v, list):
@@ -121,7 +122,8 @@ class TaskConfigSchema(BaseModel):
     tools: Optional[Dict[str, ToolConfigSchema]] = Field(None, description="Tools configuration")
     conditions: Optional[List[ConditionSchema]] = Field(None, description="Task-level conditions")
 
-    @validator('description')
+    @field_validator('description')
+    @classmethod
     def validate_description(cls, v):
         """Validate the task description."""
         if not v.strip():
@@ -134,7 +136,8 @@ class TaskConfigSchema(BaseModel):
 
         return v.strip()
 
-    @validator('agent')
+    @field_validator('agent')
+    @classmethod
     def validate_agent(cls, v):
         """Validate the agent name."""
         if not v.strip():
@@ -147,7 +150,8 @@ class TaskConfigSchema(BaseModel):
 
         return v.strip()
 
-    @validator('expected_output')
+    @field_validator('expected_output')
+    @classmethod
     def validate_expected_output(cls, v):
         """Validate the expected output."""
         if not v.strip():
@@ -160,7 +164,8 @@ class TaskConfigSchema(BaseModel):
 
         return v.strip()
 
-    @validator('tools')
+    @field_validator('tools')
+    @classmethod
     def validate_tools(cls, v):
         """Validate the tools configuration."""
         if v is None:
@@ -176,11 +181,7 @@ class TaskConfigSchema(BaseModel):
                 raise ValueError(f"Unknown tool: {tool_name}. Valid tools: {valid_tools}")
 
         return v
-
-    class Config:
-        """Pydantic configuration."""
-        extra = "forbid"
-        validate_assignment = True
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
 
 class SystemTasksSchema(BaseModel):
@@ -192,7 +193,8 @@ class SystemTasksSchema(BaseModel):
     examination: TaskConfigSchema = Field(..., description="Result examination task")
     acceptance: TaskConfigSchema = Field(..., description="Result acceptance task")
 
-    @validator('examination')
+    @field_validator('examination')
+    @classmethod
     def validate_examination_task(cls, v):
         """Validate the examination task."""
         # Should have research tools
@@ -205,7 +207,8 @@ class SystemTasksSchema(BaseModel):
 
         return v
 
-    @validator('acceptance')
+    @field_validator('acceptance')
+    @classmethod
     def validate_acceptance_task(cls, v):
         """Validate the acceptance task."""
         # Should have research tools
@@ -217,10 +220,7 @@ class SystemTasksSchema(BaseModel):
             raise ValueError("Acceptance task should have conditions")
 
         return v
-
-    class Config:
-        """Pydantic configuration."""
-        extra = "allow"  # Allow additional system tasks
+    model_config = ConfigDict(extra="allow")
 
 
 class SubTasksSchema(BaseModel):
@@ -276,10 +276,7 @@ class SubTasksSchema(BaseModel):
     generate_prediction: Optional[TaskConfigSchema] = Field(None, description="Prediction generation task")
     generate_insight: Optional[TaskConfigSchema] = Field(None, description="Insight generation task")
     generate_content: Optional[TaskConfigSchema] = Field(None, description="Content generation task")
-
-    class Config:
-        """Pydantic configuration."""
-        extra = "allow"  # Allow additional sub-tasks
+    model_config = ConfigDict(extra="allow")
 
 
 class TaskSchema(BaseModel):
@@ -288,14 +285,16 @@ class TaskSchema(BaseModel):
     system_tasks: SystemTasksSchema = Field(..., description="System tasks configuration")
     sub_tasks: SubTasksSchema = Field(..., description="Sub-tasks configuration")
 
-    @validator('system_tasks')
+    @field_validator('system_tasks')
+    @classmethod
     def validate_system_tasks(cls, v):
         """Validate system tasks."""
         if not v:
             raise ValueError("System tasks must be defined")
         return v
 
-    @validator('sub_tasks')
+    @field_validator('sub_tasks')
+    @classmethod
     def validate_sub_tasks(cls, v):
         """Validate sub-tasks."""
         # Check category coverage
@@ -311,11 +310,7 @@ class TaskSchema(BaseModel):
                 raise ValueError(f"No sub-tasks found for category: {category}")
 
         return v
-
-    class Config:
-        """Pydantic configuration."""
-        extra = "forbid"
-        validate_assignment = True
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
 
 class TaskValidationSchema(BaseModel):
@@ -328,10 +323,7 @@ class TaskValidationSchema(BaseModel):
     sub_tasks_count: int = Field(..., description="Number of sub-tasks")
     category_coverage: Dict[str, int] = Field(default_factory=dict, description="Tasks per category")
     tool_usage: Dict[str, int] = Field(default_factory=dict, description="Tool usage statistics")
-
-    class Config:
-        """Pydantic configuration."""
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class TaskConsistencySchema(BaseModel):
@@ -343,7 +335,4 @@ class TaskConsistencySchema(BaseModel):
     tool_distribution: Dict[str, List[str]] = Field(default_factory=dict, description="Tool usage by tasks")
     unused_tools: List[str] = Field(default_factory=list, description="Available but unused tools")
     category_gaps: List[str] = Field(default_factory=list, description="Categories with insufficient tasks")
-
-    class Config:
-        """Pydantic configuration."""
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")

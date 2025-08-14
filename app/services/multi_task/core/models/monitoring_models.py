@@ -4,7 +4,7 @@ Monitoring Models
 Data models for monitoring and performance tracking in the multi-task service.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field, field_serializer
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 from enum import Enum
@@ -183,9 +183,7 @@ class MonitoringConfig(BaseModel):
     # Storage settings
     max_events_in_memory: int = Field(default=10000, description="Maximum events to keep in memory")
     max_metrics_in_memory: int = Field(default=50000, description="Maximum metrics to keep in memory")
-
-    class Config:
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
 
 
 class MonitoringSummary(BaseModel):
@@ -197,9 +195,9 @@ class MonitoringSummary(BaseModel):
     active_executions: int = Field(..., description="Number of active executions")
     active_alerts: int = Field(..., description="Number of active alerts")
     last_collection_time: Optional[datetime] = Field(None, description="Last metric collection time")
+    model_config = ConfigDict(use_enum_values=True)
 
-    class Config:
-        use_enum_values = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('last_collection_time')
+    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime fields to ISO format."""
+        return value.isoformat() if value else None

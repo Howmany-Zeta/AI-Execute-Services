@@ -4,7 +4,7 @@ Quality Models
 Data models for quality control and validation in the multi-task service.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field, field_serializer
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 from enum import Enum
@@ -93,12 +93,12 @@ class QualityProfile(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Profile creation timestamp")
     created_by: str = Field(..., description="ID of the user who created the profile")
     version: str = Field(default="1.0.0", description="Profile version")
+    model_config = ConfigDict(use_enum_values=True)
 
-    class Config:
-        use_enum_values = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('created_at')
+    def serialize_datetime(self, value: datetime) -> str:
+        """Serialize datetime fields to ISO format."""
+        return value.isoformat()
 
 
 class QualityAssessment(BaseModel):
@@ -131,12 +131,12 @@ class QualityAssessment(BaseModel):
 
     # Metadata
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    model_config = ConfigDict(use_enum_values=True)
 
-    class Config:
-        use_enum_values = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('started_at', 'completed_at')
+    def serialize_datetime(self, value: datetime) -> str:
+        """Serialize datetime fields to ISO format."""
+        return value.isoformat()
 
 
 class ValidationCriteria(BaseModel):
@@ -171,11 +171,12 @@ class ValidationCriteria(BaseModel):
     # Metadata
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Criteria creation timestamp")
     version: str = Field(default="1.0.0", description="Criteria version")
+    model_config = ConfigDict()
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('created_at')
+    def serialize_datetime(self, value: datetime) -> str:
+        """Serialize datetime fields to ISO format."""
+        return value.isoformat()
 
 
 class QualityMetrics(BaseModel):
@@ -216,9 +217,9 @@ class QualityMetrics(BaseModel):
 
     # Metadata
     generated_at: datetime = Field(default_factory=datetime.utcnow, description="Metrics generation timestamp")
+    model_config = ConfigDict(use_enum_values=True)
 
-    class Config:
-        use_enum_values = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('time_period_start', 'time_period_end', 'generated_at')
+    def serialize_datetime(self, value: datetime) -> str:
+        """Serialize datetime fields to ISO format."""
+        return value.isoformat()

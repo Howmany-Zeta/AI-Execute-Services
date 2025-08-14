@@ -43,7 +43,7 @@ from .qc.accept_outcome import AcceptOutcomeService
 from ..core.models.services_models import (
     TaskCategory, SummarizerStepStatus, SummarizerState,
     MiningContext, MiningResult, WorkflowPlanningState,
-    InteractionResult, RequestType
+    InteractionResult, RequestType, ServiceStatus
 )
 from ..core.interfaces.services_interfaces import ISummarizerService
 from ..core.exceptions.services_exceptions import SummarizerError, WorkflowExecutionError, StreamingError
@@ -310,8 +310,7 @@ class Summarizer(BaseAIService):
             # Configure LangGraph execution
             config = {
                 "configurable": {
-                    "thread_id": session_id,
-                    "checkpoint_ns": "summarizer"
+                    "thread_id": session_id
                 }
             }
 
@@ -427,7 +426,10 @@ class Summarizer(BaseAIService):
             return state
 
     async def _mine_requirements_node(self, state: SummarizerState) -> SummarizerState:
-        """Node: Mine user requirements using MiningService."""
+        """
+        Node: Mine user requirements using enhanced MiningService.
+        This node is now aware of the MiningService's ability to pause.
+        """
         try:
             state.current_step = "mine_requirements"
             state.add_streaming_update(
@@ -436,7 +438,6 @@ class Summarizer(BaseAIService):
                 "in_progress"
             )
 
-            # Create mining context
             state.mining_context = MiningContext(
                 user_id=state.user_id,
                 session_id=state.session_id,
@@ -445,39 +446,50 @@ class Summarizer(BaseAIService):
             )
 
             # Execute mining
-            state.mining_result = await self._mining_service.mine_requirements(
+            mining_result = await self._mining_service.mine_requirements(
                 state.user_input, state.mining_context
             )
+            state.mining_result = mining_result
 
-            # Store results
-            state.step_results["mine_requirements"] = {
-                "mining_result": state.mining_result.__dict__,
-                "demand_state": state.mining_result.demand_state,
-                "blueprint": state.mining_result.blueprint
-            }
+            # --- NEW: Check if MiningService has paused for feedback ---
+            if getattr(mining_result, 'status', None) == ServiceStatus.WAITING_FOR_USER_FEEDBACK.value:
+                # MiningService has paused and is waiting for user input.
+                state.clarification_needed = True
 
-            # Add completion update
-            state.add_streaming_update(
-                "mine_requirements",
-                f"Requirements mined successfully: {state.mining_result.demand_state}",
-                "completed",
-                {
-                    "demand_state": state.mining_result.demand_state,
-                    "requirements_count": len(state.mining_result.final_requirements)
-                }
-            )
+                # Extract the message meant for the user from the result
+                messages = getattr(mining_result, 'messages', [])
+                if messages:
+                    last_message = messages[-1]
+                    # The content of the last message is what we need to show the user
+                    user_prompt = last_message.content if hasattr(last_message, 'content') else last_message.get('content', '')
+                    state.clarification_questions = user_prompt
+                else:
+                    state.clarification_questions = "The assistant requires more information. Please provide feedback."
+
+                state.add_streaming_update(
+                    "mine_requirements",
+                    "Analysis paused. Awaiting user feedback...",
+                    "completed",
+                    {"feedback_needed": True, "prompt": state.clarification_questions}
+                )
+                logger.info(f"Mining paused for user feedback. Prompt: {state.clarification_questions}")
+            else:
+                # Normal completion without a pause
+                state.clarification_needed = False
+                state.step_results["mine_requirements"] = {"mining_result": mining_result.__dict__}
+                state.add_streaming_update(
+                    "mine_requirements",
+                    f"Requirements mined successfully: {mining_result.demand_state}",
+                    "completed",
+                    {"demand_state": mining_result.demand_state}
+                )
 
             return state
 
         except Exception as e:
             logger.error(f"Requirements mining failed: {e}")
             state.error = f"Mining failed: {str(e)}"
-            state.add_streaming_update(
-                "mine_requirements",
-                f"Mining error: {str(e)}",
-                "failed",
-                error=str(e)
-            )
+            state.add_streaming_update("mine_requirements", f"Mining error: {str(e)}", "failed", error=str(e))
             return state
 
     async def _plan_workflow_node(self, state: SummarizerState) -> SummarizerState:
@@ -689,7 +701,7 @@ class Summarizer(BaseAIService):
                     "in_progress"
                 )
 
-                # Process feedback
+                # Process feedback based on type
                 feedback_type = state.user_feedback.get("type", "general")
                 feedback_content = state.user_feedback.get("content", "")
 
@@ -707,11 +719,12 @@ class Summarizer(BaseAIService):
                     {"feedback_type": feedback_type}
                 )
             else:
-                # No feedback to process
+                # No feedback to process - this is a waiting state
                 state.add_streaming_update(
                     "handle_user_feedback",
-                    "No user feedback to process",
-                    "completed"
+                    "Waiting for user feedback...",
+                    "in_progress",
+                    {"waiting_for_feedback": True}
                 )
 
             return state
@@ -825,12 +838,16 @@ class Summarizer(BaseAIService):
             return "proceed"
 
     def _route_after_mining(self, state: SummarizerState) -> str:
-        """Route after requirements mining."""
+        """Route after requirements mining - UPDATED for the new feedback flow."""
         if state.error:
             return "error"
-        elif state.mining_result and state.mining_result.needs_clarification:
+        # --- NEW: Check the flag set in the node ---
+        elif getattr(state, 'clarification_needed', False):
+            # If feedback is needed, route to the feedback handler to wait.
+            # The 'handle_user_feedback' node can act as a waiting room.
             return "clarify"
         else:
+            # If no feedback is needed, proceed to planning.
             return "proceed"
 
     def _route_after_planning(self, state: SummarizerState) -> str:
@@ -865,21 +882,22 @@ class Summarizer(BaseAIService):
             return "retry"
 
     def _route_after_feedback(self, state: SummarizerState) -> str:
-        """Route after user feedback handling."""
+        """Route after user feedback handling - UPDATED for universal feedback processing."""
         if state.error:
             return "error"
         elif state.user_feedback:
             feedback_type = state.user_feedback.get("type", "general")
             if feedback_type == "clarification":
-                return "continue"
-            elif feedback_type == "replan":
-                return "replan"
-            elif feedback_type == "retry":
-                return "retry"
+                return "continue"  # Continue from mining requirements
+            elif feedback_type == "meta_architect_confirmation":
+                return "replan"  # Re-plan workflow
+            elif feedback_type == "simple_strategy_confirmation":
+                return "replan"  # Re-plan workflow
             else:
-                return "finalize"
+                return "finalize"  # Default to finalization
         else:
-            return "finalize"
+            # No feedback provided - stay in waiting state
+            return "clarify"
 
     # ==================== Utility Methods ====================
 
@@ -934,12 +952,68 @@ class Summarizer(BaseAIService):
         return self._active_sessions.get(session_id)
 
     async def update_session_feedback(self, session_id: str, feedback: Dict[str, Any]) -> bool:
-        """Update user feedback for an active session."""
-        if session_id in self._active_sessions:
-            self._active_sessions[session_id].user_feedback = feedback
-            self._active_sessions[session_id].feedback_requested = False
-            return True
-        return False
+        """
+        Update session with any type of user feedback and resume the workflow.
+        This is now a universal feedback handler.
+        """
+        try:
+            if session_id in self._active_sessions:
+                session_state = self._active_sessions[session_id]
+                session_state.user_feedback = feedback
+                session_state.feedback_requested = False
+
+                # --- NEW: Unified resume logic ---
+                # Check if the session was waiting for feedback. The feedback 'type' will guide the process.
+                if getattr(session_state, 'clarification_needed', False):
+                    # Call the unified resume method, passing the entire feedback dictionary
+                    await self._resume_workflow_with_feedback(session_state, feedback)
+                else:
+                    logger.warning(f"Received feedback for session {session_id}, but it was not in a waiting state.")
+
+                logger.info(f"Updated session {session_id} with feedback of type: {feedback.get('type')}")
+                return True
+            else:
+                logger.warning(f"Session {session_id} not found for feedback update")
+                return False
+        except Exception as e:
+            logger.error(f"Failed to update session feedback: {e}")
+            return False
+
+    async def _resume_workflow_with_feedback(self, state: SummarizerState, feedback: Dict[str, Any]) -> None:
+        """
+        (Renamed & Generalized)
+        Resume the MiningService workflow with the provided user feedback.
+        """
+        try:
+            logger.info(f"Resuming MiningService workflow for session {state.session_id} with user feedback.")
+
+            # --- NEW: Call the unified resume method on MiningService ---
+            # We no longer need to know the internal details, just pass the feedback along.
+            # MiningService's internal router will handle the logic.
+            resumed_result = await self._mining_service.resume_workflow_with_feedback(
+                state.session_id, feedback
+            )
+
+            # Update the summarizer state with the new result from the resumed workflow
+            if resumed_result:
+                state.mining_result = resumed_result
+                # Check if the workflow paused again for another round of feedback
+                state.clarification_needed = getattr(resumed_result, 'status', None) == ServiceStatus.WAITING_FOR_USER_FEEDBACK.value
+
+                state.add_streaming_update(
+                    "mine_requirements",
+                    f"Feedback processed. New state: {resumed_result.demand_state}",
+                    "completed",
+                    {"clarification_processed": True, "demand_state": resumed_result.demand_state}
+                )
+                logger.info(f"MiningService workflow resumed successfully. New demand state: {resumed_result.demand_state}")
+            else:
+                logger.warning("MiningService workflow resumption returned no result.")
+
+        except Exception as e:
+            logger.error(f"Failed to resume MiningService workflow: {e}")
+            state.error = f"Failed to process feedback: {str(e)}"
+            state.add_streaming_update("mine_requirements", f"Error processing feedback: {str(e)}", "failed", error=str(e))
 
     async def get_service_metrics(self) -> Dict[str, Any]:
         """Get service performance metrics."""

@@ -6,7 +6,7 @@ This ensures that all framework definitions follow the correct structure
 and contain all required fields.
 """
 
-from pydantic import BaseModel, Field, validator
+from pydantic import field_validator, ConfigDict, BaseModel, Field, model_validator
 from typing import List, Optional, Dict, Any
 from enum import Enum
 
@@ -32,6 +32,18 @@ class OutputFormat(str, Enum):
     RISK_MATRIX = "risk_matrix"
     PERSONA_PROFILES = "persona_profiles"
     GAP_ANALYSIS_REPORT = "gap_analysis_report"
+    # New output formats for enhanced frameworks
+    DESIGN_SOLUTION = "design_solution"
+    VALIDATION_REPORT = "validation_report"
+    OKR_FRAMEWORK = "okr_framework"
+    IMPROVEMENT_PLAN = "improvement_plan"
+    FINANCIAL_ANALYSIS_REPORT = "financial_analysis_report"
+    DATA_INSIGHTS_REPORT = "data_insights_report"
+    CHANGE_MANAGEMENT_PLAN = "change_management_plan"
+    SUPPLY_CHAIN_REPORT = "supply_chain_report"
+    TECHNOLOGY_ASSESSMENT_REPORT = "technology_assessment_report"
+    COMPETITIVE_INTELLIGENCE_REPORT = "competitive_intelligence_report"
+    PROCESS_OPTIMIZATION_PLAN = "process_optimization_plan"
 
 
 class FrameworkStrategy(str, Enum):
@@ -54,7 +66,8 @@ class FrameworkModel(BaseModel):
     required_data_types: List[str] = Field(..., description="Types of data required for this framework")
     output_format: OutputFormat = Field(..., description="Expected output format")
 
-    @validator('tags')
+    @field_validator('tags')
+    @classmethod
     def validate_tags(cls, v):
         """Validate that tags are properly formatted."""
         if not v or not v.strip():
@@ -65,7 +78,8 @@ class FrameworkModel(BaseModel):
             raise ValueError("Tags cannot contain empty values")
         return v
 
-    @validator('components')
+    @field_validator('components')
+    @classmethod
     def validate_components(cls, v):
         """Validate that components are properly formatted."""
         if not v or not v.strip():
@@ -76,7 +90,8 @@ class FrameworkModel(BaseModel):
             raise ValueError("Components cannot contain empty values")
         return v
 
-    @validator('required_data_types')
+    @field_validator('required_data_types')
+    @classmethod
     def validate_required_data_types(cls, v):
         """Validate that required data types are not empty."""
         if not v:
@@ -104,7 +119,8 @@ class MetaFrameworkModel(BaseModel):
     estimated_duration: str = Field(..., description="Estimated time to complete analysis")
     strategy: FrameworkStrategy = Field(..., description="Strategy for handling this meta-framework")
 
-    @validator('component_frameworks')
+    @field_validator('component_frameworks')
+    @classmethod
     def validate_component_frameworks(cls, v):
         """Validate that component frameworks are not empty."""
         if not v:
@@ -121,7 +137,8 @@ class FrameworkConfigModel(BaseModel):
     frameworks: List[FrameworkModel] = Field(..., description="List of available frameworks")
     meta_frameworks: Optional[List[MetaFrameworkModel]] = Field(default_factory=list, description="List of meta-frameworks")
 
-    @validator('frameworks')
+    @field_validator('frameworks')
+    @classmethod
     def validate_frameworks(cls, v):
         """Validate that frameworks list is not empty and names are unique."""
         if not v:
@@ -134,28 +151,32 @@ class FrameworkConfigModel(BaseModel):
 
         return v
 
-    @validator('meta_frameworks')
-    def validate_meta_frameworks(cls, v, values):
-        """Validate meta-frameworks against available frameworks."""
-        if not v:
-            return v
+    @model_validator(mode='after')
+    def validate_meta_frameworks(self) -> 'FrameworkConfigModel':
+        """Validate that meta-frameworks and their component frameworks are valid."""
+        # Use self to access the model's fields
+        meta_frameworks = self.meta_frameworks
+        frameworks = self.frameworks
+
+        if not meta_frameworks or not frameworks:
+            return self
 
         # Get available framework names
-        frameworks = values.get('frameworks', [])
         available_names = {framework.name for framework in frameworks}
 
         # Check meta-framework names are unique
-        meta_names = [meta.name for meta in v]
+        meta_names = [meta.name for meta in meta_frameworks]
         if len(meta_names) != len(set(meta_names)):
             raise ValueError("Meta-framework names must be unique")
 
         # Check that component frameworks exist
-        for meta_framework in v:
+        for meta_framework in meta_frameworks:
             for component_name in meta_framework.component_frameworks:
                 if component_name not in available_names:
-                    raise ValueError(f"Meta-framework '{meta_framework.name}' references unknown framework '{component_name}'")
+                    raise ValueError(f"Meta-framework '{meta_framework.name}' references an unknown component framework '{component_name}'")
 
-        return v
+        # Always return the self instance at the end
+        return self
 
     def get_framework_by_name(self, name: str) -> Optional[FrameworkModel]:
         """Get a framework by name."""
@@ -195,10 +216,7 @@ class StrategicPlan(BaseModel):
     estimated_duration: Optional[str] = Field(None, description="Estimated duration for this plan")
     complexity_level: Optional[ComplexityLevel] = Field(None, description="Complexity level of this plan")
     reasoning: Optional[str] = Field(None, description="Reasoning for framework selection")
-
-    class Config:
-        # Allow forward references for recursive model
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 # Update forward reference
@@ -220,7 +238,8 @@ class BlueprintConstructionResult(BaseModel):
     processing_time_ms: float = Field(..., description="Processing time in milliseconds")
     architect_version: str = Field(..., description="Version of the Meta-Architect used")
 
-    @validator('confidence_score')
+    @field_validator('confidence_score')
+    @classmethod
     def validate_confidence_score(cls, v):
         """Validate confidence score is between 0 and 1."""
         if not 0.0 <= v <= 1.0:

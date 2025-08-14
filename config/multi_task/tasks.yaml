@@ -57,7 +57,7 @@ system_tasks:
     agent: "meta_architect"
     expected_output: "A targeted strategic blueprint in JSON format with context-driven analysis, framework selections, and execution plan tailored to the specific problem and intent categories."
     task_type: "fast"
-    tools: {}  # Meta-architect uses mining context and targeted analysis
+    tools: {framework_search}  # Meta-architect uses mining context and targeted analysis
     parameters:
       context_utilization_mode: "enhanced"  # Enhanced mining context utilization
       framework_selection_mode: "intent_driven"  # Select frameworks based on intent categories

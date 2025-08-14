@@ -6,7 +6,7 @@ import logging
 from typing import Dict, Any, List, Optional, Union, Tuple
 from enum import Enum
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -39,6 +39,7 @@ class ChartTool(BaseTool):
 
     # Configuration schema
     class Config(BaseModel):
+        model_config = ConfigDict()
         """Configuration for the chart tool"""
         export_dir: str = Field(
             default=os.path.join(tempfile.gettempdir(), 'chart_exports'),
