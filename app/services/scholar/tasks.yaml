@@ -1,4 +1,0 @@
-summarizer:
-  steps:
-    - tool: db_api
-      args_key: text

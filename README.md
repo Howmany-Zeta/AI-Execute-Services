@@ -1,342 +1,259 @@
-# Python Middleware for AI Service System
+# AIECS - AI Execute Services
 
-## Architecture Overview
+[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PyPI version](https://badge.fury.io/py/aiecs.svg)](https://badge.fury.io/py/aiecs)
 
-This project follows **Clean Architecture** principles with clear separation of concerns across multiple layers:
+AIECS (AI Execute Services) is a powerful Python middleware framework for building AI-powered applications with tool orchestration, task execution, and multi-provider LLM support.
 
-- **Domain Layer**: Core business logic and models
-- **Application Layer**: Use cases and service orchestration
-- **Infrastructure Layer**: External dependencies (database, messaging, monitoring)
-- **Config Layer**: Configuration management and service registry
-- **Interface Layer**: API endpoints and external interfaces
+## Features
 
-## Project Structure
+- **Multi-Provider LLM Support**: Seamlessly integrate with OpenAI, Google Vertex AI, and xAI
+- **Tool Orchestration**: Extensible tool system for various tasks (web scraping, data analysis, document processing, etc.)
+- **Asynchronous Task Execution**: Built on Celery for scalable task processing
+- **Real-time Communication**: WebSocket support for live updates and progress tracking
+- **Enterprise-Ready**: Production-grade architecture with PostgreSQL, Redis, and Google Cloud Storage integration
+- **Extensible Architecture**: Easy to add custom tools and AI providers
 
-```
-python-middleware/
-├── app/
-│   ├── main.py                          # FastAPI application entry point
-│   │
-│   ├── api/                             # 🌐 API Layer - External interfaces
-│   │   ├── stream_router.py             # POST /stream/:mode/:service → StreamingResponse
-│   │   ├── graph_router.py              # GET /graph/:docId → vector graph
-│   │   └── service_dispatcher.py        # Service routing and dispatch logic
-│   │
-│   ├── domain/                          # 🏛️ DOMAIN LAYER - Core business logic
-│   │   ├── execution/                   # Execution domain
-│   │   │   ├── model.py                 # TaskStepResult, TaskStatus, ErrorCode
-│   │   │   └── operation_executor.py    # Core execution operations
-│   │   └── task/                        # Task domain
-│   │       ├── model.py                 # TaskContext, DSLStep models
-│   │       ├── task_context.py          # Task context management
-│   │       └── dsl_processor.py         # Domain-specific language processing
-│   │
-│   ├── application/                     # 🔧 APPLICATION LAYER - Use cases
-│   │   └── executors/                   # Service execution orchestration
-│   │       └── service_executor.py      # Main service execution logic
-│   │
-│   ├── infrastructure/                  # 🏗️ INFRASTRUCTURE LAYER - External dependencies
-│   │   ├── persistence/                 # Data persistence
-│   │   │   ├── database_manager.py      # Database operations
-│   │   │   └── redis_client.py          # Redis client and operations
-│   │   ├── messaging/                   # Message queuing and communication
-│   │   │   ├── celery_task_manager.py   # Celery task management
-│   │   │   └── websocket_manager.py     # WebSocket communication
-│   │   └── monitoring/                  # Observability and metrics
-│   │       ├── executor_metrics.py      # Execution metrics collection
-│   │       └── tracing_manager.py       # Distributed tracing
-│   │
-│   ├── config/                          # ⚙️ CONFIG LAYER - Configuration management
-│   │   ├── config.py                    # Pydantic settings and environment config
-│   │   └── registry.py                  # Service registration and discovery
-│   │
-│   ├── core/                            # 🔌 CORE INTERFACES - Stable interfaces
-│   │   └── interface/                   # Core interface definitions
-│   │       └── execution_interface.py   # Execution interface contracts
-│   │
-│   ├── services/                        # 🤖 SERVICE IMPLEMENTATIONS - AI service modules
-│   │   ├── general/                     # General-purpose AI services
-│   │   │   ├── base.py                  # General service base class
-│   │   │   ├── services/
-│   │   │   │   └── summarizer.py        # Text summarization service
-│   │   │   ├── prompts.yaml             # General mode prompts
-│   │   │   └── tasks.yaml               # Task definitions
-│   │   ├── multi_task/                  # Multi-task orchestration services
-│   │   │   ├── base.py                  # Multi-task service base class
-│   │   │   ├── services/
-│   │   │   │   └── summarizer.py        # Multi-task summarization
-│   │   │   ├── prompts.yaml             # Multi-task prompts
-│   │   │   └── tasks.yaml               # Task definitions
-│   │   └── domain/                      # Domain-specific services
-│   │       ├── base.py                  # Domain service base class
-│   │       ├── services/
-│   │       │   └── rag/                 # RAG (Retrieval-Augmented Generation)
-│   │       └── kag_core/                # Knowledge-Augmented Generation core
-│   │
-│   ├── llm/                             # 🧠 LLM CLIENTS - Language model integrations
-│   │   ├── base_client.py               # Abstract LLM client interface
-│   │   ├── client_factory.py            # LLM client factory
-│   │   ├── openai_client.py             # OpenAI API client
-│   │   ├── vertex_client.py             # Google Vertex AI client
-│   │   └── xai_client.py                # xAI API client
-│   │
-│   ├── tools/                           # 🛠️ TOOL SYSTEM - Extensible tool plugins
-│   │   ├── base_tool.py                 # Abstract tool interface
-│   │   ├── tool_executor/               # Tool execution framework
-│   │   ├── general_tools/               # General-purpose tools
-│   │   ├── rag_tools/                   # RAG-specific tools
-│   │   ├── task_tools/                  # Task management tools
-│   │   └── out_source/                  # External service integrations
-│   │
-│   ├── tasks/                           # ⚡ ASYNC PROCESSING - Background task processing
-│   │   └── worker.py                    # Celery worker implementation
-│   │
-│   ├── utils/                           # 🔧 UTILITIES - Helper functions and utilities
-│   │   ├── execution_utils.py           # Execution helper functions
-│   │   ├── token_usage_repository.py    # Token usage tracking
-│   │   └── logging.py                   # Logging configuration
-│   │
-│   └── ws/                              # 🔌 WEBSOCKET - Real-time communication
-│       └── socket_server.py             # Socket.IO server implementation
-│
-├── scripts/                             # 📜 SCRIPTS - Utility scripts
-├── test file/                           # 🧪 TESTS - Test suites
-│   ├── api_test/                        # API integration tests
-│   ├── core_test/                       # Core functionality tests
-│   └── LLM_test/                        # LLM client tests
-│
-├── Dockerfile                           # 🐳 Docker configuration
-├── pyproject.toml                       # 📦 Poetry dependency management
-├── docker-compose.yml                   # 🐳 Multi-container setup
-└── .env                                 # 🔐 Environment variables
-```
-
-## Architecture Principles
-
-### Clean Architecture Benefits
-- **Independence**: Business logic is independent of frameworks, UI, and external dependencies
-- **Testability**: Core business logic can be tested without external dependencies
-- **Flexibility**: Easy to swap out infrastructure components without affecting business logic
-- **Maintainability**: Clear separation of concerns makes the codebase easier to understand and modify
-
-### Layer Dependencies
-```
-API Layer → Application Layer → Domain Layer
-Infrastructure Layer → Domain Layer (through interfaces)
-Config Layer → All Layers
-```
-
-### Key Design Patterns
-- **Dependency Inversion**: High-level modules don't depend on low-level modules
-- **Repository Pattern**: Data access abstraction in infrastructure layer
-- **Factory Pattern**: LLM client creation and service instantiation
-- **Template Method**: Service execution workflow in base classes
-- **Registry Pattern**: Service discovery and tool registration
-
-## Getting Started
-
-### Prerequisites
-- Python 3.10+
-- Poetry for dependency management
-- Redis for caching and task queuing
-- Docker (optional, for containerized deployment)
-
-### Installation
-
-1. **Install dependencies using Poetry**:
-```bash
-poetry install
-```
-
-2. **Set up environment variables**:
-```bash
-cp .env.example .env
-# Edit .env with your configuration
-```
-
-3. **Start Redis** (if not using Docker):
-```bash
-redis-server
-```
-
-4. **Run the FastAPI application**:
-```bash
-poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-5. **Start Celery worker** (in a separate terminal):
-```bash
-poetry run celery -A app.tasks.worker worker --loglevel=info
-```
-
-### Docker Deployment
+## Installation
 
 ```bash
-# Build and start all services
-docker-compose up --build
-
-# Or start in detached mode
-docker-compose up -d
+pip install aiecs
 ```
 
-## Environment Variables
+## Quick Start
 
-Configure the following environment variables in your `.env` file:
+### Basic Usage
 
-### LLM Provider Configuration
-- `OPENAI_API_KEY` - OpenAI API key
-- `VERTEX_PROJECT_ID` - Google Cloud project ID for Vertex AI
-- `VERTEX_LOCATION` - Vertex AI location (default: us-central1)
-- `GOOGLE_APPLICATION_CREDENTIALS` - Path to Google Cloud service account JSON
-- `XAI_API_KEY` - xAI API key (optional)
+```python
+from aiecs import AIECS
+from aiecs.domain.task.task_context import TaskContext
 
-### Infrastructure Configuration
-- `CELERY_BROKER_URL` - Redis URL for Celery task queue
-- `CORS_ALLOWED_ORIGINS` - Allowed CORS origins (comma-separated)
-- `VECTOR_STORE_BACKEND` - Vector store backend (vertex/qdrant)
+# Initialize AIECS
+aiecs = AIECS()
 
-### Vector Store Configuration
-- `VERTEX_INDEX_ID` - Vertex AI Vector Search index ID
-- `VERTEX_ENDPOINT_ID` - Vertex AI Vector Search endpoint ID
-- `QDRANT_URL` - Qdrant server URL (legacy)
-- `QDRANT_COLLECTION` - Qdrant collection name (legacy)
+# Create a task context
+context = TaskContext(
+    mode="execute",
+    service="default",
+    user_id="user123",
+    metadata={
+        "aiPreference": {
+            "provider": "OpenAI",
+            "model": "gpt-4"
+        }
+    },
+    data={
+        "task": "Analyze this text and extract key points",
+        "content": "Your text here..."
+    }
+)
+
+# Execute task
+result = await aiecs.execute(context)
+print(result)
+```
+
+### Using Tools
+
+```python
+from aiecs.tools import get_tool
+
+# Get a specific tool
+scraper = get_tool("scraper_tool")
+
+# Execute tool
+result = await scraper.execute({
+    "url": "https://example.com",
+    "extract": ["title", "content"]
+})
+```
+
+### Custom Tool Development
+
+```python
+from aiecs.tools import register_tool
+from aiecs.tools.base_tool import BaseTool
+
+@register_tool("my_custom_tool")
+class MyCustomTool(BaseTool):
+    """Custom tool for specific tasks"""
+    
+    name = "my_custom_tool"
+    description = "Does something specific"
+    
+    async def execute(self, params: dict) -> dict:
+        # Your tool logic here
+        return {"result": "success"}
+```
+
+## Configuration
+
+Create a `.env` file with the following variables:
+
+```env
+# LLM Providers
+OPENAI_API_KEY=your_openai_key
+VERTEX_PROJECT_ID=your_gcp_project
+VERTEX_LOCATION=us-central1
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
+XAI_API_KEY=your_xai_key
+
+# Database
+DB_HOST=localhost
+DB_USER=postgres
+DB_PASSWORD=your_password
+DB_NAME=aiecs_db
+DB_PORT=5432
+
+# Redis (for Celery)
+CELERY_BROKER_URL=redis://localhost:6379/0
+
+# Google Cloud Storage
+GOOGLE_CLOUD_PROJECT_ID=your_project_id
+GOOGLE_CLOUD_STORAGE_BUCKET=your_bucket_name
+
+# CORS
+CORS_ALLOWED_ORIGINS=http://localhost:3000,https://yourdomain.com
+```
+
+## Running as a Service
+
+### Start the API Server
+
+```bash
+# Using uvicorn directly
+uvicorn aiecs.main:app --host 0.0.0.0 --port 8000
+
+# Or using the entry point
+python -m aiecs
+```
+
+### Start Celery Workers
+
+```bash
+# Start worker
+celery -A aiecs.tasks.worker.celery_app worker --loglevel=info
+
+# Start beat scheduler (for periodic tasks)
+celery -A aiecs.tasks.worker.celery_app beat --loglevel=info
+
+# Start Flower (Celery monitoring)
+celery -A aiecs.tasks.worker.celery_app flower
+```
 
 ## API Endpoints
 
-### Streaming Services
-- `POST /stream/{mode}/{service}` - Stream AI service responses
-  - `mode`: general, multi_task, domain
-  - `service`: summarizer, etc.
+- `GET /health` - Health check
+- `GET /api/tools` - List available tools
+- `GET /api/services` - List available AI services
+- `GET /api/providers` - List LLM providers
+- `POST /api/execute` - Execute a task
+- `GET /api/task/{task_id}` - Get task status
+- `DELETE /api/task/{task_id}` - Cancel a task
 
-### Graph Operations
-- `GET /graph/{doc_id}` - Retrieve document vector graph
+## WebSocket Events
 
-### Health Check
-- `GET /health` - Application health status
+Connect to the WebSocket endpoint for real-time updates:
 
-## Service Architecture
+```javascript
+const socket = io('http://localhost:8000');
 
-### Service Modes
-1. **General Services** (`/stream/general/*`)
-   - Single-turn AI interactions
-   - Text processing, summarization, Q&A
-   - Optimized for quick responses
+socket.on('connect', () => {
+    console.log('Connected to AIECS');
+    
+    // Register user for updates
+    socket.emit('register', { user_id: 'user123' });
+});
 
-2. **Multi-Task Services** (`/stream/multi_task/*`)
-   - Complex workflow orchestration
-   - Multi-step task execution
-   - User confirmation and feedback loops
-
-3. **Domain Services** (`/stream/domain/*`)
-   - Specialized domain knowledge
-   - RAG (Retrieval-Augmented Generation)
-   - Knowledge graph integration
-
-### Adding New Services
-
-1. **Create service class** in appropriate mode directory:
-```python
-from app.services.general.base import GeneralServiceBase
-
-@register_ai_service("general", "my_service")
-class MyService(GeneralServiceBase):
-    async def run(self, input_data, context):
-        # Implementation
-        pass
+socket.on('progress', (data) => {
+    console.log('Task progress:', data);
+});
 ```
 
-2. **Add configuration files**:
-   - `prompts.yaml` - Service-specific prompts
-   - `tasks.yaml` - Task definitions and capabilities
+## Available Tools
 
-3. **Register tools** (if needed):
-```python
-from app.tools import register_tool
+AIECS comes with a comprehensive set of pre-built tools:
 
-@register_tool("my_tool")
-class MyTool(BaseTool):
-    # Implementation
-    pass
+- **Web Tools**: Web scraping, search API integration
+- **Data Analysis**: Pandas operations, statistical analysis
+- **Document Processing**: PDF, Word, PowerPoint handling
+- **Image Processing**: OCR, image manipulation
+- **Research Tools**: Academic research, report generation
+- **Chart Generation**: Data visualization tools
+
+## Architecture
+
+AIECS follows a clean architecture pattern with clear separation of concerns:
+
+```
+aiecs/
+├── domain/         # Core business logic
+├── application/    # Use cases and application services
+├── infrastructure/ # External services and adapters
+├── llm/           # LLM provider implementations
+├── tools/         # Tool implementations
+├── config/        # Configuration management
+└── main.py        # FastAPI application entry point
 ```
 
-## Development Guidelines
+## Development
 
-### Code Organization
-- Follow clean architecture principles
-- Keep domain logic pure (no external dependencies)
-- Use dependency injection for infrastructure components
-- Implement proper error handling and logging
+### Setting up Development Environment
 
-### Testing
 ```bash
-# Run all tests
-poetry run pytest
+# Clone the repository
+git clone https://github.com/yourusername/aiecs.git
+cd aiecs
 
-# Run specific test categories
-poetry run pytest test_file/api_test/
-poetry run pytest test_file/core_test/
-poetry run pytest test_file/LLM_test/
+# Install dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+
+# Run linting
+flake8 aiecs/
+mypy aiecs/
 ```
 
-### Code Quality
-```bash
-# Format code
-poetry run black app/
-
-# Lint code
-poetry run flake8 app/
-
-# Type checking
-poetry run mypy app/
-```
-
-## Monitoring and Observability
-
-### Metrics Collection
-- Execution metrics via `infrastructure/monitoring/executor_metrics.py`
-- Token usage tracking via `utils/token_usage_repository.py`
-- Performance monitoring with distributed tracing
-
-### Logging
-- Structured logging with correlation IDs
-- Different log levels for development and production
-- Centralized logging configuration
-
-### Health Checks
-- Application health endpoints
-- Dependency health monitoring
-- Graceful degradation strategies
-
-## Known Issues & Future Development
-
-### PDF Report Generation (Temporarily Disabled)
-**Status**: Disabled due to deployment complexity
-**Affected Component**: `app/tools/task_tools/report_tool.py` - `generate_pdf()` method
-**Issue**: WeasyPrint dependency has complex system library requirements that cause deployment difficulties.
-
-**Current Workaround**:
-- Use `generate_html()` method for HTML reports
-- Manual PDF conversion via browser print functionality
-
-**Future Development Plan**:
-1. **Phase 1**: Implement alternative PDF generation using playwright or reportlab
-2. **Phase 2**: Re-evaluate WeasyPrint with improved Docker setup
-
-### Upcoming Features
-- Enhanced multi-modal support (images, audio)
-- Advanced workflow orchestration
-- Real-time collaboration features
-- Enhanced security and authentication
-- Performance optimizations and caching strategies
-
-## Contributing
+### Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Follow the clean architecture principles
-4. Add tests for new functionality
-5. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Weasel Library Validator Error**: If you encounter duplicate validator function errors, run the included patch:
+   ```bash
+   python -m aiecs.scripts.fix_weasel_validator
+   ```
+
+2. **Database Connection Issues**: Ensure PostgreSQL is running and credentials are correct
+
+3. **Redis Connection Issues**: Verify Redis is running for Celery task queue
 
 ## License
 
-[Add your license information here]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- Built with FastAPI, Celery, and modern Python async patterns
+- Integrates with leading AI providers
+- Inspired by enterprise-grade middleware architectures
+
+## Support
+
+- Documentation: [https://aiecs.readthedocs.io](https://aiecs.readthedocs.io)
+- Issues: [GitHub Issues](https://github.com/yourusername/aiecs/issues)
+- Discussions: [GitHub Discussions](https://github.com/yourusername/aiecs/discussions)
+
+---
+
+Made with ❤️ by the AIECS Team

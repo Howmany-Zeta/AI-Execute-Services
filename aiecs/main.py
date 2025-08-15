@@ -1,0 +1,349 @@
+"""
+AIECS - AI Execute Services
+A middleware service for AI-powered task execution and tool orchestration
+"""
+
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
+import logging
+import os
+import sys
+import asyncio
+from typing import Optional, Dict, Any
+import socketio
+
+# Import configuration
+from aiecs.config.config import get_settings
+from aiecs.config.registry import get_ai_service
+
+# Import WebSocket server
+from aiecs.ws.socket_server import sio
+
+# Import infrastructure
+from aiecs.infrastructure.persistence.database_manager import DatabaseManager
+from aiecs.infrastructure.messaging.celery_task_manager import CeleryTaskManager
+from aiecs.infrastructure.monitoring.structured_logger import setup_structured_logging
+
+# Import LLM client factory
+from aiecs.llm.client_factory import LLMClientFactory
+
+# Import domain models
+from aiecs.domain.execution.model import TaskStatus
+from aiecs.domain.task.task_context import TaskContext
+
+# Import tool discovery
+from aiecs.tools import discover_tools
+
+# Setup logging
+logger = logging.getLogger(__name__)
+
+# Get settings
+settings = get_settings()
+
+# Global instances
+db_manager: Optional[DatabaseManager] = None
+task_manager: Optional[CeleryTaskManager] = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager"""
+    global db_manager, task_manager
+    
+    logger.info("Starting AIECS - AI Execute Services...")
+    
+    # Setup structured logging
+    setup_structured_logging()
+    
+    # Initialize database connection
+    try:
+        db_manager = DatabaseManager()
+        await db_manager.connect()
+        logger.info("Database connection established")
+    except Exception as e:
+        logger.error(f"Failed to connect to database: {e}")
+        raise
+    
+    # Initialize task manager
+    try:
+        task_manager = CeleryTaskManager()
+        logger.info("Task manager initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize task manager: {e}")
+        raise
+    
+    # Discover and register tools
+    try:
+        discover_tools("aiecs.tools")
+        logger.info("Tools discovered and registered")
+    except Exception as e:
+        logger.error(f"Failed to discover tools: {e}")
+        raise
+    
+    # Application startup complete
+    logger.info("AIECS startup complete")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down AIECS...")
+    
+    # Close database connection
+    if db_manager:
+        await db_manager.disconnect()
+        logger.info("Database connection closed")
+    
+    # Close all LLM clients
+    await LLMClientFactory.close_all()
+    logger.info("LLM clients closed")
+    
+    logger.info("AIECS shutdown complete")
+
+
+# Create FastAPI app
+app = FastAPI(
+    title="AIECS - AI Execute Services",
+    description="Middleware service for AI-powered task execution and tool orchestration",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Configure CORS
+allowed_origins = settings.cors_allowed_origins.split(",") if settings.cors_allowed_origins else ["*"]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount Socket.IO app
+socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
+
+
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "service": "aiecs",
+        "version": "1.0.0"
+    }
+
+
+# Get available tools
+@app.get("/api/tools")
+async def get_available_tools():
+    """Get list of available tools"""
+    from aiecs.tools import list_tools
+    tools = list_tools()
+    return {
+        "tools": tools,
+        "count": len(tools)
+    }
+
+
+# Execute task endpoint
+@app.post("/api/execute")
+async def execute_task(request: Request):
+    """Execute a task with given parameters"""
+    try:
+        data = await request.json()
+        
+        # Extract required fields
+        task_type = data.get("type", "task")
+        mode = data.get("mode", "execute")
+        service = data.get("service", "default")
+        user_id = data.get("userId", "anonymous")
+        context_data = data.get("context", {})
+        
+        # Build task context
+        task_context = TaskContext(
+            mode=mode,
+            service=service,
+            user_id=user_id,
+            metadata=context_data.get("metadata", {}),
+            data=context_data.get("data", {}),
+            tools=context_data.get("tools", [])
+        )
+        
+        # Submit task to queue
+        if not task_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Task manager not initialized"
+            )
+        
+        task_id = await task_manager.submit_task(
+            context=task_context,
+            task_type=task_type
+        )
+        
+        return {
+            "taskId": task_id,
+            "status": "queued",
+            "message": "Task submitted successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error executing task: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+# Get task status
+@app.get("/api/task/{task_id}")
+async def get_task_status(task_id: str):
+    """Get status of a specific task"""
+    try:
+        if not task_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Task manager not initialized"
+            )
+        
+        status = await task_manager.get_task_status(task_id)
+        
+        if not status:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Task not found"
+            )
+        
+        return status
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting task status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+# Cancel task
+@app.delete("/api/task/{task_id}")
+async def cancel_task(task_id: str):
+    """Cancel a running task"""
+    try:
+        if not task_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Task manager not initialized"
+            )
+        
+        success = await task_manager.cancel_task(task_id)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to cancel task"
+            )
+        
+        return {
+            "taskId": task_id,
+            "status": "cancelled",
+            "message": "Task cancelled successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error cancelling task: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+# Get service info
+@app.get("/api/services")
+async def get_services():
+    """Get available AI services"""
+    from aiecs.config.registry import AI_SERVICE_REGISTRY
+    
+    services = []
+    for (mode, service), cls in AI_SERVICE_REGISTRY.items():
+        services.append({
+            "mode": mode,
+            "service": service,
+            "class": cls.__name__,
+            "module": cls.__module__
+        })
+    
+    return {
+        "services": services,
+        "count": len(services)
+    }
+
+
+# Get LLM providers
+@app.get("/api/providers")
+async def get_providers():
+    """Get available LLM providers"""
+    from aiecs.llm.client_factory import AIProvider
+    
+    providers = [
+        {
+            "name": provider.value,
+            "enabled": True
+        }
+        for provider in AIProvider
+    ]
+    
+    return {
+        "providers": providers,
+        "count": len(providers)
+    }
+
+
+# Exception handlers
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handle HTTP exceptions"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": exc.detail,
+            "status": exc.status_code
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle general exceptions"""
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "error": "Internal server error",
+            "status": 500
+        }
+    )
+
+
+# Main entry point
+if __name__ == "__main__":
+    import uvicorn
+    
+    # Get port from environment or use default
+    port = int(os.environ.get("PORT", 8000))
+    
+    # Run the application with Socket.IO support
+    uvicorn.run(
+        socket_app,  # Use the combined Socket.IO + FastAPI app
+        host="0.0.0.0",
+        port=port,
+        log_level="info",
+        reload=bool(os.environ.get("RELOAD", False))
+    )
+
+

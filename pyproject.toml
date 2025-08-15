@@ -29,15 +29,29 @@ mypy = "^1.15.0"                                # Static type checker
 bump-pydantic = "^0.8.0"
 
 [project]
-name = "python-middleware"
+name = "aiecs"
 version = "1.0.0"
-description = "Python Middleware for AI Service System"
+description = "AI Execute Services - A middleware framework for AI-powered task execution and tool orchestration"
 authors = [
-    {name = "iretbl@gmail.com"}
+    {name = "AIECS Team", email = "iretbl@gmail.com"}
 ]
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
+keywords = ["ai", "middleware", "llm", "orchestration", "async", "tools"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: FastAPI",
+    "Framework :: Celery",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     # Core dependencies - Web framework and API
     "fastapi (>=0.115.12,<0.116.0)",                # Web framework for building APIs
@@ -102,20 +116,28 @@ dependencies = [
     "weasel (==0.4.1)",
     "pdfplumber (>=0.11.7,<0.12.0)",
     "pdfminer-six (==20250506)"
-
 ]
 
+[project.urls]
+"Homepage" = "https://github.com/aiecs-team/aiecs"
+"Bug Tracker" = "https://github.com/aiecs-team/aiecs/issues"
+"Documentation" = "https://aiecs.readthedocs.io"
 
-[tool.poetry]
-package-mode = false
 
-[tool.poetry.scripts]
-test-tools = "python:app.tools.test_runner"
-start-server = "uvicorn:app.main:app"
-start-celery-worker = "celery:app.tasks.worker.celery_app worker"
-start-celery-beat = "celery:app.tasks.worker.celery_app beat"
-start-celery-flower = "celery:app.tasks.worker.celery_app flower"
+[project.scripts]
+aiecs = "aiecs.main:main"
+aiecs-patch-weasel = "aiecs.scripts.fix_weasel_validator:main"
+
+[project.entry-points."aiecs.post_install"]
+patch_weasel = "aiecs.scripts.fix_weasel_validator:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["aiecs*"]
+
+[tool.setuptools.package-data]
+aiecs = ["scripts/*", "scripts/**/*", "scripts/*.md", "scripts/*.sh"]
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
