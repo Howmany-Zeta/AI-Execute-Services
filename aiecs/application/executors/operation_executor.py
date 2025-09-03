@@ -29,6 +29,14 @@ class OperationExecutor:
         system_params = {'user_id', 'task_id', 'op'}
         return {k: v for k, v in params.items() if k not in system_params}
 
+    def _filter_tool_call_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        过滤掉工具调用中的系统相关参数，但保留 'op' 参数（BaseTool.run() 需要）
+        """
+        # 只过滤用户和任务ID，保留 'op' 参数给 BaseTool.run() 使用
+        system_params = {'user_id', 'task_id'}
+        return {k: v for k, v in params.items() if k not in system_params}
+
     async def execute_operation(self, operation_spec: str, params: Dict[str, Any]) -> Any:
         """
         执行单个操作 (tool_name.operation_name)
@@ -204,8 +212,10 @@ class OperationExecutor:
                     self._tool_instances[tool_name] = get_tool(tool_name)
                 tool = self._tool_instances[tool_name]
                 
-                # 通过 BaseTool.run 方法执行，传递所有参数（包括 op）
-                result = await self.tool_executor.execute_async(tool, "run", **params)
+                # 过滤参数，移除系统相关的参数（但保留 'op' 参数）
+                tool_params = self._filter_tool_call_params(params)
+                # 通过 BaseTool.run 方法执行，传递过滤后的参数
+                result = await self.tool_executor.execute_async(tool, "run", **tool_params)
 
             # 缓存结果
             if self.config.get('enable_cache', True):

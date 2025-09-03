@@ -1,0 +1,670 @@
+"""
+ContentEngine: Advanced Context and Session Management Engine
+
+This engine extends TaskContext capabilities to provide comprehensive
+session management, conversation tracking, and persistent storage for BaseAIService.
+
+Key Features:
+1. Multi-session management (extends TaskContext from single task to multiple sessions)
+2. Redis backend storage for persistence and scalability
+3. Conversation history management with optimization
+4. Performance metrics and analytics
+5. Resource and lifecycle management
+6. Integration with BaseServiceCheckpointer
+"""
+
+import json
+import logging
+import time
+import uuid
+from datetime import datetime, timedelta
+from typing import Dict, Any, Optional, List, AsyncGenerator, Union
+from dataclasses import dataclass, asdict
+from contextlib import asynccontextmanager
+
+# Import TaskContext for base functionality
+from app.domain.task.task_context import TaskContext, ContextUpdate
+
+# Redis client import - use existing infrastructure
+try:
+    import redis.asyncio as redis
+    from app.infrastructure.persistence.redis_client import get_redis_client
+    REDIS_AVAILABLE = True
+except ImportError:
+    redis = None
+    get_redis_client = None
+    REDIS_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class SessionMetrics:
+    """Session-level performance metrics."""
+    session_id: str
+    user_id: str
+    created_at: datetime
+    last_activity: datetime
+    request_count: int = 0
+    error_count: int = 0
+    total_processing_time: float = 0.0
+    status: str = "active"  # active, completed, failed, expired
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            **asdict(self),
+            "created_at": self.created_at.isoformat(),
+            "last_activity": self.last_activity.isoformat()
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'SessionMetrics':
+        data = data.copy()
+        data["created_at"] = datetime.fromisoformat(data["created_at"])
+        data["last_activity"] = datetime.fromisoformat(data["last_activity"])
+        return cls(**data)
+
+
+@dataclass
+class ConversationMessage:
+    """Structured conversation message."""
+    role: str  # user, assistant, system
+    content: str
+    timestamp: datetime
+    metadata: Dict[str, Any] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "role": self.role,
+            "content": self.content,
+            "timestamp": self.timestamp.isoformat(),
+            "metadata": self.metadata or {}
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ConversationMessage':
+        data = data.copy()
+        data["timestamp"] = datetime.fromisoformat(data["timestamp"])
+        return cls(**data)
+
+
+class ContentEngine:
+    """
+    Advanced Context and Session Management Engine.
+
+    Extends TaskContext capabilities to provide comprehensive session management
+    with Redis backend storage for BaseAIService and BaseServiceCheckpointer.
+    """
+
+    def __init__(self, use_existing_redis: bool = True):
+        """
+        Initialize ContentEngine.
+
+        Args:
+            use_existing_redis: Whether to use the existing Redis client from infrastructure
+        """
+        self.use_existing_redis = use_existing_redis
+        self.redis_client: Optional[redis.Redis] = None
+
+        # Fallback to memory storage if Redis not available
+        self._memory_sessions: Dict[str, SessionMetrics] = {}
+        self._memory_conversations: Dict[str, List[ConversationMessage]] = {}
+        self._memory_contexts: Dict[str, TaskContext] = {}
+        self._memory_checkpoints: Dict[str, Dict[str, Any]] = {}
+
+        # Configuration
+        self.session_ttl = 3600 * 24  # 24 hours default TTL
+        self.conversation_limit = 1000  # Max messages per conversation
+        self.checkpoint_ttl = 3600 * 24 * 7  # 7 days for checkpoints
+
+        # Metrics
+        self._global_metrics = {
+            "total_sessions": 0,
+            "active_sessions": 0,
+            "total_messages": 0,
+            "total_checkpoints": 0
+        }
+
+        logger.info("ContentEngine initialized")
+
+    async def initialize(self) -> bool:
+        """Initialize Redis connection and validate setup."""
+        if not REDIS_AVAILABLE:
+            logger.warning("Redis not available, using memory storage")
+            return True
+
+        try:
+            if self.use_existing_redis and get_redis_client:
+                # Use existing Redis client from infrastructure
+                redis_client_instance = await get_redis_client()
+                self.redis_client = await redis_client_instance.get_client()
+
+                # Test connection
+                await self.redis_client.ping()
+                logger.info("ContentEngine connected to existing Redis client successfully")
+                return True
+            else:
+                # Fallback to direct Redis connection (for testing or standalone use)
+                import os
+                redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+                self.redis_client = redis.from_url(
+                    redis_url,
+                    decode_responses=True,
+                    socket_connect_timeout=5,
+                    socket_timeout=5
+                )
+
+                # Test connection
+                await self.redis_client.ping()
+                logger.info("ContentEngine connected to Redis directly")
+                return True
+
+        except Exception as e:
+            logger.error(f"Failed to connect to Redis: {e}")
+            logger.warning("Falling back to memory storage")
+            self.redis_client = None
+            return False
+
+    async def close(self):
+        """Close Redis connection."""
+        if self.redis_client:
+            await self.redis_client.close()
+
+    # ==================== Session Management ====================
+
+    async def create_session(
+        self,
+        session_id: str,
+        user_id: str,
+        metadata: Dict[str, Any] = None
+    ) -> SessionMetrics:
+        """Create a new session."""
+        now = datetime.utcnow()
+        session = SessionMetrics(
+            session_id=session_id,
+            user_id=user_id,
+            created_at=now,
+            last_activity=now
+        )
+
+        # Store session
+        await self._store_session(session)
+
+        # Create associated TaskContext
+        task_context = TaskContext({
+            "user_id": user_id,
+            "chat_id": session_id,
+            "metadata": metadata or {}
+        })
+        await self._store_task_context(session_id, task_context)
+
+        # Update metrics
+        self._global_metrics["total_sessions"] += 1
+        self._global_metrics["active_sessions"] += 1
+
+        logger.info(f"Created session {session_id} for user {user_id}")
+        return session
+
+    async def get_session(self, session_id: str) -> Optional[SessionMetrics]:
+        """Get session by ID."""
+        if self.redis_client:
+            try:
+                data = await self.redis_client.hget("sessions", session_id)
+                if data:
+                    return SessionMetrics.from_dict(json.loads(data))
+            except Exception as e:
+                logger.error(f"Failed to get session from Redis: {e}")
+
+        # Fallback to memory
+        return self._memory_sessions.get(session_id)
+
+    async def update_session(
+        self,
+        session_id: str,
+        updates: Dict[str, Any] = None,
+        increment_requests: bool = False,
+        add_processing_time: float = 0.0,
+        mark_error: bool = False
+    ) -> bool:
+        """Update session with activity and metrics."""
+        session = await self.get_session(session_id)
+        if not session:
+            return False
+
+        # Update activity
+        session.last_activity = datetime.utcnow()
+
+        # Update metrics
+        if increment_requests:
+            session.request_count += 1
+        if add_processing_time > 0:
+            session.total_processing_time += add_processing_time
+        if mark_error:
+            session.error_count += 1
+
+        # Apply custom updates
+        if updates:
+            for key, value in updates.items():
+                if hasattr(session, key):
+                    setattr(session, key, value)
+
+        # Store updated session
+        await self._store_session(session)
+        return True
+
+    async def end_session(self, session_id: str, status: str = "completed") -> bool:
+        """End a session and update metrics."""
+        session = await self.get_session(session_id)
+        if not session:
+            return False
+
+        session.status = status
+        session.last_activity = datetime.utcnow()
+
+        # Store final state
+        await self._store_session(session)
+
+        # Update global metrics
+        self._global_metrics["active_sessions"] = max(0, self._global_metrics["active_sessions"] - 1)
+
+        logger.info(f"Ended session {session_id} with status: {status}")
+        return True
+
+    async def _store_session(self, session: SessionMetrics):
+        """Store session to Redis or memory."""
+        if self.redis_client:
+            try:
+                await self.redis_client.hset(
+                    "sessions",
+                    session.session_id,
+                    json.dumps(session.to_dict())
+                )
+                await self.redis_client.expire(f"sessions", self.session_ttl)
+                return
+            except Exception as e:
+                logger.error(f"Failed to store session to Redis: {e}")
+
+        # Fallback to memory
+        self._memory_sessions[session.session_id] = session
+
+    # ==================== Conversation Management ====================
+
+    async def add_conversation_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        metadata: Dict[str, Any] = None
+    ) -> bool:
+        """Add message to conversation history."""
+        message = ConversationMessage(
+            role=role,
+            content=content,
+            timestamp=datetime.utcnow(),
+            metadata=metadata
+        )
+
+        # Store message
+        await self._store_conversation_message(session_id, message)
+
+        # Update session activity
+        await self.update_session(session_id)
+
+        # Update global metrics
+        self._global_metrics["total_messages"] += 1
+
+        return True
+
+    async def get_conversation_history(
+        self,
+        session_id: str,
+        limit: int = 50
+    ) -> List[ConversationMessage]:
+        """Get conversation history for a session."""
+        if self.redis_client:
+            try:
+                messages_data = await self.redis_client.lrange(
+                    f"conversation:{session_id}",
+                    -limit,
+                    -1
+                )
+                return [
+                    ConversationMessage.from_dict(json.loads(msg))
+                    for msg in messages_data
+                ]
+            except Exception as e:
+                logger.error(f"Failed to get conversation from Redis: {e}")
+
+        # Fallback to memory
+        messages = self._memory_conversations.get(session_id, [])
+        return messages[-limit:] if limit > 0 else messages
+
+    async def _store_conversation_message(self, session_id: str, message: ConversationMessage):
+        """Store conversation message to Redis or memory."""
+        if self.redis_client:
+            try:
+                # Add to list
+                await self.redis_client.lpush(
+                    f"conversation:{session_id}",
+                    json.dumps(message.to_dict())
+                )
+                # Trim to limit
+                await self.redis_client.ltrim(
+                    f"conversation:{session_id}",
+                    -self.conversation_limit,
+                    -1
+                )
+                # Set TTL
+                await self.redis_client.expire(
+                    f"conversation:{session_id}",
+                    self.session_ttl
+                )
+                return
+            except Exception as e:
+                logger.error(f"Failed to store message to Redis: {e}")
+
+        # Fallback to memory
+        if session_id not in self._memory_conversations:
+            self._memory_conversations[session_id] = []
+
+        self._memory_conversations[session_id].append(message)
+
+        # Trim to limit
+        if len(self._memory_conversations[session_id]) > self.conversation_limit:
+            self._memory_conversations[session_id] = self._memory_conversations[session_id][-self.conversation_limit:]
+
+    # ==================== TaskContext Integration ====================
+
+    async def get_task_context(self, session_id: str) -> Optional[TaskContext]:
+        """Get TaskContext for a session."""
+        if self.redis_client:
+            try:
+                data = await self.redis_client.hget("task_contexts", session_id)
+                if data:
+                    context_data = json.loads(data)
+                    # Reconstruct TaskContext from stored data
+                    return self._reconstruct_task_context(context_data)
+            except Exception as e:
+                logger.error(f"Failed to get TaskContext from Redis: {e}")
+
+        # Fallback to memory
+        return self._memory_contexts.get(session_id)
+
+    async def _store_task_context(self, session_id: str, context: TaskContext):
+        """Store TaskContext to Redis or memory."""
+        if self.redis_client:
+            try:
+                await self.redis_client.hset(
+                    "task_contexts",
+                    session_id,
+                    json.dumps(context.to_dict())
+                )
+                await self.redis_client.expire("task_contexts", self.session_ttl)
+                return
+            except Exception as e:
+                logger.error(f"Failed to store TaskContext to Redis: {e}")
+
+        # Fallback to memory
+        self._memory_contexts[session_id] = context
+
+    def _reconstruct_task_context(self, data: Dict[str, Any]) -> TaskContext:
+        """Reconstruct TaskContext from stored data."""
+        # Create new TaskContext with stored data
+        context = TaskContext(data)
+
+        # Restore context history
+        if "context_history" in data:
+            context.context_history = [
+                ContextUpdate(
+                    timestamp=entry["timestamp"],
+                    update_type=entry["update_type"],
+                    data=entry["data"],
+                    metadata=entry["metadata"]
+                )
+                for entry in data["context_history"]
+            ]
+
+        return context
+
+    # ==================== Checkpoint Management (for BaseServiceCheckpointer) ====================
+
+    async def store_checkpoint(
+        self,
+        thread_id: str,
+        checkpoint_id: str,
+        checkpoint_data: Dict[str, Any],
+        metadata: Dict[str, Any] = None
+    ) -> bool:
+        """Store checkpoint data for LangGraph workflows."""
+        checkpoint = {
+            "checkpoint_id": checkpoint_id,
+            "thread_id": thread_id,
+            "data": checkpoint_data,
+            "metadata": metadata or {},
+            "created_at": datetime.utcnow().isoformat()
+        }
+
+        if self.redis_client:
+            try:
+                # Store checkpoint
+                await self.redis_client.hset(
+                    f"checkpoints:{thread_id}",
+                    checkpoint_id,
+                    json.dumps(checkpoint)
+                )
+                # Set TTL
+                await self.redis_client.expire(
+                    f"checkpoints:{thread_id}",
+                    self.checkpoint_ttl
+                )
+
+                # Update global metrics
+                self._global_metrics["total_checkpoints"] += 1
+                return True
+
+            except Exception as e:
+                logger.error(f"Failed to store checkpoint to Redis: {e}")
+
+        # Fallback to memory
+        key = f"{thread_id}:{checkpoint_id}"
+        self._memory_checkpoints[key] = checkpoint
+        return True
+
+    async def get_checkpoint(
+        self,
+        thread_id: str,
+        checkpoint_id: str = None
+    ) -> Optional[Dict[str, Any]]:
+        """Get checkpoint data. If checkpoint_id is None, get the latest."""
+        if self.redis_client:
+            try:
+                if checkpoint_id:
+                    # Get specific checkpoint
+                    data = await self.redis_client.hget(f"checkpoints:{thread_id}", checkpoint_id)
+                    if data:
+                        return json.loads(data)
+                else:
+                    # Get latest checkpoint
+                    checkpoints = await self.redis_client.hgetall(f"checkpoints:{thread_id}")
+                    if checkpoints:
+                        # Sort by creation time and get latest
+                        latest = max(
+                            checkpoints.values(),
+                            key=lambda x: json.loads(x)["created_at"]
+                        )
+                        return json.loads(latest)
+            except Exception as e:
+                logger.error(f"Failed to get checkpoint from Redis: {e}")
+
+        # Fallback to memory
+        if checkpoint_id:
+            key = f"{thread_id}:{checkpoint_id}"
+            return self._memory_checkpoints.get(key)
+        else:
+            # Get latest from memory
+            thread_checkpoints = {
+                k: v for k, v in self._memory_checkpoints.items()
+                if k.startswith(f"{thread_id}:")
+            }
+            if thread_checkpoints:
+                latest_key = max(
+                    thread_checkpoints.keys(),
+                    key=lambda k: thread_checkpoints[k]["created_at"]
+                )
+                return thread_checkpoints[latest_key]
+
+        return None
+
+    async def list_checkpoints(
+        self,
+        thread_id: str,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """List checkpoints for a thread, ordered by creation time (newest first)."""
+        if self.redis_client:
+            try:
+                checkpoints_data = await self.redis_client.hgetall(f"checkpoints:{thread_id}")
+                checkpoints = [json.loads(data) for data in checkpoints_data.values()]
+                # Sort by creation time (newest first)
+                checkpoints.sort(key=lambda x: x["created_at"], reverse=True)
+                return checkpoints[:limit]
+            except Exception as e:
+                logger.error(f"Failed to list checkpoints from Redis: {e}")
+
+        # Fallback to memory
+        thread_checkpoints = [
+            v for k, v in self._memory_checkpoints.items()
+            if k.startswith(f"{thread_id}:")
+        ]
+        thread_checkpoints.sort(key=lambda x: x["created_at"], reverse=True)
+        return thread_checkpoints[:limit]
+
+    # ==================== Cleanup and Maintenance ====================
+
+    async def cleanup_expired_sessions(self, max_idle_hours: int = 24) -> int:
+        """Clean up expired sessions and associated data."""
+        cutoff_time = datetime.utcnow() - timedelta(hours=max_idle_hours)
+        cleaned_count = 0
+
+        if self.redis_client:
+            try:
+                # Get all sessions
+                sessions_data = await self.redis_client.hgetall("sessions")
+                expired_sessions = []
+
+                for session_id, data in sessions_data.items():
+                    session = SessionMetrics.from_dict(json.loads(data))
+                    if session.last_activity < cutoff_time:
+                        expired_sessions.append(session_id)
+
+                # Clean up expired sessions
+                for session_id in expired_sessions:
+                    await self._cleanup_session_data(session_id)
+                    cleaned_count += 1
+
+            except Exception as e:
+                logger.error(f"Failed to cleanup expired sessions from Redis: {e}")
+        else:
+            # Memory cleanup
+            expired_sessions = [
+                session_id for session_id, session in self._memory_sessions.items()
+                if session.last_activity < cutoff_time
+            ]
+
+            for session_id in expired_sessions:
+                await self._cleanup_session_data(session_id)
+                cleaned_count += 1
+
+        if cleaned_count > 0:
+            logger.info(f"Cleaned up {cleaned_count} expired sessions")
+
+        return cleaned_count
+
+    async def _cleanup_session_data(self, session_id: str):
+        """Clean up all data associated with a session."""
+        if self.redis_client:
+            try:
+                # Remove session
+                await self.redis_client.hdel("sessions", session_id)
+                # Remove conversation
+                await self.redis_client.delete(f"conversation:{session_id}")
+                # Remove task context
+                await self.redis_client.hdel("task_contexts", session_id)
+                # Remove checkpoints
+                await self.redis_client.delete(f"checkpoints:{session_id}")
+            except Exception as e:
+                logger.error(f"Failed to cleanup session data from Redis: {e}")
+        else:
+            # Memory cleanup
+            self._memory_sessions.pop(session_id, None)
+            self._memory_conversations.pop(session_id, None)
+            self._memory_contexts.pop(session_id, None)
+
+            # Remove checkpoints
+            checkpoint_keys = [
+                k for k in self._memory_checkpoints.keys()
+                if k.startswith(f"{session_id}:")
+            ]
+            for key in checkpoint_keys:
+                self._memory_checkpoints.pop(key, None)
+
+    # ==================== Metrics and Health ====================
+
+    async def get_metrics(self) -> Dict[str, Any]:
+        """Get comprehensive metrics."""
+        active_sessions_count = 0
+
+        if self.redis_client:
+            try:
+                sessions_data = await self.redis_client.hgetall("sessions")
+                active_sessions_count = len([
+                    s for s in sessions_data.values()
+                    if json.loads(s)["status"] == "active"
+                ])
+            except Exception as e:
+                logger.error(f"Failed to get metrics from Redis: {e}")
+        else:
+            active_sessions_count = len([
+                s for s in self._memory_sessions.values()
+                if s.status == "active"
+            ])
+
+        return {
+            **self._global_metrics,
+            "active_sessions": active_sessions_count,
+            "storage_backend": "redis" if self.redis_client else "memory",
+            "redis_connected": self.redis_client is not None,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+    async def health_check(self) -> Dict[str, Any]:
+        """Perform health check."""
+        health = {
+            "status": "healthy",
+            "storage_backend": "redis" if self.redis_client else "memory",
+            "redis_connected": False,
+            "issues": []
+        }
+
+        # Check Redis connection
+        if self.redis_client:
+            try:
+                await self.redis_client.ping()
+                health["redis_connected"] = True
+            except Exception as e:
+                health["issues"].append(f"Redis connection failed: {e}")
+                health["status"] = "degraded"
+
+        # Check memory usage (basic check)
+        if not self.redis_client:
+            total_memory_items = (
+                len(self._memory_sessions) +
+                len(self._memory_conversations) +
+                len(self._memory_contexts) +
+                len(self._memory_checkpoints)
+            )
+            if total_memory_items > 10000:  # Arbitrary threshold
+                health["issues"].append(f"High memory usage: {total_memory_items} items")
+                health["status"] = "warning"
+
+        return health

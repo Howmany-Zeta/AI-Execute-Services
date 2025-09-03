@@ -253,6 +253,8 @@ class StatsTool(BaseTool):
         if post_hoc:
             post_hoc_df = pd.DataFrame({'value': dependent_var, 'group': factor_var})
             tukey = pairwise_tukeyhsd(post_hoc_df['value'], post_hoc_df['group'])
+            from itertools import combinations
+            group_pairs = list(combinations(tukey.groupsunique, 2))
             tukey_results = [
                 {
                     'group1': str(group1),
@@ -263,9 +265,8 @@ class StatsTool(BaseTool):
                     'conf_lower': float(lower),
                     'conf_upper': float(upper)
                 }
-                for group1, group2, mean_diff, p_adj, lower, upper, reject in zip(
-                    tukey.groupsunique[tukey.pairindices[:,0]],
-                    tukey.groupsunique[tukey.pairindices[:,1]],
+                for (group1, group2), mean_diff, p_adj, lower, upper, reject in zip(
+                    group_pairs,
                     tukey.meandiffs,
                     tukey.pvalues,
                     tukey.confint[:,0],
@@ -275,7 +276,7 @@ class StatsTool(BaseTool):
             ]
             result['post_hoc'] = {
                 'method': 'Tukey HSD',
-                'alpha': float(tukey.alpha),
+                'alpha': 0.05,  # Standard significance level for Tukey HSD
                 'comparisons': tukey_results
             }
         return result
@@ -376,6 +377,8 @@ class StatsTool(BaseTool):
                     'variable_medians': {var: float(np.median(data[var])) for var in variables}
                 }
             ).to_dict()
+        else:
+            raise AnalysisError(f"Unsupported non-parametric test type: {test_type}. Supported types: mann_whitney, wilcoxon, kruskal, friedman")
 
     def regression(self, file_path: str, formula: str, regression_type: str = "ols", robust: bool = False, structured_output: bool = True) -> Dict[str, Any]:
         """Perform regression analysis with various models."""
