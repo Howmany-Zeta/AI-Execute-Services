@@ -444,6 +444,29 @@ class ClassifierTool(BaseTool):
             except Exception:
                 return []
 
+    def _get_hf_pipeline(self, task: str, model: str):
+        """
+        Get a Hugging Face transformers pipeline for the specified task and model.
+
+        Args:
+            task (str): The task type (e.g., "summarization").
+            model (str): The model name.
+
+        Returns:
+            Any: Hugging Face pipeline object.
+
+        Raises:
+            ImportError: If transformers library is not available.
+            ValueError: If the pipeline creation fails.
+        """
+        try:
+            from transformers import pipeline
+            return pipeline(task, model=model)
+        except ImportError:
+            raise ImportError("transformers library is required for summarization but not installed. Please install it with: pip install transformers")
+        except Exception as e:
+            raise ValueError(f"Error creating pipeline for task '{task}' with model '{model}': {e}")
+
     async def classify(self, text: str, model: Optional[str] = None, language: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Perform sentiment classification on text using spaCy and lexicon-based approach.

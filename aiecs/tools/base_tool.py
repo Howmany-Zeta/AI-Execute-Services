@@ -133,7 +133,7 @@ class BaseTool:
         if schema_class:
             try:
                 schema = schema_class(**kwargs)
-                kwargs = schema.dict(exclude_unset=True)
+                kwargs = schema.model_dump(exclude_unset=True)
             except ValidationError as e:
                 raise InputValidationError(f"Invalid input parameters: {e}")
         kwargs = self._sanitize_kwargs(kwargs)
@@ -159,7 +159,7 @@ class BaseTool:
         if schema_class:
             try:
                 schema = schema_class(**kwargs)
-                kwargs = schema.dict(exclude_unset=True)
+                kwargs = schema.model_dump(exclude_unset=True)
             except ValidationError as e:
                 raise InputValidationError(f"Invalid input parameters: {e}")
         kwargs = self._sanitize_kwargs(kwargs)

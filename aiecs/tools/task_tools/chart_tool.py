@@ -422,7 +422,8 @@ class ChartTool(BaseTool):
 
             elif plot_type == VisualizationType.PAIR:
                 if variables:
-                    sns.pairplot(df[variables], hue=hue)
+                    plot_vars = variables + [hue] if hue else variables
+                    sns.pairplot(df[plot_vars], hue=hue)
                 else:
                     sns.pairplot(df, hue=hue)
 

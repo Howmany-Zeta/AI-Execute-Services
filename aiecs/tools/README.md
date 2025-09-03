@@ -497,3 +497,72 @@ class MyNewTool(BaseTool):
 2. 添加 `__init__.py` 文件
 3. 在主 `__init__.py` 中添加导入
 4. 工具会自动被发现和注册
+
+
+## 工具使用说明
+
+### Image Tool (图像处理工具)
+
+Image Tool 提供了全面的图像处理功能，包括加载、OCR文字识别、元数据提取、尺寸调整和滤镜应用。
+
+#### 系统依赖要求
+
+**重要**: Image Tool 的 OCR 功能需要安装系统级的 Tesseract OCR 引擎。
+
+**Ubuntu/Debian 系统**:
+```bash
+sudo apt-get update
+sudo apt-get install tesseract-ocr tesseract-ocr-eng
+```
+
+**macOS 系统**:
+```bash
+brew install tesseract
+```
+
+**验证安装**:
+```bash
+tesseract --version
+```
+
+#### 功能特性
+
+1. **图像加载**: 支持多种格式 (JPG, PNG, BMP, TIFF, GIF)
+2. **OCR 文字识别**: 基于 Tesseract 引擎的文字提取
+3. **元数据提取**: 获取图像尺寸、模式和 EXIF 信息
+4. **图像调整**: 高质量的尺寸调整
+5. **滤镜效果**: 模糊、锐化、边缘增强等效果
+
+#### 使用示例
+
+```python
+from aiecs.tools.task_tools.image_tool import ImageTool
+
+# 初始化工具
+tool = ImageTool()
+
+# 加载图像信息
+result = tool.load("/path/to/image.jpg")
+print(f"尺寸: {result['size']}, 模式: {result['mode']}")
+
+# OCR 文字识别
+text = tool.ocr("/path/to/image.png", lang='eng')
+print(f"识别文字: {text}")
+
+# 提取元数据
+metadata = tool.metadata("/path/to/image.jpg", include_exif=True)
+print(f"EXIF 信息: {metadata.get('exif', {})}")
+
+# 调整图像尺寸
+tool.resize("/path/to/input.jpg", "/path/to/output.jpg", 800, 600)
+
+# 应用滤镜
+tool.filter("/path/to/input.jpg", "/path/to/blurred.jpg", "blur")
+```
+
+#### 安全特性
+
+- 文件扩展名白名单验证
+- 文件大小限制（默认 50MB）
+- 路径规范化和安全检查
+- 完整的错误处理和日志记录

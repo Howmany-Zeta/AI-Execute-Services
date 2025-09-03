@@ -86,7 +86,7 @@ class PandasTool(BaseTool):
         self.config = PandasToolConfig()
         if config:
             try:
-                self.config = self.config.parse_obj({**self.config.dict(), **config})
+                self.config = self.config.model_validate({**self.config.model_dump(), **config})
             except PydanticValidationError as e:
                 raise ValueError(f"Invalid configuration: {e}")
         self.logger = logging.getLogger(__name__)
@@ -224,6 +224,8 @@ class PandasTool(BaseTool):
             else:
                 raise ValidationError(f"Unsupported file type: {file_type}")
             return self._to_json_serializable(df)
+        except ValidationError:
+            raise
         except Exception as e:
             raise DataFrameError(f"Failed to read file: {e}")
 

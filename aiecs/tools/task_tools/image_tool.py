@@ -111,7 +111,7 @@ class FilterSchema(BaseFileSchema):
         """Validate filter type."""
         valid_filters = ['blur', 'sharpen', 'edge_enhance']
         if v not in valid_filters:
-            raise InputValidationError(f"Invalid filter_type '{v}', expected {valid_filters}")
+            raise ValueError(f"Invalid filter_type '{v}', expected {valid_filters}")
         return v
 
     @field_validator('output_path')
@@ -247,8 +247,11 @@ class ImageTool(BaseTool):
         Raises:
             FileOperationError: If file is invalid or inaccessible.
         """
+        # Validate input using schema
+        validated_input = LoadSchema(file_path=file_path)
+        
         try:
-            with Image.open(file_path) as img:
+            with Image.open(validated_input.file_path) as img:
                 img.load()
                 return {'size': img.size, 'mode': img.mode}
         except Exception as e:
@@ -268,13 +271,16 @@ class ImageTool(BaseTool):
         Raises:
             FileOperationError: If OCR fails or Tesseract is unavailable.
         """
+        # Validate input using schema
+        validated_input = OCRSchema(file_path=file_path, lang=lang)
+        
         proc = self._tesseract_manager.get_process()
         if not proc:
             raise FileOperationError(f"ocr: No Tesseract processes available (lang: {lang or 'eng'})")
         with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
             temp_path = temp_file.name
         try:
-            img = Image.open(file_path).convert('L').filter(ImageFilter.SHARPEN)
+            img = Image.open(validated_input.file_path).convert('L').filter(ImageFilter.SHARPEN)
             img.save(temp_path)
             stdout, stderr = proc.communicate(input=temp_path, timeout=30)
             if proc.returncode != 0:
@@ -305,8 +311,11 @@ class ImageTool(BaseTool):
         Raises:
             FileOperationError: If metadata extraction fails.
         """
+        # Validate input using schema
+        validated_input = MetadataSchema(file_path=file_path, include_exif=include_exif)
+        
         try:
-            with Image.open(file_path) as img:
+            with Image.open(validated_input.file_path) as img:
                 img.load()
                 info = {'size': img.size, 'mode': img.mode}
                 if include_exif:
@@ -336,11 +345,19 @@ class ImageTool(BaseTool):
         Raises:
             FileOperationError: If resizing fails.
         """
+        # Validate input using schema
+        validated_input = ResizeSchema(
+            file_path=file_path, 
+            output_path=output_path, 
+            width=width, 
+            height=height
+        )
+        
         try:
-            with Image.open(file_path) as img:
+            with Image.open(validated_input.file_path) as img:
                 img = img.resize((width, height), Image.Resampling.LANCZOS)
-                img.save(output_path)
-            return {'success': True, 'output_path': output_path}
+                img.save(validated_input.output_path)
+            return {'success': True, 'output_path': validated_input.output_path}
         except Exception as e:
             raise FileOperationError(f"resize: Failed to process '{file_path}' (output_path: {output_path}): {e}")
 
@@ -359,15 +376,22 @@ class ImageTool(BaseTool):
         Raises:
             FileOperationError: If filtering fails.
         """
+        # Validate input using schema
+        validated_input = FilterSchema(
+            file_path=file_path, 
+            output_path=output_path, 
+            filter_type=filter_type
+        )
+        
         try:
             filter_map = {
                 'blur': ImageFilter.BLUR,
                 'sharpen': ImageFilter.SHARPEN,
                 'edge_enhance': ImageFilter.EDGE_ENHANCE
             }
-            with Image.open(file_path) as img:
+            with Image.open(validated_input.file_path) as img:
                 img = img.filter(filter_map[filter_type])
-                img.save(output_path)
-            return {'success': True, 'output_path': output_path}
+                img.save(validated_input.output_path)
+            return {'success': True, 'output_path': validated_input.output_path}
         except Exception as e:
             raise FileOperationError(f"filter: Failed to process '{file_path}' (output_path: {output_path}, filter_type: {filter_type}): {e}")

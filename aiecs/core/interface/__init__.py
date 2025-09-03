@@ -8,10 +8,27 @@ from .execution_interface import (
     IOperationExecutor
 )
 
+from .storage_interface import (
+    ISessionStorage,
+    IConversationStorage,
+    ICheckpointStorage,
+    ITaskContextStorage,
+    IStorageBackend,
+    ICheckpointerBackend
+)
+
 __all__ = [
+    # Execution interfaces
     "ExecutionInterface",
     "IToolProvider",
     "IToolExecutor",
     "ICacheProvider",
-    "IOperationExecutor"
+    "IOperationExecutor",
+    # Storage interfaces
+    "ISessionStorage",
+    "IConversationStorage",
+    "ICheckpointStorage",
+    "ITaskContextStorage",
+    "IStorageBackend",
+    "ICheckpointerBackend",
 ]

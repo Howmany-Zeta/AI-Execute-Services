@@ -82,17 +82,17 @@ class BaseFileSchema(BaseModel):
         # Check extension
         ext = os.path.splitext(abs_path)[1].lower()
         if ext not in settings.allowed_extensions:
-            raise SecurityError(f"Extension '{ext}' not allowed for '{field.name}', expected {settings.allowed_extensions}")
+            raise SecurityError(f"Extension '{ext}' not allowed for '{field.field_name}', expected {settings.allowed_extensions}")
         # Check file existence and size for input paths
-        if field.name == 'file_path':
+        if field.field_name == 'file_path':
             if not os.path.isfile(abs_path):
-                raise FileOperationError(f"{field.name}: File not found: {abs_path}")
+                raise FileOperationError(f"{field.field_name}: File not found: {abs_path}")
             size_mb = os.path.getsize(abs_path) / (1024 * 1024)
             if size_mb > settings.max_file_size_mb:
-                raise FileOperationError(f"{field.name}: File too large: {size_mb:.1f}MB, max {settings.max_file_size_mb}MB")
+                raise FileOperationError(f"{field.field_name}: File too large: {size_mb:.1f}MB, max {settings.max_file_size_mb}MB")
         # Check for existing output paths
-        elif field.name == 'output_path' and os.path.exists(abs_path):
-            raise FileOperationError(f"{field.name}: File already exists: {abs_path}")
+        elif field.field_name == 'output_path' and os.path.exists(abs_path):
+            raise FileOperationError(f"{field.field_name}: File already exists: {abs_path}")
         return abs_path
 
 # Schemas for operations
@@ -160,7 +160,7 @@ class OfficeTool(BaseTool):
         self.settings = OfficeSettings()
         if config:
             try:
-                self.settings = self.settings.parse_obj({**self.settings.dict(), **config})
+                self.settings = self.settings.model_validate({**self.settings.model_dump(), **config})
             except ValidationError as e:
                 raise ValueError(f"Invalid configuration: {e}")
         self.logger = logging.getLogger(__name__)
@@ -191,6 +191,7 @@ class OfficeTool(BaseTool):
                 if not hasattr(prs, 'slides'):
                     raise ContentValidationError("Invalid PPTX structure")
             elif file_type == 'xlsx':
+                # Just validate that file can be read - don't care about return type
                 pd.read_excel(file_path, nrows=5)
             elif file_type == 'pdf':
                 with pdfplumber.open(file_path) as pdf:
@@ -251,7 +252,7 @@ class OfficeTool(BaseTool):
         for item in data_list:
             clean_item = {}
             for k, v in item.items():
-                clean_key = str(k)[:255]  # Excel key limit
+                clean_key = self._sanitize_text(str(k))[:255]  # Excel key limit with sanitization
                 if isinstance(v, str):
                     clean_value = self._sanitize_text(v)[:32767]  # Excel cell limit
                 else:
@@ -380,10 +381,15 @@ class OfficeTool(BaseTool):
             for line in sanitized_text.splitlines():
                 doc.add_paragraph(line)
             if sanitized_table_data and sanitized_table_data[0]:
-                table = doc.add_table(rows=len(sanitized_table_data), cols=len(sanitized_table_data[0]))
+                # Find maximum number of columns to handle irregular table data
+                max_cols = max(len(row) for row in sanitized_table_data)
+                table = doc.add_table(rows=len(sanitized_table_data), cols=max_cols)
                 for i, row in enumerate(sanitized_table_data):
-                    for j, val in enumerate(row):
-                        table.rows[i].cells[j].text = val
+                    for j in range(max_cols):
+                        if j < len(row):
+                            table.rows[i].cells[j].text = str(row[j])
+                        else:
+                            table.rows[i].cells[j].text = ""  # Empty cell for missing data
             doc.save(output_path)
             return {'success': True, 'file_path': output_path}
         except Exception as e:
@@ -442,8 +448,14 @@ class OfficeTool(BaseTool):
                 slide = prs.slides.add_slide(blank)
                 box = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(8), Inches(5))
                 tf = box.text_frame
-                for line in content.splitlines():
-                    tf.add_paragraph(line)
+                lines = content.splitlines()
+                if lines:
+                    # Set text for the first paragraph (which already exists)
+                    tf.text = lines[0]
+                    # Add additional paragraphs for remaining lines
+                    for line in lines[1:]:
+                        p = tf.add_paragraph()
+                        p.text = line
                 if idx == 0 and image_path:
                     try:
                         slide.shapes.add_picture(image_path, Inches(1), Inches(6), Inches(4))
@@ -471,8 +483,20 @@ class OfficeTool(BaseTool):
         """
         try:
             self._validate_document(file_path, 'xlsx')
-            df = pd.read_excel(file_path, sheet_name=sheet_name)
-            return df.to_dict(orient='records')
+            data = pd.read_excel(file_path, sheet_name=sheet_name)
+            
+            # Handle different return types from pd.read_excel()
+            if isinstance(data, pd.DataFrame):
+                # Single sheet or specific sheet requested
+                return data.to_dict(orient='records')
+            elif isinstance(data, dict):
+                # Multiple sheets returned as dict - use the first sheet
+                first_sheet_name = list(data.keys())[0]
+                first_df = data[first_sheet_name]
+                return first_df.to_dict(orient='records')
+            else:
+                raise FileOperationError("Unexpected data type returned from Excel file")
+                
         except ContentValidationError:
             raise
         except Exception as e:
@@ -553,8 +577,17 @@ class OfficeTool(BaseTool):
                             texts.append(shape.text)
                 return self._sanitize_text('\n'.join(texts))
             elif file_type == 'xlsx':
-                df = pd.read_excel(file_path)
-                return self._sanitize_text(df.to_string(index=False))
+                data = pd.read_excel(file_path)
+                # Handle different return types from pd.read_excel()
+                if isinstance(data, pd.DataFrame):
+                    return self._sanitize_text(data.to_string(index=False))
+                elif isinstance(data, dict):
+                    # Multiple sheets returned as dict - use the first sheet
+                    first_sheet_name = list(data.keys())[0]
+                    first_df = data[first_sheet_name]
+                    return self._sanitize_text(first_df.to_string(index=False))
+                else:
+                    return self._sanitize_text("")  # Fallback for unexpected data types
             elif file_type == 'image':
                 return self._sanitize_text(self._extract_image_text(file_path))
             else:

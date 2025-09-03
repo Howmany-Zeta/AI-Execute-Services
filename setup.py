@@ -15,17 +15,50 @@ def run_post_install():
     print("AIECS Post-Installation Setup")
     print("="*60 + "\n")
     
+    # Track installation results
+    weasel_success = False
+    nlp_success = False
+    
+    # Run weasel patch
     try:
-        # Try to run the weasel patch
         from aiecs.scripts.fix_weasel_validator import main as fix_weasel
         print("Running weasel library patch...")
         fix_weasel()
-        print("\n✅ Post-installation setup completed successfully!")
+        weasel_success = True
+        print("✅ Weasel patch applied successfully!")
     except Exception as e:
-        print(f"\n⚠️  Warning: Could not apply weasel patch automatically: {e}")
+        print(f"⚠️  Warning: Could not apply weasel patch automatically: {e}")
         print("You can run it manually later with: aiecs-patch-weasel")
     
-    print("\n" + "="*60 + "\n")
+    # Run NLP data download
+    try:
+        from aiecs.scripts.download_nlp_data import main as download_nlp_data
+        print("\nDownloading required NLP data (NLTK stopwords, spaCy model)...")
+        exit_code = download_nlp_data()
+        if exit_code == 0:
+            nlp_success = True
+            print("✅ NLP data download completed successfully!")
+        elif exit_code is None:
+            print("⚠️  NLP data download completed with warnings (see above)")
+        else:
+            print("❌ NLP data download failed")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not download NLP data automatically: {e}")
+        print("You can run it manually later with: python -m aiecs.scripts.download_nlp_data")
+    
+    # Summary
+    print("\n" + "="*60)
+    print("Post-installation Summary:")
+    print(f"  • Weasel patch: {'✅ Success' if weasel_success else '⚠️  Warning (manual action required)'}")
+    print(f"  • NLP data:     {'✅ Success' if nlp_success else '⚠️  Warning (manual action required)'}")
+    
+    if weasel_success and nlp_success:
+        print("\n🎉 All post-installation tasks completed successfully!")
+    else:
+        print("\n⚠️  Some tasks completed with warnings. AIECS will still work,")
+        print("but you may need to install some dependencies manually as needed.")
+    
+    print("="*60 + "\n")
 
 
 class PostInstallCommand(install):
@@ -163,6 +196,7 @@ setup(
         "console_scripts": [
             "aiecs=aiecs.__main__:main",
             "aiecs-patch-weasel=aiecs.scripts.fix_weasel_validator:main",
+            "aiecs-download-nlp-data=aiecs.scripts.download_nlp_data:main",
         ],
     },
     cmdclass={
