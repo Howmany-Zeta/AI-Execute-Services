@@ -64,9 +64,53 @@ def list_tools():
     列出所有已注册的工具
 
     Returns:
-        工具名称列表
+        工具信息字典列表
     """
-    return list(set(list(TOOL_REGISTRY.keys()) + list(TOOL_CLASSES.keys())))
+    tools = []
+    all_tool_names = list(set(list(TOOL_REGISTRY.keys()) + list(TOOL_CLASSES.keys())))
+    
+    for tool_name in all_tool_names:
+        try:
+            # 优先使用已有实例的信息
+            if tool_name in TOOL_REGISTRY:
+                tool_instance = TOOL_REGISTRY[tool_name]
+                tool_info = {
+                    "name": tool_name,
+                    "description": getattr(tool_instance, 'description', f'{tool_name} tool'),
+                    "category": getattr(tool_instance, 'category', 'general'),
+                    "class_name": tool_instance.__class__.__name__,
+                    "module": tool_instance.__class__.__module__,
+                    "status": "loaded"
+                }
+            elif tool_name in TOOL_CLASSES:
+                # 从类定义获取信息，但不实例化
+                tool_class = TOOL_CLASSES[tool_name]
+                tool_info = {
+                    "name": tool_name,
+                    "description": getattr(tool_class, 'description', f'{tool_name} tool'),
+                    "category": getattr(tool_class, 'category', 'general'),
+                    "class_name": tool_class.__name__,
+                    "module": tool_class.__module__,
+                    "status": "available"
+                }
+            else:
+                continue
+            
+            tools.append(tool_info)
+            
+        except Exception as e:
+            logger.warning(f"Failed to get info for tool {tool_name}: {e}")
+            # 提供基本信息
+            tools.append({
+                "name": tool_name,
+                "description": f"{tool_name} (info unavailable)",
+                "category": "unknown",
+                "class_name": "Unknown",
+                "module": "unknown",
+                "status": "error"
+            })
+    
+    return tools
 
 def discover_tools(package_path: str = "aiecs.tools"):
     """
@@ -92,22 +136,51 @@ def discover_tools(package_path: str = "aiecs.tools"):
 # 导入基础工具类供继承使用
 from aiecs.tools.base_tool import BaseTool
 
-# 导入所有工具模块以确保它们被注册
-# 这些导入将通过装饰器触发工具的注册
+# Lazy loading strategy: don't import all tools at package init
+# Tools will be loaded on-demand when requested
 
-# 导入任务工具模块 - 包含所有专门的任务工具
-from . import task_tools
+def _ensure_task_tools_available():
+    """Ensure task_tools module is available for lazy loading"""
+    try:
+        from . import task_tools
+        return True
+    except ImportError as e:
+        logger.error(f"Failed to import task_tools: {e}")
+        return False
 
-# 尝试导入其他可能存在的工具模块
-try:
-    from . import rag
-except ImportError:
-    pass
+def _register_known_tools():
+    """Register known tools without importing heavy dependencies"""
+    # Pre-register tool classes for discovery without importing modules
+    # This allows list_tools() to work before actual tool loading
+    
+    known_tools = [
+        ("chart_tool", "Chart and visualization operations"),
+        ("classfire_tool", "Text classification and keyword extraction"),
+        ("image_tool", "Image processing and OCR operations"),
+        ("office_tool", "Office document processing"),
+        ("pandas_tool", "Data analysis and manipulation"), 
+        ("report_tool", "Report generation and formatting"),
+        ("research_tool", "Research and information gathering"),
+        ("scraper_tool", "Web scraping and data extraction"),
+        ("search_api", "Search API integration"),
+        ("stats_tool", "Statistical analysis and computation")
+    ]
+    
+    # Register as placeholder until actually loaded
+    for tool_name, description in known_tools:
+        if tool_name not in TOOL_REGISTRY and tool_name not in TOOL_CLASSES:
+            # Create a placeholder class for discovery
+            class ToolPlaceholder:
+                def __init__(self, name, desc):
+                    self.name = name
+                    self.description = desc
+                    self.category = "task"
+                    self.is_placeholder = True
+            
+            TOOL_REGISTRY[tool_name] = ToolPlaceholder(tool_name, description)
 
-try:
-    from . import embed
-except ImportError:
-    pass
+# Register known tools for discovery
+_register_known_tools()
 
 try:
     from . import db_api
@@ -119,5 +192,5 @@ try:
 except ImportError:
     pass
 
-# 自动发现并注册所有工具
-discover_tools("aiecs.tools")
+# Don't auto-discover tools at import time for performance
+# Tools will be discovered when explicitly requested via discover_tools() call

@@ -27,7 +27,7 @@ class TaskStepResult(BaseModel):
 
 class WebSocketManager:
     """
-    专门处理 WebSocket 服务器和客户端通信
+    Specialized handler for WebSocket server and client communication
     """
 
     def __init__(self, host: str = "python-middleware-api", port: int = 8765):
@@ -39,7 +39,7 @@ class WebSocketManager:
         self._running = False
 
     async def start_server(self):
-        """启动 WebSocket 服务器"""
+        """Start WebSocket server"""
         if self.server:
             logger.warning("WebSocket server is already running")
             return self.server
@@ -58,14 +58,14 @@ class WebSocketManager:
             raise
 
     async def stop_server(self):
-        """停止 WebSocket 服务器"""
+        """Stop WebSocket server"""
         if self.server:
             self.server.close()
             await self.server.wait_closed()
             self._running = False
             logger.info("WebSocket server stopped")
 
-        # 关闭所有活跃连接
+        # Close all active connections
         if self.active_connections:
             await asyncio.gather(
                 *[conn.close() for conn in self.active_connections],
@@ -74,7 +74,7 @@ class WebSocketManager:
             self.active_connections.clear()
 
     async def _handle_client_connection(self, websocket: ServerConnection, path: str):
-        """处理客户端连接"""
+        """Handle client connection"""
         self.active_connections.add(websocket)
         client_addr = websocket.remote_address
         logger.info(f"New WebSocket connection from {client_addr}")
@@ -92,7 +92,7 @@ class WebSocketManager:
                 await websocket.close()
 
     async def _handle_client_message(self, websocket: ServerConnection, message: str):
-        """处理客户端消息"""
+        """Handle client message"""
         try:
             data = json.loads(message)
             action = data.get("action")
@@ -117,7 +117,7 @@ class WebSocketManager:
             await self._send_error(websocket, f"Internal error: {str(e)}")
 
     async def _handle_confirmation(self, data: Dict[str, Any]):
-        """处理用户确认"""
+        """Handle user confirmation"""
         callback_id = data.get("callback_id")
         if callback_id and callback_id in self.callback_registry:
             callback = self.callback_registry[callback_id]
@@ -135,13 +135,13 @@ class WebSocketManager:
             logger.warning(f"No callback found for confirmation ID: {callback_id}")
 
     async def _handle_cancellation(self, data: Dict[str, Any]):
-        """处理任务取消"""
+        """Handle task cancellation"""
         user_id = data.get("user_id")
         task_id = data.get("task_id")
 
         if user_id and task_id:
-            # 这里可以添加取消任务的逻辑
-            # 由于需要访问数据库管理器，这个功能可能需要通过回调实现
+            # Task cancellation logic can be added here
+            # Since database manager access is needed, this functionality may need to be implemented through callbacks
             logger.info(f"Task cancellation requested: user={user_id}, task={task_id}")
             await self.broadcast_message({
                 "type": "task_cancelled",
@@ -153,7 +153,7 @@ class WebSocketManager:
             logger.warning("Invalid cancellation request: missing user_id or task_id")
 
     async def _handle_ping(self, websocket: ServerConnection, data: Dict[str, Any]):
-        """处理心跳检测"""
+        """Handle heartbeat detection"""
         pong_data = {
             "type": "pong",
             "timestamp": asyncio.get_event_loop().time(),
@@ -162,10 +162,10 @@ class WebSocketManager:
         await self._send_to_client(websocket, pong_data)
 
     async def _handle_subscription(self, websocket: ServerConnection, data: Dict[str, Any]):
-        """处理订阅请求"""
+        """Handle subscription request"""
         user_id = data.get("user_id")
         if user_id:
-            # 可以在这里实现用户特定的订阅逻辑
+            # User-specific subscription logic can be implemented here
             logger.info(f"User {user_id} subscribed to updates")
             await self._send_to_client(websocket, {
                 "type": "subscription_confirmed",
@@ -173,7 +173,7 @@ class WebSocketManager:
             })
 
     async def _send_error(self, websocket: ServerConnection, error_message: str):
-        """发送错误消息给客户端"""
+        """Send error message to client"""
         error_data = {
             "type": "error",
             "message": error_message,
@@ -182,7 +182,7 @@ class WebSocketManager:
         await self._send_to_client(websocket, error_data)
 
     async def _send_to_client(self, websocket: ServerConnection, data: Dict[str, Any]):
-        """发送数据给特定客户端"""
+        """Send data to specific client"""
         try:
             if not websocket.closed:
                 await websocket.send(json.dumps(data))
@@ -190,14 +190,14 @@ class WebSocketManager:
             logger.error(f"Failed to send message to client: {e}")
 
     async def notify_user(self, step_result: TaskStepResult, user_id: str, task_id: str, step: int) -> UserConfirmation:
-        """通知用户任务步骤结果"""
+        """Notify user of task step result"""
         callback_id = str(uuid.uuid4())
         confirmation_future = asyncio.Future()
 
-        # 注册回调
+        # Register callback
         self.callback_registry[callback_id] = lambda confirmation: confirmation_future.set_result(confirmation)
 
-        # 准备通知数据
+        # Prepare notification data
         notification_data = {
             "type": "task_step_result",
             "callback_id": callback_id,
@@ -213,30 +213,30 @@ class WebSocketManager:
         }
 
         try:
-            # 广播给所有连接的客户端（可以优化为只发送给特定用户）
+            # Broadcast to all connected clients (can be optimized to send only to specific users)
             await self.broadcast_message(notification_data)
 
-            # 等待用户确认，设置超时
+            # Wait for user confirmation with timeout
             try:
-                return await asyncio.wait_for(confirmation_future, timeout=300)  # 5分钟超时
+                return await asyncio.wait_for(confirmation_future, timeout=300)  # 5 minute timeout
             except asyncio.TimeoutError:
                 logger.warning(f"User confirmation timeout for callback {callback_id}")
-                # 清理回调
+                # Clean up callback
                 self.callback_registry.pop(callback_id, None)
-                return UserConfirmation(proceed=True)  # 默认继续
+                return UserConfirmation(proceed=True)  # Default to proceed
 
         except Exception as e:
             logger.error(f"WebSocket notification error: {e}")
-            # 清理回调
+            # Clean up callback
             self.callback_registry.pop(callback_id, None)
-            return UserConfirmation(proceed=True)  # 默认继续
+            return UserConfirmation(proceed=True)  # Default to proceed
 
     async def send_heartbeat(self, user_id: str, task_id: str, interval: int = 30):
-        """发送心跳消息"""
+        """Send heartbeat message"""
         heartbeat_data = {
             "type": "heartbeat",
             "status": "heartbeat",
-            "message": "任务仍在执行中...",
+            "message": "Task is still executing...",
             "user_id": user_id,
             "task_id": task_id,
             "timestamp": asyncio.get_event_loop().time()
@@ -251,12 +251,12 @@ class WebSocketManager:
                 break
 
     async def broadcast_message(self, message: Dict[str, Any]):
-        """广播消息给所有连接的客户端"""
+        """Broadcast message to all connected clients"""
         if not self.active_connections:
             logger.debug("No active WebSocket connections for broadcast")
             return
 
-        # 过滤掉已关闭的连接
+        # Filter out closed connections
         active_connections = [conn for conn in self.active_connections if not conn.closed]
         self.active_connections = set(active_connections)
 
@@ -268,18 +268,18 @@ class WebSocketManager:
             logger.debug(f"Broadcasted message to {len(active_connections)} clients")
 
     async def send_to_user(self, user_id: str, message: Dict[str, Any]):
-        """发送消息给特定用户（需要实现用户连接映射）"""
-        # 这里可以实现用户ID到WebSocket连接的映射
-        # 目前简化为广播
+        """Send message to specific user (requires user connection mapping implementation)"""
+        # User ID to WebSocket connection mapping can be implemented here
+        # Currently simplified to broadcast
         message["target_user_id"] = user_id
         await self.broadcast_message(message)
 
     def get_connection_count(self) -> int:
-        """获取活跃连接数"""
+        """Get active connection count"""
         return len([conn for conn in self.active_connections if not conn.closed])
 
     def get_status(self) -> Dict[str, Any]:
-        """获取WebSocket管理器状态"""
+        """Get WebSocket manager status"""
         return {
             "running": self._running,
             "host": self.host,

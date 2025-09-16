@@ -6,22 +6,22 @@ import os
 logger = logging.getLogger(__name__)
 
 class RedisClient:
-    """Redis客户端单例，供不同缓存策略共享使用"""
+    """Redis client singleton for sharing across different caching strategies"""
 
     def __init__(self):
         self._client: Optional[redis.Redis] = None
         self._connection_pool: Optional[redis.ConnectionPool] = None
 
     async def initialize(self):
-        """初始化Redis客户端"""
+        """Initialize Redis client"""
         try:
-            # 从环境变量获取Redis配置
+            # Get Redis configuration from environment variables
             redis_host = os.getenv('REDIS_HOST', 'localhost')
             redis_port = int(os.getenv('REDIS_PORT', 6379))
             redis_db = int(os.getenv('REDIS_DB', 0))
             redis_password = os.getenv('REDIS_PASSWORD')
 
-            # 创建连接池
+            # Create connection pool
             self._connection_pool = redis.ConnectionPool(
                 host=redis_host,
                 port=redis_port,
@@ -32,10 +32,10 @@ class RedisClient:
                 retry_on_timeout=True
             )
 
-            # 创建Redis客户端
+            # Create Redis client
             self._client = redis.Redis(connection_pool=self._connection_pool)
 
-            # 测试连接
+            # Test connection
             await self._client.ping()
             logger.info(f"Redis client initialized successfully: {redis_host}:{redis_port}/{redis_db}")
 
@@ -44,13 +44,13 @@ class RedisClient:
             raise
 
     async def get_client(self) -> redis.Redis:
-        """获取Redis客户端实例"""
+        """Get Redis client instance"""
         if self._client is None:
             raise RuntimeError("Redis client not initialized. Call initialize() first.")
         return self._client
 
     async def close(self):
-        """关闭Redis连接"""
+        """Close Redis connection"""
         if self._client:
             await self._client.close()
             self._client = None
@@ -60,37 +60,37 @@ class RedisClient:
         logger.info("Redis client closed")
 
     async def hincrby(self, name: str, key: str, amount: int = 1) -> int:
-        """Hash字段原子性增加"""
+        """Atomically increment hash field"""
         client = await self.get_client()
         return await client.hincrby(name, key, amount)
 
     async def hget(self, name: str, key: str) -> Optional[str]:
-        """获取Hash字段值"""
+        """Get hash field value"""
         client = await self.get_client()
         return await client.hget(name, key)
 
     async def hgetall(self, name: str) -> dict:
-        """获取Hash所有字段"""
+        """Get all hash fields"""
         client = await self.get_client()
         return await client.hgetall(name)
 
     async def hset(self, name: str, mapping: dict) -> int:
-        """设置Hash字段"""
+        """Set hash fields"""
         client = await self.get_client()
         return await client.hset(name, mapping=mapping)
 
     async def expire(self, name: str, time: int) -> bool:
-        """设置过期时间"""
+        """Set expiration time"""
         client = await self.get_client()
         return await client.expire(name, time)
 
     async def exists(self, name: str) -> bool:
-        """检查key是否存在"""
+        """Check if key exists"""
         client = await self.get_client()
         return bool(await client.exists(name))
 
     async def ping(self) -> bool:
-        """测试Redis连接"""
+        """Test Redis connection"""
         try:
             client = await self.get_client()
             result = await client.ping()
@@ -135,28 +135,28 @@ class RedisClient:
             logger.error(f"Redis get failed for key {key}: {e}")
             return None
 
-# ✅ 关键改动：
-# 1. 不再立即创建实例。
-# 2. 定义一个全局变量，初始值为None。这个变量将被lifespan填充。
+# ✅ Key changes:
+# 1. No longer create instance immediately.
+# 2. Define a global variable with initial value None. This variable will be populated by lifespan.
 redis_client: Optional[RedisClient] = None
 
-# 3. 提供一个初始化函数供lifespan调用
+# 3. Provide an initialization function for lifespan to call
 async def initialize_redis_client():
-    """在应用启动时创建并初始化全局Redis客户端实例。"""
+    """Create and initialize global Redis client instance at application startup."""
     global redis_client
     if redis_client is None:
         redis_client = RedisClient()
         await redis_client.initialize()
 
-# 4. 提供一个关闭函数供lifespan调用
+# 4. Provide a close function for lifespan to call
 async def close_redis_client():
-    """在应用关闭时关闭全局Redis客户端实例。"""
+    """Close global Redis client instance at application shutdown."""
     if redis_client:
         await redis_client.close()
 
-# 为了向后兼容，保留get_redis_client函数
+# For backward compatibility, keep get_redis_client function
 async def get_redis_client() -> RedisClient:
-    """获取全局Redis客户端实例"""
+    """Get global Redis client instance"""
     if redis_client is None:
         raise RuntimeError("Redis client not initialized. Call initialize_redis_client() first.")
     return redis_client

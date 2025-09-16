@@ -16,28 +16,13 @@ This module contains specialized tools for various task-oriented operations:
 - stats_tool: Statistical analysis and computation operations
 """
 
-# Import all task tools to ensure they are registered
+# Lazy import all task tools to avoid heavy dependencies at import time
 import os
 
-from . import chart_tool
-from . import classfire_tool
-from . import image_tool
-
-# Conditionally import office_tool to avoid PyO3 conflicts in testing
-if not os.getenv('SKIP_OFFICE_TOOL', '').lower() in ('true', '1', 'yes'):
-    from . import office_tool
-
-from . import pandas_tool
-from . import report_tool
-from . import research_tool
-from . import scraper_tool
-from . import search_api
-from . import stats_tool
-
-# Export the tool modules for external access
-__all__ = [
+# Define available tools for lazy loading
+_AVAILABLE_TOOLS = [
     'chart_tool',
-    'classfire_tool',
+    'classfire_tool', 
     'image_tool',
     'pandas_tool',
     'report_tool',
@@ -47,6 +32,51 @@ __all__ = [
     'stats_tool'
 ]
 
-# Conditionally add office_tool to exports
+# Add office_tool conditionally
 if not os.getenv('SKIP_OFFICE_TOOL', '').lower() in ('true', '1', 'yes'):
-    __all__.append('office_tool')
+    _AVAILABLE_TOOLS.append('office_tool')
+
+# Track which tools have been loaded
+_LOADED_TOOLS = set()
+
+def _lazy_load_tool(tool_name: str):
+    """Lazy load a specific tool module"""
+    if tool_name in _LOADED_TOOLS:
+        return
+        
+    try:
+        if tool_name == 'chart_tool':
+            from . import chart_tool
+        elif tool_name == 'classfire_tool':
+            from . import classfire_tool
+        elif tool_name == 'image_tool':
+            from . import image_tool
+        elif tool_name == 'office_tool':
+            from . import office_tool
+        elif tool_name == 'pandas_tool':
+            from . import pandas_tool
+        elif tool_name == 'report_tool':
+            from . import report_tool
+        elif tool_name == 'research_tool':
+            from . import research_tool
+        elif tool_name == 'scraper_tool':
+            from . import scraper_tool
+        elif tool_name == 'search_api':
+            from . import search_api
+        elif tool_name == 'stats_tool':
+            from . import stats_tool
+        
+        _LOADED_TOOLS.add(tool_name)
+        
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to load tool {tool_name}: {e}")
+
+def load_all_tools():
+    """Load all available tools (for backward compatibility)"""
+    for tool_name in _AVAILABLE_TOOLS:
+        _lazy_load_tool(tool_name)
+
+# Export the tool modules for external access
+__all__ = _AVAILABLE_TOOLS + ['load_all_tools', '_lazy_load_tool']

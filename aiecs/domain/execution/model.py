@@ -22,7 +22,7 @@ class ErrorCode(Enum):
 
 
 class TaskStepResult:
-    """任务步骤结果模型"""
+    """Task step result model"""
     def __init__(self, step: str, result: Any, completed: bool = False,
                  message: str = "", status: str = "pending",
                  error_code: Optional[str] = None, error_message: Optional[str] = None):

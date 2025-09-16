@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class OperationExecutor:
     """
-    专门处理操作执行的核心逻辑
+    Core logic for handling operation execution
     """
 
     def __init__(self, tool_executor: ToolExecutor, execution_utils: ExecutionUtils, config: Dict[str, Any]):
@@ -23,30 +23,30 @@ class OperationExecutor:
 
     def _filter_tool_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
-        过滤掉系统相关的参数，只保留工具方法需要的参数
+        Filter out system-related parameters, keeping only parameters needed by tool methods
         """
-        # 系统相关的参数，不应该传递给工具方法
+        # System-related parameters that should not be passed to tool methods
         system_params = {'user_id', 'task_id', 'op'}
         return {k: v for k, v in params.items() if k not in system_params}
 
     def _filter_tool_call_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
-        过滤掉工具调用中的系统相关参数，但保留 'op' 参数（BaseTool.run() 需要）
+        Filter out system-related parameters in tool calls, but keep 'op' parameter (needed by BaseTool.run())
         """
-        # 只过滤用户和任务ID，保留 'op' 参数给 BaseTool.run() 使用
+        # Only filter user and task IDs, keep 'op' parameter for BaseTool.run() to use
         system_params = {'user_id', 'task_id'}
         return {k: v for k, v in params.items() if k not in system_params}
 
     async def execute_operation(self, operation_spec: str, params: Dict[str, Any]) -> Any:
         """
-        执行单个操作 (tool_name.operation_name)
+        Execute a single operation (tool_name.operation_name)
         """
         if "." not in operation_spec:
             raise ValueError(f"Invalid operation spec: {operation_spec}, expected 'tool_name.operation_name'")
 
         tool_name, operation_name = operation_spec.split(".", 1)
 
-        # 获取或创建工具实例
+        # Get or create tool instance
         if tool_name not in self._tool_instances:
             self._tool_instances[tool_name] = get_tool(tool_name)
 
@@ -54,10 +54,10 @@ class OperationExecutor:
         if not hasattr(tool, operation_name):
             raise ValueError(f"Operation '{operation_name}' not found in tool '{tool_name}'")
 
-        # 过滤参数，移除系统相关的参数
+        # Filter parameters, remove system-related parameters
         tool_params = self._filter_tool_params(params)
 
-        # 使用 ToolExecutor 执行操作
+        # Use ToolExecutor to execute operation
         operation = getattr(tool, operation_name)
         if asyncio.iscoroutinefunction(operation):
             return await self.tool_executor.execute_async(tool, operation_name, **tool_params)
@@ -66,7 +66,7 @@ class OperationExecutor:
 
     async def batch_execute_operations(self, operations: List[Dict[str, Any]]) -> List[Any]:
         """
-        批量执行操作，带有速率限制
+        Batch execute operations with rate limiting
         """
         results = []
         batch_size = self.config.get('batch_size', 10)
@@ -86,7 +86,7 @@ class OperationExecutor:
     async def execute_operations_sequence(self, operations: List[Dict[str, Any]], user_id: str, task_id: str,
                                         stop_on_failure: bool = False, save_callback=None) -> List[TaskStepResult]:
         """
-        顺序执行操作序列，可选择在失败时停止
+        Execute operations sequence sequentially, with option to stop on failure
         """
         results = []
 
@@ -94,7 +94,7 @@ class OperationExecutor:
             operation_spec = op_info.get("operation")
             params = op_info.get("params", {})
 
-            # 处理参数引用
+            # Process parameter references
             processed_params = self._process_param_references(params, results)
 
             try:
@@ -123,7 +123,7 @@ class OperationExecutor:
                     results.append(step_result)
                     break
 
-            # 保存步骤结果
+            # Save step result
             if save_callback:
                 await save_callback(user_id, task_id, step, step_result)
 
@@ -133,7 +133,7 @@ class OperationExecutor:
 
     def _process_param_references(self, params: Dict[str, Any], results: List[TaskStepResult]) -> Dict[str, Any]:
         """
-        处理参数引用，如 $result[0] 在操作参数中
+        Process parameter references, such as $result[0] in operation parameters
         """
         processed = {}
 
@@ -148,7 +148,7 @@ class OperationExecutor:
 
                     ref_value = results[idx].result
 
-                    # 处理嵌套属性访问，如 $result[0].data.field
+                    # Handle nested attribute access, such as $result[0].data.field
                     if len(ref_parts) > 1 and ref_parts[1].startswith('.'):
                         for attr in ref_parts[1][1:].split('.'):
                             if attr:
@@ -168,7 +168,7 @@ class OperationExecutor:
 
     async def batch_tool_calls(self, tool_calls: List[Dict], tool_executor_func=None) -> List[Any]:
         """
-        执行批量工具调用，带有速率限制
+        Execute batch tool calls with rate limiting
         """
         results = []
         batch_size = self.config.get('batch_size', 10)
@@ -187,13 +187,13 @@ class OperationExecutor:
 
     async def _execute_tool_call(self, call: Dict, tool_executor_func=None) -> Any:
         """
-        执行单个工具调用，带有速率限制
+        Execute a single tool call with rate limiting
         """
         async with self.semaphore:
             tool_name = call.get("tool")
             params = call.get("params", {})
 
-            # 使用上下文感知缓存
+            # Use context-aware caching
             if self.config.get('enable_cache', True):
                 user_id = params.get("user_id", "anonymous")
                 task_id = params.get("task_id", "none")
@@ -202,22 +202,22 @@ class OperationExecutor:
                 if cached_result is not None:
                     return cached_result
 
-            # 执行工具调用
+            # Execute tool call
             if tool_executor_func:
-                # 使用提供的工具执行器函数
+                # Use provided tool executor function
                 result = await tool_executor_func(tool_name, params)
             else:
-                # 使用内部 ToolExecutor
+                # Use internal ToolExecutor
                 if tool_name not in self._tool_instances:
                     self._tool_instances[tool_name] = get_tool(tool_name)
                 tool = self._tool_instances[tool_name]
                 
-                # 过滤参数，移除系统相关的参数（但保留 'op' 参数）
+                # Filter parameters, remove system-related parameters (but keep 'op' parameter)
                 tool_params = self._filter_tool_call_params(params)
-                # 通过 BaseTool.run 方法执行，传递过滤后的参数
+                # Execute through BaseTool.run method, passing filtered parameters
                 result = await self.tool_executor.execute_async(tool, "run", **tool_params)
 
-            # 缓存结果
+            # Cache result
             if self.config.get('enable_cache', True):
                 self.execution_utils.add_to_cache(cache_key, result)
 
@@ -225,7 +225,7 @@ class OperationExecutor:
 
     def extract_tool_calls(self, description: str, input_data: Dict, context: Dict) -> List[Dict]:
         """
-        从描述中提取工具调用
+        Extract tool calls from description
         """
         import re
 
@@ -238,7 +238,7 @@ class OperationExecutor:
             params_str = match.group(2)
             params = {}
 
-            # 解析参数
+            # Parse parameters
             param_pattern = r'(\w+)=["\'](.*?)["\']'
             param_matches = re.finditer(param_pattern, params_str)
 
@@ -246,7 +246,7 @@ class OperationExecutor:
                 param_name = param_match.group(1)
                 param_value = param_match.group(2)
 
-                # 处理输入数据引用
+                # Handle input data references
                 if param_value.startswith("input."):
                     key = param_value.split(".", 1)[1]
                     param_value = input_data.get(key, "")
@@ -265,7 +265,7 @@ class OperationExecutor:
 
     async def execute_parallel_operations(self, operations: List[Dict[str, Any]]) -> List[TaskStepResult]:
         """
-        并行执行多个操作
+        Execute multiple operations in parallel
         """
         tasks = []
 
@@ -298,7 +298,7 @@ class OperationExecutor:
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # 处理异常结果
+        # Handle exception results
         processed_results = []
         for i, result in enumerate(results):
             if isinstance(result, Exception):
@@ -317,18 +317,18 @@ class OperationExecutor:
         return processed_results
 
     def get_tool_instance(self, tool_name: str):
-        """获取工具实例"""
+        """Get tool instance"""
         if tool_name not in self._tool_instances:
             self._tool_instances[tool_name] = get_tool(tool_name)
         return self._tool_instances[tool_name]
 
     def clear_tool_cache(self):
-        """清理工具实例缓存"""
+        """Clear tool instance cache"""
         self._tool_instances.clear()
         logger.info("Tool instance cache cleared")
 
     def get_stats(self) -> Dict[str, Any]:
-        """获取操作执行器统计信息"""
+        """Get operation executor statistics"""
         return {
             "cached_tools": len(self._tool_instances),
             "tool_names": list(self._tool_instances.keys()),

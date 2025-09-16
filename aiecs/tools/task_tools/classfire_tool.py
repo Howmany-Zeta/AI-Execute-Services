@@ -7,14 +7,36 @@ from typing import Dict, Any, List, Optional, Union, Tuple
 from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator, ValidationError, ConfigDict
-from rake_nltk import Rake
-try:
-    import pke
-except ImportError:
-    pke = None
 
-# Delay spacy import to avoid Pydantic v1/v2 conflicts
+# Lazy imports for heavy dependencies
+rake_nltk = None
+pke = None
 spacy = None
+
+def _init_heavy_dependencies():
+    """Initialize heavy dependencies when actually needed"""
+    global rake_nltk, pke, spacy
+    
+    if rake_nltk is None:
+        try:
+            import rake_nltk as _rake_nltk
+            rake_nltk = _rake_nltk
+        except ImportError:
+            logger.error("rake_nltk not available")
+            
+    if pke is None:
+        try:
+            import pke as _pke
+            pke = _pke
+        except ImportError:
+            logger.warning("pke not available (optional)")
+            
+    if spacy is None:
+        try:
+            import spacy as _spacy
+            spacy = _spacy
+        except ImportError:
+            logger.warning("spacy not available (optional)")
 
 from aiecs.tools import register_tool
 from aiecs.tools.base_tool import BaseTool

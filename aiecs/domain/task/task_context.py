@@ -33,7 +33,7 @@ class TaskContext:
     def __init__(self, data: dict, task_dir: str = "./tasks"):
         self.user_id = data.get("user_id", "anonymous")
         self.chat_id = data.get("chat_id", "none")
-        # 确保元数据包含 aiPreference
+        # Ensure metadata includes aiPreference
         self.metadata = data.get("metadata", {})
         if "aiPreference" in data:
             self.metadata["aiPreference"] = data["aiPreference"]

@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class TracingManager:
     """
-    专门处理分布式追踪和链路跟踪
+    Specialized handler for distributed tracing and link tracking
     """
 
     def __init__(self, service_name: str = "service_executor",
@@ -19,7 +19,7 @@ class TracingManager:
                  jaeger_port: Optional[int] = None,
                  enable_tracing: Optional[bool] = None):
         self.service_name = service_name
-        # 从环境变量获取配置，如果没有则使用默认值
+        # Get configuration from environment variables, use defaults if not available
         self.jaeger_host = jaeger_host or os.getenv("JAEGER_AGENT_HOST", "jaeger")
         self.jaeger_port = jaeger_port or int(os.getenv("JAEGER_AGENT_PORT", "6831"))
         self.enable_tracing = enable_tracing if enable_tracing is not None else os.getenv("JAEGER_ENABLE_TRACING", "true").lower() == "true"
@@ -29,7 +29,7 @@ class TracingManager:
             self._init_tracer()
 
     def _init_tracer(self):
-        """初始化 Jaeger 追踪器"""
+        """Initialize Jaeger tracer"""
         try:
             config = jaeger_client.config.Config(
                 config={
@@ -56,15 +56,15 @@ class TracingManager:
     def start_span(self, operation_name: str, parent_span: Optional[Span] = None,
                    tags: Optional[Dict[str, Any]] = None) -> Optional[Span]:
         """
-        开始一个追踪 span
+        Start a tracing span
 
         Args:
-            operation_name: 操作名称
-            parent_span: 父 span
-            tags: 初始标签
+            operation_name: Operation name
+            parent_span: Parent span
+            tags: Initial tags
 
         Returns:
-            Span 对象或 None（如果追踪未启用）
+            Span object or None (if tracing is not enabled)
         """
         if not self.enable_tracing or not self.tracer:
             return None
@@ -75,12 +75,12 @@ class TracingManager:
                 child_of=parent_span
             )
 
-            # 设置初始标签
+            # Set initial tags
             if tags:
                 for key, value in tags.items():
                     span.set_tag(key, value)
 
-            # 设置服务信息
+            # Set service information
             span.set_tag("service.name", self.service_name)
             span.set_tag("span.kind", "server")
 
@@ -92,31 +92,31 @@ class TracingManager:
     def finish_span(self, span: Optional[Span], tags: Optional[Dict[str, Any]] = None,
                     logs: Optional[Dict[str, Any]] = None, error: Optional[Exception] = None):
         """
-        结束追踪 span
+        Finish tracing span
 
         Args:
-            span: 要结束的 span
-            tags: 额外的标签
-            logs: 日志信息
-            error: 错误信息
+            span: Span to finish
+            tags: Additional tags
+            logs: Log information
+            error: Error information
         """
         if not span or not self.enable_tracing:
             return
 
         try:
-            # 添加额外标签
+            # Add additional tags
             if tags:
                 for key, value in tags.items():
                     span.set_tag(key, value)
 
-            # 记录错误
+            # Record error
             if error:
                 span.set_tag("error", True)
                 span.set_tag("error.kind", type(error).__name__)
                 span.set_tag("error.message", str(error))
                 span.log_kv({"event": "error", "error.object": error})
 
-            # 添加日志
+            # Add logs
             if logs:
                 span.log_kv(logs)
 
@@ -126,11 +126,11 @@ class TracingManager:
 
     def with_tracing(self, operation_name: str, tags: Optional[Dict[str, Any]] = None):
         """
-        追踪装饰器
+        Tracing decorator
 
         Args:
-            operation_name: 操作名称
-            tags: 初始标签
+            operation_name: Operation name
+            tags: Initial tags
         """
         def decorator(func):
             @functools.wraps(func)
@@ -141,12 +141,12 @@ class TracingManager:
                 span = self.start_span(operation_name, tags=tags)
 
                 try:
-                    # 添加函数参数作为标签
+                    # Add function arguments as tags
                     self._add_function_args_to_span(span, args, kwargs)
 
                     result = await func(*args, **kwargs)
 
-                    # 记录成功
+                    # Record success
                     if span:
                         span.set_tag("success", True)
 
@@ -166,12 +166,12 @@ class TracingManager:
                 span = self.start_span(operation_name, tags=tags)
 
                 try:
-                    # 添加函数参数作为标签
+                    # Add function arguments as tags
                     self._add_function_args_to_span(span, args, kwargs)
 
                     result = func(*args, **kwargs)
 
-                    # 记录成功
+                    # Record success
                     if span:
                         span.set_tag("success", True)
 
@@ -183,7 +183,7 @@ class TracingManager:
                     if span and not span.finished:
                         self.finish_span(span)
 
-            # 根据函数类型返回相应的包装器
+            # Return appropriate wrapper based on function type
             import asyncio
             if asyncio.iscoroutinefunction(func):
                 return async_wrapper
@@ -193,23 +193,23 @@ class TracingManager:
         return decorator
 
     def _add_function_args_to_span(self, span: Optional[Span], args: tuple, kwargs: Dict[str, Any]):
-        """将函数参数添加到 span 标签中"""
+        """Add function arguments to span tags"""
         if not span:
             return
 
         try:
-            # 添加位置参数
+            # Add positional arguments
             for i, arg in enumerate(args):
                 if isinstance(arg, (str, int, float, bool)):
                     span.set_tag(f"arg_{i}", arg)
                 elif hasattr(arg, '__class__'):
                     span.set_tag(f"arg_{i}_type", arg.__class__.__name__)
 
-            # 添加关键字参数
+            # Add keyword arguments
             for key, value in kwargs.items():
                 if isinstance(value, (str, int, float, bool)):
                     span.set_tag(key, value)
-                elif isinstance(value, dict) and len(str(value)) < 1000:  # 避免过大的字典
+                elif isinstance(value, dict) and len(str(value)) < 1000:  # Avoid overly large dictionaries
                     span.set_tag(f"{key}_json", str(value))
                 elif hasattr(value, '__class__'):
                     span.set_tag(f"{key}_type", value.__class__.__name__)
@@ -217,7 +217,7 @@ class TracingManager:
             logger.debug(f"Error adding function args to span: {e}")
 
     def trace_database_operation(self, operation: str, table: str = None, query: str = None):
-        """数据库操作追踪装饰器"""
+        """Database operation tracing decorator"""
         def decorator(func):
             @functools.wraps(func)
             async def wrapper(*args, **kwargs):
@@ -230,7 +230,7 @@ class TracingManager:
                 if table:
                     tags["db.table"] = table
                 if query:
-                    tags["db.statement"] = query[:500]  # 限制查询长度
+                    tags["db.statement"] = query[:500]  # Limit query length
 
                 span = self.start_span(f"db.{operation}", tags=tags)
 
@@ -250,7 +250,7 @@ class TracingManager:
         return decorator
 
     def trace_external_call(self, service_name: str, endpoint: str = None):
-        """外部服务调用追踪装饰器"""
+        """External service call tracing decorator"""
         def decorator(func):
             @functools.wraps(func)
             async def wrapper(*args, **kwargs):
@@ -283,7 +283,7 @@ class TracingManager:
         return decorator
 
     def trace_tool_execution(self, tool_name: str, operation: str):
-        """工具执行追踪装饰器"""
+        """Tool execution tracing decorator"""
         def decorator(func):
             @functools.wraps(func)
             async def wrapper(*args, **kwargs):
@@ -316,14 +316,14 @@ class TracingManager:
 
     def create_child_span(self, parent_span: Optional[Span], operation_name: str,
                          tags: Optional[Dict[str, Any]] = None) -> Optional[Span]:
-        """创建子 span"""
+        """Create child span"""
         if not self.enable_tracing or not parent_span:
             return None
 
         return self.start_span(operation_name, parent_span=parent_span, tags=tags)
 
     def inject_span_context(self, span: Optional[Span], carrier: Dict[str, str]):
-        """将 span 上下文注入到载体中（用于跨服务传播）"""
+        """Inject span context into carrier (for cross-service propagation)"""
         if not self.enable_tracing or not span or not self.tracer:
             return
 
@@ -334,7 +334,7 @@ class TracingManager:
             logger.error(f"Error injecting span context: {e}")
 
     def extract_span_context(self, carrier: Dict[str, str]) -> Optional[Any]:
-        """从载体中提取 span 上下文"""
+        """Extract span context from carrier"""
         if not self.enable_tracing or not self.tracer:
             return None
 
@@ -346,7 +346,7 @@ class TracingManager:
             return None
 
     def get_active_span(self) -> Optional[Span]:
-        """获取当前活跃的 span"""
+        """Get current active span"""
         if not self.enable_tracing or not self.tracer:
             return None
 
@@ -357,7 +357,7 @@ class TracingManager:
             return None
 
     def close_tracer(self):
-        """关闭追踪器"""
+        """Close tracer"""
         if self.tracer:
             try:
                 self.tracer.close()
@@ -366,7 +366,7 @@ class TracingManager:
                 logger.error(f"Error closing tracer: {e}")
 
     def get_tracer_info(self) -> Dict[str, Any]:
-        """获取追踪器信息"""
+        """Get tracer information"""
         return {
             "enabled": self.enable_tracing,
             "service_name": self.service_name,

@@ -127,7 +127,7 @@ dependencies = [
 
 
 [project.scripts]
-aiecs = "aiecs.main:main"
+aiecs = "aiecs.__main__:main"
 aiecs-patch-weasel = "aiecs.scripts.fix_weasel_validator:main"
 aiecs-download-nlp-data = "aiecs.scripts.download_nlp_data:main"
 

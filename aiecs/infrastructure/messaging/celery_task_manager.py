@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 class CeleryTaskManager:
     """
-    专门处理 Celery 分布式任务调度和执行
+    Specialized handler for Celery distributed task scheduling and execution
     """
 
     def __init__(self, config: Dict[str, Any]):
@@ -24,7 +24,7 @@ class CeleryTaskManager:
         self._init_celery()
 
     def _init_celery(self):
-        """初始化 Celery 应用"""
+        """Initialize Celery application"""
         try:
             self.celery_app = Celery(
                 'service_executor',
@@ -32,7 +32,7 @@ class CeleryTaskManager:
                 backend=self.config.get('backend_url', 'redis://redis:6379/0')
             )
 
-            # 配置 Celery
+            # Configure Celery
             self.celery_app.conf.update(
                 task_serializer=self.config.get('task_serializer', 'json'),
                 accept_content=self.config.get('accept_content', ['json']),
@@ -57,30 +57,30 @@ class CeleryTaskManager:
     def execute_celery_task(self, task_name: str, queue: str, user_id: str, task_id: str, step: int,
                            mode: str, service: str, input_data: Dict[str, Any], context: Dict[str, Any]):
         """
-        执行 Celery 任务
+        Execute Celery task
 
         Args:
-            task_name: 任务名称
-            queue: 队列名称 ('fast_tasks' 或 'heavy_tasks')
-            user_id: 用户ID
-            task_id: 任务ID
-            step: 步骤编号
-            mode: 服务模式
-            service: 服务名称
-            input_data: 输入数据
-            context: 上下文信息
+            task_name: Task name
+            queue: Queue name ('fast_tasks' or 'heavy_tasks')
+            user_id: User ID
+            task_id: Task ID
+            step: Step number
+            mode: Service mode
+            service: Service name
+            input_data: Input data
+            context: Context information
 
         Returns:
-            Celery AsyncResult 对象
+            Celery AsyncResult object
         """
         logger.info(f"Queueing task {task_name} to {queue} for user {user_id}, task {task_id}, step {step}")
 
-        # 根据队列确定使用的 Celery 任务
+        # Determine Celery task to use based on queue
         celery_task_name = "aiecs.tasks.worker.execute_task"
         if queue == "heavy_tasks":
             celery_task_name = "aiecs.tasks.worker.execute_heavy_task"
 
-        # 将任务发送到 Celery
+        # Send task to Celery
         return self.celery_app.send_task(
             celery_task_name,
             kwargs={
@@ -98,7 +98,7 @@ class CeleryTaskManager:
 
     async def execute_task(self, task_name: str, input_data: Dict[str, Any], context: Dict[str, Any]) -> Any:
         """
-        执行单个任务，使用 Celery 进行异步处理
+        Execute a single task using Celery for asynchronous processing
         """
         user_id = context.get("user_id", "anonymous")
         task_id = input_data.get("task_id", str(uuid.uuid4()))
@@ -148,14 +148,14 @@ class CeleryTaskManager:
 
     async def execute_heavy_task(self, task_name: str, input_data: Dict, context: Dict) -> Any:
         """
-        执行重型任务
+        Execute heavy task
         """
         input_data["queue"] = "heavy_tasks"
         return await self.execute_task(task_name, input_data, context)
 
     async def execute_dsl_task_step(self, step: Dict, input_data: Dict, context: Dict) -> Dict[str, Any]:
         """
-        执行 DSL 任务步骤
+        Execute DSL task step
         """
         task_name = step.get("task")
         category = "process"
@@ -171,7 +171,7 @@ class CeleryTaskManager:
                 "error_message": "Task name is required"
             }
 
-        # 确定任务类型
+        # Determine task type
         task_type = "fast"
         try:
             task_type_result = await self.execute_task(task_name, {"get_task_type": True}, context)
@@ -187,7 +187,7 @@ class CeleryTaskManager:
         task_id = context.get("task_id", str(uuid.uuid4()))
         step_num = context.get("step", 0)
 
-        # 发送任务到 Celery
+        # Send task to Celery
         celery_task = self.celery_app.send_task(
             celery_task_name,
             kwargs={
@@ -207,7 +207,7 @@ class CeleryTaskManager:
             timeout_seconds = self.config.get('task_timeout_seconds', 300)
             start_time = time.time()
 
-            # 等待任务完成
+            # Wait for task completion
             while not celery_task.ready():
                 if time.time() - start_time > timeout_seconds:
                     raise AsyncioTimeoutError(f"Task {task_name} timed out after {timeout_seconds} seconds")
@@ -262,7 +262,7 @@ class CeleryTaskManager:
             }
 
     def get_task_result(self, task_id: str):
-        """获取任务结果"""
+        """Get task result"""
         try:
             result = self.celery_app.AsyncResult(task_id)
             return {
@@ -281,7 +281,7 @@ class CeleryTaskManager:
             }
 
     def cancel_task(self, task_id: str):
-        """取消任务"""
+        """Cancel task"""
         try:
             self.celery_app.control.revoke(task_id, terminate=True)
             logger.info(f"Task {task_id} cancelled")
@@ -292,7 +292,7 @@ class CeleryTaskManager:
 
     async def batch_execute_tasks(self, tasks: List[Dict[str, Any]]) -> List[Any]:
         """
-        批量执行任务
+        Batch execute tasks
         """
         results = []
         batch_size = self.config.get('batch_size', 10)
@@ -314,7 +314,7 @@ class CeleryTaskManager:
         return results
 
     def get_queue_info(self) -> Dict[str, Any]:
-        """获取队列信息"""
+        """Get queue information"""
         try:
             inspect = self.celery_app.control.inspect()
             active_tasks = inspect.active()
@@ -331,7 +331,7 @@ class CeleryTaskManager:
             return {"error": str(e)}
 
     def get_worker_stats(self) -> Dict[str, Any]:
-        """获取工作器统计信息"""
+        """Get worker statistics"""
         try:
             inspect = self.celery_app.control.inspect()
             stats = inspect.stats()

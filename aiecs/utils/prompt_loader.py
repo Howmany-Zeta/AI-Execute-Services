@@ -3,7 +3,7 @@ import os
 
 def get_prompt(mode: str, service: str) -> str:
     """
-    从 services/{mode}/prompts.yaml 中加载指定 service 的 prompt。
+    Load the prompt for the specified service from services/{mode}/prompts.yaml.
     """
     path = f"app/services/{mode}/prompts.yaml"
     if not os.path.exists(path):

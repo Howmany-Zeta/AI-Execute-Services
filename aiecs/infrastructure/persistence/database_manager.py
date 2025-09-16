@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class DatabaseManager:
     """
-    专门处理数据库连接、操作和任务历史管理
+    Specialized handler for database connections, operations, and task history management
     """
 
     def __init__(self, db_config: Optional[Dict[str, Any]] = None):
@@ -24,7 +24,7 @@ class DatabaseManager:
         self._initialized = False
 
     async def init_connection_pool(self, min_size: int = 10, max_size: int = 20):
-        """初始化数据库连接池"""
+        """Initialize database connection pool"""
         try:
             self.connection_pool = await asyncpg.create_pool(
                 **self.db_config,
@@ -37,14 +37,14 @@ class DatabaseManager:
             raise
 
     async def _get_connection(self):
-        """获取数据库连接"""
+        """Get database connection"""
         if self.connection_pool:
             return self.connection_pool.acquire()
         else:
             return asyncpg.connect(**self.db_config)
 
     async def init_database_schema(self):
-        """初始化数据库表结构"""
+        """Initialize database table structure"""
         try:
             if self.connection_pool:
                 async with self.connection_pool.acquire() as conn:
@@ -64,7 +64,7 @@ class DatabaseManager:
             return False
 
     async def _create_tables(self, conn):
-        """创建数据库表"""
+        """Create database tables"""
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS task_history (
                 id SERIAL PRIMARY KEY,
@@ -82,7 +82,7 @@ class DatabaseManager:
         ''')
 
     async def save_task_history(self, user_id: str, task_id: str, step: int, step_result: TaskStepResult):
-        """保存任务执行历史"""
+        """Save task execution history"""
         if not self._initialized:
             await self.init_database_schema()
 
@@ -110,7 +110,7 @@ class DatabaseManager:
             raise Exception(f"Database error: {e}")
 
     async def load_task_history(self, user_id: str, task_id: str) -> List[Dict]:
-        """加载任务执行历史"""
+        """Load task execution history"""
         if not self._initialized:
             await self.init_database_schema()
 
@@ -145,7 +145,7 @@ class DatabaseManager:
             raise Exception(f"Database error: {e}")
 
     async def mark_task_as_cancelled(self, user_id: str, task_id: str):
-        """标记任务为已取消"""
+        """Mark task as cancelled"""
         if not self._initialized:
             await self.init_database_schema()
 
@@ -173,7 +173,7 @@ class DatabaseManager:
             raise Exception(f"Database error: {e}")
 
     async def check_task_status(self, user_id: str, task_id: str) -> TaskStatus:
-        """检查任务状态"""
+        """Check task status"""
         if not self._initialized:
             await self.init_database_schema()
 
@@ -200,7 +200,7 @@ class DatabaseManager:
             raise Exception(f"Database error: {e}")
 
     async def get_user_tasks(self, user_id: str, limit: int = 100) -> List[Dict]:
-        """获取用户的任务列表"""
+        """Get user task list"""
         if not self._initialized:
             await self.init_database_schema()
 
@@ -252,7 +252,7 @@ class DatabaseManager:
             raise Exception(f"Database error: {e}")
 
     async def cleanup_old_tasks(self, days_old: int = 30):
-        """清理旧任务记录"""
+        """Clean up old task records"""
         if not self._initialized:
             await self.init_database_schema()
 
@@ -280,7 +280,7 @@ class DatabaseManager:
             return False
 
     async def close(self):
-        """关闭数据库连接池"""
+        """Close database connection pool"""
         if self.connection_pool:
             await self.connection_pool.close()
             logger.info("Database connection pool closed")
