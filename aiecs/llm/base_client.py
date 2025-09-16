@@ -23,14 +23,14 @@ class LLMResponse:
     response_time: Optional[float] = None
 
     def __post_init__(self):
-        """确保token数据的一致性"""
-        # 如果有详细的token信息但没有总数，计算总数
+        """Ensure consistency of token data"""
+        # If there are detailed token information but no total, calculate the total
         if self.prompt_tokens is not None and self.completion_tokens is not None and self.tokens_used is None:
             self.tokens_used = self.prompt_tokens + self.completion_tokens
 
-        # 如果只有总数但没有详细信息，尝试估算（这种情况下无法准确分配）
+        # If only total is available but no detailed information, try to estimate (cannot accurately allocate in this case)
         elif self.tokens_used is not None and self.prompt_tokens is None and self.completion_tokens is None:
-            # 这种情况下我们无法准确分配，保持原样
+            # In this case we cannot accurately allocate, keep as is
             pass
 
 class LLMClientError(Exception):

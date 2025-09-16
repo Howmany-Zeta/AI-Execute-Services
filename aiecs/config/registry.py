@@ -2,7 +2,7 @@ AI_SERVICE_REGISTRY = {}
 
 def register_ai_service(mode: str, service: str):
     """
-    装饰器用于将某个类注册到服务中心中，以便通过 (mode, service) 查找调用。
+    Decorator for registering a class to the service center, so it can be found and called by (mode, service).
     """
     def decorator(cls):
         AI_SERVICE_REGISTRY[(mode, service)] = cls
@@ -11,7 +11,7 @@ def register_ai_service(mode: str, service: str):
 
 def get_ai_service(mode: str, service: str):
     """
-    根据 mode 和 service 名称查找注册的服务类。
+    Find registered service class based on mode and service name.
     """
     key = (mode, service)
     if key not in AI_SERVICE_REGISTRY:

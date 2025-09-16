@@ -41,6 +41,6 @@ __all__ = [
 ]
 
 # Version information
-__version__ = "2.0.0"
+__version__ = "1.0.0"
 __author__ = "Python Middleware Team"
 __description__ = "Core interfaces and abstractions for the middleware architecture"

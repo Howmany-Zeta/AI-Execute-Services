@@ -1,5 +1,5 @@
 """
-ContentEngine: Advanced Context and Session Management Engine
+ContextEngine: Advanced Context and Session Management Engine
 
 This engine extends TaskContext capabilities to provide comprehensive
 session management, conversation tracking, and persistent storage for BaseAIService.
@@ -24,6 +24,9 @@ from contextlib import asynccontextmanager
 
 # Import TaskContext for base functionality
 from app.domain.task.task_context import TaskContext, ContextUpdate
+
+# Import core storage interfaces
+from app.core.interface.storage_interface import IStorageBackend, ICheckpointerBackend
 
 # Redis client import - use existing infrastructure
 try:
@@ -88,17 +91,20 @@ class ConversationMessage:
         return cls(**data)
 
 
-class ContentEngine:
+class ContextEngine(IStorageBackend, ICheckpointerBackend):
     """
     Advanced Context and Session Management Engine.
 
-    Extends TaskContext capabilities to provide comprehensive session management
+    Implements core storage interfaces to provide comprehensive session management
     with Redis backend storage for BaseAIService and BaseServiceCheckpointer.
+
+    This implementation follows the middleware's core interface pattern,
+    enabling dependency inversion and clean architecture.
     """
 
     def __init__(self, use_existing_redis: bool = True):
         """
-        Initialize ContentEngine.
+        Initialize ContextEngine.
 
         Args:
             use_existing_redis: Whether to use the existing Redis client from infrastructure
@@ -125,7 +131,7 @@ class ContentEngine:
             "total_checkpoints": 0
         }
 
-        logger.info("ContentEngine initialized")
+        logger.info("ContextEngine initialized")
 
     async def initialize(self) -> bool:
         """Initialize Redis connection and validate setup."""
@@ -135,13 +141,21 @@ class ContentEngine:
 
         try:
             if self.use_existing_redis and get_redis_client:
+                # First ensure Redis client is initialized
+                from app.infrastructure.persistence.redis_client import initialize_redis_client
+                try:
+                    await initialize_redis_client()
+                except Exception as init_error:
+                    logger.warning(f"Failed to initialize Redis client: {init_error}")
+                    # Fall through to direct connection attempt
+
                 # Use existing Redis client from infrastructure
                 redis_client_instance = await get_redis_client()
                 self.redis_client = await redis_client_instance.get_client()
 
                 # Test connection
                 await self.redis_client.ping()
-                logger.info("ContentEngine connected to existing Redis client successfully")
+                logger.info("ContextEngine connected to existing Redis client successfully")
                 return True
             else:
                 # Fallback to direct Redis connection (for testing or standalone use)
@@ -156,7 +170,7 @@ class ContentEngine:
 
                 # Test connection
                 await self.redis_client.ping()
-                logger.info("ContentEngine connected to Redis directly")
+                logger.info("ContextEngine connected to Redis directly")
                 return True
 
         except Exception as e:
@@ -328,10 +342,12 @@ class ContentEngine:
                     -limit,
                     -1
                 )
-                return [
+                # Since lpush adds to the beginning, we need to reverse to get chronological order
+                messages = [
                     ConversationMessage.from_dict(json.loads(msg))
-                    for msg in messages_data
+                    for msg in reversed(messages_data)
                 ]
+                return messages
             except Exception as e:
                 logger.error(f"Failed to get conversation from Redis: {e}")
 
@@ -668,3 +684,299 @@ class ContentEngine:
                 health["status"] = "warning"
 
         return health
+
+    # ==================== ICheckpointerBackend Implementation ====================
+
+    async def put_checkpoint(
+        self,
+        thread_id: str,
+        checkpoint_id: str,
+        checkpoint_data: Dict[str, Any],
+        metadata: Dict[str, Any] = None
+    ) -> bool:
+        """Store a checkpoint for LangGraph workflows (ICheckpointerBackend interface)."""
+        return await self.store_checkpoint(thread_id, checkpoint_id, checkpoint_data, metadata)
+
+    async def put_writes(
+        self,
+        thread_id: str,
+        checkpoint_id: str,
+        task_id: str,
+        writes_data: List[tuple]
+    ) -> bool:
+        """Store intermediate writes for a checkpoint (ICheckpointerBackend interface)."""
+        writes_key = f"writes:{thread_id}:{checkpoint_id}:{task_id}"
+        writes_payload = {
+            "thread_id": thread_id,
+            "checkpoint_id": checkpoint_id,
+            "task_id": task_id,
+            "writes": writes_data,
+            "created_at": datetime.utcnow().isoformat()
+        }
+
+        if self.redis_client:
+            try:
+                await self.redis_client.hset(
+                    f"checkpoint_writes:{thread_id}",
+                    f"{checkpoint_id}:{task_id}",
+                    json.dumps(writes_payload)
+                )
+                await self.redis_client.expire(
+                    f"checkpoint_writes:{thread_id}",
+                    self.checkpoint_ttl
+                )
+                return True
+            except Exception as e:
+                logger.error(f"Failed to store writes to Redis: {e}")
+
+        # Fallback to memory
+        self._memory_checkpoints[writes_key] = writes_payload
+        return True
+
+    async def get_writes(
+        self,
+        thread_id: str,
+        checkpoint_id: str
+    ) -> List[tuple]:
+        """Get intermediate writes for a checkpoint (ICheckpointerBackend interface)."""
+        if self.redis_client:
+            try:
+                writes_data = await self.redis_client.hgetall(f"checkpoint_writes:{thread_id}")
+                writes = []
+                for key, data in writes_data.items():
+                    if key.startswith(f"{checkpoint_id}:"):
+                        payload = json.loads(data)
+                        writes.extend(payload.get("writes", []))
+                return writes
+            except Exception as e:
+                logger.error(f"Failed to get writes from Redis: {e}")
+
+        # Fallback to memory
+        writes = []
+        writes_prefix = f"writes:{thread_id}:{checkpoint_id}:"
+        for key, payload in self._memory_checkpoints.items():
+            if key.startswith(writes_prefix):
+                writes.extend(payload.get("writes", []))
+        return writes
+
+    # ==================== ITaskContextStorage Implementation ====================
+
+    async def store_task_context(self, session_id: str, context: Any) -> bool:
+        """Store TaskContext for a session (ITaskContextStorage interface)."""
+        return await self._store_task_context(session_id, context)
+
+    # ==================== Agent Communication and Conversation Isolation ====================
+
+    async def create_conversation_session(
+        self,
+        session_id: str,
+        participants: List[Dict[str, Any]],
+        session_type: str,
+        metadata: Dict[str, Any] = None
+    ) -> str:
+        """
+        Create an isolated conversation session between participants.
+
+        Args:
+            session_id: Base session ID
+            participants: List of participant dictionaries with id, type, role
+            session_type: Type of conversation ('user_to_mc', 'mc_to_agent', 'agent_to_agent', 'user_to_agent')
+            metadata: Additional session metadata
+
+        Returns:
+            Generated session key for conversation isolation
+        """
+        from .conversation_models import ConversationSession, ConversationParticipant
+
+        # Create participant objects
+        participant_objects = [
+            ConversationParticipant(
+                participant_id=p.get('id'),
+                participant_type=p.get('type'),
+                participant_role=p.get('role'),
+                metadata=p.get('metadata', {})
+            )
+            for p in participants
+        ]
+
+        # Create conversation session
+        conversation_session = ConversationSession(
+            session_id=session_id,
+            participants=participant_objects,
+            session_type=session_type,
+            created_at=datetime.utcnow(),
+            last_activity=datetime.utcnow(),
+            metadata=metadata or {}
+        )
+
+        # Generate unique session key
+        session_key = conversation_session.generate_session_key()
+
+        # Store conversation session metadata
+        await self._store_conversation_session(session_key, conversation_session)
+
+        logger.info(f"Created conversation session: {session_key} (type: {session_type})")
+        return session_key
+
+    async def add_agent_communication_message(
+        self,
+        session_key: str,
+        sender_id: str,
+        sender_type: str,
+        sender_role: Optional[str],
+        recipient_id: str,
+        recipient_type: str,
+        recipient_role: Optional[str],
+        content: str,
+        message_type: str = "communication",
+        metadata: Dict[str, Any] = None
+    ) -> bool:
+        """
+        Add a message to an agent communication session.
+
+        Args:
+            session_key: Isolated session key
+            sender_id: ID of the sender
+            sender_type: Type of sender ('master_controller', 'agent', 'user')
+            sender_role: Role of sender (for agents)
+            recipient_id: ID of the recipient
+            recipient_type: Type of recipient
+            recipient_role: Role of recipient (for agents)
+            content: Message content
+            message_type: Type of message
+            metadata: Additional message metadata
+
+        Returns:
+            Success status
+        """
+        from .conversation_models import AgentCommunicationMessage
+
+        # Create agent communication message
+        message = AgentCommunicationMessage(
+            message_id=str(uuid.uuid4()),
+            session_key=session_key,
+            sender_id=sender_id,
+            sender_type=sender_type,
+            sender_role=sender_role,
+            recipient_id=recipient_id,
+            recipient_type=recipient_type,
+            recipient_role=recipient_role,
+            content=content,
+            message_type=message_type,
+            timestamp=datetime.utcnow(),
+            metadata=metadata or {}
+        )
+
+        # Convert to conversation message format and store
+        conv_message_dict = message.to_conversation_message_dict()
+
+        # Store using existing conversation message infrastructure
+        await self.add_conversation_message(
+            session_id=session_key,
+            role=conv_message_dict["role"],
+            content=conv_message_dict["content"],
+            metadata=conv_message_dict["metadata"]
+        )
+
+        # Update session activity
+        await self._update_conversation_session_activity(session_key)
+
+        logger.debug(f"Added agent communication message to session {session_key}")
+        return True
+
+    async def get_agent_conversation_history(
+        self,
+        session_key: str,
+        limit: int = 50,
+        message_types: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get conversation history for an agent communication session.
+
+        Args:
+            session_key: Isolated session key
+            limit: Maximum number of messages to retrieve
+            message_types: Filter by message types
+
+        Returns:
+            List of conversation messages
+        """
+        # Get conversation history using existing infrastructure
+        messages = await self.get_conversation_history(session_key, limit)
+
+        # Filter by message types if specified
+        if message_types:
+            filtered_messages = []
+            for msg in messages:
+                if hasattr(msg, 'to_dict'):
+                    msg_dict = msg.to_dict()
+                else:
+                    msg_dict = msg
+
+                msg_metadata = msg_dict.get('metadata', {})
+                msg_type = msg_metadata.get('message_type', 'communication')
+
+                if msg_type in message_types:
+                    filtered_messages.append(msg_dict)
+
+            return filtered_messages
+
+        # Convert messages to dict format
+        return [msg.to_dict() if hasattr(msg, 'to_dict') else msg for msg in messages]
+
+    async def _store_conversation_session(self, session_key: str, conversation_session) -> None:
+        """Store conversation session metadata."""
+        session_data = {
+            "session_id": conversation_session.session_id,
+            "participants": [
+                {
+                    "participant_id": p.participant_id,
+                    "participant_type": p.participant_type,
+                    "participant_role": p.participant_role,
+                    "metadata": p.metadata
+                }
+                for p in conversation_session.participants
+            ],
+            "session_type": conversation_session.session_type,
+            "created_at": conversation_session.created_at.isoformat(),
+            "last_activity": conversation_session.last_activity.isoformat(),
+            "metadata": conversation_session.metadata
+        }
+
+        if self.redis_client:
+            try:
+                await self.redis_client.hset(
+                    "conversation_sessions",
+                    session_key,
+                    json.dumps(session_data)
+                )
+                await self.redis_client.expire("conversation_sessions", self.session_ttl)
+                return
+            except Exception as e:
+                logger.error(f"Failed to store conversation session to Redis: {e}")
+
+        # Fallback to memory (extend memory storage)
+        if not hasattr(self, '_memory_conversation_sessions'):
+            self._memory_conversation_sessions = {}
+        self._memory_conversation_sessions[session_key] = session_data
+
+    async def _update_conversation_session_activity(self, session_key: str) -> None:
+        """Update last activity timestamp for a conversation session."""
+        if self.redis_client:
+            try:
+                session_data = await self.redis_client.hget("conversation_sessions", session_key)
+                if session_data:
+                    session_dict = json.loads(session_data)
+                    session_dict["last_activity"] = datetime.utcnow().isoformat()
+                    await self.redis_client.hset(
+                        "conversation_sessions",
+                        session_key,
+                        json.dumps(session_dict)
+                    )
+                return
+            except Exception as e:
+                logger.error(f"Failed to update conversation session activity in Redis: {e}")
+
+        # Fallback to memory
+        if hasattr(self, '_memory_conversation_sessions') and session_key in self._memory_conversation_sessions:
+            self._memory_conversation_sessions[session_key]["last_activity"] = datetime.utcnow().isoformat()

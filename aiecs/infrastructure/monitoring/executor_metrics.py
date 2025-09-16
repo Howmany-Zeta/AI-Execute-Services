@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 class ExecutorMetrics:
     """
-    专门处理执行器的性能监控和指标收集
+    Specialized handler for executor performance monitoring and metrics collection
     """
 
     def __init__(self, enable_metrics: bool = True, metrics_port: int = 8001):
@@ -20,7 +20,7 @@ class ExecutorMetrics:
             self._init_prometheus_metrics()
 
     def _init_prometheus_metrics(self):
-        """初始化 Prometheus 指标"""
+        """Initialize Prometheus metrics"""
         try:
             start_http_server(self.metrics_port)
             self.metrics = {
@@ -40,13 +40,13 @@ class ExecutorMetrics:
             self.metrics = {}
 
     def record_operation_latency(self, operation: str, duration: float):
-        """记录操作延迟"""
+        """Record operation latency"""
         if not self.enable_metrics or f"{operation}_latency" not in self.metrics:
             return
         self.metrics[f"{operation}_latency"].observe(duration)
 
     def record_operation_success(self, operation: str, labels: Optional[Dict[str, str]] = None):
-        """记录操作成功"""
+        """Record operation success"""
         if not self.enable_metrics or f"{operation}_success" not in self.metrics:
             return
         metric = self.metrics[f"{operation}_success"]
@@ -55,21 +55,21 @@ class ExecutorMetrics:
         metric.inc()
 
     def record_operation_failure(self, operation: str, error_type: str, labels: Optional[Dict[str, str]] = None):
-        """记录操作失败"""
+        """Record operation failure"""
         if not self.enable_metrics:
             return
-        # 可以添加失败指标
+        # Failure metrics can be added
         logger.error(f"Operation {operation} failed with error type: {error_type}")
 
     def record_retry(self, operation: str, attempt_number: int):
-        """记录重试"""
+        """Record retry"""
         if not self.enable_metrics or f"{operation}_retries" not in self.metrics:
             return
         if attempt_number > 1:
             self.metrics[f"{operation}_retries"].inc()
 
     def with_metrics(self, metric_name: str, labels: Optional[Dict[str, str]] = None):
-        """监控装饰器"""
+        """Monitoring decorator"""
         def decorator(func):
             @functools.wraps(func)
             async def wrapper(*args, **kwargs):
@@ -97,7 +97,7 @@ class ExecutorMetrics:
         return decorator
 
     def get_metrics_summary(self) -> Dict[str, Any]:
-        """获取指标摘要"""
+        """Get metrics summary"""
         if not self.enable_metrics:
             return {"metrics_enabled": False}
 

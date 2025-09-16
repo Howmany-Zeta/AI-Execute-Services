@@ -15,60 +15,60 @@ class DSLProcessor:
 
     def __init__(self, tracer=None):
         self.tracer = tracer
-        # 更新支持的条件模式，使用更严格的匹配
+        # Update supported condition patterns with stricter matching
         self.supported_conditions = [
             r"intent\.includes\('([^']+)'\)",
             r"context\.(\w+)\s*(==|!=|>|<|>=|<=)\s*(.+)",
             r"input\.(\w+)\s*(==|!=|>|<|>=|<=)\s*(.+)",
             r"result\[(\d+)\]\.(\w+)\s*(==|!=|>|<|>=|<=)\s*(.+)"
         ]
-        # 条件检查优先级顺序
+        # Condition check priority order
         self.condition_check_order = [
-            "AND",  # 逻辑AND操作
-            "OR",   # 逻辑OR操作
-            "intent.includes",  # 意图包含检查
-            "context",  # 上下文检查
-            "input",    # 输入检查
-            "result"    # 结果检查
+            "AND",  # Logical AND operation
+            "OR",   # Logical OR operation
+            "intent.includes",  # Intent inclusion check
+            "context",  # Context check
+            "input",    # Input check
+            "result"    # Result check
         ]
 
     def evaluate_condition(self, condition: str, intent_categories: List[str],
                           context: Dict[str, Any] = None, input_data: Dict[str, Any] = None,
                           results: List[TaskStepResult] = None) -> bool:
         """
-        评估条件表达式，支持多种条件类型
-        按照优化后的检查顺序：AND -> OR -> intent.includes -> context -> input -> result
+        Evaluate condition expression, supporting multiple condition types
+        Following optimized check order: AND -> OR -> intent.includes -> context -> input -> result
         """
         try:
-            # 1. 复合条件: 支持 AND (优先级最高)
+            # 1. Compound condition: support AND (highest priority)
             if " AND " in condition:
                 parts = condition.split(" AND ")
                 return all(self.evaluate_condition(part.strip(), intent_categories, context, input_data, results) for part in parts)
 
-            # 2. 复合条件: 支持 OR (第二优先级)
+            # 2. Compound condition: support OR (second priority)
             if " OR " in condition:
                 parts = condition.split(" OR ")
                 return any(self.evaluate_condition(part.strip(), intent_categories, context, input_data, results) for part in parts)
 
-            # 3. Intent 条件: intent.includes('category')
+            # 3. Intent condition: intent.includes('category')
             match = re.fullmatch(r"intent\.includes\('([^']+)'\)", condition)
             if match:
                 category = match.group(1)
                 return category in intent_categories
 
-            # 4. Context 条件: context.field == value
+            # 4. Context condition: context.field == value
             match = re.fullmatch(r"context\.(\w+)\s*(==|!=|>|<|>=|<=)\s*(.+)", condition)
             if match and context:
                 field, operator, value = match.groups()
                 return self._evaluate_comparison(context.get(field), operator, self._parse_value(value))
 
-            # 5. Input 条件: input.field == value
+            # 5. Input condition: input.field == value
             match = re.fullmatch(r"input\.(\w+)\s*(==|!=|>|<|>=|<=)\s*(.+)", condition)
             if match and input_data:
                 field, operator, value = match.groups()
                 return self._evaluate_comparison(input_data.get(field), operator, self._parse_value(value))
 
-            # 6. Result 条件: result[0].field == value
+            # 6. Result condition: result[0].field == value
             match = re.fullmatch(r"result\[(\d+)\]\.(\w+)\s*(==|!=|>|<|>=|<=)\s*(.+)", condition)
             if match and results:
                 index, field, operator, value = match.groups()
@@ -84,7 +84,7 @@ class DSLProcessor:
             raise ValueError(f"Failed to evaluate condition '{condition}': {e}")
 
     def _evaluate_comparison(self, left_value: Any, operator: str, right_value: Any) -> bool:
-        """评估比较操作"""
+        """Evaluate comparison operation"""
         try:
             if operator == "==":
                 return left_value == right_value
@@ -101,26 +101,26 @@ class DSLProcessor:
             else:
                 raise ValueError(f"Unsupported operator: {operator}")
         except TypeError:
-            # 类型不匹配时返回 False
+            # Return False when types don't match
             return False
 
     def _parse_value(self, value_str: str) -> Any:
-        """解析值字符串为适当的类型"""
+        """Parse value string to appropriate type"""
         value_str = value_str.strip()
 
-        # 字符串值
+        # String value
         if value_str.startswith('"') and value_str.endswith('"'):
             return value_str[1:-1]
         if value_str.startswith("'") and value_str.endswith("'"):
             return value_str[1:-1]
 
-        # 布尔值
+        # Boolean value
         if value_str.lower() == "true":
             return True
         if value_str.lower() == "false":
             return False
 
-        # 数字值
+        # Numeric value
         try:
             if "." in value_str:
                 return float(value_str)
@@ -129,11 +129,11 @@ class DSLProcessor:
         except ValueError:
             pass
 
-        # 默认返回字符串
+        # Default return string
         return value_str
 
     def validate_condition_syntax(self, condition: str) -> bool:
-        """验证条件语法的有效性"""
+        """Validate condition syntax validity"""
         if not condition or not isinstance(condition, str):
             return False
 
@@ -141,12 +141,12 @@ class DSLProcessor:
         if not condition:
             return False
 
-        # 检查是否匹配任何支持的条件模式
+        # Check if matches any supported condition pattern
         for pattern in self.supported_conditions:
             if re.fullmatch(pattern, condition):
                 return True
 
-        # 检查复合条件
+        # Check compound conditions
         if " AND " in condition or " OR " in condition:
             return True
 
@@ -156,7 +156,7 @@ class DSLProcessor:
                               context: Dict, execute_single_task: Callable, execute_batch_task: Callable,
                               results: List[TaskStepResult] = None) -> TaskStepResult:
         """
-        执行 DSL 步骤，基于步骤类型 (if, parallel, task, sequence)
+        Execute DSL step based on step type (if, parallel, task, sequence)
         """
         span = self.tracer.start_span("execute_dsl_step") if self.tracer else None
         if span:
@@ -196,7 +196,7 @@ class DSLProcessor:
     async def _handle_if_step(self, step: Dict, intent_categories: List[str], input_data: Dict,
                              context: Dict, execute_single_task: Callable, execute_batch_task: Callable,
                              span=None, results: List[TaskStepResult] = None) -> TaskStepResult:
-        """处理条件 'if' 步骤"""
+        """Handle conditional 'if' step"""
         condition = step["if"]
         then_steps = step["then"]
         else_steps = step.get("else", [])
@@ -270,7 +270,7 @@ class DSLProcessor:
 
     async def _handle_parallel_step(self, step: Dict, input_data: Dict, context: Dict,
                                    execute_batch_task: Callable, span=None) -> TaskStepResult:
-        """处理并行任务执行"""
+        """Handle parallel task execution"""
         task_names = step["parallel"]
         if span:
             span.set_tag("parallel_tasks", task_names)
@@ -289,7 +289,7 @@ class DSLProcessor:
     async def _handle_sequence_step(self, step: Dict, intent_categories: List[str], input_data: Dict,
                                    context: Dict, execute_single_task: Callable, execute_batch_task: Callable,
                                    span=None, results: List[TaskStepResult] = None) -> TaskStepResult:
-        """处理顺序执行步骤"""
+        """Handle sequential execution steps"""
         sequence_steps = step["sequence"]
         if span:
             span.set_tag("sequence_length", len(sequence_steps))
@@ -302,7 +302,7 @@ class DSLProcessor:
             if results is not None:
                 results.append(result)
 
-            # 如果步骤失败且设置了 stop_on_failure，则停止执行
+            # If step fails and stop_on_failure is set, stop execution
             if not result.completed and step.get("stop_on_failure", False):
                 break
 
@@ -316,7 +316,7 @@ class DSLProcessor:
 
     async def _handle_task_step(self, step: Dict, input_data: Dict, context: Dict,
                                execute_single_task: Callable, span=None) -> TaskStepResult:
-        """处理单个任务执行"""
+        """Handle single task execution"""
         task_name = step["task"]
         task_params = step.get("params", {})
 
@@ -324,7 +324,7 @@ class DSLProcessor:
             span.set_tag("task_name", task_name)
 
         try:
-            # 合并任务参数和输入数据
+            # Merge task parameters and input data
             merged_input = {**input_data, **task_params}
             result = await execute_single_task(task_name, merged_input, context)
 
@@ -355,7 +355,7 @@ class DSLProcessor:
     async def _handle_loop_step(self, step: Dict, intent_categories: List[str], input_data: Dict,
                                context: Dict, execute_single_task: Callable, execute_batch_task: Callable,
                                span=None, results: List[TaskStepResult] = None) -> TaskStepResult:
-        """处理循环步骤"""
+        """Handle loop step"""
         loop_config = step["loop"]
         loop_steps = loop_config["steps"]
         condition = loop_config.get("while")
@@ -369,11 +369,11 @@ class DSLProcessor:
         iteration = 0
 
         while iteration < max_iterations:
-            # 检查循环条件
+            # Check loop condition
             if condition and not self.evaluate_condition(condition, intent_categories, context, input_data, results):
                 break
 
-            # 执行循环体
+            # Execute loop body
             iteration_step_results = []
             for sub_step in loop_steps:
                 result = await self.execute_dsl_step(sub_step, intent_categories, input_data, context,
@@ -385,7 +385,7 @@ class DSLProcessor:
             iteration_results.append(iteration_step_results)
             iteration += 1
 
-            # 如果没有条件，只执行一次
+            # If no condition, execute only once
             if not condition:
                 break
 
@@ -399,7 +399,7 @@ class DSLProcessor:
         )
 
     def validate_dsl_step(self, step: Dict) -> List[str]:
-        """验证 DSL 步骤的格式"""
+        """Validate DSL step format"""
         errors = []
 
         if not isinstance(step, dict):
@@ -414,7 +414,7 @@ class DSLProcessor:
         elif len(found_types) > 1:
             errors.append(f"Step can only contain one type, found: {found_types}")
 
-        # 验证具体步骤类型
+        # Validate specific step types
         if "if" in step:
             if "then" not in step:
                 errors.append("'if' step must have 'then' clause")
@@ -437,7 +437,7 @@ class DSLProcessor:
         return errors
 
     def get_supported_features(self) -> Dict[str, Any]:
-        """获取支持的 DSL 功能"""
+        """Get supported DSL features"""
         return {
             "step_types": ["if", "parallel", "sequence", "task", "loop"],
             "condition_types": [
@@ -452,9 +452,9 @@ class DSLProcessor:
             "condition_check_order": self.condition_check_order,
             "regex_matching": "fullmatch (exact matching)",
             "improvements": [
-                "使用 re.fullmatch 替代 re.match 提供更严格的匹配",
-                "优化条件检查顺序：AND -> OR -> intent.includes -> context -> input -> result",
-                "增强值解析的健壮性，支持 null 值",
-                "添加条件语法验证方法"
+                "Use re.fullmatch instead of re.match for stricter matching",
+                "Optimize condition check order: AND -> OR -> intent.includes -> context -> input -> result",
+                "Enhance value parsing robustness, support null values",
+                "Add condition syntax validation method"
             ]
         }

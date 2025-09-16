@@ -12,17 +12,17 @@ logger = logging.getLogger(__name__)
 
 class ExecutionUtils:
     """
-    提供执行层的公共工具集，包括缓存和重试逻辑。
+    Provides common utility set for execution layer, including caching and retry logic.
     """
     def __init__(self, cache_size: int = 100, cache_ttl: int = 3600, retry_attempts: int = 3, retry_backoff: float = 1.0):
         """
-        初始化执行工具类。
+        Initialize execution utility class.
         
         Args:
-            cache_size (int): 缓存的最大条目数
-            cache_ttl (int): 缓存的生存时间（秒）
-            retry_attempts (int): 重试尝试次数
-            retry_backoff (float): 重试的退避因子
+            cache_size (int): Maximum number of cache entries
+            cache_ttl (int): Cache time-to-live (seconds)
+            retry_attempts (int): Number of retry attempts
+            retry_backoff (float): Retry backoff factor
         """
         self.cache_size = cache_size
         self.cache_ttl = cache_ttl
@@ -34,17 +34,17 @@ class ExecutionUtils:
         
     def generate_cache_key(self, func_name: str, user_id: str, task_id: str, args: tuple, kwargs: Dict[str, Any]) -> str:
         """
-        生成基于上下文的缓存键，包括用户ID、任务ID、函数名和参数。
+        Generate context-based cache key including user ID, task ID, function name and parameters.
         
         Args:
-            func_name (str): 函数名称
-            user_id (str): 用户ID
-            task_id (str): 任务ID
-            args (tuple): 位置参数
-            kwargs (Dict[str, Any]): 关键字参数
+            func_name (str): Function name
+            user_id (str): User ID
+            task_id (str): Task ID
+            args (tuple): Positional arguments
+            kwargs (Dict[str, Any]): Keyword arguments
             
         Returns:
-            str: 缓存键
+            str: Cache key
         """
         key_dict = {
             'func': func_name,
@@ -61,13 +61,13 @@ class ExecutionUtils:
 
     def get_from_cache(self, cache_key: str) -> Optional[Any]:
         """
-        从缓存中获取结果，如果存在且未过期。
+        Get result from cache if it exists and is not expired.
         
         Args:
-            cache_key (str): 缓存键
+            cache_key (str): Cache key
             
         Returns:
-            Optional[Any]: 缓存结果或None
+            Optional[Any]: Cached result or None
         """
         if not self._cache:
             return None
@@ -82,12 +82,12 @@ class ExecutionUtils:
 
     def add_to_cache(self, cache_key: str, result: Any, ttl: Optional[int] = None) -> None:
         """
-        将结果添加到缓存中，可选设置生存时间。
+        Add result to cache with optional time-to-live setting.
         
         Args:
-            cache_key (str): 缓存键
-            result (Any): 缓存结果
-            ttl (Optional[int]): 生存时间（秒）
+            cache_key (str): Cache key
+            result (Any): Cached result
+            ttl (Optional[int]): Time-to-live (seconds)
         """
         if not self._cache:
             return
@@ -99,13 +99,13 @@ class ExecutionUtils:
 
     def create_retry_strategy(self, metric_name: Optional[str] = None) -> Callable:
         """
-        创建重试策略，适用于执行操作。
+        Create retry strategy for execution operations.
         
         Args:
-            metric_name (Optional[str]): 指标名称，用于日志记录
+            metric_name (Optional[str]): Metric name for logging
             
         Returns:
-            Callable: 重试装饰器
+            Callable: Retry decorator
         """
         def after_retry(retry_state):
             logger.warning(f"Retry {retry_state.attempt_number}/{self.retry_attempts} for {metric_name or 'operation'} after {retry_state.idle_for}s: {retry_state.outcome.exception()}")
@@ -119,13 +119,13 @@ class ExecutionUtils:
     @contextmanager
     def timeout_context(self, seconds: int):
         """
-        上下文管理器，用于强制执行操作超时。
+        Context manager for enforcing operation timeout.
         
         Args:
-            seconds (int): 超时时间（秒）
+            seconds (int): Timeout duration (seconds)
             
         Raises:
-            TimeoutError: 如果操作超过超时时间
+            TimeoutError: If operation exceeds timeout duration
         """
         loop = asyncio.get_event_loop()
         future = asyncio.Future()
@@ -137,19 +137,19 @@ class ExecutionUtils:
 
     async def execute_with_retry_and_timeout(self, func: Callable, timeout: int, *args, **kwargs) -> Any:
         """
-        使用重试和超时机制执行操作。
+        Execute operation with retry and timeout mechanism.
         
         Args:
-            func (Callable): 要执行的函数
-            timeout (int): 超时时间（秒）
-            *args: 位置参数
-            **kwargs: 关键字参数
+            func (Callable): Function to execute
+            timeout (int): Timeout duration (seconds)
+            *args: Positional arguments
+            **kwargs: Keyword arguments
             
         Returns:
-            Any: 操作结果
+            Any: Operation result
             
         Raises:
-            OperationError: 如果所有重试尝试失败
+            OperationError: If all retry attempts fail
         """
         retry_strategy = self.create_retry_strategy(func.__name__)
         try:
