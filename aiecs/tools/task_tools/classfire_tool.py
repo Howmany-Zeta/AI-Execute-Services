@@ -10,33 +10,27 @@ from pydantic import BaseModel, Field, field_validator, ValidationError, ConfigD
 
 # Lazy imports for heavy dependencies
 rake_nltk = None
-pke = None
 spacy = None
 
 def _init_heavy_dependencies():
     """Initialize heavy dependencies when actually needed"""
-    global rake_nltk, pke, spacy
+    global rake_nltk, spacy
     
     if rake_nltk is None:
         try:
             import rake_nltk as _rake_nltk
             rake_nltk = _rake_nltk
         except ImportError:
-            logger.error("rake_nltk not available")
-            
-    if pke is None:
-        try:
-            import pke as _pke
-            pke = _pke
-        except ImportError:
-            logger.warning("pke not available (optional)")
+            import logging
+            logging.getLogger(__name__).error("rake_nltk not available")
             
     if spacy is None:
         try:
             import spacy as _spacy
             spacy = _spacy
         except ImportError:
-            logger.warning("spacy not available (optional)")
+            import logging
+            logging.getLogger(__name__).warning("spacy not available (optional)")
 
 from aiecs.tools import register_tool
 from aiecs.tools.base_tool import BaseTool
@@ -123,10 +117,6 @@ class ClassifierTool(BaseTool):
         use_rake_for_english: bool = Field(
             default=True,
             description="Use RAKE for English phrase extraction"
-        )
-        use_pke_for_chinese: bool = Field(
-            default=True,
-            description="Use PKE for Chinese phrase extraction"
         )
 
         model_config = ConfigDict(env_prefix="CLASSIFIER_TOOL_")
@@ -406,7 +396,13 @@ class ClassifierTool(BaseTool):
             List[str]: Extracted phrases.
         """
         try:
-            rake = Rake()
+            # Initialize heavy dependencies if needed
+            _init_heavy_dependencies()
+            
+            if rake_nltk is None:
+                raise ImportError("rake_nltk not available")
+                
+            rake = rake_nltk.Rake()
             rake.extract_keywords_from_text(text)
             phrases = rake.get_ranked_phrases()[:top_k]
             return phrases
@@ -764,15 +760,52 @@ class ClassifierTool(BaseTool):
             raise ValueError("Rate limit exceeded. Please try again later.")
 
         language = language or self._detect_language(text)
-        model = "facebook/bart-large-cnn" if language == 'en' else "bert-base-chinese"
+        # Use appropriate models for summarization
+        if language == 'en':
+            model = "facebook/bart-large-cnn"
+        else:
+            # For Chinese and other languages, use a multilingual model
+            # For now, use t5-base, but consider using a Chinese-specific model in the future
+            model = "t5-base"
 
         pipe = await asyncio.get_event_loop().run_in_executor(
             None, self._get_hf_pipeline, "summarization", model
         )
 
-        result = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: pipe(text, max_length=max_length, min_length=30, do_sample=False)[0]['summary_text']
-        )
+        # Different models use different parameter names for length control
+        if model.startswith("t5"):
+            # T5 models use max_new_tokens instead of max_length
+            # For Chinese text, use a more conservative approach
+            if language == 'zh':
+                # Chinese text: use character count and be more conservative
+                input_chars = len(text)
+                max_new_tokens = min(max_length, max(input_chars // 4, 5))
+                min_new_tokens = 2
+            else:
+                # English text: use word count
+                input_words = len(text.split())
+                max_new_tokens = min(max_length, max(input_words // 2, 10))
+                min_new_tokens = 5
+            
+            result = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: pipe(text, max_new_tokens=max_new_tokens, min_new_tokens=min_new_tokens, do_sample=False)[0]['summary_text']
+            )
+        else:
+            # BART and other models use max_length
+            if language == 'zh':
+                # Chinese text: use character count
+                input_chars = len(text)
+                max_len = min(max_length, max(input_chars // 4, 10))
+                min_len = 5
+            else:
+                # English text: use word count
+                input_words = len(text.split())
+                max_len = min(max_length, max(input_words // 2, 20))
+                min_len = 10
+            
+            result = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: pipe(text, max_length=max_len, min_length=min_len, do_sample=False)[0]['summary_text']
+            )
 
         return result
 

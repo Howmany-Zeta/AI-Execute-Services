@@ -53,71 +53,104 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    # Core dependencies - Web framework and API
-    "fastapi (>=0.115.12,<0.116.0)",                # Web framework for building APIs
-    "httpx (>=0.28.1,<0.29.0)",                     # HTTP client for Python
-    "uvicorn[standard] (>=0.34.2,<0.35.0)",         # ASGI server for FastAPI and websockets
-    "python-dotenv (>=1.1.0,<2.0.0)",               # Environment variable management
+    # =============================================================================
+    # Core Web Framework and API Dependencies
+    # =============================================================================
+    "fastapi (>=0.115.12,<0.116.0)",                # Modern, fast web framework for building APIs
+    "httpx (>=0.28.1,<0.29.0)",                     # Async HTTP client for Python
+    "uvicorn[standard] (>=0.34.2,<0.35.0)",         # ASGI server for FastAPI and WebSocket support
+    "python-dotenv (>=1.1.0,<2.0.0)",               # Environment variable management from .env files
     "pydantic (>=2.11.5,<3.0.0)",                   # Data validation and settings management
-    "pydantic-settings (>=2.9.1,<3.0.0)",           # Settings management for Pydantic
-    "cachetools (>=5.0.0,<6.0.0)",                  # Caching utilities
-    # Messaging and task queue
-    "celery (>=5.5.2,<6.0.0)",                      # Distributed task queue
-    "redis (>=6.2.0,<7.0.0)",                       # In-memory data structure store, used as broker/backend
-    "python-socketio (>=5.13.0,<6.0.0)",            # WebSocket implementation
-    "python-engineio (>=4.12.1,<5.0.0)",            # Engine.IO implementation
-    "tenacity (>=9.1.2,<10.0.0)",                   # Retry library with exponential backoff
-    # LLM and AI services
-    "openai (>=1.68.2,<1.76.0)",                    # OpenAI API client
-    "google-cloud-aiplatform (>=1.71.1,<2.0.0)",    # Google Cloud AI Platform with Vertex AI included
-    # NLP and text processing
-    "spacy (>=3.8.7,<4.0.0)",                       # Natural language processing
+    "pydantic-settings (>=2.9.1,<3.0.0)",           # Settings management for Pydantic v2
+    "cachetools (>=5.0.0,<6.0.0)",                  # Caching utilities and decorators
+    "typing-extensions (>=4.13.2,<5.0.0)",          # Extended typing capabilities for older Python versions
+    "aiofiles (>=24.1.0,<25.0.0)",                  # Async file operations support
+
+    # =============================================================================
+    # Task Queue and Messaging
+    # =============================================================================
+    "celery (>=5.5.2,<6.0.0)",                      # Distributed task queue for background processing
+    "redis (>=6.2.0,<7.0.0)",                       # In-memory data store used as Celery broker/backend
+    "python-socketio (>=5.13.0,<6.0.0)",            # WebSocket implementation for real-time communication
+    "python-engineio (>=4.12.1,<5.0.0)",            # Engine.IO implementation for Socket.IO
+    "tenacity (>=9.1.2,<10.0.0)",                   # Retry library with exponential backoff strategies
+    "flower (>=2.0.1,<3.0.0)",                      # Web-based monitoring tool for Celery
+
+    # =============================================================================
+    # AI and LLM Services
+    # =============================================================================
+    "openai (>=1.68.2,<1.76.0)",                    # OpenAI API client for GPT models
+    "google-cloud-aiplatform (>=1.71.1,<2.0.0)",    # Google Cloud AI Platform with Vertex AI
+    "langchain (>=0.3.26,<0.4.0)",                  # Framework for developing LLM applications
+    "langgraph (>=0.5.3,<0.6.0)",                   # Graph-based state machine for LangChain
+    "weasel (==0.4.1)",                              # SpaCy's configuration system
+
+    # =============================================================================
+    # Natural Language Processing
+    # =============================================================================
+    "spacy (>=3.8.7,<4.0.0)",                       # Industrial-strength NLP library
     "rake-nltk (>=1.0.6,<2.0.0)",                   # Rapid Automatic Keyword Extraction
-    # Data processing and analysis
-    "numpy (>=2.2.6,<3.0.0)",                       # Numerical computing
-    "pandas (>=2.2.3,<3.0.0)",                      # Data analysis and manipulation
-    "scipy (>=1.15.3,<2.0.0)",                      # Scientific computing
+    # "transformers (>=4.56.1,<5.0.0)",             # Installation requirements are costly and temporarily disabled
+    # "torch (>=2.8.0,<3.0.0)",                     # Installation requirements are costly and temporarily disabled
+
+    # =============================================================================
+    # Data Processing and Analysis
+    # =============================================================================
+    "numpy (>=2.2.6,<3.0.0)",                       # Fundamental package for numerical computing
+    "pandas (>=2.2.3,<3.0.0)",                      # Data analysis and manipulation library
+    "scipy (>=1.15.3,<2.0.0)",                      # Scientific computing library
     "scikit-learn (>=1.5.0,<2.0.0)",                # Machine learning library
-    # Document processing
-    "pyyaml (>=6.0.2,<7.0.0)",                      # YAML parser and emitter
+    "statsmodels (>=0.14.4,<0.15.0)",               # Statistical models and tests
+    "pyreadstat (>=1.2.9,<2.0.0)",                  # Read/write SAS, SPSS, and Stata files
+    "tabulate (>=0.9.0,<0.10.0)",                   # Pretty-print tabular data
+
+    # =============================================================================
+    # Document Processing and Office Files
+    # =============================================================================
     "python-docx (>=1.1.2,<2.0.0)",                 # Microsoft Word document processing
     "python-pptx (>=1.0.2,<2.0.0)",                 # Microsoft PowerPoint document processing
-    "markdown (>=3.8,<4.0)",                        # Markdown parser
-    "bleach (>=6.2.0,<7.0.0)",                      # HTML sanitizing library
-    # File operations
-    "typing-extensions (>=4.13.2,<5.0.0)",          # Extended typing capabilities
-    # Visualization and reporting
-    "matplotlib (>=3.10.3,<4.0.0)",                 # Plotting library
-    "seaborn (>=0.13.2,<0.14.0)",                   # Statistical data visualization
-    "pyreadstat (>=1.2.9,<2.0.0)",                  # Read/write SAS, SPSS, and Stata files
-    "statsmodels (>=0.14.4,<0.15.0)",               # Statistical models
-    "jinja2 (>=3.1.6,<4.0.0)",                      # Template engine
-    # "weasyprint (>=65.1,<66.0)",                  # HTML to PDF converter - Temporarily disabled due to deployment complexity
-    # Web scraping and HTTP
-    "beautifulsoup4 (>=4.13.4,<5.0.0)",             # HTML/XML parser
-    "lxml (>=5.4.0,<6.0.0)",                        # XML and HTML processing
-    "playwright (>=1.52.0,<2.0.0)",                 # Browser automation library
-    "pytesseract (>=0.3.13,<0.4.0)",                # OCR (Optical Character Recognition) engine wrapper
-    "pillow (>=11.2.1,<12.0.0)",                    # Image processing library (PIL fork)
+    "openpyxl (>=3.1.5,<4.0.0)",                    # Excel file reading and writing
+    "pdfplumber (>=0.11.7,<0.12.0)",                # PDF text extraction and analysis
+    "pdfminer-six (==20250506)",                    # PDF parsing and text extraction
     "tika (>=2.6.0,<3.0.0)",                        # Content analysis toolkit for document parsing
-    # Database drivers
+
+    # =============================================================================
+    # Data Visualization and Reporting
+    # =============================================================================
+    "matplotlib (>=3.10.3,<4.0.0)",                 # Comprehensive plotting library
+    "seaborn (>=0.13.2,<0.14.0)",                   # Statistical data visualization
+    "jinja2 (>=3.1.6,<4.0.0)",                      # Template engine for report generation
+
+    # =============================================================================
+    # Web Scraping and Content Extraction
+    # =============================================================================
+    "beautifulsoup4 (>=4.13.4,<5.0.0)",             # HTML/XML parsing library
+    "lxml (>=5.4.0,<6.0.0)",                        # Fast XML and HTML processing
+    "playwright (>=1.52.0,<2.0.0)",                 # Browser automation for dynamic content
+    "pytesseract (>=0.3.13,<0.4.0)",                # OCR (Optical Character Recognition) wrapper
+    "pillow (>=11.2.1,<12.0.0)",                    # Image processing library (PIL fork)
+    "scrapy (>=2.13.3,<3.0.0)",                     # 
+
+    # =============================================================================
+    # Configuration and Data Formats
+    # =============================================================================
+    "pyyaml (>=6.0.2,<7.0.0)",                      # YAML parser and emitter
+    "markdown (>=3.8,<4.0)",                        # Markdown parser and converter
+    "bleach (>=6.2.0,<7.0.0)",                      # HTML sanitizing library
+
+    # =============================================================================
+    # Database and Storage
+    # =============================================================================
+    "sqlalchemy (>=2.0.41,<3.0.0)",                 # SQL toolkit and ORM
     "asyncpg (>=0.30.0,<1.0.0)",                    # PostgreSQL async driver
-    # Monitoring and metrics
+
+    # =============================================================================
+    # Monitoring, Metrics, and Observability
+    # =============================================================================
     "prometheus-client (>=0.21.1,<1.0.0)",          # Prometheus metrics client
-    # Distributed tracing
     "jaeger-client (>=4.8.0,<5.0.0)",               # Jaeger distributed tracing client
-    "opentracing (>=2.4.0,<3.0.0)",                  # OpenTracing API for distributed tracing
-    "sqlalchemy (>=2.0.41,<3.0.0)",
-    "flower (>=2.0.1,<3.0.0)",
-    "psutil (>=7.0.0,<8.0.0)",
-    "aiofiles (>=24.1.0,<25.0.0)",
-    "langchain (>=0.3.26,<0.4.0)",
-    "langgraph (>=0.5.3,<0.6.0)",
-    "weasel (==0.4.1)",
-    "pdfplumber (>=0.11.7,<0.12.0)",
-    "pdfminer-six (==20250506)",
-    "openpyxl (>=3.1.5,<4.0.0)",
-    "tabulate (>=0.9.0,<0.10.0)",
+    "opentracing (>=2.4.0,<3.0.0)",                 # OpenTracing API for distributed tracing
+    "psutil (>=7.0.0,<8.0.0)",                      # System and process monitoring utilities
 ]
 
 [project.urls]

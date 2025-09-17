@@ -228,7 +228,29 @@ class ResearchTool(BaseTool):
             effect_vals = [case['attrs'].get(effect, 0) for case in cases]
             if len(factor_vals) < 2:
                 return {'correlation': 0.0, 'pvalue': 1.0}
-            corr, pval = pearsonr(factor_vals, effect_vals)
+            
+            # Convert to numpy arrays to avoid PyTorch compatibility issues
+            import numpy as np
+            factor_array = np.array(factor_vals, dtype=np.float64)
+            effect_array = np.array(effect_vals, dtype=np.float64)
+            
+            # Calculate correlation using numpy if scipy fails
+            try:
+                corr, pval = pearsonr(factor_array, effect_array)
+            except (AttributeError, ImportError) as e:
+                # Fallback to numpy correlation calculation
+                self.logger.warning(f"scipy pearsonr failed ({e}), using numpy fallback")
+                corr = np.corrcoef(factor_array, effect_array)[0, 1]
+                # Simple p-value approximation (not statistically rigorous but functional)
+                n = len(factor_array)
+                if n <= 2:
+                    pval = 1.0
+                else:
+                    # Approximate p-value using t-distribution
+                    t_stat = corr * np.sqrt((n - 2) / (1 - corr**2 + 1e-10))
+                    from scipy.stats import t
+                    pval = 2 * (1 - t.cdf(abs(t_stat), n - 2))
+            
             return {'correlation': float(corr), 'pvalue': float(pval)}
         except Exception as e:
             raise FileOperationError(f"Failed to process mill_concomitant: {str(e)}")
