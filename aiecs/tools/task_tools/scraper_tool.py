@@ -131,7 +131,7 @@ class ScraperTool(BaseTool):
         self.settings = ScraperSettings()
         if config:
             try:
-                self.settings = self.settings.parse_obj({**self.settings.dict(), **config})
+                self.settings = self.settings.model_validate({**self.settings.model_dump(), **config})
             except ValidationError as e:
                 raise ValueError(f"Invalid settings: {e}")
         self.logger = logging.getLogger(__name__)
@@ -231,12 +231,12 @@ class ScraperTool(BaseTool):
         """
         try:
             headers = headers or {}
-            headers['User-Agent'] = self.settings.user_agent
+            if 'User-Agent' not in headers:
+                headers['User-Agent'] = self.settings.user_agent
             kwargs = {
                 'params': params,
                 'headers': headers,
                 'follow_redirects': allow_redirects,
-                'verify': verify_ssl if verify_ssl is not None else True,
             }
             if auth:
                 kwargs['auth'] = auth
@@ -248,15 +248,19 @@ class ScraperTool(BaseTool):
                 kwargs['data'] = data
 
             if async_mode:
-                async with httpx.AsyncClient() as client:
+                async with httpx.AsyncClient(verify=verify_ssl if verify_ssl is not None else True) as client:
                     method_fn = getattr(client, method.value)
                     resp = await method_fn(str(url), **kwargs)
             else:
-                with httpx.Client() as client:
+                with httpx.Client(verify=verify_ssl if verify_ssl is not None else True) as client:
                     method_fn = getattr(client, method.value)
                     resp = method_fn(str(url), **kwargs)
 
-            resp.raise_for_status()
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                raise HttpError(f"HTTP {e.response.status_code}: {e.response.reason_phrase} for {url}")
+            
             if len(resp.content) > self.settings.max_content_length:
                 raise HttpError(f"Response content too large: {len(resp.content)} bytes")
 
@@ -299,11 +303,14 @@ class ScraperTool(BaseTool):
             HttpError: If the request fails.
         """
         try:
+            import urllib.parse
+            import urllib.error
+            
             headers = headers or {}
-            headers['User-Agent'] = self.settings.user_agent
+            if 'User-Agent' not in headers:
+                headers['User-Agent'] = self.settings.user_agent
             data_bytes = None
             if data:
-                import urllib.parse
                 data_bytes = urllib.parse.urlencode(data).encode()
             req = urllib_request.Request(
                 str(url),
@@ -370,7 +377,7 @@ class ScraperTool(BaseTool):
             if engine == RenderEngine.PLAYWRIGHT:
                 if not self.settings.playwright_available:
                     raise RenderingError("Playwright is not available. Install with 'pip install playwright'")
-                result = self._render_with_playwright(url, wait_time, wait_selector, scroll_to_bottom, screenshot, screenshot_path)
+                result = await self._render_with_playwright(url, wait_time, wait_selector, scroll_to_bottom, screenshot, screenshot_path)
             else:
                 raise RenderingError(f"Unsupported rendering engine: {engine}. Only PLAYWRIGHT is supported.")
             if output_format and output_path:
@@ -380,32 +387,32 @@ class ScraperTool(BaseTool):
         except Exception as e:
             raise RenderingError(f"Failed to render page: {str(e)}")
 
-    def _render_with_playwright(self, url: str, wait_time: int, wait_selector: Optional[str], scroll_to_bottom: bool, screenshot: bool, screenshot_path: Optional[str]) -> Dict[str, Any]:
-        """Render a web page using Playwright."""
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as p:
-            browser = p.chromium.launch()
-            page = browser.new_page(
+    async def _render_with_playwright(self, url: str, wait_time: int, wait_selector: Optional[str], scroll_to_bottom: bool, screenshot: bool, screenshot_path: Optional[str]) -> Dict[str, Any]:
+        """Render a web page using Playwright with async API."""
+        from playwright.async_api import async_playwright
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
+            page = await browser.new_page(
                 user_agent=self.settings.user_agent,
                 viewport={'width': 1280, 'height': 800}
             )
             try:
-                page.goto(url)
+                await page.goto(url)
                 if wait_selector:
-                    page.wait_for_selector(wait_selector)
+                    await page.wait_for_selector(wait_selector)
                 else:
-                    page.wait_for_load_state('networkidle')
+                    await page.wait_for_load_state('networkidle')
                 if scroll_to_bottom:
-                    page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
-                    page.wait_for_timeout(1000)
+                    await page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
+                    await page.wait_for_timeout(1000)
                 screenshot_result = None
                 if screenshot:
                     screenshot_path = screenshot_path or os.path.join(self.settings.output_dir, f"screenshot_{int(time.time())}.png")
                     os.makedirs(os.path.dirname(os.path.abspath(screenshot_path)), exist_ok=True)
-                    page.screenshot(path=screenshot_path)
+                    await page.screenshot(path=screenshot_path)
                     screenshot_result = screenshot_path
-                html = page.content()
-                title = page.title()
+                html = await page.content()
+                title = await page.title()
                 result = {
                     'html': html,
                     'title': title,
@@ -414,7 +421,7 @@ class ScraperTool(BaseTool):
                 }
                 return result
             finally:
-                browser.close()
+                await browser.close()
 
 
     def crawl_scrapy(self, project_path: str, spider_name: str, output_path: str, spider_args: Optional[Dict[str, str]] = None, headers: Optional[Dict[str, str]] = None, output_format: Optional[OutputFormat] = None) -> Dict[str, Any]:
@@ -509,9 +516,15 @@ class ScraperTool(BaseTool):
                     if value is not None:
                         results.append(value)
                 elif extract_text:
-                    text = element.text_content().strip() if hasattr(element, 'text_content') else element.get_text().strip()
-                    if text:
-                        results.append(text)
+                    if hasattr(element, 'text_content') and callable(getattr(element, 'text_content')):
+                        # lxml element
+                        text = element.text_content()
+                    else:
+                        # BeautifulSoup element
+                        text = element.get_text()
+                    
+                    if text and text.strip():
+                        results.append(text.strip())
             return {
                 'selector': selector,
                 'selector_type': selector_type,
@@ -529,3 +542,7 @@ class ScraperTool(BaseTool):
     head = get_httpx
     options = get_httpx
     patch = get_httpx
+    
+    # Legacy method aliases
+    get_requests = get_httpx
+    get_aiohttp = get_httpx

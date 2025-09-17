@@ -18,6 +18,7 @@ def run_post_install():
     # Track installation results
     weasel_success = False
     nlp_success = False
+    dependency_check_success = False
     
     # Run weasel patch
     try:
@@ -46,17 +47,41 @@ def run_post_install():
         print(f"⚠️  Warning: Could not download NLP data automatically: {e}")
         print("You can run it manually later with: python -m aiecs.scripts.download_nlp_data")
     
+    # Run dependency check
+    try:
+        from aiecs.scripts.quick_dependency_check import QuickDependencyChecker
+        print("\n" + "="*60)
+        print("Checking system dependencies...")
+        print("="*60)
+        
+        checker = QuickDependencyChecker()
+        exit_code = checker.run_check()
+        
+        if exit_code == 0:
+            dependency_check_success = True
+            print("\n✅ All critical dependencies are available!")
+        else:
+            print("\n⚠️  Some dependencies are missing. See details above.")
+            print("You can run a full dependency check later with: aiecs-check-deps")
+        
+    except Exception as e:
+        print(f"⚠️  Warning: Could not run dependency check automatically: {e}")
+        print("You can run it manually later with: aiecs-check-deps")
+    
     # Summary
     print("\n" + "="*60)
     print("Post-installation Summary:")
-    print(f"  • Weasel patch: {'✅ Success' if weasel_success else '⚠️  Warning (manual action required)'}")
-    print(f"  • NLP data:     {'✅ Success' if nlp_success else '⚠️  Warning (manual action required)'}")
+    print(f"  • Weasel patch:      {'✅ Success' if weasel_success else '⚠️  Warning (manual action required)'}")
+    print(f"  • NLP data:          {'✅ Success' if nlp_success else '⚠️  Warning (manual action required)'}")
+    print(f"  • Dependency check:  {'✅ Success' if dependency_check_success else '⚠️  Warning (manual action required)'}")
     
-    if weasel_success and nlp_success:
+    if weasel_success and nlp_success and dependency_check_success:
         print("\n🎉 All post-installation tasks completed successfully!")
+        print("AIECS is ready to use with full functionality.")
     else:
         print("\n⚠️  Some tasks completed with warnings. AIECS will still work,")
         print("but you may need to install some dependencies manually as needed.")
+        print("\nFor detailed dependency information, run: aiecs-check-deps")
     
     print("="*60 + "\n")
 
@@ -197,6 +222,9 @@ setup(
             "aiecs=aiecs.__main__:main",
             "aiecs-patch-weasel=aiecs.scripts.fix_weasel_validator:main",
             "aiecs-download-nlp-data=aiecs.scripts.download_nlp_data:main",
+            "aiecs-check-deps=aiecs.scripts.dependency_checker:main",
+            "aiecs-quick-check=aiecs.scripts.quick_dependency_check:main",
+            "aiecs-fix-deps=aiecs.scripts.dependency_fixer:main",
         ],
     },
     cmdclass={
