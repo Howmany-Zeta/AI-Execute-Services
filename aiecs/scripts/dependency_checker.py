@@ -197,30 +197,43 @@ class DependencyChecker:
         optional_deps = []
         
         # Python packages
-        python_packages = ["spacy", "transformers", "nltk", "rake_nltk"]
+        python_packages = ["spacy", "transformers", "nltk", "rake_nltk", "spacy_pkuseg"]
         for pkg in python_packages:
             status = self.check_python_package(pkg)
+            is_critical = pkg != "spacy_pkuseg"  # spacy_pkuseg is optional
             python_deps.append(DependencyInfo(
                 name=pkg,
                 status=status,
                 description=f"Python package: {pkg}",
                 install_command=f"pip install {pkg}",
                 impact=f"{pkg} functionality will be unavailable",
-                is_critical=True
+                is_critical=is_critical
             ))
         
         # spaCy models
         spacy_models = ["en_core_web_sm", "zh_core_web_sm"]
         for model in spacy_models:
             status = self._check_spacy_model(model)
+            is_critical = model == "en_core_web_sm"  # Only English model is critical
             model_deps.append(DependencyInfo(
                 name=f"spaCy {model}",
                 status=status,
                 description=f"spaCy model: {model}",
                 install_command=f"python -m spacy download {model}",
                 impact=f"Text processing in {model.split('_')[0]} language will be unavailable",
-                is_critical=True
+                is_critical=is_critical
             ))
+
+        # spaCy PKUSeg model (optional Chinese segmentation)
+        pkuseg_status = self._check_spacy_pkuseg_model()
+        model_deps.append(DependencyInfo(
+            name="spaCy PKUSeg",
+            status=pkuseg_status,
+            description="Chinese text segmentation model for spaCy",
+            install_command="pip install spacy_pkuseg",
+            impact="Advanced Chinese text segmentation will be unavailable",
+            is_critical=False
+        ))
         
         # Transformers models
         transformers_models = ["facebook/bart-large-cnn", "t5-base"]
@@ -512,6 +525,19 @@ class DependencyChecker:
             nltk.data.find(f'corpora/{data}')
             return DependencyStatus.AVAILABLE
         except LookupError:
+            return DependencyStatus.MISSING
+        except Exception:
+            return DependencyStatus.ERROR
+
+    def _check_spacy_pkuseg_model(self) -> DependencyStatus:
+        """Check if spaCy PKUSeg model is available."""
+        try:
+            import spacy_pkuseg
+            # Test basic functionality
+            seg = spacy_pkuseg.pkuseg()
+            test_result = list(seg.cut("测试"))
+            return DependencyStatus.AVAILABLE
+        except ImportError:
             return DependencyStatus.MISSING
         except Exception:
             return DependencyStatus.ERROR

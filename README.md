@@ -360,6 +360,147 @@ Example output:
 ✅ All dependencies are satisfied!
 ```
 
+## Development and Packaging
+
+### Building the Package
+
+To build the distribution packages:
+
+```bash
+# Clean previous builds
+rm -rf build/ dist/ *.egg-info/
+
+# Build both wheel and source distribution
+python3 -m build --sdist --wheel
+```
+
+### Environment Cleanup
+
+For development and before releasing, you may want to clean up the environment completely. Here's the comprehensive cleanup process:
+
+#### 1. Clean Python Cache and Build Files
+
+```bash
+# Remove Python cache files
+find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+find . -name "*.pyc" -delete 2>/dev/null || true
+find . -name "*.pyo" -delete 2>/dev/null || true
+
+# Remove build and packaging artifacts
+rm -rf build/ *.egg-info/ .eggs/
+
+# Remove test and coverage cache
+rm -rf .pytest_cache/ .coverage*
+```
+
+#### 2. Clean Log and Temporary Files
+
+```bash
+# Remove log files
+rm -f *.log dependency_report.txt
+
+# Remove temporary directories
+rm -rf /tmp/wheel_*
+
+# Remove backup files
+find . -name "*.backup.*" -delete 2>/dev/null || true
+```
+
+#### 3. Uninstall AIECS Package (if installed)
+
+```bash
+# Uninstall the package completely
+pip uninstall aiecs -y
+
+# Verify removal
+pip list | grep aiecs || echo "✅ aiecs package completely removed"
+```
+
+#### 4. Clean Downloaded NLP Data and Models
+
+If you've used the AIECS NLP tools, you may want to remove downloaded data:
+
+```bash
+# Remove NLTK data (stopwords, punkt, wordnet, etc.)
+rm -rf ~/nltk_data
+
+# Remove spaCy models
+pip uninstall en-core-web-sm zh-core-web-sm spacy-pkuseg -y 2>/dev/null || true
+
+# Verify spaCy models removal
+python3 -c "import spacy; print('spaCy models:', spacy.util.get_installed_models())" 2>/dev/null || echo "✅ spaCy models removed"
+```
+
+#### 5. Complete Cleanup Script
+
+For convenience, here's a complete cleanup script:
+
+```bash
+#!/bin/bash
+echo "🧹 Starting complete AIECS environment cleanup..."
+
+# Python cache and build files
+echo "📁 Cleaning Python cache and build files..."
+find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+find . -name "*.pyc" -delete 2>/dev/null || true
+find . -name "*.pyo" -delete 2>/dev/null || true
+rm -rf build/ *.egg-info/ .eggs/ .pytest_cache/ .coverage*
+
+# Log and temporary files
+echo "📝 Cleaning log and temporary files..."
+rm -f *.log dependency_report.txt
+rm -rf /tmp/wheel_*
+find . -name "*.backup.*" -delete 2>/dev/null || true
+
+# Uninstall package
+echo "🗑️ Uninstalling AIECS package..."
+pip uninstall aiecs -y 2>/dev/null || true
+
+# Clean NLP data
+echo "🤖 Cleaning NLP data and models..."
+rm -rf ~/nltk_data
+pip uninstall en-core-web-sm zh-core-web-sm spacy-pkuseg -y 2>/dev/null || true
+
+# Verify final state
+echo "✅ Cleanup complete! Final package state:"
+ls -la dist/ 2>/dev/null || echo "No dist/ directory found"
+echo "Environment is now clean and ready for release."
+```
+
+#### What Gets Preserved
+
+The cleanup process preserves:
+- ✅ Source code files
+- ✅ Test files and coverage reports (for maintenance)
+- ✅ Configuration files (`.gitignore`, `pyproject.toml`, etc.)
+- ✅ Documentation files
+- ✅ Final distribution packages in `dist/`
+
+#### What Gets Removed
+
+The cleanup removes:
+- ❌ Python cache files (`__pycache__/`, `*.pyc`)
+- ❌ Build artifacts (`build/`, `*.egg-info/`)
+- ❌ Log files (`*.log`, `dependency_report.txt`)
+- ❌ Installed AIECS package and command-line tools
+- ❌ Downloaded NLP data and models (~110MB)
+- ❌ Temporary and backup files
+
+### Release Preparation
+
+After cleanup, your `dist/` directory should contain only:
+
+```
+dist/
+├── aiecs-1.0.0-py3-none-any.whl  # Production-ready wheel package
+└── aiecs-1.0.0.tar.gz            # Production-ready source package
+```
+
+These packages are ready for:
+- PyPI publication: `twine upload dist/*`
+- GitHub Releases
+- Private repository distribution
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
