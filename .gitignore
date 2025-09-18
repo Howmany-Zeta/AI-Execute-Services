@@ -52,7 +52,6 @@ cover/
 # Test files and directories
 test/
 tests/
-*test*
 test_*
 *_test.*
 *test*.py
@@ -61,6 +60,10 @@ test*.py
 **/*test*.py
 **/test_*.py
 **/*_test.py
+
+# Allow GitHub workflows with 'test' in name
+!.github/workflows/*test*.yml
+!.github/workflows/*test*.yaml
 
 # Translations
 *.mo

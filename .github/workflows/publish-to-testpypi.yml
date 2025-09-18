@@ -1,0 +1,74 @@
+name: Publish to TestPyPI
+
+on:
+  push:
+    tags:
+      - 'v*'  # 当推送以 v 开头的标签时触发，如 v1.0.0
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build-and-publish:
+    name: Build and publish Python distribution to TestPyPI
+    runs-on: ubuntu-latest
+    environment: 
+      name: testpypi
+      url: https://test.pypi.org/p/aiecs
+    permissions:
+      id-token: write  # 用于 trusted publishing
+      contents: read   # 用于检出代码
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install build dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine
+    
+    - name: Clean previous builds
+      run: |
+        rm -rf build/ dist/ *.egg-info/
+    
+    - name: Build package
+      run: |
+        python -m build
+    
+    - name: Verify package
+      run: |
+        twine check dist/*
+    
+    - name: List package contents
+      run: |
+        echo "📦 Generated packages:"
+        ls -la dist/
+        echo ""
+        echo "📋 Package sizes:"
+        du -h dist/*
+    
+    - name: Publish to TestPyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/
+        verbose: true
+        print-hash: true
+    
+    - name: Test installation from TestPyPI
+      run: |
+        echo "⏳ Waiting for package to be available on TestPyPI..."
+        sleep 30
+        echo "🧪 Testing installation from TestPyPI..."
+        pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ aiecs
+        echo "✅ Package installed successfully!"
+        
+        # Test basic import
+        python -c "import aiecs; print(f'AIECS version: {aiecs.__version__}')"
+        
+        # Test command line tools
+        aiecs --help || echo "⚠️ aiecs command not available"
+        aiecs-check-deps --help || echo "⚠️ aiecs-check-deps command not available"
