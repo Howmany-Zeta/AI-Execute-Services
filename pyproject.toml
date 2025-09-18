@@ -17,16 +17,7 @@ exclude = '''
 '''
 
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.3.5"                               # Testing framework
-pytest-asyncio = "^1.0.0"                       # Async testing support
-pytest-cov = "^4.0.0"                           # Coverage reporting for pytest
-pytest-xdist = "^3.0.0"                         # Parallel test execution
-pytest-mock = "^3.10.0"                         # Mock fixtures for pytest
-black = "^25.1.0"                               # Code formatter
-flake8 = "^7.2.0"                               # Code linter
-mypy = "^1.15.0"                                # Static type checker
-bump-pydantic = "^0.8.0"
+# 移除 Poetry 配置，统一使用 project.optional-dependencies
 
 [project]
 name = "aiecs"
@@ -35,7 +26,7 @@ description = "AI Execute Services - A middleware framework for AI-powered task 
 authors = [
     {name = "AIECS Team", email = "iretbl@gmail.com"}
 ]
-license = {text = "MIT"}
+license = "MIT"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 keywords = ["ai", "middleware", "llm", "orchestration", "async", "tools"]
@@ -43,7 +34,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Topic :: Software Development :: Libraries :: Python Modules",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -153,27 +143,43 @@ dependencies = [
     "psutil (>=7.0.0,<8.0.0)",                      # System and process monitoring utilities
 ]
 
+# 开发依赖项 - 移动到 optional-dependencies
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.5",                               # Testing framework
+    "pytest-asyncio>=1.0.0",                       # Async testing support
+    "pytest-cov>=4.0.0",                           # Coverage reporting for pytest
+    "pytest-xdist>=3.0.0",                         # Parallel test execution
+    "pytest-mock>=3.10.0",                         # Mock fixtures for pytest
+    "black>=25.1.0",                               # Code formatter
+    "flake8>=7.2.0",                               # Code linter
+    "mypy>=1.15.0",                                # Static type checker
+    "bump-pydantic>=0.8.0",
+]
+
 [project.urls]
 "Homepage" = "https://github.com/aiecs-team/aiecs"
 "Bug Tracker" = "https://github.com/aiecs-team/aiecs/issues"
 "Documentation" = "https://aiecs.readthedocs.io"
 
-
 [project.scripts]
 aiecs = "aiecs.__main__:main"
 aiecs-patch-weasel = "aiecs.scripts.fix_weasel_validator:main"
 aiecs-download-nlp-data = "aiecs.scripts.download_nlp_data:main"
-
-[project.entry-points."aiecs.post_install"]
-patch_weasel = "aiecs.scripts.fix_weasel_validator:main"
-download_nlp_data = "aiecs.scripts.download_nlp_data:main"
+aiecs-check-deps = "aiecs.scripts.dependency_checker:main"
+aiecs-quick-check = "aiecs.scripts.quick_dependency_check:main"
+aiecs-fix-deps = "aiecs.scripts.dependency_fixer:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["aiecs*"]
+exclude = ["test*", "tests*", "htmlcov*", "*.log"]
 
 [tool.setuptools.package-data]
-aiecs = ["scripts/*", "scripts/**/*", "scripts/*.md", "scripts/*.sh"]
+aiecs = ["scripts/*.md", "scripts/*.sh"]
+
+[tool.setuptools]
+py-modules = []
 
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]

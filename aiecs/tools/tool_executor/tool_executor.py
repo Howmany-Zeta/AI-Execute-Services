@@ -123,7 +123,7 @@ def validate_input(schema_class: Type[BaseModel]) -> Callable:
         def wrapper(self, *args, **kwargs):
             try:
                 schema = schema_class(**kwargs)
-                validated_kwargs = schema.dict(exclude_unset=True)
+                validated_kwargs = schema.model_dump(exclude_unset=True)
                 return func(self, **validated_kwargs)
             except ValidationError as e:
                 raise InputValidationError(f"Invalid input parameters: {e}")

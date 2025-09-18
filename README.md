@@ -17,8 +17,45 @@ AIECS (AI Execute Services) is a powerful Python middleware framework for buildi
 
 ## Installation
 
+### From PyPI (Recommended)
+
 ```bash
 pip install aiecs
+```
+
+### From Source
+
+```bash
+# Clone the repository
+git clone https://github.com/aiecs-team/aiecs.git
+cd aiecs
+
+# Install in development mode
+pip install -e .
+
+# Or install with development dependencies
+pip install -e ".[dev]"
+```
+
+### Post-Installation Setup
+
+After installation, you can use the built-in tools to set up dependencies and verify your installation:
+
+```bash
+# Check all dependencies
+aiecs-check-deps
+
+# Quick dependency check
+aiecs-quick-check
+
+# Download required NLP models and data
+aiecs-download-nlp-data
+
+# Fix common dependency issues automatically
+aiecs-fix-deps
+
+# Apply Weasel library patch (if needed)
+aiecs-patch-weasel
 ```
 
 ## Quick Start
@@ -117,15 +154,58 @@ GOOGLE_CLOUD_STORAGE_BUCKET=your_bucket_name
 CORS_ALLOWED_ORIGINS=http://localhost:3000,https://yourdomain.com
 ```
 
+## Command Line Tools
+
+AIECS provides several command-line tools for setup and maintenance:
+
+### Dependency Management
+
+```bash
+# Check all dependencies (comprehensive)
+aiecs-check-deps
+
+# Quick dependency check
+aiecs-quick-check
+
+# Automatically fix missing dependencies
+aiecs-fix-deps --non-interactive
+
+# Fix dependencies interactively (default)
+aiecs-fix-deps
+```
+
+### Setup and Configuration
+
+```bash
+# Download required NLP models and data
+aiecs-download-nlp-data
+
+# Apply Weasel library patch (fixes validator conflicts)
+aiecs-patch-weasel
+```
+
+### Main Application
+
+```bash
+# Start the AIECS server
+aiecs
+
+# Or start with custom configuration
+aiecs --host 0.0.0.0 --port 8000
+```
+
 ## Running as a Service
 
 ### Start the API Server
 
 ```bash
+# Using the aiecs command (recommended)
+aiecs
+
 # Using uvicorn directly
 uvicorn aiecs.main:app --host 0.0.0.0 --port 8000
 
-# Or using the entry point
+# Or using the Python module
 python -m aiecs
 ```
 
@@ -229,14 +309,56 @@ mypy aiecs/
 
 ### Common Issues
 
-1. **Weasel Library Validator Error**: If you encounter duplicate validator function errors, run the included patch:
+1. **Missing Dependencies**: Use the built-in dependency checker and fixer:
    ```bash
-   python -m aiecs.scripts.fix_weasel_validator
+   # Check what's missing
+   aiecs-check-deps
+
+   # Automatically fix issues
+   aiecs-fix-deps --non-interactive
    ```
 
-2. **Database Connection Issues**: Ensure PostgreSQL is running and credentials are correct
+2. **Weasel Library Validator Error**: If you encounter duplicate validator function errors:
+   ```bash
+   aiecs-patch-weasel
+   ```
 
-3. **Redis Connection Issues**: Verify Redis is running for Celery task queue
+3. **Missing NLP Models**: Download required models and data:
+   ```bash
+   aiecs-download-nlp-data
+   ```
+
+4. **Database Connection Issues**: Ensure PostgreSQL is running and credentials are correct
+
+5. **Redis Connection Issues**: Verify Redis is running for Celery task queue
+
+### Dependency Check Output
+
+The dependency checker provides detailed information about:
+- ✅ Available dependencies
+- ❌ Missing critical dependencies
+- ⚠️ Missing optional dependencies
+- 📦 System-level requirements
+- 🤖 AI models and data files
+
+Example output:
+```
+🔍 AIECS Quick Dependency Check
+==================================================
+
+📦 Critical Dependencies:
+✅ All critical dependencies are available
+
+🔧 Tool-Specific Dependencies:
+   ✅ Image Tool
+   ✅ Classfire Tool
+   ✅ Office Tool
+   ✅ Stats Tool
+   ✅ Report Tool
+   ✅ Scraper Tool
+
+✅ All dependencies are satisfied!
+```
 
 ## License
 

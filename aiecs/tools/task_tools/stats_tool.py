@@ -60,7 +60,7 @@ class StatsTool(BaseTool):
         self.settings = StatsSettings()
         if config:
             try:
-                self.settings = self.settings.parse_obj({**self.settings.dict(), **config})
+                self.settings = self.settings.model_validate({**self.settings.model_dump(), **config})
             except ValidationError as e:
                 raise ValueError(f"Invalid settings: {e}")
         self.logger = logging.getLogger(__name__)
