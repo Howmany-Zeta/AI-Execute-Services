@@ -175,6 +175,52 @@ def download_spacy_model(model_name: str, logger: logging.Logger) -> bool:
         return False
     
 
+def download_spacy_pkuseg_model(logger: logging.Logger) -> bool:
+    """
+    Download and install spaCy PKUSeg model for Chinese text segmentation.
+
+    Args:
+        logger: Logger instance
+
+    Returns:
+        True if successful, False otherwise
+    """
+    logger.info("Starting spaCy PKUSeg model installation...")
+
+    if not check_python_package('spacy', logger):
+        logger.error("spaCy is not installed. Please install it first with: pip install spacy")
+        return False
+
+    # Check if spacy_pkuseg is already installed
+    if check_python_package('spacy_pkuseg', logger):
+        logger.info("spacy_pkuseg is already installed")
+        return True
+
+    # Install spacy_pkuseg package
+    cmd = [sys.executable, "-m", "pip", "install", "spacy_pkuseg"]
+    success, output = run_command(cmd, logger)
+
+    if success:
+        logger.info("Successfully installed spacy_pkuseg")
+
+        # Verify the package can be imported
+        try:
+            import spacy_pkuseg
+            logger.info("Verified spacy_pkuseg can be imported")
+
+            # Test basic functionality
+            seg = spacy_pkuseg.pkuseg()
+            test_result = seg.cut("这是一个测试句子")
+            logger.info(f"spacy_pkuseg test successful: {list(test_result)}")
+            return True
+        except Exception as e:
+            logger.error(f"Installed spacy_pkuseg cannot be used: {e}")
+            return False
+    else:
+        logger.error(f"Failed to install spacy_pkuseg: {output}")
+        return False
+
+
 def download_rake_nltk_data(logger: logging.Logger) -> bool:
     """
     Ensure RAKE-NLTK has required data.
@@ -246,7 +292,16 @@ def verify_installation(logger: logging.Logger) -> bool:
         logger.info(f"spaCy Chinese model verification successful. Processed {len(doc)} tokens")
     except Exception as e:
         logger.warning(f"spaCy Chinese model verification failed: {e}. This is optional.")
-    
+
+    # Test spaCy PKUSeg model (optional)
+    try:
+        import spacy_pkuseg
+        seg = spacy_pkuseg.pkuseg()
+        result = list(seg.cut("这是一个测试句子"))
+        logger.info(f"spaCy PKUSeg model verification successful. Segmented: {result}")
+    except Exception as e:
+        logger.warning(f"spaCy PKUSeg model verification failed: {e}. This is optional.")
+
     return success
 
 
@@ -269,6 +324,11 @@ def main():
     if not download_spacy_model('zh_core_web_sm', logger):
         logger.warning("Chinese model download failed, but this is optional")
         # Don't mark as failure for Chinese model
+
+    # Download spaCy Chinese segmentation model (optional)
+    if not download_spacy_pkuseg_model(logger):
+        logger.warning("spaCy PKUSeg model download failed, but this is optional")
+        # Don't mark as failure for PKUSeg model
     
     # Check RAKE-NLTK (optional)
     download_rake_nltk_data(logger)
