@@ -55,13 +55,24 @@ tests/
 *test*
 test_*
 *_test.*
+*test*.py
+test*.py
+*_test.py
+**/*test*.py
+**/test_*.py
+**/*_test.py
 
 # Translations
 *.mo
 *.pot
 
-# Django stuff:
+# Log files
 *.log
+**/*.log
+logs/
+log/
+
+# Django stuff:
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
@@ -161,3 +172,32 @@ ehthumbs.db
 storage/
 temp/
 *.backup.*
+
+# AIECS specific exclusions
+dependency_report.txt
+test_output*.log
+htmlcov/
+.coverage*
+coverage.xml
+*.cover
+.pytest_cache/
+.tox/
+.nox/
+
+# Build and packaging artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS specific
+.DS_Store
+Thumbs.db
+ehthumbs.db

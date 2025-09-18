@@ -197,7 +197,7 @@ class ImageTool(BaseTool):
         self.settings = ImageSettings()
         if config:
             try:
-                self.settings = self.settings.parse_obj({**self.settings.dict(), **config})
+                self.settings = self.settings.model_validate({**self.settings.model_dump(), **config})
             except ValidationError as e:
                 raise ValueError(f"Invalid configuration: {e}")
         self.logger = logging.getLogger(__name__)
@@ -225,7 +225,7 @@ class ImageTool(BaseTool):
             ValueError: If config contains invalid settings.
         """
         try:
-            self.settings = self.settings.parse_obj({**self.settings.dict(), **config})
+            self.settings = self.settings.model_validate({**self.settings.model_dump(), **config})
             # Reinitialize Tesseract if pool size changes
             if 'tesseract_pool_size' in config:
                 self._tesseract_manager.cleanup()

@@ -1,11 +1,14 @@
 include README.md
 include LICENSE
 include pyproject.toml
-include setup.py
 recursive-include aiecs *.py
-recursive-include aiecs/scripts *
-include aiecs/scripts/README_WEASEL_PATCH.md
-include aiecs/scripts/*.sh
+recursive-include aiecs/scripts *.md *.sh
 global-exclude __pycache__
 global-exclude *.py[co]
 global-exclude .DS_Store
+global-exclude *.log
+global-exclude test*
+global-exclude tests*
+global-exclude htmlcov*
+global-exclude setup.py
+global-exclude *test*.py
