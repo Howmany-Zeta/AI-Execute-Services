@@ -23,6 +23,21 @@ class DatabaseManager:
         self.connection_pool = None
         self._initialized = False
 
+    async def connect(self, min_size: int = 10, max_size: int = 20):
+        """Connect to database and initialize connection pool"""
+        if self._initialized:
+            logger.info("Database already connected")
+            return
+
+        try:
+            await self.init_connection_pool(min_size, max_size)
+            await self.init_database_schema()
+            self._initialized = True
+            logger.info("Database connection and schema initialization completed")
+        except Exception as e:
+            logger.error(f"Failed to connect to database: {e}")
+            raise
+
     async def init_connection_pool(self, min_size: int = 10, max_size: int = 20):
         """Initialize database connection pool"""
         try:
@@ -278,6 +293,12 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Database error during cleanup: {e}")
             return False
+
+    async def disconnect(self):
+        """Disconnect from database and close connection pool"""
+        await self.close()
+        self._initialized = False
+        logger.info("Database disconnected")
 
     async def close(self):
         """Close database connection pool"""

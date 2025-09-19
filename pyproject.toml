@@ -143,7 +143,7 @@ dependencies = [
     "psutil (>=7.0.0,<8.0.0)",                      # System and process monitoring utilities
 ]
 
-# 开发依赖项 - 移动到 optional-dependencies
+# 开发依赖项 - 移动到 optional-dependencies，use `pip install aiecs[dev]`
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3.5",                               # Testing framework
@@ -184,3 +184,30 @@ py-modules = []
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+# Pytest configuration
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["test"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+    "--disable-warnings"
+]
+markers = [
+    "asyncio: marks tests as async",
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "security: marks tests as security tests",
+    "performance: marks tests as performance tests"
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+    "ignore::pytest.PytestUnknownMarkWarning"
+]
