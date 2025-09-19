@@ -298,16 +298,24 @@ class DependencyChecker:
             is_critical=False
         ))
         
-        # Python packages
-        python_packages = ["tika", "python-docx", "python-pptx", "openpyxl", "pdfplumber", "pytesseract", "PIL"]
-        for pkg in python_packages:
-            status = self.check_python_package(pkg)
+        # Python packages (package_name: import_name)
+        python_packages = {
+            "tika": "tika",
+            "python-docx": "docx",  # Package name vs import name
+            "python-pptx": "pptx",  # Package name vs import name
+            "openpyxl": "openpyxl",
+            "pdfplumber": "pdfplumber",
+            "pytesseract": "pytesseract",
+            "PIL": "PIL"
+        }
+        for pkg_name, import_name in python_packages.items():
+            status = self.check_python_package(import_name)
             python_deps.append(DependencyInfo(
-                name=pkg,
+                name=pkg_name,
                 status=status,
-                description=f"Python package: {pkg}",
-                install_command=f"pip install {pkg}",
-                impact=f"{pkg} functionality will be unavailable",
+                description=f"Python package: {pkg_name}",
+                install_command=f"pip install {pkg_name}",
+                impact=f"{pkg_name} functionality will be unavailable",
                 is_critical=True
             ))
         
@@ -348,16 +356,24 @@ class DependencyChecker:
             is_critical=False
         ))
         
-        # Python packages
-        python_packages = ["pandas", "numpy", "scipy", "scikit-learn", "statsmodels", "pyreadstat", "openpyxl"]
-        for pkg in python_packages:
-            status = self.check_python_package(pkg)
+        # Python packages (package_name: import_name)
+        python_packages = {
+            "pandas": "pandas",
+            "numpy": "numpy",
+            "scipy": "scipy",
+            "scikit-learn": "sklearn",  # Package name vs import name
+            "statsmodels": "statsmodels",
+            "pyreadstat": "pyreadstat",
+            "openpyxl": "openpyxl"
+        }
+        for pkg_name, import_name in python_packages.items():
+            status = self.check_python_package(import_name)
             python_deps.append(DependencyInfo(
-                name=pkg,
+                name=pkg_name,
                 status=status,
-                description=f"Python package: {pkg}",
-                install_command=f"pip install {pkg}",
-                impact=f"{pkg} functionality will be unavailable",
+                description=f"Python package: {pkg_name}",
+                install_command=f"pip install {pkg_name}",
+                impact=f"{pkg_name} functionality will be unavailable",
                 is_critical=True
             ))
         
@@ -398,16 +414,26 @@ class DependencyChecker:
             is_critical=False
         ))
         
-        # Python packages
-        python_packages = ["jinja2", "matplotlib", "weasyprint", "bleach", "markdown", "pandas", "openpyxl", "python-docx", "python-pptx"]
-        for pkg in python_packages:
-            status = self.check_python_package(pkg)
+        # Python packages (package_name: import_name)
+        python_packages = {
+            "jinja2": "jinja2",
+            "matplotlib": "matplotlib",
+            "weasyprint": "weasyprint",
+            "bleach": "bleach",
+            "markdown": "markdown",
+            "pandas": "pandas",
+            "openpyxl": "openpyxl",
+            "python-docx": "docx",  # Package name vs import name
+            "python-pptx": "pptx"   # Package name vs import name
+        }
+        for pkg_name, import_name in python_packages.items():
+            status = self.check_python_package(import_name)
             python_deps.append(DependencyInfo(
-                name=pkg,
+                name=pkg_name,
                 status=status,
-                description=f"Python package: {pkg}",
-                install_command=f"pip install {pkg}",
-                impact=f"{pkg} functionality will be unavailable",
+                description=f"Python package: {pkg_name}",
+                install_command=f"pip install {pkg_name}",
+                impact=f"{pkg_name} functionality will be unavailable",
                 is_critical=True
             ))
         
@@ -448,16 +474,22 @@ class DependencyChecker:
             is_critical=False
         ))
         
-        # Python packages
-        python_packages = ["playwright", "scrapy", "httpx", "beautifulsoup4", "lxml"]
-        for pkg in python_packages:
-            status = self.check_python_package(pkg)
+        # Python packages (package_name: import_name)
+        python_packages = {
+            "playwright": "playwright",
+            "scrapy": "scrapy",
+            "httpx": "httpx",
+            "beautifulsoup4": "bs4",  # Package name vs import name
+            "lxml": "lxml"
+        }
+        for pkg_name, import_name in python_packages.items():
+            status = self.check_python_package(import_name)
             python_deps.append(DependencyInfo(
-                name=pkg,
+                name=pkg_name,
                 status=status,
-                description=f"Python package: {pkg}",
-                install_command=f"pip install {pkg}",
-                impact=f"{pkg} functionality will be unavailable",
+                description=f"Python package: {pkg_name}",
+                install_command=f"pip install {pkg_name}",
+                impact=f"{pkg_name} functionality will be unavailable",
                 is_critical=True
             ))
         
