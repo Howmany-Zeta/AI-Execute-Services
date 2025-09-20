@@ -22,16 +22,25 @@ from typing import Dict, Any, Optional, List, AsyncGenerator, Union
 from dataclasses import dataclass, asdict
 from contextlib import asynccontextmanager
 
+
+class DateTimeEncoder(json.JSONEncoder):
+    """Custom JSON encoder to handle datetime objects."""
+
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
+
 # Import TaskContext for base functionality
-from app.domain.task.task_context import TaskContext, ContextUpdate
+from aiecs.domain.task.task_context import TaskContext, ContextUpdate
 
 # Import core storage interfaces
-from app.core.interface.storage_interface import IStorageBackend, ICheckpointerBackend
+from aiecs.core.interface.storage_interface import IStorageBackend, ICheckpointerBackend
 
 # Redis client import - use existing infrastructure
 try:
     import redis.asyncio as redis
-    from app.infrastructure.persistence.redis_client import get_redis_client
+    from aiecs.infrastructure.persistence.redis_client import get_redis_client
     REDIS_AVAILABLE = True
 except ImportError:
     redis = None
@@ -142,7 +151,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         try:
             if self.use_existing_redis and get_redis_client:
                 # First ensure Redis client is initialized
-                from app.infrastructure.persistence.redis_client import initialize_redis_client
+                from aiecs.infrastructure.persistence.redis_client import initialize_redis_client
                 try:
                     await initialize_redis_client()
                 except Exception as init_error:
@@ -291,7 +300,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 await self.redis_client.hset(
                     "sessions",
                     session.session_id,
-                    json.dumps(session.to_dict())
+                    json.dumps(session.to_dict(), cls=DateTimeEncoder)
                 )
                 await self.redis_client.expire(f"sessions", self.session_ttl)
                 return
@@ -362,7 +371,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 # Add to list
                 await self.redis_client.lpush(
                     f"conversation:{session_id}",
-                    json.dumps(message.to_dict())
+                    json.dumps(message.to_dict(), cls=DateTimeEncoder)
                 )
                 # Trim to limit
                 await self.redis_client.ltrim(
@@ -413,7 +422,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 await self.redis_client.hset(
                     "task_contexts",
                     session_id,
-                    json.dumps(context.to_dict())
+                    json.dumps(context.to_dict(), cls=DateTimeEncoder)
                 )
                 await self.redis_client.expire("task_contexts", self.session_ttl)
                 return
@@ -466,7 +475,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 await self.redis_client.hset(
                     f"checkpoints:{thread_id}",
                     checkpoint_id,
-                    json.dumps(checkpoint)
+                    json.dumps(checkpoint, cls=DateTimeEncoder)
                 )
                 # Set TTL
                 await self.redis_client.expire(
@@ -719,7 +728,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 await self.redis_client.hset(
                     f"checkpoint_writes:{thread_id}",
                     f"{checkpoint_id}:{task_id}",
-                    json.dumps(writes_payload)
+                    json.dumps(writes_payload, cls=DateTimeEncoder)
                 )
                 await self.redis_client.expire(
                     f"checkpoint_writes:{thread_id}",
@@ -948,7 +957,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 await self.redis_client.hset(
                     "conversation_sessions",
                     session_key,
-                    json.dumps(session_data)
+                    json.dumps(session_data, cls=DateTimeEncoder)
                 )
                 await self.redis_client.expire("conversation_sessions", self.session_ttl)
                 return
@@ -971,7 +980,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                     await self.redis_client.hset(
                         "conversation_sessions",
                         session_key,
-                        json.dumps(session_dict)
+                        json.dumps(session_dict, cls=DateTimeEncoder)
                     )
                 return
             except Exception as e:
