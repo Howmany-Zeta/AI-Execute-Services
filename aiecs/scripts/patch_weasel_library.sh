@@ -149,7 +149,7 @@ test_fix() {
 import sys
 sys.path.insert(0, '.')
 try:
-    from app.tools.task_tools.research_tool import *
+    from aiecs.tools.task_tools.research_tool import *
     print('✅ Import successful - fix appears to work!')
 except Exception as e:
     print(f'❌ Import still fails: {e}')
