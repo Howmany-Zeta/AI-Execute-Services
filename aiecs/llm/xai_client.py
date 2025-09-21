@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional, List, AsyncGenerator
 from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-from .base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
+from aiecs.llm.base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
 from aiecs.config.config import get_settings
 
 logger = logging.getLogger(__name__)

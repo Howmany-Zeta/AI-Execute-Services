@@ -6,7 +6,7 @@ from vertexai.generative_models import GenerativeModel, HarmCategory, HarmBlockT
 import vertexai
 from google.oauth2 import service_account
 
-from .base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
+from aiecs.llm.base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
 from aiecs.config.config import get_settings
 
 logger = logging.getLogger(__name__)
