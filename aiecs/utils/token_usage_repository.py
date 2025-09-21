@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, Dict, Any
 import logging
-from ..infrastructure.persistence.redis_client import get_redis_client
+from aiecs.infrastructure.persistence.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
 
