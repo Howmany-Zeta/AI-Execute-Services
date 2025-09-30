@@ -21,6 +21,7 @@ class LLMResponse:
     completion_tokens: Optional[int] = None
     cost_estimate: Optional[float] = None
     response_time: Optional[float] = None
+    metadata: Optional[Dict[str, Any]] = None  # Added for backward compatibility
 
     def __post_init__(self):
         """Ensure consistency of token data"""

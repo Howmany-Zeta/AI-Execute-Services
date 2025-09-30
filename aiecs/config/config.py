@@ -5,6 +5,7 @@ from functools import lru_cache
 class Settings(BaseSettings):
     # LLM Provider Configuration (optional until used)
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
+    googleai_api_key: str = Field(default="", alias="GOOGLEAI_API_KEY")
     vertex_project_id: str = Field(default="", alias="VERTEX_PROJECT_ID")
     vertex_location: str = Field(default="us-central1", alias="VERTEX_LOCATION")
     google_application_credentials: str = Field(default="", alias="GOOGLE_APPLICATION_CREDENTIALS")

@@ -2,8 +2,8 @@ import asyncio
 import logging
 import os
 from typing import Dict, Any, Optional, List, AsyncGenerator
-from vertexai.generative_models import GenerativeModel, HarmCategory, HarmBlockThreshold
 import vertexai
+from vertexai.generative_models import GenerativeModel, HarmCategory, HarmBlockThreshold, GenerationConfig, SafetySetting
 from google.oauth2 import service_account
 
 from aiecs.llm.base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
@@ -76,6 +76,7 @@ class VertexAIClient(BaseLLMClient):
         try:
             # Use the stable Vertex AI API
             model_instance = GenerativeModel(model_name)
+            self.logger.debug(f"Initialized Vertex AI model: {model_name}")
 
             # Convert messages to Vertex AI format
             if len(messages) == 1 and messages[0].role == "user":
@@ -84,50 +85,82 @@ class VertexAIClient(BaseLLMClient):
                 # For multi-turn conversations, combine messages
                 prompt = "\n".join([f"{msg.role}: {msg.content}" for msg in messages])
 
+            # Use modern GenerationConfig object
+            generation_config = GenerationConfig(
+                temperature=temperature,
+                max_output_tokens=max_tokens or 8192,  # Increased to account for thinking tokens
+                top_p=0.95,
+                top_k=40,
+            )
+
+            # Modern safety settings configuration using SafetySetting objects
+            safety_settings = [
+                SafetySetting(category=HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=HarmBlockThreshold.BLOCK_NONE),
+                SafetySetting(category=HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=HarmBlockThreshold.BLOCK_NONE),
+                SafetySetting(category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=HarmBlockThreshold.BLOCK_NONE),
+                SafetySetting(category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=HarmBlockThreshold.BLOCK_NONE),
+            ]
+
             response = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: model_instance.generate_content(
                     prompt,
-                    generation_config={
-                        "temperature": temperature,
-                        "max_output_tokens": max_tokens or 8192,  # Increased to account for thinking tokens
-                        "top_p": 0.95,
-                        "top_k": 40,
-                    },
-                    safety_settings={
-                        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-                    }
+                    generation_config=generation_config,
+                    safety_settings=safety_settings
                 )
             )
 
-            # Handle response content safely
+            # Handle response content safely - improved multi-part response handling
+            content = None
             try:
+                # First try to get text directly
                 content = response.text
                 self.logger.debug(f"Vertex AI response received: {content[:100]}...")
-            except ValueError as ve:
-                # Handle cases where response has no content (safety filters, etc.)
-                self.logger.warning(f"Vertex AI response error: {str(ve)}")
-                self.logger.debug(f"Full response object: {response}")
-
-                # Check if response has candidates but no text
+            except (ValueError, AttributeError) as ve:
+                # Handle multi-part responses and other issues
+                self.logger.warning(f"Cannot get response text directly: {str(ve)}")
+                
+                # Try to extract content from candidates with multi-part support
                 if hasattr(response, 'candidates') and response.candidates:
                     candidate = response.candidates[0]
                     self.logger.debug(f"Candidate finish_reason: {getattr(candidate, 'finish_reason', 'unknown')}")
-
-                    # If finish_reason is MAX_TOKENS, it might be due to thinking tokens
-                    if hasattr(candidate, 'finish_reason') and candidate.finish_reason == 'MAX_TOKENS':
-                        content = "[Response truncated due to token limit - consider increasing max_tokens for Gemini 2.5 models]"
-                        self.logger.warning("Response truncated due to MAX_TOKENS - Gemini 2.5 uses thinking tokens")
-                    elif "no parts" in str(ve).lower() or "safety filters" in str(ve).lower():
-                        content = "[Response blocked by safety filters or has no content]"
-                        self.logger.warning(f"Vertex AI response blocked or empty: {str(ve)}")
-                    else:
-                        content = f"[Response error: {str(ve)}]"
+                    
+                    # Handle multi-part content
+                    if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
+                        try:
+                            # Extract text from all parts
+                            text_parts = []
+                            for part in candidate.content.parts:
+                                if hasattr(part, 'text') and part.text:
+                                    text_parts.append(part.text)
+                            
+                            if text_parts:
+                                content = "\n".join(text_parts)
+                                self.logger.info(f"Successfully extracted multi-part response: {len(text_parts)} parts")
+                            else:
+                                self.logger.warning("No text content found in multi-part response")
+                        except Exception as part_error:
+                            self.logger.error(f"Failed to extract content from multi-part response: {str(part_error)}")
+                    
+                    # If still no content, check finish reason
+                    if not content:
+                        if hasattr(candidate, 'finish_reason'):
+                            if candidate.finish_reason == 'MAX_TOKENS':
+                                content = "[Response truncated due to token limit - consider increasing max_tokens for Gemini 2.5 models]"
+                                self.logger.warning("Response truncated due to MAX_TOKENS - Gemini 2.5 uses thinking tokens")
+                            elif candidate.finish_reason in ['SAFETY', 'RECITATION']:
+                                content = "[Response blocked by safety filters or content policy]"
+                                self.logger.warning(f"Response blocked by safety filters: {candidate.finish_reason}")
+                            else:
+                                content = f"[Response error: Cannot get response text - {candidate.finish_reason}]"
+                        else:
+                            content = "[Response error: Cannot get the response text]"
                 else:
-                    content = f"[Response error: {str(ve)}]"
+                    content = f"[Response error: No candidates found - {str(ve)}]"
+                
+                # Final fallback
+                if not content:
+                    content = "[Response error: Cannot get the response text. Multiple content parts are not supported.]"
 
             # Vertex AI doesn't provide detailed token usage in the response
             tokens_used = self._count_tokens_estimate(prompt + content)
@@ -150,11 +183,16 @@ class VertexAIClient(BaseLLMClient):
             if "quota" in str(e).lower() or "limit" in str(e).lower():
                 raise RateLimitError(f"Vertex AI quota exceeded: {str(e)}")
             # Handle specific Vertex AI response errors
-            if "cannot get the response text" in str(e).lower() or "safety filters" in str(e).lower():
+            if any(keyword in str(e).lower() for keyword in [
+                "cannot get the response text",
+                "safety filters", 
+                "multiple content parts are not supported",
+                "cannot get the candidate text"
+            ]):
                 self.logger.warning(f"Vertex AI response issue: {str(e)}")
                 # Return a response indicating the issue
                 return LLMResponse(
-                    content="[Response unavailable due to safety filters or content policy]",
+                    content="[Response unavailable due to content processing issues or safety filters]",
                     provider=self.provider_name,
                     model=model_name,
                     tokens_used=self._count_tokens_estimate(prompt),
