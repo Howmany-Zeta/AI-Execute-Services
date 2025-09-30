@@ -4,7 +4,7 @@ import os
 from typing import Dict, Any, Optional, List, AsyncGenerator
 
 import google.generativeai as genai
-from google.generativeai.types import GenerationConfig, SafetySetting, HarmCategory, HarmBlockThreshold
+from google.generativeai.types import GenerationConfig, HarmCategory, HarmBlockThreshold
 
 from aiecs.llm.base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
 from aiecs.config.config import get_settings

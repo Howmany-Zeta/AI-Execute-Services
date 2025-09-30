@@ -73,5 +73,5 @@ Before releasing a new version:
 3. Update version in `aiecs/main.py` (if applicable)
 4. Update CHANGELOG (if you have one)
 5. Commit changes
-6. Tag the release: `git tag v1.0.5`
+6. Tag the release: `git tag v1.0.6`
 7. Push tags: `git push --tags`
