@@ -1,11 +1,20 @@
 import os
 import logging
+import warnings
 from typing import List, Dict, Optional, Any
 
 import pandas as pd
 import pdfplumber
 import pytesseract
 from PIL import Image
+
+# Configure Tika log path to user-writable directory before importing
+os.environ['TIKA_LOG_PATH'] = os.path.expanduser('~/.cache/tika')
+os.makedirs(os.path.expanduser('~/.cache/tika'), exist_ok=True)
+
+# Suppress pkg_resources deprecation warning from tika
+warnings.filterwarnings('ignore', category=UserWarning, module='tika')
+
 from tika import parser
 from docx import Document as DocxDocument
 from docx.shared import Pt

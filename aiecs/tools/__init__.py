@@ -152,18 +152,30 @@ def _register_known_tools():
     """Register known tools without importing heavy dependencies"""
     # Pre-register tool classes for discovery without importing modules
     # This allows list_tools() to work before actual tool loading
+    # 
+    # NOTE: Tool names must match the names used in @register_tool decorators:
+    # - chart (not chart_tool)
+    # - classifier (not classfire_tool) 
+    # - image (not image_tool)
+    # - office (not office_tool)
+    # - pandas (not pandas_tool)
+    # - report (not report_tool)
+    # - research (not research_tool)
+    # - scraper (not scraper_tool)
+    # - search_api (same)
+    # - stats (not stats_tool)
     
     known_tools = [
-        ("chart_tool", "Chart and visualization operations"),
-        ("classfire_tool", "Text classification and keyword extraction"),
-        ("image_tool", "Image processing and OCR operations"),
-        ("office_tool", "Office document processing"),
-        ("pandas_tool", "Data analysis and manipulation"), 
-        ("report_tool", "Report generation and formatting"),
-        ("research_tool", "Research and information gathering"),
-        ("scraper_tool", "Web scraping and data extraction"),
+        ("chart", "Chart and visualization operations"),
+        ("classifier", "Text classification and keyword extraction"),
+        ("image", "Image processing and OCR operations"),
+        ("office", "Office document processing"),
+        ("pandas", "Data analysis and manipulation"), 
+        ("report", "Report generation and formatting"),
+        ("research", "Research and information gathering"),
+        ("scraper", "Web scraping and data extraction"),
         ("search_api", "Search API integration"),
-        ("stats_tool", "Statistical analysis and computation")
+        ("stats", "Statistical analysis and computation")
     ]
     
     # Register as placeholder until actually loaded
