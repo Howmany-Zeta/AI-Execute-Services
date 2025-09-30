@@ -21,7 +21,7 @@ exclude = '''
 
 [project]
 name = "aiecs"
-version = "1.0.8"
+version = "1.1.0"
 description = "AI Execute Services - A middleware framework for AI-powered task execution and tool orchestration"
 authors = [
     {name = "AIECS Team", email = "iretbl@gmail.com"}

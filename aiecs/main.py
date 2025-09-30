@@ -23,6 +23,10 @@ from aiecs.ws.socket_server import sio
 
 # Import infrastructure
 from aiecs.infrastructure.persistence.database_manager import DatabaseManager
+from aiecs.infrastructure.persistence import (
+    initialize_context_engine,
+    close_context_engine
+)
 from aiecs.infrastructure.messaging.celery_task_manager import CeleryTaskManager
 from aiecs.infrastructure.monitoring.structured_logger import setup_structured_logging
 
@@ -82,6 +86,13 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to discover tools: {e}")
         raise
     
+    # Initialize ContextEngine (optional, graceful degradation)
+    try:
+        await initialize_context_engine()
+        logger.info("ContextEngine initialized")
+    except Exception as e:
+        logger.warning(f"ContextEngine initialization failed (continuing without it): {e}")
+    
     # Application startup complete
     logger.info("AIECS startup complete")
     
@@ -89,6 +100,13 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down AIECS...")
+    
+    # Close ContextEngine
+    try:
+        await close_context_engine()
+        logger.info("ContextEngine closed")
+    except Exception as e:
+        logger.warning(f"Error closing ContextEngine: {e}")
     
     # Close database connection
     if db_manager:
@@ -106,7 +124,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="AIECS - AI Execute Services",
     description="Middleware service for AI-powered task execution and tool orchestration",
-    version="1.0.5",
+    version="1.1.0",    
     lifespan=lifespan
 )
 
@@ -131,7 +149,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "aiecs",
-        "version": "1.0.8"
+        "version": "1.1.0"
     }
 
 
