@@ -25,11 +25,14 @@ _global_context_engine: Optional['ContextEngine'] = None
 _initialization_lock = asyncio.Lock()
 _initialized = False
 
-try:
-    from aiecs.domain.context.context_engine import ContextEngine
-except ImportError:
-    ContextEngine = None
-    logger.warning("ContextEngine not available - aiecs package may not be installed")
+def _get_context_engine_class():
+    """Lazy import of ContextEngine to avoid circular dependencies."""
+    try:
+        from aiecs.domain.context.context_engine import ContextEngine
+        return ContextEngine
+    except ImportError as e:
+        logger.warning(f"ContextEngine not available - {e}")
+        return None
 
 
 async def initialize_context_engine(use_existing_redis: bool = True) -> Optional['ContextEngine']:
@@ -66,6 +69,7 @@ async def initialize_context_engine(use_existing_redis: bool = True) -> Optional
         if _initialized and _global_context_engine:
             return _global_context_engine
         
+        ContextEngine = _get_context_engine_class()
         if not ContextEngine:
             logger.error("ContextEngine class not available - cannot initialize")
             return None
