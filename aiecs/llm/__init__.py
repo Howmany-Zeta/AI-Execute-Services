@@ -26,6 +26,7 @@ from .client_factory import (
 
 from .openai_client import OpenAIClient
 from .vertex_client import VertexAIClient
+from .googleai_client import GoogleAIClient
 from .xai_client import XAIClient
 
 __all__ = [
@@ -46,6 +47,7 @@ __all__ = [
     # Individual clients
     'OpenAIClient',
     'VertexAIClient',
+    'GoogleAIClient',
     'XAIClient',
 
     # Convenience functions
