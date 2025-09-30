@@ -131,7 +131,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "aiecs",
-        "version": "1.0.6"
+        "version": "1.0.7"
     }
 
 
