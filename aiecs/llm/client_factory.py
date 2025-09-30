@@ -5,6 +5,7 @@ from enum import Enum
 from .base_client import BaseLLMClient, LLMMessage, LLMResponse
 from .openai_client import OpenAIClient
 from .vertex_client import VertexAIClient
+from .googleai_client import GoogleAIClient
 from .xai_client import XAIClient
 from ..utils.base_callback import CustomAsyncCallbackHandler
 
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 class AIProvider(str, Enum):
     OPENAI = "OpenAI"
     VERTEX = "Vertex"
+    GOOGLEAI = "GoogleAI"
     XAI = "xAI"
 
 class LLMClientFactory:
@@ -41,6 +43,8 @@ class LLMClientFactory:
             return OpenAIClient()
         elif provider == AIProvider.VERTEX:
             return VertexAIClient()
+        elif provider == AIProvider.GOOGLEAI:
+            return GoogleAIClient()
         elif provider == AIProvider.XAI:
             return XAIClient()
         else:
