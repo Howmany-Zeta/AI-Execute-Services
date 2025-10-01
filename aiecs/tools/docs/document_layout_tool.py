@@ -18,6 +18,7 @@ import os
 import json
 import uuid
 import tempfile
+import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Union, Tuple
 from enum import Enum
@@ -142,7 +143,7 @@ class DocumentLayoutTool(BaseTool):
             except ValidationError as e:
                 raise ValueError(f"Invalid settings: {e}")
         
-        self.logger = self._get_logger()
+        self.logger = logging.getLogger(__name__)
         
         # Initialize directories
         self._init_directories()

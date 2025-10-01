@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+import tempfile
 from typing import Dict, Any, List, Optional, Union, Callable
 from enum import Enum
 from datetime import datetime
@@ -64,6 +65,9 @@ class WriterOrchestratorSettings(BaseSettings):
     enable_draft_mode: bool = True
     enable_content_review: bool = True
     auto_backup_on_ai_write: bool = True
+    
+    # Directory settings
+    temp_dir: str = tempfile.gettempdir()
     
     class Config:
         env_prefix = "AI_DOC_WRITER_"
@@ -139,8 +143,14 @@ class AIDocumentWriterOrchestrator(BaseTool):
         
         # Initialize DocumentCreatorTool
         try:
-            from aiecs.tools.docs.document_creator_tool import DocumentCreatorTool
+            from aiecs.tools.docs.document_creator_tool import (
+                DocumentCreatorTool, DocumentFormat, DocumentType, TemplateType
+            )
             self.creation_tools['creator'] = DocumentCreatorTool()
+            # Store classes for later use
+            self.DocumentFormat = DocumentFormat
+            self.DocumentType = DocumentType
+            self.TemplateType = TemplateType
             self.logger.info("DocumentCreatorTool initialized successfully")
         except ImportError:
             self.logger.warning("DocumentCreatorTool not available")
@@ -308,7 +318,8 @@ class AIDocumentWriterOrchestrator(BaseTool):
         """
         try:
             start_time = datetime.now()
-            operation_id = f"ai_write_{int(start_time.timestamp())}"
+            # Use microsecond precision for unique IDs
+            operation_id = f"ai_write_{int(start_time.timestamp() * 1000000)}"
             
             self.logger.info(f"Starting AI write operation {operation_id}: {target_path}")
             
@@ -562,6 +573,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
                 "target_path": target_path,
                 "edit_operation": edit_operation,
                 "edit_instructions": edit_instructions,
+                "preserve_structure": preserve_structure,
                 "analysis_result": analysis_result,
                 "ai_edit_plan": ai_edit_plan,
                 "edit_results": edit_results,
@@ -663,7 +675,8 @@ class AIDocumentWriterOrchestrator(BaseTool):
             
             # Perform analysis based on type
             if analysis_type == "structure":
-                result = self._analyze_document_structure(source_path, analysis_params.get("format", "txt"))
+                format_param = analysis_params.get("format", "txt") if analysis_params else "txt"
+                result = self._analyze_document_structure(source_path, format_param)
             elif analysis_type == "readability":
                 result = self._analyze_readability(content, analysis_params)
             elif analysis_type == "keywords":
@@ -1067,11 +1080,50 @@ Please provide a detailed editing plan with:
             
             # Step 1: Create document from template
             document_metadata = content_plan.get('metadata', {})
-            document_format = content_plan.get('format', 'markdown')
+            document_format_str = content_plan.get('format', 'markdown')
+            
+            # Convert string to DocumentFormat enum
+            try:
+                document_format = self.DocumentFormat(document_format_str)
+            except (ValueError, AttributeError):
+                # Fallback if DocumentFormat not available
+                from aiecs.tools.docs.document_creator_tool import DocumentFormat
+                document_format = DocumentFormat.MARKDOWN
+            
+            # Get enum classes
+            try:
+                DocumentType = self.DocumentType
+                TemplateType = self.TemplateType
+            except AttributeError:
+                from aiecs.tools.docs.document_creator_tool import DocumentType, TemplateType
+            
+            # Parse document_type with fallback
+            doc_type_str = content_plan.get('document_type', 'custom')
+            try:
+                doc_type = DocumentType(doc_type_str)
+            except ValueError:
+                # Try to find a matching type or use a sensible default
+                if 'technical' in doc_type_str.lower():
+                    doc_type = DocumentType.TECHNICAL
+                elif 'report' in doc_type_str.lower():
+                    doc_type = DocumentType.REPORT
+                elif 'article' in doc_type_str.lower():
+                    doc_type = DocumentType.ARTICLE
+                else:
+                    doc_type = DocumentType.TECHNICAL  # Default fallback
+                self.logger.warning(f"Unknown document type '{doc_type_str}', using {doc_type.value}")
+            
+            # Parse template_type with fallback
+            try:
+                tmpl_type = TemplateType(document_template)
+            except ValueError:
+                # Default to basic template
+                tmpl_type = TemplateType.BASIC
+                self.logger.warning(f"Unknown template type '{document_template}', using basic")
             
             creation_result = creator.create_document(
-                document_type=content_plan.get('document_type', 'custom'),
-                template_type=document_template,
+                document_type=doc_type,
+                template_type=tmpl_type,
                 output_format=document_format,
                 metadata=document_metadata,
                 output_path=output_path
@@ -1684,7 +1736,8 @@ Please provide a detailed editing plan with:
         }
         
         # Save template
-        template_file = os.path.join(self.settings.temp_dir, f"template_{template_name}.json")
+        temp_dir = tempfile.gettempdir()
+        template_file = os.path.join(temp_dir, f"template_{template_name}.json")
         with open(template_file, 'w') as f:
             import json
             json.dump(template_info, f, indent=2)
@@ -1958,10 +2011,12 @@ Please provide a detailed editing plan with:
                 from aiecs.domain.task.task_context import TaskContext
                 
                 task_context = TaskContext(
-                    task_id=f"content_gen_{datetime.now().timestamp()}",
-                    task_type="content_generation",
-                    input_data={"prompt": prompt},
-                    metadata=params
+                    data={
+                        "user_id": "test_user",
+                        "chat_id": f"content_gen_{datetime.now().timestamp()}",
+                        "metadata": params,
+                        "aiPreference": params.get("ai_provider", "default")
+                    }
                 )
                 
                 result = self.aiecs_client.process_task(task_context)

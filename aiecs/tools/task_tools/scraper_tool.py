@@ -46,7 +46,7 @@ class RenderEngine(str, Enum):
     PLAYWRIGHT = "playwright"
 
 # Global settings
-class ScraperSettings(BaseSettings):
+class ScraperSettings(BaseModel):
     """
     Configuration for ScraperTool.
 

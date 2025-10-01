@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Optional, Union, Callable
 from enum import Enum
 from datetime import datetime
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, ConfigDict
 from pydantic_settings import BaseSettings
 
 from aiecs.tools.base_tool import BaseTool
@@ -40,8 +40,7 @@ class OrchestratorSettings(BaseSettings):
     max_tokens: int = 2000
     timeout: int = 60
     
-    class Config:
-        env_prefix = "AI_DOC_ORCHESTRATOR_"
+    model_config = ConfigDict(env_prefix="AI_DOC_ORCHESTRATOR_")
 
 
 class AIDocumentOrchestratorError(Exception):
@@ -77,12 +76,15 @@ class AIDocumentOrchestrator(BaseTool):
     def __init__(self, config: Optional[Dict] = None):
         """Initialize AI Document Orchestrator with settings"""
         super().__init__(config)
-        self.settings = OrchestratorSettings()
+        # Initialize settings with config if provided
         if config:
             try:
-                self.settings = self.settings.model_validate({**self.settings.model_dump(), **config})
+                # For BaseSettings, use dictionary unpacking
+                self.settings = OrchestratorSettings(**config)
             except ValidationError as e:
                 raise ValueError(f"Invalid settings: {e}")
+        else:
+            self.settings = OrchestratorSettings()
         
         self.logger = logging.getLogger(__name__)
         
@@ -143,6 +145,10 @@ class AIDocumentOrchestrator(BaseTool):
             ProcessingMode.ANSWER_QUESTIONS: {
                 "system_prompt": "You are an expert document analyst. Answer questions based on document content accurately.",
                 "user_prompt_template": "Based on the following document content, answer these questions:\n\nQuestions:\n{questions}\n\nDocument content:\n{content}\n\nProvide clear, accurate answers with references to the relevant parts of the document."
+            },
+            ProcessingMode.CUSTOM: {
+                "system_prompt": "You are an expert document analyst. Follow the custom instructions provided.",
+                "user_prompt_template": "{custom_prompt}\n\nDocument content:\n{content}\n\nPlease provide your analysis based on the custom instructions above."
             }
         }
     
