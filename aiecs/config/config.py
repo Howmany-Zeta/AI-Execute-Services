@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # Vector store backend selection (Qdrant deprecated, using Vertex AI by default)
     vector_store_backend: str = Field("vertex", alias="VECTOR_STORE_BACKEND")  # "vertex" (qdrant deprecated)
 
+    # Development/Server Configuration
+    reload: bool = Field(default=False, alias="RELOAD")
+    port: int = Field(default=8000, alias="PORT")
+
     model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     @property

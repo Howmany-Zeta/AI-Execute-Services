@@ -12,7 +12,8 @@ from datetime import datetime
 from pathlib import Path
 import tempfile
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
+from pydantic import ValidationError as PydanticValidationError
 from pydantic_settings import BaseSettings
 
 from aiecs.tools.base_tool import BaseTool
@@ -22,6 +23,7 @@ from aiecs.tools import register_tool
 class DocumentFormat(str, Enum):
     """Supported document formats for writing"""
     TXT = "txt"
+    PLAIN_TEXT = "txt"  # Alias for TXT
     JSON = "json"
     CSV = "csv"
     XML = "xml"
@@ -87,6 +89,7 @@ class DocumentWriterSettings(BaseSettings):
     """Configuration for DocumentWriterTool"""
     temp_dir: str = os.path.join(tempfile.gettempdir(), 'document_writer')
     backup_dir: str = os.path.join(tempfile.gettempdir(), 'document_backups')
+    output_dir: Optional[str] = None  # Output directory
     max_file_size: int = 100 * 1024 * 1024  # 100MB
     max_backup_versions: int = 10
     default_encoding: str = "utf-8"
@@ -95,6 +98,13 @@ class DocumentWriterSettings(BaseSettings):
     enable_content_validation: bool = True
     enable_security_scan: bool = True
     atomic_write: bool = True  # 原子写入
+    validation_level: str = "basic"  # Validation level
+    timeout_seconds: int = 60  # Operation timeout
+    auto_backup: bool = True  # Auto backup before write
+    atomic_writes: bool = True  # Atomic write operations
+    default_format: DocumentFormat = DocumentFormat.MARKDOWN  # Default document format
+    version_control: bool = True  # Enable version control
+    security_scan: bool = True  # Enable security scanning
     
     # 云存储设置
     enable_cloud_storage: bool = True
@@ -103,10 +113,26 @@ class DocumentWriterSettings(BaseSettings):
     
     class Config:
         env_prefix = "DOC_WRITER_"
+        extra = "allow"  # Allow extra fields for flexibility
 
 
 class DocumentWriterError(Exception):
     """Base exception for document writer errors"""
+    pass
+
+
+class WriteError(DocumentWriterError):
+    """Raised when write operations fail"""
+    pass
+
+
+class ValidationError(DocumentWriterError):
+    """Raised when validation fails"""
+    pass
+
+
+class SecurityError(DocumentWriterError):
+    """Raised when security validation fails"""
     pass
 
 
@@ -147,12 +173,16 @@ class DocumentWriterTool(BaseTool):
     
     def __init__(self, config: Optional[Dict] = None):
         """Initialize DocumentWriterTool with settings"""
-        super().__init__(config)
+        try:
+            super().__init__(config)
+        except PydanticValidationError as e:
+            raise ValueError(f"Invalid settings: {e}")
+            
         self.settings = DocumentWriterSettings()
         if config:
             try:
                 self.settings = self.settings.model_validate({**self.settings.model_dump(), **config})
-            except ValidationError as e:
+            except PydanticValidationError as e:
                 raise ValueError(f"Invalid settings: {e}")
         
         self.logger = logging.getLogger(__name__)
@@ -588,7 +618,9 @@ class DocumentWriterTool(BaseTool):
                         with open(temp_path, 'wb') as f:
                             f.write(content)
                     else:
-                        with open(temp_path, 'w', encoding=encoding.value) as f:
+                        # Handle both EncodingType enum and string
+                        enc_value = encoding.value if hasattr(encoding, 'value') else str(encoding)
+                        with open(temp_path, 'w', encoding=enc_value) as f:
                             f.write(content)
                     
                     # Atomic move
@@ -611,7 +643,9 @@ class DocumentWriterTool(BaseTool):
                 if isinstance(content, bytes):
                     file_mode += 'b'
                 
-                with open(target_path, file_mode, encoding=None if isinstance(content, bytes) else encoding.value) as f:
+                # Handle both EncodingType enum and string
+                enc_value = None if isinstance(content, bytes) else (encoding.value if hasattr(encoding, 'value') else str(encoding))
+                with open(target_path, file_mode, encoding=enc_value) as f:
                     f.write(content)
             
             # Get file stats

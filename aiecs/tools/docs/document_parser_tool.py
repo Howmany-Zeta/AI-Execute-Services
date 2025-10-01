@@ -10,7 +10,7 @@ from pathlib import Path
 import tempfile
 
 import httpx
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, ConfigDict
 from pydantic_settings import BaseSettings
 
 from aiecs.tools.base_tool import BaseTool
@@ -64,8 +64,7 @@ class DocumentParserSettings(BaseSettings):
     gcs_bucket_name: str = "aiecs-documents"
     gcs_project_id: Optional[str] = None
     
-    class Config:
-        env_prefix = "DOC_PARSER_"
+    model_config = ConfigDict(env_prefix="DOC_PARSER_")
 
 
 class DocumentParserError(Exception):
@@ -106,12 +105,15 @@ class DocumentParserTool(BaseTool):
     def __init__(self, config: Optional[Dict] = None):
         """Initialize DocumentParserTool with settings"""
         super().__init__(config)
-        self.settings = DocumentParserSettings()
+        # Initialize settings with config if provided
         if config:
             try:
-                self.settings = self.settings.model_validate({**self.settings.model_dump(), **config})
+                # For BaseSettings, use dictionary unpacking
+                self.settings = DocumentParserSettings(**config)
             except ValidationError as e:
                 raise ValueError(f"Invalid settings: {e}")
+        else:
+            self.settings = DocumentParserSettings()
         
         self.logger = logging.getLogger(__name__)
         os.makedirs(self.settings.temp_dir, exist_ok=True)
