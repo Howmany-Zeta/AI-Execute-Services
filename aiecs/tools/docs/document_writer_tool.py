@@ -371,9 +371,27 @@ class DocumentWriterTool(BaseTool):
                 self._rollback_from_backup(target_path, backup_info)
             raise DocumentWriterError(f"Document write failed: {str(e)}")
     
-    async def write_document_async(self, **kwargs) -> Dict[str, Any]:
+    async def write_document_async(self,
+                                    target_path: str,
+                                    content: Union[str, bytes, Dict, List],
+                                    format: DocumentFormat,
+                                    mode: WriteMode = WriteMode.CREATE,
+                                    encoding: EncodingType = EncodingType.UTF8,
+                                    validation_level: ValidationLevel = ValidationLevel.BASIC,
+                                    metadata: Optional[Dict[str, Any]] = None,
+                                    backup_comment: Optional[str] = None) -> Dict[str, Any]:
         """Async version of write_document"""
-        return await asyncio.to_thread(self.write_document, **kwargs)
+        return await asyncio.to_thread(
+            self.write_document,
+            target_path=target_path,
+            content=content,
+            format=format,
+            mode=mode,
+            encoding=encoding,
+            validation_level=validation_level,
+            metadata=metadata,
+            backup_comment=backup_comment
+        )
     
     def batch_write_documents(self,
                              write_operations: List[Dict[str, Any]],

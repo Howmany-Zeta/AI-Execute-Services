@@ -48,11 +48,18 @@ def get_tool(name):
     Raises:
         ValueError: 如果工具未注册
     """
-    if name not in TOOL_REGISTRY and name in TOOL_CLASSES:
-        # 延迟实例化BaseTool子类
-        tool_class = TOOL_CLASSES[name]
-        config = TOOL_CONFIGS.get(name, {})
-        TOOL_REGISTRY[name] = tool_class(config)
+    # 检查是否需要替换占位符或延迟实例化
+    if name in TOOL_CLASSES:
+        # 如果 TOOL_REGISTRY 中是占位符，或者不存在，则实例化真实工具类
+        current_tool = TOOL_REGISTRY.get(name)
+        is_placeholder = getattr(current_tool, 'is_placeholder', False)
+
+        if current_tool is None or is_placeholder:
+            # 延迟实例化BaseTool子类，替换占位符
+            tool_class = TOOL_CLASSES[name]
+            config = TOOL_CONFIGS.get(name, {})
+            TOOL_REGISTRY[name] = tool_class(config)
+            logger.debug(f"Instantiated tool '{name}' from class {tool_class.__name__}")
 
     if name not in TOOL_REGISTRY:
         raise ValueError(f"Tool '{name}' is not registered")

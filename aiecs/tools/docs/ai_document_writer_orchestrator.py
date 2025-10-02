@@ -380,9 +380,27 @@ class AIDocumentWriterOrchestrator(BaseTool):
         except Exception as e:
             raise WriteOrchestrationError(f"AI write operation failed: {str(e)}")
     
-    async def ai_write_document_async(self, **kwargs) -> Dict[str, Any]:
+    async def ai_write_document_async(self,
+                                        target_path: str,
+                                        content_requirements: str,
+                                        generation_mode: ContentGenerationMode,
+                                        document_format: str = "txt",
+                                        write_strategy: WriteStrategy = WriteStrategy.IMMEDIATE,
+                                        ai_provider: Optional[AIProvider] = None,
+                                        generation_params: Optional[Dict[str, Any]] = None,
+                                        write_params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Async version of ai_write_document"""
-        return await asyncio.to_thread(self.ai_write_document, **kwargs)
+        return await asyncio.to_thread(
+            self.ai_write_document,
+            target_path=target_path,
+            content_requirements=content_requirements,
+            generation_mode=generation_mode,
+            document_format=document_format,
+            write_strategy=write_strategy,
+            ai_provider=ai_provider,
+            generation_params=generation_params,
+            write_params=write_params
+        )
     
     def enhance_document(self,
                         source_path: str,

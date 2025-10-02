@@ -13,6 +13,9 @@ import logging
 from typing import Any, Dict, List, Optional, Type, Union, get_type_hints
 from pydantic import BaseModel, Field
 
+# Import schema generator
+from aiecs.tools.schema_generator import generate_schema_from_method
+
 try:
     from langchain.tools import BaseTool as LangchainBaseTool
     from langchain.callbacks.manager import CallbackManagerForToolRun, AsyncCallbackManagerForToolRun
@@ -33,24 +36,27 @@ logger = logging.getLogger(__name__)
 class LangchainToolAdapter(LangchainBaseTool):
     """
     Langchain tool adapter for single operation
-    
+
     Wraps one operation method of BaseTool as an independent Langchain tool
     """
-    
+
     # Define class attributes
     name: str = ""
     description: str = ""
-    
+    base_tool_name: str = ""
+    operation_name: str = ""
+    operation_schema: Optional[Type[BaseModel]] = None
+
     def __init__(
-        self, 
+        self,
         base_tool_name: str,
-        operation_name: str, 
+        operation_name: str,
         operation_schema: Optional[Type[BaseModel]] = None,
         description: Optional[str] = None
     ):
         """
         Initialize adapter
-        
+
         Args:
             base_tool_name: Original tool name
             operation_name: Operation name
@@ -58,56 +64,55 @@ class LangchainToolAdapter(LangchainBaseTool):
             description: Tool description
         """
         # Construct tool name and description
-        self.name = f"{base_tool_name}_{operation_name}"
-        self.description = description or f"Execute {operation_name} operation from {base_tool_name} tool"
-        
-        # Store tool information (use self.__dict__ to set directly to avoid pydantic validation)
-        self.__dict__['base_tool_name'] = base_tool_name
-        self.__dict__['operation_name'] = operation_name
-        self.__dict__['operation_schema'] = operation_schema
-        
-        # Set parameter Schema
-        if operation_schema:
-            self.args_schema = operation_schema
-        
-        super().__init__()
+        tool_name = f"{base_tool_name}_{operation_name}"
+        tool_description = description or f"Execute {operation_name} operation from {base_tool_name} tool"
+
+        # Initialize parent class with all required fields
+        super().__init__(
+            name=tool_name,
+            description=tool_description,
+            base_tool_name=base_tool_name,
+            operation_name=operation_name,
+            operation_schema=operation_schema,
+            args_schema=operation_schema
+        )
     
     def _run(
-        self, 
-        run_manager: Optional[CallbackManagerForToolRun] = None, 
+        self,
+        run_manager: Optional[CallbackManagerForToolRun] = None,
         **kwargs: Any
     ) -> Any:
         """Execute operation synchronously"""
         try:
             # Get original tool instance
-            base_tool = get_tool(self.__dict__['base_tool_name'])
-            
+            base_tool = get_tool(self.base_tool_name)
+
             # Execute operation
-            result = base_tool.run(self.__dict__['operation_name'], **kwargs)
-            
+            result = base_tool.run(self.operation_name, **kwargs)
+
             logger.info(f"Successfully executed {self.name} with result type: {type(result)}")
             return result
-            
+
         except Exception as e:
             logger.error(f"Error executing {self.name}: {str(e)}")
             raise
-    
+
     async def _arun(
-        self, 
+        self,
         run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
         **kwargs: Any
     ) -> Any:
         """Execute operation asynchronously"""
         try:
             # Get original tool instance
-            base_tool = get_tool(self.__dict__['base_tool_name'])
-            
+            base_tool = get_tool(self.base_tool_name)
+
             # Execute asynchronous operation
-            result = await base_tool.run_async(self.__dict__['operation_name'], **kwargs)
-            
+            result = await base_tool.run_async(self.operation_name, **kwargs)
+
             logger.info(f"Successfully executed {self.name} async with result type: {type(result)}")
             return result
-            
+
         except Exception as e:
             logger.error(f"Error executing {self.name} async: {str(e)}")
             raise
@@ -121,47 +126,90 @@ class ToolRegistry:
     def discover_operations(self, base_tool_class: Type[BaseTool]) -> List[Dict[str, Any]]:
         """
         Discover all operation methods and Schemas of BaseTool class
-        
+
         Args:
             base_tool_class: BaseTool subclass
-            
+
         Returns:
             List of operation information, including method names, Schemas, descriptions, etc.
         """
         operations = []
-        
+
         # Get all Schema classes
+        # Build a mapping from normalized names to Schema classes
+        # Check both class-level and module-level schemas
         schemas = {}
+
+        # 1. Check class-level schemas (e.g., ChartTool)
         for attr_name in dir(base_tool_class):
             attr = getattr(base_tool_class, attr_name)
             if isinstance(attr, type) and issubclass(attr, BaseModel) and attr.__name__.endswith('Schema'):
-                op_name = attr.__name__.replace('Schema', '').lower()
-                schemas[op_name] = attr
-        
+                # Normalize: remove 'Schema' suffix, convert to lowercase, remove underscores
+                schema_base_name = attr.__name__.replace('Schema', '')
+                normalized_name = schema_base_name.replace('_', '').lower()
+                schemas[normalized_name] = attr
+                logger.debug(f"Found class-level schema {attr.__name__} -> normalized: {normalized_name}")
+
+        # 2. Check module-level schemas (e.g., ImageTool)
+        tool_module = inspect.getmodule(base_tool_class)
+        if tool_module:
+            for attr_name in dir(tool_module):
+                if attr_name.startswith('_'):
+                    continue
+                attr = getattr(tool_module, attr_name)
+                if isinstance(attr, type) and issubclass(attr, BaseModel) and attr.__name__.endswith('Schema'):
+                    # Skip if already found at class level
+                    schema_base_name = attr.__name__.replace('Schema', '')
+                    normalized_name = schema_base_name.replace('_', '').lower()
+                    if normalized_name not in schemas:
+                        schemas[normalized_name] = attr
+                        logger.debug(f"Found module-level schema {attr.__name__} -> normalized: {normalized_name}")
+
         # Get all public methods
         for method_name in dir(base_tool_class):
             if method_name.startswith('_'):
                 continue
-                
+
             method = getattr(base_tool_class, method_name)
             if not callable(method):
                 continue
-                
-            # Skip base class methods
+
+            # Skip base class methods and Schema classes themselves
             if method_name in ['run', 'run_async', 'run_batch']:
                 continue
-            
+
+            # Skip if it's a class (like Config or Schema classes)
+            if isinstance(method, type):
+                continue
+
+            # Normalize method name: remove underscores and convert to lowercase
+            normalized_method_name = method_name.replace('_', '').lower()
+
+            # Try to find matching schema
+            matching_schema = schemas.get(normalized_method_name)
+
+            if matching_schema:
+                logger.debug(f"Matched method {method_name} with manual schema {matching_schema.__name__}")
+            else:
+                # Auto-generate schema if not found
+                auto_schema = generate_schema_from_method(method, method_name)
+                if auto_schema:
+                    matching_schema = auto_schema
+                    logger.debug(f"Auto-generated schema for method {method_name}: {auto_schema.__name__}")
+                else:
+                    logger.debug(f"No schema found or generated for method {method_name}")
+
             # Get method information
             operation_info = {
                 'name': method_name,
                 'method': method,
-                'schema': schemas.get(method_name),
+                'schema': matching_schema,
                 'description': inspect.getdoc(method) or f"Execute {method_name} operation",
                 'is_async': inspect.iscoroutinefunction(method)
             }
-            
+
             operations.append(operation_info)
-        
+
         return operations
     
     def _extract_description(self, method, base_tool_name: str, operation_name: str, schema: Optional[Type[BaseModel]] = None) -> str:
@@ -255,20 +303,23 @@ class ToolRegistry:
     def create_all_langchain_tools(self) -> List[LangchainToolAdapter]:
         """
         Create Langchain adapters for all registered BaseTools
-        
+
         Returns:
             List of all Langchain tool adapters
         """
         all_tools = []
-        
-        for tool_name in list_tools():
+
+        # list_tools() returns a list of dicts, extract tool names
+        tool_infos = list_tools()
+        for tool_info in tool_infos:
+            tool_name = tool_info['name']
             try:
                 tools = self.create_langchain_tools(tool_name)
                 all_tools.extend(tools)
             except Exception as e:
                 logger.error(f"Failed to create Langchain tools for {tool_name}: {e}")
-        
-        logger.info(f"Created total {len(all_tools)} Langchain tools from {len(list_tools())} base tools")
+
+        logger.info(f"Created total {len(all_tools)} Langchain tools from {len(tool_infos)} base tools")
         return all_tools
     
     def get_tool(self, name: str) -> Optional[LangchainToolAdapter]:

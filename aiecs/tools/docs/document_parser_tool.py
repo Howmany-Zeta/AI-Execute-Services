@@ -326,9 +326,23 @@ class DocumentParserTool(BaseTool):
             # Cleanup temporary files
             self._cleanup_temp_files(source)
     
-    async def parse_document_async(self, **kwargs) -> Dict[str, Any]:
+    async def parse_document_async(self,
+                                    source: str,
+                                    strategy: ParsingStrategy = ParsingStrategy.FULL_CONTENT,
+                                    output_format: OutputFormat = OutputFormat.JSON,
+                                    force_type: Optional[DocumentType] = None,
+                                    extract_metadata: bool = True,
+                                    chunk_size: Optional[int] = None) -> Dict[str, Any]:
         """Async version of parse_document"""
-        return await asyncio.to_thread(self.parse_document, **kwargs)
+        return await asyncio.to_thread(
+            self.parse_document,
+            source=source,
+            strategy=strategy,
+            output_format=output_format,
+            force_type=force_type,
+            extract_metadata=extract_metadata,
+            chunk_size=chunk_size
+        )
     
     def _is_url(self, source: str) -> bool:
         """Check if source is a URL"""
