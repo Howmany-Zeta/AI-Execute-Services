@@ -214,7 +214,7 @@ class ImageTool(BaseTool):
         """Clean up Tesseract processes on destruction."""
         self._tesseract_manager.cleanup()
 
-    def update_settings(self, config: Dict):
+    def update_settings(self, config: Dict) -> None:
         """
         Update configuration settings dynamically.
 

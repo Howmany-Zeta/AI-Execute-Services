@@ -305,21 +305,21 @@ def verify_installation(logger: logging.Logger) -> bool:
     return success
 
 
-def main():
-    """Main function to download all required NLP data."""
+def download_all_nlp_data():
+    """Download all required NLP data."""
     logger = setup_logging()
     logger.info("Starting AIECS NLP data download process...")
-    
+
     success = True
-    
+
     # Download NLTK data
     if not download_nltk_data(logger):
         success = False
-    
+
     # Download spaCy English model
     if not download_spacy_model('en_core_web_sm', logger):
         success = False
-    
+
     # Download spaCy Chinese model (optional)
     if not download_spacy_model('zh_core_web_sm', logger):
         logger.warning("Chinese model download failed, but this is optional")
@@ -329,10 +329,10 @@ def main():
     if not download_spacy_pkuseg_model(logger):
         logger.warning("spaCy PKUSeg model download failed, but this is optional")
         # Don't mark as failure for PKUSeg model
-    
+
     # Check RAKE-NLTK (optional)
     download_rake_nltk_data(logger)
-    
+
     # Verify installation
     if success and verify_installation(logger):
         logger.info("✅ All NLP data downloaded and verified successfully!")
@@ -342,6 +342,48 @@ def main():
         logger.error("❌ Some NLP data downloads failed. Please check the logs above.")
         logger.error("You may need to install missing packages or run this script again.")
         return 1
+
+
+def main():
+    """Main entry point with argument parsing."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description='Download NLP data for AIECS tools',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Show this help message
+  aiecs-download-nlp-data --help
+
+  # Download all NLP data
+  aiecs-download-nlp-data --download
+  aiecs-download-nlp-data -d
+
+NLP Data Includes:
+  - NLTK packages: stopwords, punkt, wordnet, averaged_perceptron_tagger
+  - spaCy models: en_core_web_sm (English), zh_core_web_sm (Chinese, optional)
+  - spaCy PKUSeg model (Chinese segmentation, optional)
+  - RAKE-NLTK data (keyword extraction, optional)
+        """
+    )
+
+    parser.add_argument(
+        '-d', '--download',
+        action='store_true',
+        help='Download all NLP data packages'
+    )
+
+    args = parser.parse_args()
+
+    # If no arguments provided, show help
+    if not args.download:
+        parser.print_help()
+        print("\n⚠️  No action specified. Use --download or -d to download NLP data.")
+        return 0
+
+    # Execute download
+    return download_all_nlp_data()
 
 
 if __name__ == "__main__":

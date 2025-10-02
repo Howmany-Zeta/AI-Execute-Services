@@ -19,12 +19,6 @@ exclude = '''
 
 # 移除 Poetry 配置，统一使用 project.optional-dependencies
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.4.2"
-pytest-cov = "^7.0.0"
-pytest-asyncio = "^1.2.0"
-pytest-mock = "^3.15.1"
-
 [project]
 name = "aiecs"
 version = "1.1.0"
@@ -171,11 +165,13 @@ dev = [
 
 [project.scripts]
 aiecs = "aiecs.__main__:main"
-aiecs-patch-weasel = "aiecs.scripts.fix_weasel_validator:main"
-aiecs-download-nlp-data = "aiecs.scripts.download_nlp_data:main"
-aiecs-check-deps = "aiecs.scripts.dependency_checker:main"
-aiecs-quick-check = "aiecs.scripts.quick_dependency_check:main"
-aiecs-fix-deps = "aiecs.scripts.dependency_fixer:main"
+aiecs-patch-weasel = "aiecs.scripts.dependance_patch.fix_weasel.fix_weasel_validator:main"
+aiecs-download-nlp-data = "aiecs.scripts.dependance_check.download_nlp_data:main"
+aiecs-check-deps = "aiecs.scripts.dependance_check.dependency_checker:main"
+aiecs-quick-check = "aiecs.scripts.dependance_check.quick_dependency_check:main"
+aiecs-fix-deps = "aiecs.scripts.dependance_check.dependency_fixer:main"
+aiecs-tools-check-annotations = "aiecs.scripts.tools_develop.check_type_annotations:main"
+aiecs-tools-validate-schemas = "aiecs.scripts.tools_develop.validate_tool_schemas:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

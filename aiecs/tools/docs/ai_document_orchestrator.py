@@ -243,9 +243,23 @@ class AIDocumentOrchestrator(BaseTool):
         except Exception as e:
             raise ProcessingError(f"Document processing failed: {str(e)}")
     
-    async def process_document_async(self, **kwargs) -> Dict[str, Any]:
+    async def process_document_async(self,
+                                      source: str,
+                                      processing_mode: ProcessingMode,
+                                      ai_provider: Optional[AIProvider] = None,
+                                      processing_params: Optional[Dict[str, Any]] = None,
+                                      parse_params: Optional[Dict[str, Any]] = None,
+                                      ai_params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Async version of process_document"""
-        return await asyncio.to_thread(self.process_document, **kwargs)
+        return await asyncio.to_thread(
+            self.process_document,
+            source=source,
+            processing_mode=processing_mode,
+            ai_provider=ai_provider,
+            processing_params=processing_params,
+            parse_params=parse_params,
+            ai_params=ai_params
+        )
     
     def batch_process_documents(self,
                                sources: List[str],
