@@ -1,7 +1,7 @@
 """
-自动 Schema 生成工具
+Automatic Schema Generation Tool
 
-从方法签名和类型注解自动生成 Pydantic Schema
+Automatically generate Pydantic Schema from method signatures and type annotations
 """
 
 import inspect
@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 
 def _normalize_type(param_type: Type) -> Type:
     """
-    标准化类型，处理不支持的类型
+    Normalize types, handle unsupported types
 
-    将 pandas.DataFrame 等复杂类型映射为 Any
+    Map complex types like pandas.DataFrame to Any
     """
-    # 获取类型名称
+    # Get type name
     type_name = getattr(param_type, '__name__', str(param_type))
 
-    # 检查是否是 pandas 类型
+    # Check if it's a pandas type
     if 'DataFrame' in type_name or 'Series' in type_name:
         return Any
 
@@ -30,9 +30,9 @@ def _normalize_type(param_type: Type) -> Type:
 
 def _extract_param_description_from_docstring(docstring: str, param_name: str) -> Optional[str]:
     """
-    从文档字符串中提取参数描述
+    Extract parameter description from docstring
 
-    支持格式:
+    Supported formats:
     - Google style: Args: param_name: description
     - NumPy style: Parameters: param_name : type description
     """
@@ -47,26 +47,26 @@ def _extract_param_description_from_docstring(docstring: str, param_name: str) -
     for line in lines:
         stripped = line.strip()
 
-        # 检测 Args/Parameters 部分
+        # Detect Args/Parameters section
         if stripped in ['Args:', 'Arguments:', 'Parameters:']:
             in_args_section = True
             continue
 
-        # 检测结束
+        # Detect end
         if in_args_section and stripped in ['Returns:', 'Raises:', 'Yields:', 'Examples:', 'Note:', 'Notes:']:
             break
 
         if in_args_section:
-            # Google style: param_name: description 或 param_name (type): description
+            # Google style: param_name: description or param_name (type): description
             if ':' in stripped and not stripped.startswith(' '):
-                # 保存之前的参数
+                # Save previous parameter
                 if current_param == param_name and description_lines:
                     return ' '.join(description_lines).strip()
 
-                # 解析新参数
+                # Parse new parameter
                 parts = stripped.split(':', 1)
                 if len(parts) == 2:
-                    # 移除可能的类型注解 (type)
+                    # Remove possible type annotation (type)
                     param_part = parts[0].strip()
                     if '(' in param_part:
                         param_part = param_part.split('(')[0].strip()
@@ -74,10 +74,10 @@ def _extract_param_description_from_docstring(docstring: str, param_name: str) -
                     current_param = param_part
                     description_lines = [parts[1].strip()]
             elif current_param and stripped:
-                # 继续描述
+                # Continue description
                 description_lines.append(stripped)
 
-    # 检查最后一个参数
+    # Check last parameter
     if current_param == param_name and description_lines:
         return ' '.join(description_lines).strip()
 
@@ -90,59 +90,59 @@ def generate_schema_from_method(
     base_class: Type[BaseModel] = BaseModel
 ) -> Optional[Type[BaseModel]]:
     """
-    从方法签名自动生成 Pydantic Schema
+    Automatically generate Pydantic Schema from method signature
 
     Args:
-        method: 要生成 Schema 的方法
-        method_name: 方法名称
-        base_class: Schema 基类
+        method: Method to generate Schema for
+        method_name: Method name
+        base_class: Schema base class
 
     Returns:
-        生成的 Pydantic Schema 类，如果无法生成则返回 None
+        Generated Pydantic Schema class, returns None if unable to generate
     """
     try:
-        # 获取方法签名
+        # Get method signature
         sig = inspect.signature(method)
 
-        # 获取类型注解
+        # Get type annotations
         try:
             type_hints = get_type_hints(method)
         except Exception as e:
             logger.debug(f"Failed to get type hints for {method_name}: {e}")
             type_hints = {}
 
-        # 获取文档字符串
+        # Get docstring
         docstring = inspect.getdoc(method) or f"Execute {method_name} operation"
 
-        # 提取简短描述（第一行）
+        # Extract short description (first line)
         first_line = docstring.split('\n')[0].strip()
         schema_description = first_line if first_line else f"Execute {method_name} operation"
 
-        # 构建字段定义
+        # Build field definitions
         field_definitions = {}
 
         for param_name, param in sig.parameters.items():
-            # 跳过 self 参数
+            # Skip self parameter
             if param_name == 'self':
                 continue
 
-            # 获取参数类型并标准化
+            # Get parameter type and normalize
             param_type = type_hints.get(param_name, Any)
             param_type = _normalize_type(param_type)
 
-            # 获取默认值
+            # Get default value
             has_default = param.default != inspect.Parameter.empty
             default_value = param.default if has_default else ...
 
-            # 从文档字符串提取参数描述
+            # Extract parameter description from docstring
             field_description = _extract_param_description_from_docstring(docstring, param_name)
             if not field_description:
                 field_description = f"Parameter {param_name}"
 
-            # 创建 Field
+            # Create Field
             if has_default:
                 if default_value is None:
-                    # Optional 参数
+                    # Optional parameter
                     field_definitions[param_name] = (
                         param_type,
                         Field(default=None, description=field_description)
@@ -153,21 +153,21 @@ def generate_schema_from_method(
                         Field(default=default_value, description=field_description)
                     )
             else:
-                # 必需参数
+                # Required parameter
                 field_definitions[param_name] = (
                     param_type,
                     Field(description=field_description)
                 )
 
-        # 如果没有参数（除了 self），返回 None
+        # If no parameters (except self), return None
         if not field_definitions:
             logger.debug(f"No parameters found for {method_name}, skipping schema generation")
             return None
 
-        # 生成 Schema 类名
+        # Generate Schema class name
         schema_name = f"{method_name.title().replace('_', '')}Schema"
 
-        # 创建 Schema 类，允许任意类型
+        # Create Schema class, allow arbitrary types
         schema_class = create_model(
             schema_name,
             __base__=base_class,
@@ -186,40 +186,40 @@ def generate_schema_from_method(
 
 def generate_schemas_for_tool(tool_class: Type) -> Dict[str, Type[BaseModel]]:
     """
-    为工具类的所有方法生成 Schema
+    Generate Schema for all methods of a tool class
     
     Args:
-        tool_class: 工具类
+        tool_class: Tool class
         
     Returns:
-        方法名到 Schema 类的映射
+        Mapping from method names to Schema classes
     """
     schemas = {}
     
     for method_name in dir(tool_class):
-        # 跳过私有方法和特殊方法
+        # Skip private methods and special methods
         if method_name.startswith('_'):
             continue
         
-        # 跳过基类方法
+        # Skip base class methods
         if method_name in ['run', 'run_async', 'run_batch']:
             continue
         
         method = getattr(tool_class, method_name)
         
-        # 跳过非方法属性
+        # Skip non-method attributes
         if not callable(method):
             continue
         
-        # 跳过类（如 Config, Schema 等）
+        # Skip classes (like Config, Schema, etc.)
         if isinstance(method, type):
             continue
         
-        # 生成 Schema
+        # Generate Schema
         schema = generate_schema_from_method(method, method_name)
         
         if schema:
-            # 标准化方法名（移除下划线，转小写）
+            # Normalize method name (remove underscores, convert to lowercase)
             normalized_name = method_name.replace('_', '').lower()
             schemas[normalized_name] = schema
             logger.info(f"Generated schema for {method_name}")
@@ -230,36 +230,36 @@ def generate_schemas_for_tool(tool_class: Type) -> Dict[str, Type[BaseModel]]:
 
 
 
-# 使用示例
+# Usage example
 if __name__ == '__main__':
     import sys
     sys.path.insert(0, '/home/coder1/python-middleware-dev')
 
     from aiecs.tools import discover_tools, TOOL_CLASSES
 
-    # 配置日志
+    # Configure logging
     logging.basicConfig(level=logging.INFO)
 
-    # 发现工具
+    # Discover tools
     discover_tools()
 
-    # 为 PandasTool 生成 Schema
-    print("为 PandasTool 生成 Schema:")
+    # Generate Schema for PandasTool
+    print("Generating Schema for PandasTool:")
     print("=" * 80)
 
     pandas_tool = TOOL_CLASSES['pandas']
     schemas = generate_schemas_for_tool(pandas_tool)
 
-    print(f"\n生成了 {len(schemas)} 个 Schema:\n")
+    print(f"\nGenerated {len(schemas)} Schemas:\n")
 
-    # 显示前3个示例
+    # Show first 3 examples
     for method_name, schema in list(schemas.items())[:3]:
         print(f"{schema.__name__}:")
-        print(f"  描述: {schema.__doc__}")
-        print(f"  字段:")
+        print(f"  Description: {schema.__doc__}")
+        print(f"  Fields:")
         for field_name, field_info in schema.model_fields.items():
-            required = "必需" if field_info.is_required() else "可选"
-            default = f" (默认: {field_info.default})" if not field_info.is_required() and field_info.default is not None else ""
+            required = "Required" if field_info.is_required() else "Optional"
+            default = f" (default: {field_info.default})" if not field_info.is_required() and field_info.default is not None else ""
             print(f"    - {field_name}: {field_info.description} [{required}]{default}")
         print()
 

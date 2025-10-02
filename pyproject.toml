@@ -21,7 +21,7 @@ exclude = '''
 
 [project]
 name = "aiecs"
-version = "1.1.0"
+version = "1.1.1"
 description = "AI Execute Services - A middleware framework for AI-powered task execution and tool orchestration"
 authors = [
     {name = "AIECS Team", email = "iretbl@gmail.com"}
@@ -165,6 +165,7 @@ dev = [
 
 [project.scripts]
 aiecs = "aiecs.__main__:main"
+aiecs-version = "aiecs.scripts.aid.version_manager:main"
 aiecs-patch-weasel = "aiecs.scripts.dependance_patch.fix_weasel.fix_weasel_validator:main"
 aiecs-download-nlp-data = "aiecs.scripts.dependance_check.download_nlp_data:main"
 aiecs-check-deps = "aiecs.scripts.dependance_check.dependency_checker:main"

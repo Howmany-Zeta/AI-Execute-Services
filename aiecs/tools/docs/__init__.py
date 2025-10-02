@@ -30,6 +30,9 @@ def _lazy_load_doc_tool(tool_name: str):
     if tool_name in _LOADED_DOC_TOOLS:
         return
     
+    # Mark as loading to prevent infinite recursion
+    _LOADED_DOC_TOOLS.add(tool_name)
+    
     try:
         if tool_name == 'document_parser_tool':
             from . import document_parser_tool
@@ -53,9 +56,9 @@ def _lazy_load_doc_tool(tool_name: str):
             from . import content_insertion_tool
             globals()['content_insertion_tool'] = content_insertion_tool
         
-        _LOADED_DOC_TOOLS.add(tool_name)
-        
     except ImportError as e:
+        # Remove from loaded set if import failed
+        _LOADED_DOC_TOOLS.discard(tool_name)
         print(f"Warning: Could not import {tool_name}: {e}")
 
 def __getattr__(name: str):
