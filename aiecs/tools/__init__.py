@@ -11,25 +11,25 @@ from aiecs.tools.base_tool import BaseTool
 
 logger = logging.getLogger(__name__)
 
-# 全局工具注册表
+# Global tool registry
 TOOL_REGISTRY = {}
 TOOL_CLASSES = {}
 TOOL_CONFIGS = {}
 
 def register_tool(name):
     """
-    装饰器，用于注册工具类
+    Decorator for registering tool classes
 
     Args:
-        name: 工具名称
+        name: Tool name
 
     Returns:
-        装饰后的类
+        Decorated class
     """
     def wrapper(cls):
-        # 存储工具类，但不立即实例化
+        # Store tool class but don't instantiate immediately
         TOOL_CLASSES[name] = cls
-        # 兼容旧版本：如果类继承自BaseTool，则不立即实例化
+        # Backward compatibility: if class inherits from BaseTool, don't instantiate immediately
         if not issubclass(cls, BaseTool):
             TOOL_REGISTRY[name] = cls()
         return cls
@@ -37,25 +37,25 @@ def register_tool(name):
 
 def get_tool(name):
     """
-    获取工具实例
+    Get tool instance
 
     Args:
-        name: 工具名称
+        name: Tool name
 
     Returns:
-        工具实例
+        Tool instance
 
     Raises:
-        ValueError: 如果工具未注册
+        ValueError: If tool is not registered
     """
-    # 检查是否需要替换占位符或延迟实例化
+    # Check if placeholder needs to be replaced or lazy instantiation is needed
     if name in TOOL_CLASSES:
-        # 如果 TOOL_REGISTRY 中是占位符，或者不存在，则实例化真实工具类
+        # If TOOL_REGISTRY contains placeholder or doesn't exist, instantiate real tool class
         current_tool = TOOL_REGISTRY.get(name)
         is_placeholder = getattr(current_tool, 'is_placeholder', False)
 
         if current_tool is None or is_placeholder:
-            # 延迟实例化BaseTool子类，替换占位符
+            # Lazy instantiation of BaseTool subclasses, replace placeholder
             tool_class = TOOL_CLASSES[name]
             config = TOOL_CONFIGS.get(name, {})
             TOOL_REGISTRY[name] = tool_class(config)
@@ -68,17 +68,17 @@ def get_tool(name):
 
 def list_tools():
     """
-    列出所有已注册的工具
+    List all registered tools
 
     Returns:
-        工具信息字典列表
+        List of tool information dictionaries
     """
     tools = []
     all_tool_names = list(set(list(TOOL_REGISTRY.keys()) + list(TOOL_CLASSES.keys())))
     
     for tool_name in all_tool_names:
         try:
-            # 优先使用已有实例的信息
+            # Prefer using information from existing instances
             if tool_name in TOOL_REGISTRY:
                 tool_instance = TOOL_REGISTRY[tool_name]
                 tool_info = {
@@ -90,7 +90,7 @@ def list_tools():
                     "status": "loaded"
                 }
             elif tool_name in TOOL_CLASSES:
-                # 从类定义获取信息，但不实例化
+                # Get information from class definition but don't instantiate
                 tool_class = TOOL_CLASSES[tool_name]
                 tool_info = {
                     "name": tool_name,
@@ -107,7 +107,7 @@ def list_tools():
             
         except Exception as e:
             logger.warning(f"Failed to get info for tool {tool_name}: {e}")
-            # 提供基本信息
+            # Provide basic information
             tools.append({
                 "name": tool_name,
                 "description": f"{tool_name} (info unavailable)",
@@ -121,26 +121,26 @@ def list_tools():
 
 def discover_tools(package_path: str = "aiecs.tools"):
     """
-    发现并注册包中的所有工具
+    Discover and register all tools in the package
 
     Args:
-        package_path: 要搜索的包路径
+        package_path: Package path to search
     """
     package = importlib.import_module(package_path)
     package_dir = os.path.dirname(package.__file__)
 
     for _, module_name, is_pkg in pkgutil.iter_modules([package_dir]):
         if is_pkg:
-            # 递归搜索子包中的工具
+            # Recursively search for tools in subpackages
             discover_tools(f"{package_path}.{module_name}")
         else:
-            # 导入模块
+            # Import module
             try:
                 importlib.import_module(f"{package_path}.{module_name}")
             except Exception as e:
                 logger.error(f"Error importing module {module_name}: {e}")
 
-# 导入基础工具类供继承使用
+# Import base tool class for inheritance
 from aiecs.tools.base_tool import BaseTool
 
 # Lazy loading strategy: don't import all tools at package init
