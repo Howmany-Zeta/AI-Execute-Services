@@ -103,6 +103,7 @@ def download_nltk_data(logger: logging.Logger) -> bool:
         packages_to_download = [
             'stopwords',
             'punkt',
+            'punkt_tab',  # Added for RAKE-NLTK compatibility
             'wordnet',
             'averaged_perceptron_tagger'
         ]
