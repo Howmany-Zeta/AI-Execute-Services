@@ -117,9 +117,11 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         Args:
             use_existing_redis: Whether to use the existing Redis client from infrastructure
+                              (已弃用: 现在总是创建独立的 RedisClient 实例以避免事件循环冲突)
         """
         self.use_existing_redis = use_existing_redis
         self.redis_client: Optional[redis.Redis] = None
+        self._redis_client_wrapper: Optional[Any] = None  # RedisClient 包装器实例
 
         # Fallback to memory storage if Redis not available
         self._memory_sessions: Dict[str, SessionMetrics] = {}
@@ -149,49 +151,51 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             return True
 
         try:
-            if self.use_existing_redis and get_redis_client:
-                # First ensure Redis client is initialized
-                from aiecs.infrastructure.persistence.redis_client import initialize_redis_client
-                try:
-                    await initialize_redis_client()
-                except Exception as init_error:
-                    logger.warning(f"Failed to initialize Redis client: {init_error}")
-                    # Fall through to direct connection attempt
+            # ✅ 修复方案：在当前事件循环中创建新的 RedisClient 实例
+            # 
+            # 问题根源：
+            # - 全局 RedisClient 单例在应用启动的事件循环A中创建
+            # - ContextEngine 可能在不同的事件循环B中被初始化（例如在请求处理中）
+            # - redis.asyncio 的连接池绑定到创建时的事件循环
+            # - 跨事件循环使用会导致 "Task got Future attached to a different loop" 错误
+            #
+            # 解决方案：
+            # - 为每个 ContextEngine 实例创建独立的 RedisClient
+            # - 使用 RedisClient 包装器保持架构一致性
+            # - 在当前事件循环中初始化，确保事件循环匹配
+            
+            from aiecs.infrastructure.persistence.redis_client import RedisClient
+            
+            # 创建专属的 RedisClient 实例（在当前事件循环中）
+            self._redis_client_wrapper = RedisClient()
+            await self._redis_client_wrapper.initialize()
+            
+            # 获取底层 redis.Redis 客户端用于现有代码
+            self.redis_client = await self._redis_client_wrapper.get_client()
 
-                # Use existing Redis client from infrastructure
-                redis_client_instance = await get_redis_client()
-                self.redis_client = await redis_client_instance.get_client()
-
-                # Test connection
-                await self.redis_client.ping()
-                logger.info("ContextEngine connected to existing Redis client successfully")
-                return True
-            else:
-                # Fallback to direct Redis connection (for testing or standalone use)
-                import os
-                redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-                self.redis_client = redis.from_url(
-                    redis_url,
-                    decode_responses=True,
-                    socket_connect_timeout=5,
-                    socket_timeout=5
-                )
-
-                # Test connection
-                await self.redis_client.ping()
-                logger.info("ContextEngine connected to Redis directly")
-                return True
+            # Test connection
+            await self.redis_client.ping()
+            logger.info("ContextEngine connected to Redis successfully using RedisClient wrapper in current event loop")
+            return True
 
         except Exception as e:
             logger.error(f"Failed to connect to Redis: {e}")
             logger.warning("Falling back to memory storage")
             self.redis_client = None
+            self._redis_client_wrapper = None
             return False
 
     async def close(self):
         """Close Redis connection."""
-        if self.redis_client:
+        if hasattr(self, '_redis_client_wrapper') and self._redis_client_wrapper:
+            # 使用 RedisClient 包装器的 close 方法
+            await self._redis_client_wrapper.close()
+            self._redis_client_wrapper = None
+            self.redis_client = None
+        elif self.redis_client:
+            # 兼容性处理：直接关闭 redis 客户端
             await self.redis_client.close()
+            self.redis_client = None
 
     # ==================== Session Management ====================
 
