@@ -12,8 +12,7 @@ from urllib.parse import urlparse, urljoin
 import httpx
 from bs4 import BeautifulSoup
 from urllib import request as urllib_request
-from pydantic import BaseModel, ValidationError, ConfigDict
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, ValidationError, ConfigDict, Field
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -45,31 +44,6 @@ class RenderEngine(str, Enum):
     NONE = "none"
     PLAYWRIGHT = "playwright"
 
-# Global settings
-class ScraperSettings(BaseModel):
-    """
-    Configuration for ScraperTool.
-
-    Attributes:
-        user_agent (str): User agent for HTTP requests.
-        max_content_length (int): Maximum content length in bytes.
-        output_dir (str): Directory for output files.
-        scrapy_command (str): Command to run Scrapy.
-        allowed_domains (List[str]): Allowed domains for scraping.
-        blocked_domains (List[str]): Blocked domains for scraping.
-        playwright_available (bool): Whether Playwright is available.
-        env_prefix (str): Environment variable prefix.
-    """
-    user_agent: str = "PythonMiddlewareScraper/2.0"
-    max_content_length: int = 10 * 1024 * 1024  # 10MB
-    output_dir: str = os.path.join(tempfile.gettempdir(), 'scraper_outputs')
-    scrapy_command: str = "scrapy"
-    allowed_domains: List[str] = []
-    blocked_domains: List[str] = []
-    playwright_available: bool = False
-    env_prefix: str = "SCRAPER_TOOL_"
-
-    model_config = ConfigDict(env_prefix="SCRAPER_TOOL_")
 
 # Exceptions
 class ScraperToolError(Exception):
@@ -117,39 +91,72 @@ class ScraperTool(BaseTool):
     - Scrapy integration for advanced crawling
     - Output in various formats: text, JSON, HTML, Markdown, CSV
     """
+    
+    # Configuration schema
+    class Config(BaseModel):
+        """Configuration for the scraper tool"""
+        model_config = ConfigDict(env_prefix="SCRAPER_TOOL_")
+        
+        user_agent: str = Field(
+            default="PythonMiddlewareScraper/2.0",
+            description="User agent for HTTP requests"
+        )
+        max_content_length: int = Field(
+            default=10 * 1024 * 1024,
+            description="Maximum content length in bytes"
+        )
+        output_dir: str = Field(
+            default=os.path.join(tempfile.gettempdir(), 'scraper_outputs'),
+            description="Directory for output files"
+        )
+        scrapy_command: str = Field(
+            default="scrapy",
+            description="Command to run Scrapy"
+        )
+        allowed_domains: List[str] = Field(
+            default=[],
+            description="Allowed domains for scraping"
+        )
+        blocked_domains: List[str] = Field(
+            default=[],
+            description="Blocked domains for scraping"
+        )
+        playwright_available: bool = Field(
+            default=False,
+            description="Whether Playwright is available (auto-detected)"
+        )
+    
     def __init__(self, config: Optional[Dict] = None):
         """
         Initialize ScraperTool with settings and resources.
 
         Args:
-            config (Dict, optional): Configuration overrides for ScraperSettings.
+            config (Dict, optional): Configuration overrides for ScraperTool.
 
         Raises:
             ValueError: If config contains invalid settings.
         """
         super().__init__(config)
-        self.settings = ScraperSettings()
-        if config:
-            try:
-                self.settings = self.settings.model_validate({**self.settings.model_dump(), **config})
-            except ValidationError as e:
-                raise ValueError(f"Invalid settings: {e}")
+        
+        # Parse configuration
+        self.config = self.Config(**(config or {}))
+        
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
             handler = logging.StreamHandler()
             handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
             self.logger.addHandler(handler)
         self.logger.setLevel(logging.INFO)
-        os.makedirs(self.settings.output_dir, exist_ok=True)
+        os.makedirs(self.config.output_dir, exist_ok=True)
         self._check_external_tools()
 
     def _check_external_tools(self):
         """Check if external tools are available."""
         try:
             import playwright
-            self.settings.playwright_available = True
+            self.config.playwright_available = True
         except ImportError:
-            self.settings.playwright_available = False
+            self.config.playwright_available = False
 
 
     async def _save_output(self, content: Any, path: str, format: OutputFormat) -> None:
@@ -232,7 +239,7 @@ class ScraperTool(BaseTool):
         try:
             headers = headers or {}
             if 'User-Agent' not in headers:
-                headers['User-Agent'] = self.settings.user_agent
+                headers['User-Agent'] = self.config.user_agent
             kwargs = {
                 'params': params,
                 'headers': headers,
@@ -261,7 +268,7 @@ class ScraperTool(BaseTool):
             except httpx.HTTPStatusError as e:
                 raise HttpError(f"HTTP {e.response.status_code}: {e.response.reason_phrase} for {url}")
             
-            if len(resp.content) > self.settings.max_content_length:
+            if len(resp.content) > self.config.max_content_length:
                 raise HttpError(f"Response content too large: {len(resp.content)} bytes")
 
             if content_type == ContentType.JSON:
@@ -308,7 +315,7 @@ class ScraperTool(BaseTool):
             
             headers = headers or {}
             if 'User-Agent' not in headers:
-                headers['User-Agent'] = self.settings.user_agent
+                headers['User-Agent'] = self.config.user_agent
             data_bytes = None
             if data:
                 data_bytes = urllib.parse.urlencode(data).encode()
@@ -320,7 +327,7 @@ class ScraperTool(BaseTool):
             )
             with urllib_request.urlopen(req) as resp:
                 content_length = resp.getheader('Content-Length')
-                if content_length and int(content_length) > self.settings.max_content_length:
+                if content_length and int(content_length) > self.config.max_content_length:
                     raise HttpError(f"Response content too large: {content_length} bytes")
                 content = resp.read()
                 charset = resp.headers.get_content_charset() or 'utf-8'
@@ -375,7 +382,7 @@ class ScraperTool(BaseTool):
         """
         try:
             if engine == RenderEngine.PLAYWRIGHT:
-                if not self.settings.playwright_available:
+                if not self.config.playwright_available:
                     raise RenderingError("Playwright is not available. Install with 'pip install playwright'")
                 result = await self._render_with_playwright(url, wait_time, wait_selector, scroll_to_bottom, screenshot, screenshot_path)
             else:
@@ -393,7 +400,7 @@ class ScraperTool(BaseTool):
         async with async_playwright() as p:
             browser = await p.chromium.launch()
             page = await browser.new_page(
-                user_agent=self.settings.user_agent,
+                user_agent=self.config.user_agent,
                 viewport={'width': 1280, 'height': 800}
             )
             try:
@@ -407,7 +414,7 @@ class ScraperTool(BaseTool):
                     await page.wait_for_timeout(1000)
                 screenshot_result = None
                 if screenshot:
-                    screenshot_path = screenshot_path or os.path.join(self.settings.output_dir, f"screenshot_{int(time.time())}.png")
+                    screenshot_path = screenshot_path or os.path.join(self.config.output_dir, f"screenshot_{int(time.time())}.png")
                     os.makedirs(os.path.dirname(os.path.abspath(screenshot_path)), exist_ok=True)
                     await page.screenshot(path=screenshot_path)
                     screenshot_result = screenshot_path
@@ -447,10 +454,10 @@ class ScraperTool(BaseTool):
             start_time = time.time()
             os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
             cmd = [
-                self.settings.scrapy_command,
+                self.config.scrapy_command,
                 'crawl', spider_name,
                 '-o', output_path,
-                '-s', f'USER_AGENT={self.settings.user_agent}',
+                '-s', f'USER_AGENT={self.config.user_agent}',
                 '-s', 'LOG_LEVEL=INFO'
             ]
             if spider_args:

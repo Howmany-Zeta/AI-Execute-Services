@@ -6,8 +6,7 @@ from typing import Dict, Any, List, Optional, Union, Callable
 from enum import Enum
 from datetime import datetime
 
-from pydantic import BaseModel, Field, ValidationError
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, Field, ValidationError, ConfigDict
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -52,25 +51,6 @@ class AIProvider(str, Enum):
     LOCAL = "local"
 
 
-class WriterOrchestratorSettings(BaseSettings):
-    """Configuration for AI Document Writer Orchestrator"""
-    default_ai_provider: AIProvider = AIProvider.OPENAI
-    max_content_length: int = 50000  # Maximum content length for AI generation
-    max_concurrent_writes: int = 5
-    default_temperature: float = 0.3
-    max_tokens: int = 4000
-    timeout: int = 60
-    
-    # Draft and review settings
-    enable_draft_mode: bool = True
-    enable_content_review: bool = True
-    auto_backup_on_ai_write: bool = True
-    
-    # Directory settings
-    temp_dir: str = tempfile.gettempdir()
-    
-    class Config:
-        env_prefix = "AI_DOC_WRITER_"
 
 
 class AIDocumentWriterOrchestratorError(Exception):
@@ -104,15 +84,58 @@ class AIDocumentWriterOrchestrator(BaseTool):
     - Existing AIECS infrastructure
     """
     
+    # Configuration schema
+    class Config(BaseModel):
+        """Configuration for the AI document writer orchestrator tool"""
+        model_config = ConfigDict(env_prefix="AI_DOC_WRITER_")
+        
+        default_ai_provider: str = Field(
+            default="openai",
+            description="Default AI provider to use"
+        )
+        max_content_length: int = Field(
+            default=50000,
+            description="Maximum content length for AI generation"
+        )
+        max_concurrent_writes: int = Field(
+            default=5,
+            description="Maximum concurrent write operations"
+        )
+        default_temperature: float = Field(
+            default=0.3,
+            description="Default temperature for AI model"
+        )
+        max_tokens: int = Field(
+            default=4000,
+            description="Maximum tokens for AI response"
+        )
+        timeout: int = Field(
+            default=60,
+            description="Timeout in seconds for AI operations"
+        )
+        enable_draft_mode: bool = Field(
+            default=True,
+            description="Whether to enable draft mode"
+        )
+        enable_content_review: bool = Field(
+            default=True,
+            description="Whether to enable content review"
+        )
+        auto_backup_on_ai_write: bool = Field(
+            default=True,
+            description="Whether to automatically backup before AI writes"
+        )
+        temp_dir: str = Field(
+            default=tempfile.gettempdir(),
+            description="Temporary directory for processing"
+        )
+    
     def __init__(self, config: Optional[Dict] = None):
         """Initialize AI Document Writer Orchestrator with settings"""
         super().__init__(config)
-        self.settings = WriterOrchestratorSettings()
-        if config:
-            try:
-                self.settings = self.settings.model_validate({**self.settings.model_dump(), **config})
-            except ValidationError as e:
-                raise ValueError(f"Invalid settings: {e}")
+        
+        # Parse configuration
+        self.config = self.Config(**(config or {}))
         
         self.logger = logging.getLogger(__name__)
         
@@ -328,7 +351,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
                 content_requirements,
                 generation_mode,
                 document_format,
-                ai_provider or self.settings.default_ai_provider,
+                ai_provider or self.config.default_ai_provider,
                 generation_params or {}
             )
             
@@ -363,7 +386,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
                 "generation_mode": generation_mode,
                 "document_format": document_format,
                 "write_strategy": write_strategy,
-                "ai_provider": ai_provider or self.settings.default_ai_provider,
+                "ai_provider": ai_provider or self.config.default_ai_provider,
                 "ai_result": ai_result,
                 "write_result": write_result,
                 "post_process_result": post_process_result,
@@ -431,14 +454,14 @@ class AIDocumentWriterOrchestrator(BaseTool):
             ai_result = self._enhance_content_with_ai(
                 existing_content,
                 enhancement_goals,
-                ai_provider or self.settings.default_ai_provider
+                ai_provider or self.config.default_ai_provider
             )
             
             # Step 3: Write enhanced content
             target = target_path or source_path
             write_mode = "overwrite" if target == source_path else "create"
             
-            if self.settings.auto_backup_on_ai_write and target == source_path:
+            if self.config.auto_backup_on_ai_write and target == source_path:
                 write_mode = "backup_write"
             
             write_result = self.document_writer.write_document(
@@ -486,7 +509,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
         try:
             start_time = datetime.now()
             batch_id = f"batch_ai_write_{int(start_time.timestamp())}"
-            max_concurrent = max_concurrent or self.settings.max_concurrent_writes
+            max_concurrent = max_concurrent or self.config.max_concurrent_writes
             
             self.logger.info(f"Starting batch AI write {batch_id}: {len(write_requests)} requests")
             
@@ -568,7 +591,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
                 edit_operation,
                 edit_instructions,
                 analysis_result,
-                ai_provider or self.settings.default_ai_provider
+                ai_provider or self.config.default_ai_provider
             )
             
             # Step 4: Execute editing operations
@@ -1454,7 +1477,7 @@ Please provide a detailed editing plan with:
                         item.get('requirements', ''),
                         ContentGenerationMode.GENERATE,
                         'markdown',
-                        self.settings.default_ai_provider,
+                        self.config.default_ai_provider,
                         item.get('generation_params', {})
                     )
                     
@@ -1634,7 +1657,7 @@ Please provide a detailed editing plan with:
                 analysis_prompt,
                 ContentGenerationMode.GENERATE,
                 'markdown',
-                self.settings.default_ai_provider,
+                self.config.default_ai_provider,
                 {}
             )
             
@@ -1781,7 +1804,7 @@ Please provide a detailed editing plan with:
         """
         try:
             # Load template
-            template_file = os.path.join(self.settings.temp_dir, f"template_{template_name}.json")
+            template_file = os.path.join(self.config.temp_dir, f"template_{template_name}.json")
             with open(template_file, 'r') as f:
                 import json
                 template_info = json.load(f)
@@ -1798,7 +1821,7 @@ Please provide a detailed editing plan with:
                     f"Template: {template_name}",
                     ContentGenerationMode.TEMPLATE_FILL,
                     "txt",
-                    self.settings.default_ai_provider,
+                    self.config.default_ai_provider,
                     {
                         "template": template_info["content"],
                         "data": template_data
@@ -2189,7 +2212,7 @@ Please provide a detailed editing plan with:
         
         # Log operation
         try:
-            log_file = os.path.join(self.settings.temp_dir, "ai_write_operations.log")
+            log_file = os.path.join(self.config.temp_dir, "ai_write_operations.log")
             with open(log_file, "a") as f:
                 import json
                 f.write(json.dumps(post_process_info) + "\n")

@@ -7,31 +7,16 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from dataclasses import field
 
-from pydantic import BaseModel, ValidationError, field_validator, ConfigDict
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, ValidationError, field_validator, ConfigDict, Field
 from PIL import Image, ExifTags, ImageFilter
 from queue import Queue
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
 
-# Configuration for ImageTool
-class ImageSettings(BaseSettings):
-    """
-    Configuration for ImageTool.
-
-    Attributes:
-        max_file_size_mb (int): Maximum file size in megabytes.
-        allowed_extensions (List[str]): Allowed image file extensions.
-        tesseract_pool_size (int): Number of Tesseract processes for OCR.
-        env_prefix (str): Environment variable prefix for settings.
-    """
-    max_file_size_mb: int = 50
-    allowed_extensions: List[str] = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif']
-    tesseract_pool_size: int = 2
-    env_prefix: str = 'IMAGE_TOOL_'
-
-    model_config = ConfigDict(env_prefix='IMAGE_TOOL_')
+# Module-level default configuration for validators
+_DEFAULT_MAX_FILE_SIZE_MB = 50
+_DEFAULT_ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif']
 
 # Exceptions
 class ImageToolError(Exception):
@@ -55,16 +40,15 @@ class BaseFileSchema(BaseModel):
     @classmethod
     def validate_file_path(cls, v: str) -> str:
         """Validate file path for existence, size, and extension."""
-        settings = ImageSettings()
         abs_path = os.path.abspath(os.path.normpath(v))
         ext = os.path.splitext(abs_path)[1].lower()
-        if ext not in settings.allowed_extensions:
-            raise SecurityError(f"Extension '{ext}' not allowed, expected {settings.allowed_extensions}")
+        if ext not in _DEFAULT_ALLOWED_EXTENSIONS:
+            raise SecurityError(f"Extension '{ext}' not allowed, expected {_DEFAULT_ALLOWED_EXTENSIONS}")
         if not os.path.isfile(abs_path):
             raise FileOperationError(f"File not found: {abs_path}")
         size_mb = os.path.getsize(abs_path) / (1024 * 1024)
-        if size_mb > settings.max_file_size_mb:
-            raise FileOperationError(f"File too large: {size_mb:.1f}MB, max {settings.max_file_size_mb}MB")
+        if size_mb > _DEFAULT_MAX_FILE_SIZE_MB:
+            raise FileOperationError(f"File too large: {size_mb:.1f}MB, max {_DEFAULT_MAX_FILE_SIZE_MB}MB")
         return abs_path
 
 # Schemas for operations
@@ -91,11 +75,10 @@ class ResizeSchema(BaseFileSchema):
     @classmethod
     def validate_output_path(cls, v: str) -> str:
         """Validate output path for existence and extension."""
-        settings = ImageSettings()
         abs_path = os.path.abspath(os.path.normpath(v))
         ext = os.path.splitext(abs_path)[1].lower()
-        if ext not in settings.allowed_extensions:
-            raise SecurityError(f"Output extension '{ext}' not allowed, expected {settings.allowed_extensions}")
+        if ext not in _DEFAULT_ALLOWED_EXTENSIONS:
+            raise SecurityError(f"Output extension '{ext}' not allowed, expected {_DEFAULT_ALLOWED_EXTENSIONS}")
         if os.path.exists(abs_path):
             raise FileOperationError(f"Output file already exists: {abs_path}")
         return abs_path
@@ -118,11 +101,10 @@ class FilterSchema(BaseFileSchema):
     @classmethod
     def validate_output_path(cls, v: str) -> str:
         """Validate output path for existence and extension."""
-        settings = ImageSettings()
         abs_path = os.path.abspath(os.path.normpath(v))
         ext = os.path.splitext(abs_path)[1].lower()
-        if ext not in settings.allowed_extensions:
-            raise SecurityError(f"Output extension '{ext}' not allowed, expected {settings.allowed_extensions}")
+        if ext not in _DEFAULT_ALLOWED_EXTENSIONS:
+            raise SecurityError(f"Output extension '{ext}' not allowed, expected {_DEFAULT_ALLOWED_EXTENSIONS}")
         if os.path.exists(abs_path):
             raise FileOperationError(f"Output file already exists: {abs_path}")
         return abs_path
@@ -183,38 +165,56 @@ class ImageTool(BaseTool):
 
     Inherits from BaseTool to leverage ToolExecutor for caching, concurrency, and error handling.
     """
-    def __init__(self, config: Dict[Any, Any] = None):
+    
+    # Configuration schema
+    class Config(BaseModel):
+        """Configuration for the image tool"""
+        model_config = ConfigDict(env_prefix="IMAGE_TOOL_")
+        
+        max_file_size_mb: int = Field(
+            default=50,
+            description="Maximum file size in megabytes"
+        )
+        allowed_extensions: List[str] = Field(
+            default=['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif'],
+            description="Allowed image file extensions"
+        )
+        tesseract_pool_size: int = Field(
+            default=2,
+            description="Number of Tesseract processes for OCR"
+        )
+    
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
-        Initialize ImageTool with settings and resources.
+        Initialize ImageTool with configuration and resources.
 
         Args:
-            config (Dict, optional): Configuration overrides for ImageSettings.
+            config (Dict, optional): Configuration overrides for ImageTool.
 
         Raises:
             ValueError: If config contains invalid settings.
         """
         super().__init__(config)
-        self.settings = ImageSettings()
-        if config:
-            try:
-                self.settings = self.settings.model_validate({**self.settings.model_dump(), **config})
-            except ValidationError as e:
-                raise ValueError(f"Invalid configuration: {e}")
+        
+        # Parse configuration
+        self.config = self.Config(**(config or {}))
+        
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
             handler = logging.StreamHandler()
             handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
             self.logger.addHandler(handler)
         self.logger.setLevel(logging.INFO)
+        
         # Initialize Tesseract manager
-        self._tesseract_manager = TesseractManager(self.settings.tesseract_pool_size)
+        self._tesseract_manager = TesseractManager(self.config.tesseract_pool_size)
         self._tesseract_manager.initialize()
 
     def __del__(self):
         """Clean up Tesseract processes on destruction."""
         self._tesseract_manager.cleanup()
 
-    def update_settings(self, config: Dict) -> None:
+    def update_config(self, config: Dict) -> None:
         """
         Update configuration settings dynamically.
 
@@ -225,11 +225,11 @@ class ImageTool(BaseTool):
             ValueError: If config contains invalid settings.
         """
         try:
-            self.settings = self.settings.model_validate({**self.settings.model_dump(), **config})
+            self.config = self.Config(**{**self.config.model_dump(), **config})
             # Reinitialize Tesseract if pool size changes
             if 'tesseract_pool_size' in config:
                 self._tesseract_manager.cleanup()
-                self._tesseract_manager = TesseractManager(self.settings.tesseract_pool_size)
+                self._tesseract_manager = TesseractManager(self.config.tesseract_pool_size)
                 self._tesseract_manager.initialize()
         except ValidationError as e:
             raise ValueError(f"Invalid configuration: {e}")

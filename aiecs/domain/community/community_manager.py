@@ -7,16 +7,62 @@ resource sharing, and collaborative decision-making.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Set
+from typing import Dict, List, Any, Optional, Set, Protocol, Callable
 import uuid
 
 from .models.community_models import (
     AgentCommunity, CommunityMember, CommunityResource, CommunityDecision,
     CollaborationSession, CommunityRole, GovernanceType, DecisionStatus, ResourceType
 )
-from ..core.exceptions.task_exceptions import TaskValidationError
+from .exceptions import CommunityValidationError as TaskValidationError
 
 logger = logging.getLogger(__name__)
+
+
+class MemberLifecycleHooks(Protocol):
+    """
+    Protocol defining lifecycle hooks for community member events.
+    Implement this protocol to receive notifications about member lifecycle events.
+    """
+    
+    async def on_member_join(
+        self, 
+        community_id: str, 
+        member_id: str, 
+        member: CommunityMember
+    ) -> None:
+        """Called when a member joins a community."""
+        ...
+    
+    async def on_member_exit(
+        self, 
+        community_id: str, 
+        member_id: str, 
+        member: CommunityMember,
+        reason: Optional[str] = None
+    ) -> None:
+        """Called when a member exits/is removed from a community."""
+        ...
+    
+    async def on_member_update(
+        self, 
+        community_id: str, 
+        member_id: str, 
+        member: CommunityMember,
+        changes: Dict[str, Any]
+    ) -> None:
+        """Called when a member's properties are updated."""
+        ...
+    
+    async def on_member_inactive(
+        self, 
+        community_id: str, 
+        member_id: str, 
+        member: CommunityMember,
+        reason: Optional[str] = None
+    ) -> None:
+        """Called when a member becomes inactive."""
+        ...
 
 
 class CommunityManager:
@@ -43,6 +89,9 @@ class CommunityManager:
         # Community relationships
         self.member_communities: Dict[str, Set[str]] = {}  # member_id -> set of community_ids
         self.community_members: Dict[str, Set[str]] = {}   # community_id -> set of member_ids
+        
+        # Lifecycle hooks
+        self.lifecycle_hooks: List[MemberLifecycleHooks] = []
         
         self._initialized = False
         logger.info("Community manager initialized")
@@ -97,6 +146,9 @@ class CommunityManager:
                 creator_agent_id,
                 community_role=CommunityRole.LEADER
             )
+        
+        # Auto-save to storage
+        await self._save_to_storage()
         
         logger.info(f"Created community: {name} ({community.community_id})")
         return community.community_id
@@ -156,6 +208,12 @@ class CommunityManager:
         elif community_role == CommunityRole.COORDINATOR:
             community.coordinators.append(member.member_id)
         
+        # Auto-save to storage
+        await self._save_to_storage()
+        
+        # Execute lifecycle hooks
+        await self._execute_hook("on_member_join", community_id, member.member_id, member)
+        
         logger.info(f"Added member {agent_id} to community {community_id} as {community_role}")
         return member.member_id
 
@@ -209,6 +267,9 @@ class CommunityManager:
         community.shared_resources.append(resource.resource_id)
         community.resource_count += 1
         
+        # Auto-save to storage
+        await self._save_to_storage()
+        
         logger.info(f"Created resource {name} in community {community_id}")
         return resource.resource_id
 
@@ -258,6 +319,9 @@ class CommunityManager:
         # Update community
         community = self.communities[community_id]
         community.decision_count += 1
+        
+        # Auto-save to storage
+        await self._save_to_storage()
         
         logger.info(f"Proposed decision '{title}' in community {community_id}")
         return decision.decision_id
@@ -316,9 +380,200 @@ class CommunityManager:
         if decision.status == DecisionStatus.PROPOSED:
             decision.status = DecisionStatus.VOTING
         
+        # Auto-save to storage
+        await self._save_to_storage()
+        
         logger.info(f"Member {member_id} voted '{vote}' on decision {decision_id}")
         return True
 
+    async def remove_member_from_community(
+        self,
+        community_id: str,
+        member_id: str,
+        transfer_resources: bool = True,
+        new_owner_id: Optional[str] = None
+    ) -> bool:
+        """
+        Remove a member from a community with graceful cleanup.
+        
+        Args:
+            community_id: ID of the community
+            member_id: ID of the member to remove
+            transfer_resources: Whether to transfer member's resources
+            new_owner_id: Optional new owner for transferred resources
+            
+        Returns:
+            True if member was removed successfully
+        """
+        if community_id not in self.communities:
+            raise TaskValidationError(f"Community not found: {community_id}")
+        
+        if member_id not in self.members:
+            raise TaskValidationError(f"Member not found: {member_id}")
+        
+        member = self.members[member_id]
+        community = self.communities[community_id]
+        
+        # Transfer or orphan resources
+        if transfer_resources:
+            await self.transfer_member_resources(
+                member_id=member_id,
+                new_owner_id=new_owner_id or community.leaders[0] if community.leaders else None,
+                community_id=community_id
+            )
+        
+        # Remove from community member list
+        if member_id in community.members:
+            community.members.remove(member_id)
+        
+        # Remove from leadership positions
+        if member_id in community.leaders:
+            community.leaders.remove(member_id)
+        
+        if member_id in community.coordinators:
+            community.coordinators.remove(member_id)
+        
+        # Update relationships
+        if community_id in self.community_members:
+            self.community_members[community_id].discard(member_id)
+        
+        if member.agent_id in self.member_communities:
+            self.member_communities[member.agent_id].discard(community_id)
+        
+        # Mark member as inactive
+        member.is_active = False
+        member.last_active_at = datetime.utcnow()
+        
+        # Auto-save to storage
+        await self._save_to_storage()
+        
+        # Execute lifecycle hooks
+        await self._execute_hook("on_member_exit", community_id, member_id, member, reason="removed")
+        
+        logger.info(f"Removed member {member_id} from community {community_id}")
+        return True
+    
+    async def transfer_member_resources(
+        self,
+        member_id: str,
+        new_owner_id: Optional[str],
+        community_id: str
+    ) -> List[str]:
+        """
+        Transfer ownership of member's resources to another member.
+        
+        Args:
+            member_id: ID of the member whose resources to transfer
+            new_owner_id: ID of the new owner (None = make resources orphaned/community-owned)
+            community_id: ID of the community
+            
+        Returns:
+            List of transferred resource IDs
+        """
+        if member_id not in self.members:
+            raise TaskValidationError(f"Member not found: {member_id}")
+        
+        transferred_resources = []
+        
+        # Find all resources owned by this member
+        for resource_id, resource in self.resources.items():
+            if resource.owner_id == member_id:
+                if new_owner_id:
+                    # Transfer to new owner
+                    resource.owner_id = new_owner_id
+                    resource.metadata["transferred_from"] = member_id
+                    resource.metadata["transferred_at"] = datetime.utcnow().isoformat()
+                    resource.updated_at = datetime.utcnow()
+                else:
+                    # Make community-owned (orphaned)
+                    resource.owner_id = "community"
+                    resource.metadata["orphaned_from"] = member_id
+                    resource.metadata["orphaned_at"] = datetime.utcnow().isoformat()
+                    resource.access_level = "public"  # Make public for community access
+                
+                transferred_resources.append(resource_id)
+        
+        # Auto-save to storage
+        if transferred_resources:
+            await self._save_to_storage()
+        
+        logger.info(f"Transferred {len(transferred_resources)} resources from member {member_id}")
+        return transferred_resources
+    
+    async def deactivate_member(
+        self,
+        member_id: str,
+        reason: Optional[str] = None
+    ) -> bool:
+        """
+        Soft deactivation of a member (doesn't remove, just marks inactive).
+        
+        Args:
+            member_id: ID of the member to deactivate
+            reason: Optional reason for deactivation
+            
+        Returns:
+            True if member was deactivated successfully
+        """
+        if member_id not in self.members:
+            raise TaskValidationError(f"Member not found: {member_id}")
+        
+        member = self.members[member_id]
+        member.is_active = False
+        member.last_active_at = datetime.utcnow()
+        member.participation_level = "inactive"
+        
+        if reason:
+            member.metadata["deactivation_reason"] = reason
+            member.metadata["deactivated_at"] = datetime.utcnow().isoformat()
+        
+        # Auto-save to storage
+        await self._save_to_storage()
+        
+        # Execute lifecycle hooks
+        await self._execute_hook("on_member_inactive", None, member_id, member, reason=reason)
+        
+        logger.info(f"Deactivated member {member_id}")
+        return True
+    
+    async def reactivate_member(
+        self,
+        member_id: str,
+        restore_roles: bool = True
+    ) -> bool:
+        """
+        Reactivate a previously deactivated member.
+        
+        Args:
+            member_id: ID of the member to reactivate
+            restore_roles: Whether to restore previous roles
+            
+        Returns:
+            True if member was reactivated successfully
+        """
+        if member_id not in self.members:
+            raise TaskValidationError(f"Member not found: {member_id}")
+        
+        member = self.members[member_id]
+        member.is_active = True
+        member.last_active_at = datetime.utcnow()
+        member.participation_level = "active"
+        
+        # Clear deactivation metadata
+        if "deactivation_reason" in member.metadata:
+            del member.metadata["deactivation_reason"]
+        if "deactivated_at" in member.metadata:
+            member.metadata["previous_deactivation"] = member.metadata["deactivated_at"]
+            del member.metadata["deactivated_at"]
+        
+        member.metadata["reactivated_at"] = datetime.utcnow().isoformat()
+        
+        # Auto-save to storage
+        await self._save_to_storage()
+        
+        logger.info(f"Reactivated member {member_id}")
+        return True
+    
     def _find_member_by_agent_id(self, community_id: str, agent_id: str) -> Optional[CommunityMember]:
         """Find a community member by agent ID."""
         if community_id not in self.community_members:
@@ -330,8 +585,229 @@ class CommunityManager:
                 return member
         
         return None
+    
+    def register_lifecycle_hook(self, hook: MemberLifecycleHooks) -> None:
+        """
+        Register a lifecycle hook handler.
+        
+        Args:
+            hook: Hook handler implementing MemberLifecycleHooks protocol
+        """
+        self.lifecycle_hooks.append(hook)
+        logger.info(f"Registered lifecycle hook: {hook.__class__.__name__}")
+    
+    def unregister_lifecycle_hook(self, hook: MemberLifecycleHooks) -> bool:
+        """
+        Unregister a lifecycle hook handler.
+        
+        Args:
+            hook: Hook handler to remove
+            
+        Returns:
+            True if hook was removed
+        """
+        if hook in self.lifecycle_hooks:
+            self.lifecycle_hooks.remove(hook)
+            logger.info(f"Unregistered lifecycle hook: {hook.__class__.__name__}")
+            return True
+        return False
+    
+    async def _execute_hook(
+        self, 
+        hook_name: str, 
+        community_id: Optional[str], 
+        member_id: str, 
+        member: CommunityMember,
+        **kwargs
+    ) -> None:
+        """
+        Execute all registered hooks for a specific event.
+        
+        Args:
+            hook_name: Name of the hook method to call
+            community_id: ID of the community (optional for some hooks)
+            member_id: ID of the member
+            member: Member object
+            **kwargs: Additional arguments to pass to the hook
+        """
+        for hook in self.lifecycle_hooks:
+            try:
+                hook_method = getattr(hook, hook_name, None)
+                if hook_method:
+                    if community_id:
+                        await hook_method(community_id, member_id, member, **kwargs)
+                    else:
+                        await hook_method(member_id, member, **kwargs)
+            except Exception as e:
+                logger.error(f"Error executing lifecycle hook {hook_name}: {e}")
 
     async def _load_from_storage(self) -> None:
-        """Load communities and members from persistent storage."""
-        # TODO: Implement loading from context_engine or database
-        pass
+        """
+        Load communities and members from persistent storage.
+        
+        Loads:
+        - Communities
+        - Members
+        - Resources
+        - Decisions
+        - Sessions
+        - Relationships
+        """
+        if not self.context_engine:
+            logger.warning("No context engine available for loading")
+            return
+        
+        try:
+            # Load communities
+            communities_data = await self._load_data_by_key("communities")
+            if communities_data:
+                for community_id, community_dict in communities_data.items():
+                    try:
+                        community = AgentCommunity(**community_dict)
+                        self.communities[community_id] = community
+                        self.community_members[community_id] = set(community.members)
+                    except Exception as e:
+                        logger.error(f"Failed to load community {community_id}: {e}")
+            
+            # Load members
+            members_data = await self._load_data_by_key("community_members")
+            if members_data:
+                for member_id, member_dict in members_data.items():
+                    try:
+                        member = CommunityMember(**member_dict)
+                        self.members[member_id] = member
+                    except Exception as e:
+                        logger.error(f"Failed to load member {member_id}: {e}")
+            
+            # Load resources
+            resources_data = await self._load_data_by_key("community_resources")
+            if resources_data:
+                for resource_id, resource_dict in resources_data.items():
+                    try:
+                        resource = CommunityResource(**resource_dict)
+                        self.resources[resource_id] = resource
+                    except Exception as e:
+                        logger.error(f"Failed to load resource {resource_id}: {e}")
+            
+            # Load decisions
+            decisions_data = await self._load_data_by_key("community_decisions")
+            if decisions_data:
+                for decision_id, decision_dict in decisions_data.items():
+                    try:
+                        decision = CommunityDecision(**decision_dict)
+                        self.decisions[decision_id] = decision
+                    except Exception as e:
+                        logger.error(f"Failed to load decision {decision_id}: {e}")
+            
+            # Load sessions
+            sessions_data = await self._load_data_by_key("community_sessions")
+            if sessions_data:
+                for session_id, session_dict in sessions_data.items():
+                    try:
+                        session = CollaborationSession(**session_dict)
+                        self.sessions[session_id] = session
+                    except Exception as e:
+                        logger.error(f"Failed to load session {session_id}: {e}")
+            
+            # Rebuild member_communities relationships
+            for member_id, member in self.members.items():
+                for community_id, community in self.communities.items():
+                    if member_id in community.members:
+                        if member.agent_id not in self.member_communities:
+                            self.member_communities[member.agent_id] = set()
+                        self.member_communities[member.agent_id].add(community_id)
+            
+            logger.info(f"Loaded {len(self.communities)} communities, {len(self.members)} members from storage")
+            
+        except Exception as e:
+            logger.error(f"Error loading from storage: {e}")
+    
+    async def _load_data_by_key(self, key: str) -> Optional[Dict[str, Any]]:
+        """Load data from context engine by key."""
+        if not self.context_engine:
+            return None
+        
+        try:
+            # Try to get data from context engine
+            # The exact method depends on the context engine implementation
+            if hasattr(self.context_engine, 'get_context'):
+                data = await self.context_engine.get_context(key)
+                return data
+            elif hasattr(self.context_engine, 'get'):
+                data = await self.context_engine.get(key)
+                return data
+            else:
+                logger.warning(f"Context engine does not support get operations")
+                return None
+        except Exception as e:
+            logger.debug(f"No data found for key {key}: {e}")
+            return None
+    
+    async def _save_to_storage(self) -> None:
+        """
+        Save all communities and members to persistent storage.
+        
+        Saves:
+        - Communities
+        - Members
+        - Resources
+        - Decisions
+        - Sessions
+        """
+        if not self.context_engine:
+            logger.debug("No context engine available for saving")
+            return
+        
+        try:
+            # Save communities
+            communities_data = {
+                cid: community.model_dump() for cid, community in self.communities.items()
+            }
+            await self._save_data_by_key("communities", communities_data)
+            
+            # Save members
+            members_data = {
+                mid: member.model_dump() for mid, member in self.members.items()
+            }
+            await self._save_data_by_key("community_members", members_data)
+            
+            # Save resources
+            resources_data = {
+                rid: resource.model_dump() for rid, resource in self.resources.items()
+            }
+            await self._save_data_by_key("community_resources", resources_data)
+            
+            # Save decisions
+            decisions_data = {
+                did: decision.model_dump() for did, decision in self.decisions.items()
+            }
+            await self._save_data_by_key("community_decisions", decisions_data)
+            
+            # Save sessions
+            sessions_data = {
+                sid: session.model_dump() for sid, session in self.sessions.items()
+            }
+            await self._save_data_by_key("community_sessions", sessions_data)
+            
+            logger.debug(f"Saved {len(self.communities)} communities, {len(self.members)} members to storage")
+            
+        except Exception as e:
+            logger.error(f"Error saving to storage: {e}")
+    
+    async def _save_data_by_key(self, key: str, data: Dict[str, Any]) -> None:
+        """Save data to context engine by key."""
+        if not self.context_engine:
+            return
+        
+        try:
+            # The exact method depends on the context engine implementation
+            if hasattr(self.context_engine, 'set_context'):
+                await self.context_engine.set_context(key, data)
+            elif hasattr(self.context_engine, 'set'):
+                await self.context_engine.set(key, data)
+            elif hasattr(self.context_engine, 'save'):
+                await self.context_engine.save(key, data)
+            else:
+                logger.warning(f"Context engine does not support set/save operations")
+        except Exception as e:
+            logger.error(f"Failed to save data for key {key}: {e}")

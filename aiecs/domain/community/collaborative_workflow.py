@@ -12,7 +12,7 @@ import uuid
 import asyncio
 
 from .models.community_models import CollaborationSession
-from ..core.exceptions.task_exceptions import TaskValidationError
+from .exceptions import CommunityValidationError as TaskValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -317,18 +317,110 @@ class CollaborativeWorkflowEngine:
         })
 
     async def _peer_review_workflow(self, session: CollaborationSession) -> None:
-        """Execute peer review workflow."""
+        """
+        Execute peer review workflow.
+        
+        Phases:
+        1. Reviewer assignment
+        2. Individual review
+        3. Review collection and synthesis
+        4. Feedback integration
+        5. Final approval
+        """
         logger.info(f"Starting peer review workflow for session {session.session_id}")
         
-        # Implementation for peer review workflow
-        pass
+        # Phase 1: Reviewer Assignment
+        await self._execute_phase(session, "reviewer_assignment", {
+            "instructions": "Assign reviewers based on expertise and availability",
+            "time_limit_minutes": 5,
+            "min_reviewers": 2,
+            "max_reviewers": 5
+        })
+        
+        # Phase 2: Individual Review
+        await self._execute_phase(session, "individual_review", {
+            "instructions": "Conduct independent review of the material",
+            "time_limit_minutes": 30,
+            "review_criteria": ["accuracy", "completeness", "clarity", "quality"],
+            "parallel_reviews": True
+        })
+        
+        # Phase 3: Review Collection
+        await self._execute_phase(session, "review_collection", {
+            "instructions": "Collect and synthesize all review feedback",
+            "time_limit_minutes": 15,
+            "identify_conflicts": True,
+            "aggregate_scores": True
+        })
+        
+        # Phase 4: Feedback Integration
+        await self._execute_phase(session, "feedback_integration", {
+            "instructions": "Integrate reviewer feedback into the material",
+            "time_limit_minutes": 20,
+            "collaborative_editing": True,
+            "track_changes": True
+        })
+        
+        # Phase 5: Final Approval
+        await self._execute_phase(session, "final_approval", {
+            "instructions": "Reviewers provide final approval or request changes",
+            "time_limit_minutes": 10,
+            "require_consensus": True,
+            "approval_threshold": 0.8
+        })
 
     async def _consensus_building_workflow(self, session: CollaborationSession) -> None:
-        """Execute consensus building workflow."""
+        """
+        Execute consensus building workflow.
+        
+        Phases:
+        1. Issue presentation and clarification
+        2. Discussion round 1 - Position sharing
+        3. Common ground identification
+        4. Proposal refinement
+        5. Convergence check and agreement
+        """
         logger.info(f"Starting consensus building workflow for session {session.session_id}")
         
-        # Implementation for consensus building workflow
-        pass
+        # Phase 1: Issue Presentation
+        await self._execute_phase(session, "issue_presentation", {
+            "instructions": "Present the issue clearly and allow clarification questions",
+            "time_limit_minutes": 15,
+            "clarification_enabled": True
+        })
+        
+        # Phase 2: Position Sharing
+        await self._execute_phase(session, "position_sharing", {
+            "instructions": "Each member shares their position and rationale",
+            "time_limit_minutes": 20,
+            "equal_participation": True,
+            "capture_positions": True
+        })
+        
+        # Phase 3: Common Ground Identification
+        await self._execute_phase(session, "common_ground_identification", {
+            "instructions": "Identify areas of agreement and shared values",
+            "time_limit_minutes": 15,
+            "find_overlaps": True,
+            "identify_blockers": True
+        })
+        
+        # Phase 4: Proposal Refinement
+        await self._execute_phase(session, "proposal_refinement", {
+            "instructions": "Refine proposals to address concerns and maximize agreement",
+            "time_limit_minutes": 25,
+            "iterative_refinement": True,
+            "test_proposals": True
+        })
+        
+        # Phase 5: Convergence Check
+        await self._execute_phase(session, "convergence_check", {
+            "instructions": "Check for consensus and finalize agreement",
+            "time_limit_minutes": 15,
+            "consensus_threshold": 0.9,
+            "allow_dissent": True,
+            "document_agreement": True
+        })
 
     async def _execute_phase(
         self,

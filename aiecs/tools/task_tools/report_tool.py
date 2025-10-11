@@ -19,8 +19,7 @@ from docx import Document
 from docx.shared import Pt as DocxPt, RGBColor
 import markdown
 import matplotlib.pyplot as plt
-from pydantic import ValidationError, ConfigDict
-from pydantic_settings import BaseSettings
+from pydantic import ValidationError, ConfigDict, Field
 import tempfile
 import logging
 
@@ -28,45 +27,6 @@ from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
 from aiecs.tools.temp_file_manager import TempFileManager
 
-# Configuration for ReportTool
-class ReportSettings(BaseSettings):
-    """
-    Configuration for ReportTool.
-
-    Attributes:
-        templates_dir (str): Directory for Jinja2 templates.
-        default_output_dir (str): Default directory for output files.
-        allowed_extensions (List[str]): Allowed file extensions for outputs.
-        pdf_page_size (str): Default PDF page size.
-        default_font (str): Default font for documents.
-        default_font_size (int): Default font size in points.
-        allowed_html_tags (Set[str]): Allowed HTML tags for sanitization.
-        allowed_html_attributes (Dict[str, List[str]]): Allowed HTML attributes for sanitization.
-        temp_files_max_age (int): Maximum age of temporary files in seconds.
-        env_prefix (str): Environment variable prefix for settings.
-    """
-    templates_dir: str = os.getcwd()
-    default_output_dir: str = os.path.join(tempfile.gettempdir(), 'reports')
-    allowed_extensions: List[str] = ['.html', '.pdf', '.xlsx', '.pptx', '.docx', '.md', '.png']
-    pdf_page_size: str = 'A4'
-    default_font: str = 'Arial'
-    default_font_size: int = 12
-    allowed_html_tags: Set[str] = {
-        'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'a', 'ul', 'ol', 'li',
-        'strong', 'em', 'b', 'i', 'table', 'tr', 'td', 'th', 'thead', 'tbody',
-        'span', 'div', 'img', 'hr', 'code', 'pre'
-    }
-    allowed_html_attributes: Dict[str, List[str]] = {
-        'a': ['href', 'title', 'target'],
-        'img': ['src', 'alt', 'title', 'width', 'height'],
-        'td': ['colspan', 'rowspan', 'align'],
-        'th': ['colspan', 'rowspan', 'align'],
-        '*': ['class', 'id', 'style']
-    }
-    temp_files_max_age: int = 3600  # 1 hour in seconds
-    env_prefix: str = 'REPORT_TOOL_'
-
-    model_config = ConfigDict(env_prefix='REPORT_TOOL_')
 
 # Exceptions
 class ReportToolError(Exception):
@@ -119,23 +79,74 @@ class ReportTool(BaseTool):
 
     Inherits from BaseTool.
     """
+    
+    # Configuration schema
+    class Config(BaseModel):
+        """Configuration for the report tool"""
+        model_config = ConfigDict(env_prefix="REPORT_TOOL_")
+        
+        templates_dir: str = Field(
+            default=os.getcwd(),
+            description="Directory for Jinja2 templates"
+        )
+        default_output_dir: str = Field(
+            default=os.path.join(tempfile.gettempdir(), 'reports'),
+            description="Default directory for output files"
+        )
+        allowed_extensions: List[str] = Field(
+            default=['.html', '.pdf', '.xlsx', '.pptx', '.docx', '.md', '.png'],
+            description="Allowed file extensions for outputs"
+        )
+        pdf_page_size: str = Field(
+            default='A4',
+            description="Default PDF page size"
+        )
+        default_font: str = Field(
+            default='Arial',
+            description="Default font for documents"
+        )
+        default_font_size: int = Field(
+            default=12,
+            description="Default font size in points"
+        )
+        allowed_html_tags: Set[str] = Field(
+            default={
+                'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'a', 'ul', 'ol', 'li',
+                'strong', 'em', 'b', 'i', 'table', 'tr', 'td', 'th', 'thead', 'tbody',
+                'span', 'div', 'img', 'hr', 'code', 'pre'
+            },
+            description="Allowed HTML tags for sanitization"
+        )
+        allowed_html_attributes: Dict[str, List[str]] = Field(
+            default={
+                'a': ['href', 'title', 'target'],
+                'img': ['src', 'alt', 'title', 'width', 'height'],
+                'td': ['colspan', 'rowspan', 'align'],
+                'th': ['colspan', 'rowspan', 'align'],
+                '*': ['class', 'id', 'style']
+            },
+            description="Allowed HTML attributes for sanitization"
+        )
+        temp_files_max_age: int = Field(
+            default=3600,
+            description="Maximum age of temporary files in seconds"
+        )
+    
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         Initialize ReportTool with settings and resources.
 
         Args:
-            config (Dict, optional): Configuration overrides for ReportSettings.
+            config (Dict, optional): Configuration overrides for ReportTool.
 
         Raises:
             ValueError: If config contains invalid settings.
         """
         super().__init__(config)
-        self.settings = ReportSettings()
-        if config:
-            try:
-                self.settings = self.settings.model_validate({**self.settings.model_dump(), **config})
-            except ValidationError as e:
-                raise ValueError(f"Invalid configuration: {e}")
+        
+        # Parse configuration
+        self.config = self.Config(**(config or {}))
+        
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
             handler = logging.StreamHandler()
@@ -143,10 +154,10 @@ class ReportTool(BaseTool):
             self.logger.addHandler(handler)
         self.logger.setLevel(logging.INFO)
         self._jinja_env = sandbox.SandboxedEnvironment(
-            loader=FileSystemLoader(self.settings.templates_dir),
+            loader=FileSystemLoader(self.config.templates_dir),
             autoescape=True
         )
-        self._temp_manager = TempFileManager(self.settings.default_output_dir, self.settings.temp_files_max_age)
+        self._temp_manager = TempFileManager(self.config.default_output_dir, self.config.temp_files_max_age)
 
     def generate_html(self, template_path: Optional[str], template_str: Optional[str], context: Dict[str, Any], output_path: str, template_variables: Optional[Dict[str, str]] = None) -> str:
         """
@@ -167,7 +178,7 @@ class ReportTool(BaseTool):
         """
         try:
             if template_path:
-                path = os.path.join(self.settings.templates_dir, template_path)
+                path = os.path.join(self.config.templates_dir, template_path)
                 tmpl = self._jinja_env.get_template(template_path)
             else:
                 tmpl = self._jinja_env.from_string(template_str)
@@ -178,7 +189,7 @@ class ReportTool(BaseTool):
                 html = html.replace('<head>', '<head>\n' + csrf_meta)
             else:
                 html = csrf_meta + html
-            html = sanitize_html(html, self.settings.allowed_html_tags, self.settings.allowed_html_attributes)
+            html = sanitize_html(html, self.config.allowed_html_tags, self.config.allowed_html_attributes)
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(html)
             self._temp_manager.register_file(output_path)
@@ -290,8 +301,8 @@ class ReportTool(BaseTool):
                 s = prs.slides.add_slide(prs.slide_layouts[1])
                 title_shape = s.shapes.title
                 title_shape.text = slide['title']
-                font = slide.get('font') or default_font or self.settings.default_font
-                font_size = slide.get('font_size') or default_font_size or self.settings.default_font_size
+                font = slide.get('font') or default_font or self.config.default_font
+                font_size = slide.get('font_size') or default_font_size or self.config.default_font_size
                 font_color = slide.get('font_color') or default_font_color or (0, 0, 0)
                 title_shape.text_frame.paragraphs[0].font.name = font
                 title_shape.text_frame.paragraphs[0].font.size = Pt(font_size)
@@ -370,8 +381,8 @@ class ReportTool(BaseTool):
                 tmpl = self._jinja_env.from_string(template_str)
             content = tmpl.render(**context)
             doc = Document()
-            font = font or self.settings.default_font
-            font_size = font_size or self.settings.default_font_size
+            font = font or self.config.default_font
+            font_size = font_size or self.config.default_font_size
             font_color = font_color or (0, 0, 0)
             for line in content.splitlines():
                 p = doc.add_paragraph()

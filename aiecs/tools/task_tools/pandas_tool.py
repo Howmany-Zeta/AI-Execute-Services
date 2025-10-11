@@ -2,7 +2,7 @@ from io import StringIO
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Union, Optional, Any
-from pydantic import BaseModel, ValidationError as PydanticValidationError, ConfigDict
+from pydantic import BaseModel, ValidationError as PydanticValidationError, ConfigDict, Field
 import logging
 
 from aiecs.tools.base_tool import BaseTool
@@ -29,31 +29,6 @@ class ValidationError(PandasToolError):
     """Validation error."""
     pass
 
-# Configuration for PandasTool
-class PandasToolConfig(BaseModel):
-    """
-    Configuration for PandasTool.
-
-    Attributes:
-        csv_delimiter (str): Delimiter for CSV files.
-        encoding (str): Encoding for file operations.
-        default_agg (Dict[str, str]): Default aggregation functions.
-        chunk_size (int): Chunk size for large file processing.
-        max_csv_size (int): Threshold for chunked CSV processing.
-        allowed_file_extensions (List[str]): Allowed file extensions.
-        env_prefix (str): Environment variable prefix.
-    """
-    csv_delimiter: str = ","
-    encoding: str = "utf-8"
-    default_agg: Dict[str, str] = {"numeric": "mean", "object": "count"}
-    chunk_size: int = 10000
-    max_csv_size: int = 1000000
-    allowed_file_extensions: List[str] = ['.csv', '.xlsx', '.json']
-    env_prefix: str = "PANDAS_TOOL_"
-
-    model_config = ConfigDict(env_prefix="PANDAS_TOOL_")
-
-
 @register_tool("pandas")
 class PandasTool(BaseTool):
     """
@@ -72,23 +47,52 @@ class PandasTool(BaseTool):
 
     Inherits from BaseTool to leverage ToolExecutor for caching, concurrency, and error handling.
     """
+    
+    # Configuration schema
+    class Config(BaseModel):
+        """Configuration for the pandas tool"""
+        model_config = ConfigDict(env_prefix="PANDAS_TOOL_")
+        
+        csv_delimiter: str = Field(
+            default=",",
+            description="Delimiter for CSV files"
+        )
+        encoding: str = Field(
+            default="utf-8",
+            description="Encoding for file operations"
+        )
+        default_agg: Dict[str, str] = Field(
+            default={"numeric": "mean", "object": "count"},
+            description="Default aggregation functions"
+        )
+        chunk_size: int = Field(
+            default=10000,
+            description="Chunk size for large file processing"
+        )
+        max_csv_size: int = Field(
+            default=1000000,
+            description="Threshold for chunked CSV processing"
+        )
+        allowed_file_extensions: List[str] = Field(
+            default=['.csv', '.xlsx', '.json'],
+            description="Allowed file extensions"
+        )
+    
     def __init__(self, config: Optional[Dict] = None):
         """
         Initialize PandasTool with configuration.
 
         Args:
-            config (Dict, optional): Configuration overrides for PandasToolConfig.
+            config (Dict, optional): Configuration overrides for PandasTool.
 
         Raises:
             ValueError: If config is invalid.
         """
         super().__init__(config)
-        self.config = PandasToolConfig()
-        if config:
-            try:
-                self.config = self.config.model_validate({**self.config.model_dump(), **config})
-            except PydanticValidationError as e:
-                raise ValueError(f"Invalid configuration: {e}")
+        
+        # Parse configuration
+        self.config = self.Config(**(config or {}))
+        
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
             handler = logging.StreamHandler()
