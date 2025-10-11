@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     vertex_project_id: str = Field(default="", alias="VERTEX_PROJECT_ID")
     vertex_location: str = Field(default="us-central1", alias="VERTEX_LOCATION")
     google_application_credentials: str = Field(default="", alias="GOOGLE_APPLICATION_CREDENTIALS")
+    google_api_key: str = Field(default="", alias="GOOGLE_API_KEY")
+    google_cse_id: str = Field(default="", alias="GOOGLE_CSE_ID")
     xai_api_key: str = Field(default="", alias="XAI_API_KEY")
     grok_api_key: str = Field(default="", alias="GROK_API_KEY")  # Backward compatibility
     

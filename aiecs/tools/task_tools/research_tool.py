@@ -2,8 +2,7 @@ import logging
 from typing import Dict, Any, List, Optional, Tuple
 import spacy
 from spacy.language import Language
-from pydantic import BaseModel, ValidationError, ConfigDict
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, ValidationError, ConfigDict, Field
 from collections import Counter
 from scipy.stats import pearsonr
 import os
@@ -11,25 +10,6 @@ import os
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
 
-# Configuration for ResearchTool
-class ResearchSettings(BaseSettings):
-    """
-    Configuration for ResearchTool.
-
-    Attributes:
-        max_workers (int): Maximum number of thread pool workers.
-        spacy_model (str): Default spaCy model to use.
-        max_text_length (int): Maximum text length for inputs.
-        allowed_spacy_models (List[str]): Allowed spaCy models.
-        env_prefix (str): Environment variable prefix.
-    """
-    max_workers: int = min(32, (os.cpu_count() or 4) * 2)
-    spacy_model: str = "en_core_web_sm"
-    max_text_length: int = 10_000
-    allowed_spacy_models: List[str] = ["en_core_web_sm", "zh_core_web_sm"]
-    env_prefix: str = 'RESEARCH_TOOL_'
-
-    model_config = ConfigDict(env_prefix='RESEARCH_TOOL_')
 
 # Exceptions
 class ResearchToolError(Exception):
@@ -57,23 +37,44 @@ class ResearchTool(BaseTool):
 
     Inherits from BaseTool.
     """
+    
+    # Configuration schema
+    class Config(BaseModel):
+        """Configuration for the research tool"""
+        model_config = ConfigDict(env_prefix="RESEARCH_TOOL_")
+        
+        max_workers: int = Field(
+            default=min(32, (os.cpu_count() or 4) * 2),
+            description="Maximum number of worker threads"
+        )
+        spacy_model: str = Field(
+            default="en_core_web_sm",
+            description="Default spaCy model to use"
+        )
+        max_text_length: int = Field(
+            default=10_000,
+            description="Maximum text length for inputs"
+        )
+        allowed_spacy_models: List[str] = Field(
+            default=["en_core_web_sm", "zh_core_web_sm"],
+            description="Allowed spaCy models"
+        )
+    
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         Initialize ResearchTool with settings and resources.
 
         Args:
-            config (Dict, optional): Configuration overrides for ResearchSettings.
+            config (Dict, optional): Configuration overrides for ResearchTool.
 
         Raises:
             ValueError: If config contains invalid settings.
         """
         super().__init__(config)
-        self.settings = ResearchSettings()
-        if config:
-            try:
-                self.settings = self.settings.model_validate({**self.settings.model_dump(), **config})
-            except ValidationError as e:
-                raise ValueError(f"Invalid configuration: {e}")
+        
+        # Parse configuration
+        self.config = self.Config(**(config or {}))
+        
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
             handler = logging.StreamHandler()
@@ -98,9 +99,9 @@ class ResearchTool(BaseTool):
             ResearchToolError: If the spaCy model is invalid.
         """
         if self._spacy_nlp is None:
-            if self.settings.spacy_model not in self.settings.allowed_spacy_models:
-                raise ResearchToolError(f"Invalid spaCy model '{self.settings.spacy_model}', expected {self.settings.allowed_spacy_models}")
-            self._spacy_nlp = spacy.load(self.settings.spacy_model, disable=["textcat"])
+            if self.config.spacy_model not in self.config.allowed_spacy_models:
+                raise ResearchToolError(f"Invalid spaCy model '{self.config.spacy_model}', expected {self.config.allowed_spacy_models}")
+            self._spacy_nlp = spacy.load(self.config.spacy_model, disable=["textcat"])
         return self._spacy_nlp
 
     def mill_agreement(self, cases: List[Dict[str, Any]]) -> Dict[str, Any]:

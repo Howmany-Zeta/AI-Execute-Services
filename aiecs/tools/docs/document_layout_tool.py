@@ -24,8 +24,7 @@ from typing import Dict, Any, List, Optional, Union, Tuple
 from enum import Enum
 from pathlib import Path
 
-from pydantic import BaseModel, Field, ValidationError
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, Field, ValidationError, ConfigDict
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -86,17 +85,6 @@ class HeaderFooterPosition(str, Enum):
     FOOTER_RIGHT = "footer_right"
 
 
-class DocumentLayoutSettings(BaseSettings):
-    """Configuration for DocumentLayoutTool"""
-    temp_dir: str = os.path.join(tempfile.gettempdir(), 'document_layouts')
-    default_page_size: PageSize = PageSize.A4
-    default_orientation: PageOrientation = PageOrientation.PORTRAIT
-    default_margins: Dict[str, float] = {"top": 2.5, "bottom": 2.5, "left": 2.5, "right": 2.5}
-    auto_adjust_layout: bool = True
-    preserve_formatting: bool = True
-    
-    class Config:
-        env_prefix = "DOC_LAYOUT_"
 
 
 class DocumentLayoutError(Exception):
@@ -133,15 +121,42 @@ class DocumentLayoutTool(BaseTool):
     - ContentInsertionTool for complex content positioning
     """
     
+    # Configuration schema
+    class Config(BaseModel):
+        """Configuration for the document layout tool"""
+        model_config = ConfigDict(env_prefix="DOC_LAYOUT_")
+        
+        temp_dir: str = Field(
+            default=os.path.join(tempfile.gettempdir(), 'document_layouts'),
+            description="Temporary directory for layout processing"
+        )
+        default_page_size: str = Field(
+            default="a4",
+            description="Default page size"
+        )
+        default_orientation: str = Field(
+            default="portrait",
+            description="Default page orientation"
+        )
+        default_margins: Dict[str, float] = Field(
+            default={"top": 2.5, "bottom": 2.5, "left": 2.5, "right": 2.5},
+            description="Default page margins in centimeters (top, bottom, left, right)"
+        )
+        auto_adjust_layout: bool = Field(
+            default=True,
+            description="Whether to automatically adjust layout for optimal presentation"
+        )
+        preserve_formatting: bool = Field(
+            default=True,
+            description="Whether to preserve existing formatting when applying layouts"
+        )
+    
     def __init__(self, config: Optional[Dict] = None):
         """Initialize Document Layout Tool with settings"""
         super().__init__(config)
-        self.settings = DocumentLayoutSettings()
-        if config:
-            try:
-                self.settings = self.settings.model_validate({**self.settings.model_dump(), **config})
-            except ValidationError as e:
-                raise ValueError(f"Invalid settings: {e}")
+        
+        # Parse configuration
+        self.config = self.Config(**(config or {}))
         
         self.logger = logging.getLogger(__name__)
         
@@ -156,7 +171,7 @@ class DocumentLayoutTool(BaseTool):
     
     def _init_directories(self):
         """Initialize required directories"""
-        os.makedirs(self.settings.temp_dir, exist_ok=True)
+        os.makedirs(self.config.temp_dir, exist_ok=True)
     
     def _init_layout_presets(self):
         """Initialize built-in layout presets"""

@@ -6,7 +6,6 @@ from enum import Enum
 from datetime import datetime
 
 from pydantic import BaseModel, Field, ValidationError, ConfigDict
-from pydantic_settings import BaseSettings
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -31,16 +30,6 @@ class AIProvider(str, Enum):
     LOCAL = "local"
 
 
-class OrchestratorSettings(BaseSettings):
-    """Configuration for AI Document Orchestrator"""
-    default_ai_provider: AIProvider = AIProvider.OPENAI
-    max_chunk_size: int = 4000  # For AI processing
-    max_concurrent_requests: int = 5
-    default_temperature: float = 0.1
-    max_tokens: int = 2000
-    timeout: int = 60
-    
-    model_config = ConfigDict(env_prefix="AI_DOC_ORCHESTRATOR_")
 
 
 class AIDocumentOrchestratorError(Exception):
@@ -73,18 +62,42 @@ class AIDocumentOrchestrator(BaseTool):
     - Existing AIECS infrastructure
     """
     
+    # Configuration schema
+    class Config(BaseModel):
+        """Configuration for the AI document orchestrator tool"""
+        model_config = ConfigDict(env_prefix="AI_DOC_ORCHESTRATOR_")
+        
+        default_ai_provider: str = Field(
+            default="openai",
+            description="Default AI provider to use"
+        )
+        max_chunk_size: int = Field(
+            default=4000,
+            description="Maximum chunk size for AI processing"
+        )
+        max_concurrent_requests: int = Field(
+            default=5,
+            description="Maximum concurrent AI requests"
+        )
+        default_temperature: float = Field(
+            default=0.1,
+            description="Default temperature for AI model"
+        )
+        max_tokens: int = Field(
+            default=2000,
+            description="Maximum tokens for AI response"
+        )
+        timeout: int = Field(
+            default=60,
+            description="Timeout in seconds for AI operations"
+        )
+    
     def __init__(self, config: Optional[Dict] = None):
         """Initialize AI Document Orchestrator with settings"""
         super().__init__(config)
-        # Initialize settings with config if provided
-        if config:
-            try:
-                # For BaseSettings, use dictionary unpacking
-                self.settings = OrchestratorSettings(**config)
-            except ValidationError as e:
-                raise ValueError(f"Invalid settings: {e}")
-        else:
-            self.settings = OrchestratorSettings()
+        
+        # Parse configuration
+        self.config = self.Config(**(config or {}))
         
         self.logger = logging.getLogger(__name__)
         
@@ -212,7 +225,7 @@ class AIDocumentOrchestrator(BaseTool):
             ai_result = self._process_with_ai(
                 content, 
                 processing_mode, 
-                ai_provider or self.settings.default_ai_provider,
+                ai_provider or self.config.default_ai_provider,
                 processing_params or {},
                 ai_params or {}
             )
@@ -221,7 +234,7 @@ class AIDocumentOrchestrator(BaseTool):
             result = {
                 "source": source,
                 "processing_mode": processing_mode,
-                "ai_provider": ai_provider or self.settings.default_ai_provider,
+                "ai_provider": ai_provider or self.config.default_ai_provider,
                 "document_info": {
                     "type": parsed_result.get("document_type"),
                     "detection_confidence": parsed_result.get("detection_confidence"),
@@ -282,7 +295,7 @@ class AIDocumentOrchestrator(BaseTool):
         """
         try:
             start_time = datetime.now()
-            max_concurrent = max_concurrent or self.settings.max_concurrent_requests
+            max_concurrent = max_concurrent or self.config.max_concurrent_requests
             
             # Process documents in batches
             results = asyncio.run(self._batch_process_async(
@@ -293,7 +306,7 @@ class AIDocumentOrchestrator(BaseTool):
             batch_result = {
                 "sources": sources,
                 "processing_mode": processing_mode,
-                "ai_provider": ai_provider or self.settings.default_ai_provider,
+                "ai_provider": ai_provider or self.config.default_ai_provider,
                 "total_documents": len(sources),
                 "successful_documents": len([r for r in results if r.get("status") == "success"]),
                 "failed_documents": len([r for r in results if r.get("status") == "error"]),
@@ -341,7 +354,7 @@ class AIDocumentOrchestrator(BaseTool):
             # Process with AI
             ai_result = self._call_ai_provider(
                 prompt,
-                ai_provider or self.settings.default_ai_provider,
+                ai_provider or self.config.default_ai_provider,
                 {}
             )
             
@@ -380,7 +393,7 @@ class AIDocumentOrchestrator(BaseTool):
             text_content = str(content)
         
         # Chunk content if too large
-        max_size = self.settings.max_chunk_size
+        max_size = self.config.max_chunk_size
         if len(text_content) > max_size:
             # For now, truncate - could implement smart chunking
             text_content = text_content[:max_size] + "\n\n[Content truncated...]"

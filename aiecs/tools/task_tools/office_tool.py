@@ -20,31 +20,14 @@ from docx import Document as DocxDocument
 from docx.shared import Pt
 from pptx import Presentation
 from pptx.util import Inches
-from pydantic import BaseModel, field_validator, ValidationError, ConfigDict
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, field_validator, ValidationError, ConfigDict, Field
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
 
-# Configuration for OfficeTool
-class OfficeSettings(BaseSettings):
-    """
-    Configuration for OfficeTool.
-
-    Attributes:
-        max_file_size_mb (int): Maximum file size in megabytes.
-        default_font (str): Default font for documents.
-        default_font_size (int): Default font size in points.
-        allowed_extensions (List[str]): Allowed document file extensions.
-        env_prefix (str): Environment variable prefix for settings.
-    """
-    max_file_size_mb: int = 100
-    default_font: str = "Arial"
-    default_font_size: int = 12
-    allowed_extensions: List[str] = ['.docx', '.pptx', '.xlsx', '.pdf', '.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif']
-    env_prefix: str = 'OFFICE_TOOL_'
-
-    model_config = ConfigDict(env_prefix='OFFICE_TOOL_')
+# Module-level default configuration for validators
+_DEFAULT_MAX_FILE_SIZE_MB = 100
+_DEFAULT_ALLOWED_EXTENSIONS = ['.docx', '.pptx', '.xlsx', '.pdf', '.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif']
 
 # Exceptions
 class OfficeToolError(Exception):
@@ -78,7 +61,6 @@ class BaseFileSchema(BaseModel):
         """Validate file paths for existence, size, extension, and path traversal."""
         if not v:
             return v
-        settings = OfficeSettings()
         abs_path = os.path.abspath(os.path.normpath(v))
         # Check for path traversal
         if '..' in v or '~' in v or '%' in v:
@@ -90,15 +72,15 @@ class BaseFileSchema(BaseModel):
             raise SecurityError(f"Path not in allowed directories: {abs_path}")
         # Check extension
         ext = os.path.splitext(abs_path)[1].lower()
-        if ext not in settings.allowed_extensions:
-            raise SecurityError(f"Extension '{ext}' not allowed for '{field.field_name}', expected {settings.allowed_extensions}")
+        if ext not in _DEFAULT_ALLOWED_EXTENSIONS:
+            raise SecurityError(f"Extension '{ext}' not allowed for '{field.field_name}', expected {_DEFAULT_ALLOWED_EXTENSIONS}")
         # Check file existence and size for input paths
         if field.field_name == 'file_path':
             if not os.path.isfile(abs_path):
                 raise FileOperationError(f"{field.field_name}: File not found: {abs_path}")
             size_mb = os.path.getsize(abs_path) / (1024 * 1024)
-            if size_mb > settings.max_file_size_mb:
-                raise FileOperationError(f"{field.field_name}: File too large: {size_mb:.1f}MB, max {settings.max_file_size_mb}MB")
+            if size_mb > _DEFAULT_MAX_FILE_SIZE_MB:
+                raise FileOperationError(f"{field.field_name}: File too large: {size_mb:.1f}MB, max {_DEFAULT_MAX_FILE_SIZE_MB}MB")
         # Check for existing output paths
         elif field.field_name == 'output_path' and os.path.exists(abs_path):
             raise FileOperationError(f"{field.field_name}: File already exists: {abs_path}")
@@ -155,23 +137,44 @@ class OfficeTool(BaseTool):
 
     Inherits from BaseTool to leverage ToolExecutor for caching, concurrency, and error handling.
     """
+    
+    # Configuration schema
+    class Config(BaseModel):
+        """Configuration for the office tool"""
+        model_config = ConfigDict(env_prefix="OFFICE_TOOL_")
+        
+        max_file_size_mb: int = Field(
+            default=100,
+            description="Maximum file size in megabytes"
+        )
+        default_font: str = Field(
+            default="Arial",
+            description="Default font for documents"
+        )
+        default_font_size: int = Field(
+            default=12,
+            description="Default font size in points"
+        )
+        allowed_extensions: List[str] = Field(
+            default=['.docx', '.pptx', '.xlsx', '.pdf', '.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif'],
+            description="Allowed document file extensions"
+        )
+    
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
-        Initialize OfficeTool with settings.
+        Initialize OfficeTool with configuration.
 
         Args:
-            config (Dict, optional): Configuration overrides for OfficeSettings.
+            config (Dict, optional): Configuration overrides for OfficeTool.
 
         Raises:
             ValueError: If config contains invalid settings.
         """
         super().__init__(config)
-        self.settings = OfficeSettings()
-        if config:
-            try:
-                self.settings = self.settings.model_validate({**self.settings.model_dump(), **config})
-            except ValidationError as e:
-                raise ValueError(f"Invalid configuration: {e}")
+        
+        # Parse configuration
+        self.config = self.Config(**(config or {}))
+        
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
             handler = logging.StreamHandler()
@@ -385,8 +388,8 @@ class OfficeTool(BaseTool):
             sanitized_table_data = self._sanitize_table_data(table_data)
             doc = DocxDocument()
             style = doc.styles['Normal']
-            style.font.name = self.settings.default_font
-            style.font.size = Pt(self.settings.default_font_size)
+            style.font.name = self.config.default_font
+            style.font.size = Pt(self.config.default_font_size)
             for line in sanitized_text.splitlines():
                 doc.add_paragraph(line)
             if sanitized_table_data and sanitized_table_data[0]:

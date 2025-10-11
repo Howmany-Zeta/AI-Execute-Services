@@ -7,8 +7,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 import numpy as np
-from pydantic_settings import BaseSettings
-from pydantic import ValidationError, ConfigDict
+from pydantic import BaseModel, ValidationError, ConfigDict, Field
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -20,13 +19,6 @@ class ScalerType(str, Enum):
     ROBUST = "robust"
     NONE = "none"
 
-class StatsSettings(BaseSettings):
-    """Configuration for StatsTool."""
-    max_file_size_mb: int = 200
-    allowed_extensions: List[str] = ['.sav', '.sas7bdat', '.por', '.csv', '.xlsx', '.xls', '.json', '.parquet', '.feather']
-    env_prefix: str = 'STATS_TOOL_'
-
-    model_config = ConfigDict(env_prefix='STATS_TOOL_')
 
 # Exceptions
 class StatsToolError(Exception): pass
@@ -55,14 +47,27 @@ class StatsResult:
 @register_tool('stats')
 class StatsTool(BaseTool):
     """Enhanced statistical analysis tool for various data formats and operations."""
+    
+    # Configuration schema
+    class Config(BaseModel):
+        """Configuration for the stats tool"""
+        model_config = ConfigDict(env_prefix="STATS_TOOL_")
+        
+        max_file_size_mb: int = Field(
+            default=200,
+            description="Maximum file size in megabytes"
+        )
+        allowed_extensions: List[str] = Field(
+            default=['.sav', '.sas7bdat', '.por', '.csv', '.xlsx', '.xls', '.json', '.parquet', '.feather'],
+            description="Allowed file extensions"
+        )
+    
     def __init__(self, config: Dict[str, Any] = None):
         super().__init__(config)
-        self.settings = StatsSettings()
-        if config:
-            try:
-                self.settings = self.settings.model_validate({**self.settings.model_dump(), **config})
-            except ValidationError as e:
-                raise ValueError(f"Invalid settings: {e}")
+        
+        # Parse configuration
+        self.config = self.Config(**(config or {}))
+        
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
             h = logging.StreamHandler()

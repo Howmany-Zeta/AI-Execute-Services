@@ -11,7 +11,6 @@ import tempfile
 
 import httpx
 from pydantic import BaseModel, Field, ValidationError, ConfigDict
-from pydantic_settings import BaseSettings
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -50,21 +49,6 @@ class OutputFormat(str, Enum):
     HTML = "html"
 
 
-class DocumentParserSettings(BaseSettings):
-    """Configuration for DocumentParserTool"""
-    user_agent: str = "DocumentParser/1.0"
-    max_file_size: int = 50 * 1024 * 1024  # 50MB
-    temp_dir: str = os.path.join(tempfile.gettempdir(), 'document_parser')
-    default_encoding: str = "utf-8"
-    timeout: int = 30
-    max_pages: int = 1000  # For large PDF files
-    
-    # Cloud storage settings
-    enable_cloud_storage: bool = True
-    gcs_bucket_name: str = "aiecs-documents"
-    gcs_project_id: Optional[str] = None
-    
-    model_config = ConfigDict(env_prefix="DOC_PARSER_")
 
 
 class DocumentParserError(Exception):
@@ -102,21 +86,57 @@ class DocumentParserTool(BaseTool):
     - ImageTool for image OCR
     """
     
+    # Configuration schema
+    class Config(BaseModel):
+        """Configuration for the document parser tool"""
+        model_config = ConfigDict(env_prefix="DOC_PARSER_")
+        
+        user_agent: str = Field(
+            default="DocumentParser/1.0",
+            description="User agent for HTTP requests"
+        )
+        max_file_size: int = Field(
+            default=50 * 1024 * 1024,
+            description="Maximum file size in bytes"
+        )
+        temp_dir: str = Field(
+            default=os.path.join(tempfile.gettempdir(), 'document_parser'),
+            description="Temporary directory for document processing"
+        )
+        default_encoding: str = Field(
+            default="utf-8",
+            description="Default encoding for text files"
+        )
+        timeout: int = Field(
+            default=30,
+            description="Timeout for HTTP requests in seconds"
+        )
+        max_pages: int = Field(
+            default=1000,
+            description="Maximum number of pages to process for large documents"
+        )
+        enable_cloud_storage: bool = Field(
+            default=True,
+            description="Whether to enable cloud storage integration"
+        )
+        gcs_bucket_name: str = Field(
+            default="aiecs-documents",
+            description="Google Cloud Storage bucket name"
+        )
+        gcs_project_id: Optional[str] = Field(
+            default=None,
+            description="Google Cloud Storage project ID"
+        )
+    
     def __init__(self, config: Optional[Dict] = None):
         """Initialize DocumentParserTool with settings"""
         super().__init__(config)
-        # Initialize settings with config if provided
-        if config:
-            try:
-                # For BaseSettings, use dictionary unpacking
-                self.settings = DocumentParserSettings(**config)
-            except ValidationError as e:
-                raise ValueError(f"Invalid settings: {e}")
-        else:
-            self.settings = DocumentParserSettings()
+        
+        # Parse configuration
+        self.config = self.Config(**(config or {}))
         
         self.logger = logging.getLogger(__name__)
-        os.makedirs(self.settings.temp_dir, exist_ok=True)
+        os.makedirs(self.config.temp_dir, exist_ok=True)
         
         # Initialize dependent tools
         self._init_dependent_tools()
@@ -151,15 +171,15 @@ class DocumentParserTool(BaseTool):
         """Initialize cloud storage for document retrieval"""
         self.file_storage = None
         
-        if self.settings.enable_cloud_storage:
+        if self.config.enable_cloud_storage:
             try:
                 from aiecs.infrastructure.persistence.file_storage import FileStorage
                 
                 storage_config = {
-                    'gcs_bucket_name': self.settings.gcs_bucket_name,
-                    'gcs_project_id': self.settings.gcs_project_id,
+                    'gcs_bucket_name': self.config.gcs_bucket_name,
+                    'gcs_project_id': self.config.gcs_project_id,
                     'enable_local_fallback': True,
-                    'local_storage_path': self.settings.temp_dir
+                    'local_storage_path': self.config.temp_dir
                 }
                 
                 self.file_storage = FileStorage(storage_config)
@@ -538,7 +558,7 @@ class DocumentParserTool(BaseTool):
             # Generate temp file path
             parsed_url = urlparse(url)
             filename = os.path.basename(parsed_url.path) or "document"
-            temp_path = os.path.join(self.settings.temp_dir, f"download_{hash(url)}_{filename}")
+            temp_path = os.path.join(self.config.temp_dir, f"download_{hash(url)}_{filename}")
             
             # Download using scraper tool
             result = asyncio.run(self.scraper_tool.get_httpx(
@@ -573,7 +593,7 @@ class DocumentParserTool(BaseTool):
             
             # Generate local temp file path
             temp_filename = f"cloud_download_{hash(source)}_{Path(storage_path).name}"
-            temp_path = os.path.join(self.settings.temp_dir, temp_filename)
+            temp_path = os.path.join(self.config.temp_dir, temp_filename)
             
             self.logger.info(f"Downloading from cloud storage: {source} -> {temp_path}")
             
@@ -720,7 +740,7 @@ class DocumentParserTool(BaseTool):
     def _parse_text_document(self, file_path: str, doc_type: DocumentType, strategy: ParsingStrategy) -> Union[str, Dict[str, Any]]:
         """Parse text-based documents"""
         try:
-            with open(file_path, 'r', encoding=self.settings.default_encoding, errors='ignore') as f:
+            with open(file_path, 'r', encoding=self.config.default_encoding, errors='ignore') as f:
                 content = f.read()
             
             if strategy == ParsingStrategy.TEXT_ONLY:
@@ -836,7 +856,7 @@ class DocumentParserTool(BaseTool):
         
         if self._is_url(source):
             # Clean up URL downloaded files
-            temp_pattern = os.path.join(self.settings.temp_dir, f"download_{hash(source)}_*")
+            temp_pattern = os.path.join(self.config.temp_dir, f"download_{hash(source)}_*")
             for temp_file in glob.glob(temp_pattern):
                 try:
                     os.remove(temp_file)
@@ -846,7 +866,7 @@ class DocumentParserTool(BaseTool):
         
         elif self._is_cloud_storage_path(source) or self._is_storage_id(source):
             # Clean up cloud storage downloaded files
-            temp_pattern = os.path.join(self.settings.temp_dir, f"cloud_download_{hash(source)}_*")
+            temp_pattern = os.path.join(self.config.temp_dir, f"cloud_download_{hash(source)}_*")
             for temp_file in glob.glob(temp_pattern):
                 try:
                     os.remove(temp_file)
@@ -897,7 +917,7 @@ class DocumentParserTool(BaseTool):
     def _extract_text_fallback(self, file_path: str) -> str:
         """Fallback text extraction method"""
         try:
-            with open(file_path, 'r', encoding=self.settings.default_encoding, errors='ignore') as f:
+            with open(file_path, 'r', encoding=self.config.default_encoding, errors='ignore') as f:
                 return f.read()
         except:
             with open(file_path, 'rb') as f:

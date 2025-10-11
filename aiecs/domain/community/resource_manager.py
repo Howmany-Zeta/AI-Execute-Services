@@ -15,7 +15,7 @@ from .models.community_models import (
     CommunityResource, CommunityMember, AgentCommunity,
     ResourceType
 )
-from ..core.exceptions.task_exceptions import TaskValidationError
+from .exceptions import CommunityValidationError as TaskValidationError
 
 logger = logging.getLogger(__name__)
 

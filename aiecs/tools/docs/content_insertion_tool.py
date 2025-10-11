@@ -24,8 +24,7 @@ from typing import Dict, Any, List, Optional, Union, Tuple
 from enum import Enum
 from pathlib import Path
 
-from pydantic import BaseModel, Field, ValidationError
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, Field, ValidationError, ConfigDict
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -97,18 +96,6 @@ class InsertionPosition(str, Enum):
     INLINE = "inline"
 
 
-class ContentInsertionSettings(BaseSettings):
-    """Configuration for ContentInsertionTool"""
-    temp_dir: str = os.path.join(tempfile.gettempdir(), 'content_insertion')
-    assets_dir: str = os.path.join(tempfile.gettempdir(), 'document_assets')
-    max_image_size: int = 10 * 1024 * 1024  # 10MB
-    max_chart_size: Tuple[int, int] = (1200, 800)  # pixels
-    default_image_format: str = "png"
-    optimize_images: bool = True
-    auto_resize: bool = True
-    
-    class Config:
-        env_prefix = "CONTENT_INSERT_"
 
 
 class ContentInsertionError(Exception):
@@ -151,13 +138,46 @@ class ContentInsertionTool(BaseTool):
     - DocumentWriterTool for content placement
     """
     
+    # Configuration schema
+    class Config(BaseModel):
+        """Configuration for the content insertion tool"""
+        model_config = ConfigDict(env_prefix="CONTENT_INSERT_")
+        
+        temp_dir: str = Field(
+            default=os.path.join(tempfile.gettempdir(), 'content_insertion'),
+            description="Temporary directory for content processing"
+        )
+        assets_dir: str = Field(
+            default=os.path.join(tempfile.gettempdir(), 'document_assets'),
+            description="Directory for document assets"
+        )
+        max_image_size: int = Field(
+            default=10 * 1024 * 1024,
+            description="Maximum image size in bytes"
+        )
+        max_chart_size: Tuple[int, int] = Field(
+            default=(1200, 800),
+            description="Maximum chart size in pixels (width, height)"
+        )
+        default_image_format: str = Field(
+            default="png",
+            description="Default image format for generated content"
+        )
+        optimize_images: bool = Field(
+            default=True,
+            description="Whether to optimize images automatically"
+        )
+        auto_resize: bool = Field(
+            default=True,
+            description="Whether to automatically resize content to fit"
+        )
+    
     def __init__(self, config: Optional[Dict] = None):
         """Initialize Content Insertion Tool with settings"""
         super().__init__(config)
-        try:
-            self.settings = ContentInsertionSettings(**(config or {}))
-        except ValidationError as e:
-            raise ValueError(f"Invalid settings: {e}")
+        
+        # Parse configuration
+        self.config = self.Config(**(config or {}))
         
         self.logger = logging.getLogger(__name__)
         
@@ -175,8 +195,8 @@ class ContentInsertionTool(BaseTool):
     
     def _init_directories(self):
         """Initialize required directories"""
-        os.makedirs(self.settings.temp_dir, exist_ok=True)
-        os.makedirs(self.settings.assets_dir, exist_ok=True)
+        os.makedirs(self.config.temp_dir, exist_ok=True)
+        os.makedirs(self.config.assets_dir, exist_ok=True)
     
     def _init_external_tools(self):
         """Initialize external tools for content generation"""
@@ -803,14 +823,14 @@ class ContentInsertionTool(BaseTool):
                 raise ChartInsertionError("Chart file not found")
             
             # Copy chart to assets directory
-            chart_filename = f"chart_{uuid.uuid4().hex[:8]}.{self.settings.default_image_format}"
-            asset_path = os.path.join(self.settings.assets_dir, chart_filename)
+            chart_filename = f"chart_{uuid.uuid4().hex[:8]}.{self.config.default_image_format}"
+            asset_path = os.path.join(self.config.assets_dir, chart_filename)
             
             import shutil
             shutil.copy2(chart_file, asset_path)
             
             # Optimize if needed
-            if self.settings.optimize_images and 'image' in self.external_tools:
+            if self.config.optimize_images and 'image' in self.external_tools:
                 self._optimize_image(asset_path)
             
             return {
@@ -878,8 +898,8 @@ class ContentInsertionTool(BaseTool):
                 image_file = image_source
             
             # Copy to assets directory
-            image_filename = f"image_{uuid.uuid4().hex[:8]}.{self.settings.default_image_format}"
-            asset_path = os.path.join(self.settings.assets_dir, image_filename)
+            image_filename = f"image_{uuid.uuid4().hex[:8]}.{self.config.default_image_format}"
+            asset_path = os.path.join(self.config.assets_dir, image_filename)
             
             import shutil
             shutil.copy2(image_file, asset_path)
@@ -1142,8 +1162,8 @@ class ContentInsertionTool(BaseTool):
         """Download image from URL"""
         import urllib.request
         
-        filename = f"downloaded_{uuid.uuid4().hex[:8]}.{self.settings.default_image_format}"
-        filepath = os.path.join(self.settings.temp_dir, filename)
+        filename = f"downloaded_{uuid.uuid4().hex[:8]}.{self.config.default_image_format}"
+        filepath = os.path.join(self.config.temp_dir, filename)
         
         urllib.request.urlretrieve(url, filepath)
         return filepath
@@ -1160,7 +1180,7 @@ class ContentInsertionTool(BaseTool):
         image_data = base64.b64decode(data)
         
         filename = f"base64_{uuid.uuid4().hex[:8]}.{format_info}"
-        filepath = os.path.join(self.settings.temp_dir, filename)
+        filepath = os.path.join(self.config.temp_dir, filename)
         
         with open(filepath, 'wb') as f:
             f.write(image_data)

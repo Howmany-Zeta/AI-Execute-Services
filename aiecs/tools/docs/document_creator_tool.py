@@ -23,8 +23,7 @@ from typing import Dict, Any, List, Optional, Union
 from enum import Enum
 from pathlib import Path
 
-from pydantic import BaseModel, Field, ValidationError
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, Field, ValidationError, ConfigDict
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -82,18 +81,6 @@ class StylePreset(str, Enum):
     PROFESSIONAL = "professional"
 
 
-class DocumentCreatorSettings(BaseSettings):
-    """Configuration for DocumentCreatorTool"""
-    templates_dir: str = os.path.join(tempfile.gettempdir(), 'document_templates')
-    output_dir: str = os.path.join(tempfile.gettempdir(), 'created_documents')
-    default_format: DocumentFormat = DocumentFormat.MARKDOWN
-    default_style: StylePreset = StylePreset.DEFAULT
-    auto_backup: bool = True
-    include_metadata: bool = True
-    generate_toc: bool = True
-    
-    class Config:
-        env_prefix = "DOC_CREATOR_"
 
 
 class DocumentCreatorError(Exception):
@@ -129,15 +116,46 @@ class DocumentCreatorTool(BaseTool):
     - ContentInsertionTool for complex content
     """
     
+    # Configuration schema
+    class Config(BaseModel):
+        """Configuration for the document creator tool"""
+        model_config = ConfigDict(env_prefix="DOC_CREATOR_")
+        
+        templates_dir: str = Field(
+            default=os.path.join(tempfile.gettempdir(), 'document_templates'),
+            description="Directory for document templates"
+        )
+        output_dir: str = Field(
+            default=os.path.join(tempfile.gettempdir(), 'created_documents'),
+            description="Directory for created documents"
+        )
+        default_format: str = Field(
+            default="markdown",
+            description="Default output format"
+        )
+        default_style: str = Field(
+            default="default",
+            description="Default style preset"
+        )
+        auto_backup: bool = Field(
+            default=True,
+            description="Whether to automatically backup created documents"
+        )
+        include_metadata: bool = Field(
+            default=True,
+            description="Whether to include metadata in created documents"
+        )
+        generate_toc: bool = Field(
+            default=True,
+            description="Whether to generate table of contents automatically"
+        )
+    
     def __init__(self, config: Optional[Dict] = None):
         """Initialize Document Creator Tool with settings"""
         super().__init__(config)
-        self.settings = DocumentCreatorSettings()
-        if config:
-            try:
-                self.settings = self.settings.model_validate({**self.settings.model_dump(), **config})
-            except ValidationError as e:
-                raise ValueError(f"Invalid settings: {e}")
+        
+        # Parse configuration
+        self.config = self.Config(**(config or {}))
         
         self.logger = logging.getLogger(__name__)
         
@@ -152,8 +170,8 @@ class DocumentCreatorTool(BaseTool):
     
     def _init_directories(self):
         """Initialize required directories"""
-        os.makedirs(self.settings.templates_dir, exist_ok=True)
-        os.makedirs(self.settings.output_dir, exist_ok=True)
+        os.makedirs(self.config.templates_dir, exist_ok=True)
+        os.makedirs(self.config.output_dir, exist_ok=True)
     
     def _init_templates(self):
         """Initialize built-in templates"""
@@ -237,7 +255,7 @@ class DocumentCreatorTool(BaseTool):
             processed_metadata = self._process_metadata(metadata, output_format)
             
             # Step 4: Apply style preset
-            style_config = self._get_style_config(style_preset or self.settings.default_style)
+            style_config = self._get_style_config(style_preset or self.config.default_style)
             
             # Step 5: Create document from template
             document_content = self._create_document_from_template(
@@ -293,7 +311,7 @@ class DocumentCreatorTool(BaseTool):
         """
         try:
             # Load custom template
-            template_path = os.path.join(self.settings.templates_dir, template_name)
+            template_path = os.path.join(self.config.templates_dir, template_name)
             if not os.path.exists(template_path):
                 raise TemplateError(f"Template not found: {template_name}")
             
@@ -423,15 +441,15 @@ class DocumentCreatorTool(BaseTool):
         
         # Scan for custom templates
         custom_templates = []
-        if os.path.exists(self.settings.templates_dir):
-            for file in os.listdir(self.settings.templates_dir):
+        if os.path.exists(self.config.templates_dir):
+            for file in os.listdir(self.config.templates_dir):
                 if file.endswith(('.md', '.html', '.txt', '.json')):
                     custom_templates.append(file)
         
         return {
             "built_in_templates": [t.value for t in built_in_templates],
             "custom_templates": custom_templates,
-            "templates_directory": self.settings.templates_dir,
+            "templates_directory": self.config.templates_dir,
             "total_templates": len(built_in_templates) + len(custom_templates)
         }
     
@@ -952,7 +970,7 @@ class DocumentCreatorTool(BaseTool):
         """Generate output path for document"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{document_type}_{timestamp}_{document_id[:8]}.{output_format.value}"
-        return os.path.join(self.settings.output_dir, filename)
+        return os.path.join(self.config.output_dir, filename)
     
     def _process_metadata(self, metadata: Dict[str, Any], output_format: DocumentFormat) -> Dict[str, Any]:
         """Process and validate metadata"""
@@ -996,7 +1014,7 @@ class DocumentCreatorTool(BaseTool):
                 content = content.replace(placeholder, str(value))
         
         # Add metadata header if required
-        if self.settings.include_metadata:
+        if self.config.include_metadata:
             metadata_header = self._generate_metadata_header(metadata, output_format)
             content = metadata_header + "\n\n" + content
         

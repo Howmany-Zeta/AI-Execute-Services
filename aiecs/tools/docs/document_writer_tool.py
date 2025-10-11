@@ -12,9 +12,8 @@ from datetime import datetime
 from pathlib import Path
 import tempfile
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from pydantic import ValidationError as PydanticValidationError
-from pydantic_settings import BaseSettings
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -85,35 +84,6 @@ class ValidationLevel(str, Enum):
     ENTERPRISE = "enterprise"  # 企业级验证（安全、合规）
 
 
-class DocumentWriterSettings(BaseSettings):
-    """Configuration for DocumentWriterTool"""
-    temp_dir: str = os.path.join(tempfile.gettempdir(), 'document_writer')
-    backup_dir: str = os.path.join(tempfile.gettempdir(), 'document_backups')
-    output_dir: Optional[str] = None  # Output directory
-    max_file_size: int = 100 * 1024 * 1024  # 100MB
-    max_backup_versions: int = 10
-    default_encoding: str = "utf-8"
-    enable_backup: bool = True
-    enable_versioning: bool = True
-    enable_content_validation: bool = True
-    enable_security_scan: bool = True
-    atomic_write: bool = True  # 原子写入
-    validation_level: str = "basic"  # Validation level
-    timeout_seconds: int = 60  # Operation timeout
-    auto_backup: bool = True  # Auto backup before write
-    atomic_writes: bool = True  # Atomic write operations
-    default_format: DocumentFormat = DocumentFormat.MARKDOWN  # Default document format
-    version_control: bool = True  # Enable version control
-    security_scan: bool = True  # Enable security scanning
-    
-    # 云存储设置
-    enable_cloud_storage: bool = True
-    gcs_bucket_name: str = "aiecs-documents"
-    gcs_project_id: Optional[str] = None
-    
-    class Config:
-        env_prefix = "DOC_WRITER_"
-        extra = "allow"  # Allow extra fields for flexibility
 
 
 class DocumentWriterError(Exception):
@@ -171,25 +141,108 @@ class DocumentWriterTool(BaseTool):
     - Audit logging
     """
     
+    # Configuration schema
+    class Config(BaseModel):
+        """Configuration for the document writer tool"""
+        model_config = ConfigDict(env_prefix="DOC_WRITER_")
+        
+        temp_dir: str = Field(
+            default=os.path.join(tempfile.gettempdir(), 'document_writer'),
+            description="Temporary directory for document processing"
+        )
+        backup_dir: str = Field(
+            default=os.path.join(tempfile.gettempdir(), 'document_backups'),
+            description="Directory for document backups"
+        )
+        output_dir: Optional[str] = Field(
+            default=None,
+            description="Default output directory for documents"
+        )
+        max_file_size: int = Field(
+            default=100 * 1024 * 1024,
+            description="Maximum file size in bytes"
+        )
+        max_backup_versions: int = Field(
+            default=10,
+            description="Maximum number of backup versions to keep"
+        )
+        default_encoding: str = Field(
+            default="utf-8",
+            description="Default text encoding for documents"
+        )
+        enable_backup: bool = Field(
+            default=True,
+            description="Whether to enable automatic backup functionality"
+        )
+        enable_versioning: bool = Field(
+            default=True,
+            description="Whether to enable document versioning"
+        )
+        enable_content_validation: bool = Field(
+            default=True,
+            description="Whether to enable content validation"
+        )
+        enable_security_scan: bool = Field(
+            default=True,
+            description="Whether to enable security scanning"
+        )
+        atomic_write: bool = Field(
+            default=True,
+            description="Whether to use atomic write operations"
+        )
+        validation_level: str = Field(
+            default="basic",
+            description="Content validation level"
+        )
+        timeout_seconds: int = Field(
+            default=60,
+            description="Operation timeout in seconds"
+        )
+        auto_backup: bool = Field(
+            default=True,
+            description="Whether to automatically backup before write operations"
+        )
+        atomic_writes: bool = Field(
+            default=True,
+            description="Whether to use atomic write operations"
+        )
+        default_format: str = Field(
+            default="md",
+            description="Default document format"
+        )
+        version_control: bool = Field(
+            default=True,
+            description="Whether to enable version control"
+        )
+        security_scan: bool = Field(
+            default=True,
+            description="Whether to enable security scanning"
+        )
+        enable_cloud_storage: bool = Field(
+            default=True,
+            description="Whether to enable cloud storage integration"
+        )
+        gcs_bucket_name: str = Field(
+            default="aiecs-documents",
+            description="Google Cloud Storage bucket name"
+        )
+        gcs_project_id: Optional[str] = Field(
+            default=None,
+            description="Google Cloud Storage project ID"
+        )
+    
     def __init__(self, config: Optional[Dict] = None):
         """Initialize DocumentWriterTool with settings"""
-        try:
-            super().__init__(config)
-        except PydanticValidationError as e:
-            raise ValueError(f"Invalid settings: {e}")
-            
-        self.settings = DocumentWriterSettings()
-        if config:
-            try:
-                self.settings = self.settings.model_validate({**self.settings.model_dump(), **config})
-            except PydanticValidationError as e:
-                raise ValueError(f"Invalid settings: {e}")
+        super().__init__(config)
+        
+        # Parse configuration
+        self.config = self.Config(**(config or {}))
         
         self.logger = logging.getLogger(__name__)
         
         # Create necessary directories
-        os.makedirs(self.settings.temp_dir, exist_ok=True)
-        os.makedirs(self.settings.backup_dir, exist_ok=True)
+        os.makedirs(self.config.temp_dir, exist_ok=True)
+        os.makedirs(self.config.backup_dir, exist_ok=True)
         
         # Initialize cloud storage
         self._init_cloud_storage()
@@ -201,15 +254,15 @@ class DocumentWriterTool(BaseTool):
         """Initialize cloud storage for document writing"""
         self.file_storage = None
         
-        if self.settings.enable_cloud_storage:
+        if self.config.enable_cloud_storage:
             try:
                 from aiecs.infrastructure.persistence.file_storage import FileStorage
                 
                 storage_config = {
-                    'gcs_bucket_name': self.settings.gcs_bucket_name,
-                    'gcs_project_id': self.settings.gcs_project_id,
+                    'gcs_bucket_name': self.config.gcs_bucket_name,
+                    'gcs_project_id': self.config.gcs_project_id,
                     'enable_local_fallback': True,
-                    'local_storage_path': self.settings.temp_dir
+                    'local_storage_path': self.config.temp_dir
                 }
                 
                 self.file_storage = FileStorage(storage_config)
@@ -327,7 +380,7 @@ class DocumentWriterTool(BaseTool):
             
             # Step 4: Create backup if needed
             backup_info = None
-            if self.settings.enable_backup and mode in [WriteMode.OVERWRITE, WriteMode.UPDATE]:
+            if self.config.enable_backup and mode in [WriteMode.OVERWRITE, WriteMode.UPDATE]:
                 backup_info = self._create_backup(target_path, backup_comment)
             
             # Step 5: Execute atomic write
@@ -487,8 +540,8 @@ class DocumentWriterTool(BaseTool):
         
         # Size validation
         content_size = self._calculate_content_size(content)
-        if content_size > self.settings.max_file_size:
-            raise ValueError(f"Content size {content_size} exceeds maximum {self.settings.max_file_size}")
+        if content_size > self.config.max_file_size:
+            raise ValueError(f"Content size {content_size} exceeds maximum {self.config.max_file_size}")
         
         # Permission validation
         if not self._check_write_permission(target_path, mode):
@@ -523,7 +576,7 @@ class DocumentWriterTool(BaseTool):
             processed_content = str(content)
         
         # Content validation
-        if self.settings.enable_content_validation:
+        if self.config.enable_content_validation:
             self._validate_content(processed_content, format, validation_level)
         
         # Calculate metadata
@@ -549,15 +602,15 @@ class DocumentWriterTool(BaseTool):
             "is_cloud_path": self._is_cloud_storage_path(target_path),
             "requires_backup": False,
             "requires_versioning": False,
-            "atomic_operation": self.settings.atomic_write
+            "atomic_operation": self.config.atomic_write
         }
         
         if mode == WriteMode.CREATE and plan["file_exists"]:
             raise DocumentWriterError(f"File already exists: {target_path}")
         
         if mode in [WriteMode.OVERWRITE, WriteMode.UPDATE] and plan["file_exists"]:
-            plan["requires_backup"] = self.settings.enable_backup
-            plan["requires_versioning"] = self.settings.enable_versioning
+            plan["requires_backup"] = self.config.enable_backup
+            plan["requires_versioning"] = self.config.enable_versioning
         
         if mode == WriteMode.APPEND and not plan["file_exists"]:
             # Convert to CREATE mode
@@ -576,7 +629,7 @@ class DocumentWriterTool(BaseTool):
             file_suffix = Path(target_path).suffix
             
             backup_filename = f"{file_stem}_backup_{timestamp}{file_suffix}"
-            backup_path = os.path.join(self.settings.backup_dir, backup_filename)
+            backup_path = os.path.join(self.config.backup_dir, backup_filename)
             
             # Copy file to backup location
             if self._is_cloud_storage_path(target_path):
@@ -715,7 +768,7 @@ class DocumentWriterTool(BaseTool):
     def _handle_versioning(self, target_path: str, content_metadata: Dict, metadata: Optional[Dict]) -> Optional[Dict]:
         """Handle document versioning"""
         
-        if not self.settings.enable_versioning:
+        if not self.config.enable_versioning:
             return None
         
         try:
@@ -733,8 +786,8 @@ class DocumentWriterTool(BaseTool):
             versions.append(version_info)
             
             # Keep only recent versions
-            if len(versions) > self.settings.max_backup_versions:
-                versions = versions[-self.settings.max_backup_versions:]
+            if len(versions) > self.config.max_backup_versions:
+                versions = versions[-self.config.max_backup_versions:]
             
             self._save_version_history(version_file, versions)
             
@@ -1044,7 +1097,7 @@ class DocumentWriterTool(BaseTool):
         
         # Log to audit file
         try:
-            audit_file = os.path.join(self.settings.temp_dir, "write_audit.log")
+            audit_file = os.path.join(self.config.temp_dir, "write_audit.log")
             with open(audit_file, "a") as f:
                 f.write(json.dumps(audit_info) + "\n")
         except Exception as e:
@@ -1514,7 +1567,7 @@ class DocumentWriterTool(BaseTool):
     
     def _store_clipboard_content(self, content: str):
         """Store content in clipboard (simplified implementation)"""
-        clipboard_file = os.path.join(self.settings.temp_dir, "clipboard.txt")
+        clipboard_file = os.path.join(self.config.temp_dir, "clipboard.txt")
         try:
             with open(clipboard_file, 'w', encoding='utf-8') as f:
                 f.write(content)
@@ -1523,7 +1576,7 @@ class DocumentWriterTool(BaseTool):
     
     def _get_clipboard_content(self) -> str:
         """Get content from clipboard"""
-        clipboard_file = os.path.join(self.settings.temp_dir, "clipboard.txt")
+        clipboard_file = os.path.join(self.config.temp_dir, "clipboard.txt")
         try:
             with open(clipboard_file, 'r', encoding='utf-8') as f:
                 return f.read()

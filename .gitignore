@@ -204,3 +204,6 @@ dist/
 .DS_Store
 Thumbs.db
 ehthumbs.db
+
+# Cursor IDE
+.cursor/

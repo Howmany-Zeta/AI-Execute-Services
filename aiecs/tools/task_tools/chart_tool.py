@@ -39,8 +39,9 @@ class ChartTool(BaseTool):
 
     # Configuration schema
     class Config(BaseModel):
-        model_config = ConfigDict()
         """Configuration for the chart tool"""
+        model_config = ConfigDict(env_prefix="CHART_TOOL_")
+        
         export_dir: str = Field(
             default=os.path.join(tempfile.gettempdir(), 'chart_exports'),
             description="Directory to export files to"
