@@ -6,7 +6,7 @@ import vertexai
 from vertexai.generative_models import GenerativeModel, HarmCategory, HarmBlockThreshold, GenerationConfig, SafetySetting
 from google.oauth2 import service_account
 
-from aiecs.llm.base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
+from aiecs.llm.clients.base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
 from aiecs.config.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -18,12 +18,6 @@ class VertexAIClient(BaseLLMClient):
         super().__init__("Vertex")
         self.settings = get_settings()
         self._initialized = False
-
-        # Token cost estimates (USD per 1K tokens)
-        self.token_costs = {
-            "gemini-2.5-pro": {"input": 0.00125, "output": 0.00375},
-            "gemini-2.5-flash": {"input": 0.000075, "output": 0.0003},
-        }
 
     def _init_vertex_ai(self):
         """Lazy initialization of Vertex AI with proper authentication"""
@@ -71,7 +65,14 @@ class VertexAIClient(BaseLLMClient):
     ) -> LLMResponse:
         """Generate text using Vertex AI"""
         self._init_vertex_ai()
-        model_name = model or "gemini-2.5-pro"
+        
+        # Get model name from config if not provided
+        model_name = model or self._get_default_model() or "gemini-2.5-pro"
+        
+        # Get model config for default parameters
+        model_config = self._get_model_config(model_name)
+        if model_config and max_tokens is None:
+            max_tokens = model_config.default_params.max_tokens
 
         try:
             # Use the stable Vertex AI API
@@ -163,13 +164,12 @@ class VertexAIClient(BaseLLMClient):
                     content = "[Response error: Cannot get the response text. Multiple content parts are not supported.]"
 
             # Vertex AI doesn't provide detailed token usage in the response
-            tokens_used = self._count_tokens_estimate(prompt + content)
-            cost = self._estimate_cost(
-                model_name,
-                self._count_tokens_estimate(prompt),
-                self._count_tokens_estimate(content),
-                self.token_costs
-            )
+            input_tokens = self._count_tokens_estimate(prompt)
+            output_tokens = self._count_tokens_estimate(content)
+            tokens_used = input_tokens + output_tokens
+            
+            # Use config-based cost estimation
+            cost = self._estimate_cost_from_config(model_name, input_tokens, output_tokens)
 
             return LLMResponse(
                 content=content,

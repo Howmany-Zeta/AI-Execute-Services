@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional, List, AsyncGenerator
 import google.generativeai as genai
 from google.generativeai.types import GenerationConfig, HarmCategory, HarmBlockThreshold
 
-from aiecs.llm.base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
+from aiecs.llm.clients.base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
 from aiecs.config.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -19,12 +19,6 @@ class GoogleAIClient(BaseLLMClient):
         self.settings = get_settings()
         self._initialized = False
         self.client = None
-
-        # Token cost estimates for Gemini 2.5 series
-        self.token_costs = {
-            "gemini-2.5-pro": {"input": 0.00125, "output": 0.00375},
-            "gemini-2.5-flash": {"input": 0.000075, "output": 0.0003},
-        }
 
     def _init_google_ai(self):
         """Lazy initialization of Google AI SDK"""
@@ -50,7 +44,14 @@ class GoogleAIClient(BaseLLMClient):
     ) -> LLMResponse:
         """Generate text using Google AI"""
         self._init_google_ai()
-        model_name = model or "gemini-2.5-pro"
+        
+        # Get model name from config if not provided
+        model_name = model or self._get_default_model() or "gemini-2.5-pro"
+        
+        # Get model config for default parameters
+        model_config = self._get_model_config(model_name)
+        if model_config and max_tokens is None:
+            max_tokens = model_config.default_params.max_tokens
 
         try:
             model_instance = genai.GenerativeModel(model_name)
@@ -88,12 +89,8 @@ class GoogleAIClient(BaseLLMClient):
             completion_tokens = response.usage_metadata.candidates_token_count
             total_tokens = response.usage_metadata.total_token_count
 
-            cost = self._estimate_cost(
-                model_name,
-                prompt_tokens,
-                completion_tokens,
-                self.token_costs
-            )
+            # Use config-based cost estimation
+            cost = self._estimate_cost_from_config(model_name, prompt_tokens, completion_tokens)
 
             return LLMResponse(
                 content=content,
@@ -121,7 +118,14 @@ class GoogleAIClient(BaseLLMClient):
     ) -> AsyncGenerator[str, None]:
         """Stream text generation using Google AI"""
         self._init_google_ai()
-        model_name = model or "gemini-2.5-pro"
+        
+        # Get model name from config if not provided
+        model_name = model or self._get_default_model() or "gemini-2.5-pro"
+        
+        # Get model config for default parameters
+        model_config = self._get_model_config(model_name)
+        if model_config and max_tokens is None:
+            max_tokens = model_config.default_params.max_tokens
 
         try:
             model_instance = genai.GenerativeModel(model_name)

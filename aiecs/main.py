@@ -29,6 +29,10 @@ from aiecs.infrastructure.persistence import (
 )
 from aiecs.infrastructure.messaging.celery_task_manager import CeleryTaskManager
 from aiecs.infrastructure.monitoring.structured_logger import setup_structured_logging
+from aiecs.infrastructure.monitoring import (
+    initialize_global_metrics,
+    close_global_metrics
+)
 
 # Import LLM client factory
 from aiecs.llm.client_factory import LLMClientFactory
@@ -60,6 +64,13 @@ async def lifespan(app: FastAPI):
     
     # Setup structured logging
     setup_structured_logging()
+    
+    # Initialize global metrics (early in startup)
+    try:
+        await initialize_global_metrics()
+        logger.info("Global metrics initialized")
+    except Exception as e:
+        logger.warning(f"Global metrics initialization failed (continuing without it): {e}")
     
     # Initialize database connection
     try:
@@ -117,6 +128,13 @@ async def lifespan(app: FastAPI):
     await LLMClientFactory.close_all()
     logger.info("LLM clients closed")
     
+    # Close global metrics
+    try:
+        await close_global_metrics()
+        logger.info("Global metrics closed")
+    except Exception as e:
+        logger.warning(f"Error closing global metrics: {e}")
+    
     logger.info("AIECS shutdown complete")
 
 
@@ -150,6 +168,18 @@ async def health_check():
         "status": "healthy",
         "service": "aiecs",
         "version": "1.2.0"
+    }
+
+
+# Metrics health check endpoint
+@app.get("/metrics/health")
+async def metrics_health():
+    """Check global metrics health"""
+    from aiecs.infrastructure.monitoring import is_metrics_initialized, get_metrics_summary
+    
+    return {
+        "initialized": is_metrics_initialized(),
+        "summary": get_metrics_summary()
     }
 
 

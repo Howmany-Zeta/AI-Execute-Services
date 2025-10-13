@@ -12,7 +12,7 @@ from aiecs.config.config import get_settings, validate_required_settings
 from aiecs.domain.task.task_context import TaskContext
 from aiecs.tools import discover_tools, list_tools, get_tool
 from aiecs.llm.client_factory import LLMClientFactory, LLMClientManager, AIProvider
-from aiecs.llm.base_client import LLMMessage
+from aiecs.llm.clients.base_client import LLMMessage
 
 logger = logging.getLogger(__name__)
 

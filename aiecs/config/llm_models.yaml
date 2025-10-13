@@ -1,0 +1,465 @@
+# LLM Models Configuration
+# Centralized configuration for all LLM providers and their models
+
+providers:
+  # Vertex AI Provider
+  vertex:
+    provider_name: "Vertex"
+    default_model: "gemini-2.5-pro"
+    models:
+      - name: "gemini-2.5-pro"
+        display_name: "Gemini 2.5 Pro"
+        description: "Most capable Gemini model with extended thinking capabilities"
+        costs:
+          input: 0.00125
+          output: 0.00375
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 8192
+          context_window: 1000000
+        default_params:
+          temperature: 0.7
+          max_tokens: 8192
+          top_p: 0.95
+          top_k: 40
+      
+      - name: "gemini-2.5-flash"
+        display_name: "Gemini 2.5 Flash"
+        description: "Fast and efficient Gemini model"
+        costs:
+          input: 0.000075
+          output: 0.0003
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 8192
+          context_window: 1000000
+        default_params:
+          temperature: 0.7
+          max_tokens: 8192
+          top_p: 0.95
+          top_k: 40
+
+  # Google AI Provider
+  googleai:
+    provider_name: "GoogleAI"
+    default_model: "gemini-2.5-pro"
+    models:
+      - name: "gemini-2.5-pro"
+        display_name: "Gemini 2.5 Pro (Google AI)"
+        description: "Most capable Gemini model via Google AI Studio"
+        costs:
+          input: 0.00125
+          output: 0.00375
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 8192
+          context_window: 1000000
+        default_params:
+          temperature: 0.7
+          max_tokens: 8192
+          top_p: 0.95
+          top_k: 40
+      
+      - name: "gemini-2.5-flash"
+        display_name: "Gemini 2.5 Flash (Google AI)"
+        description: "Fast and efficient Gemini model via Google AI Studio"
+        costs:
+          input: 0.000075
+          output: 0.0003
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 8192
+          context_window: 1000000
+        default_params:
+          temperature: 0.7
+          max_tokens: 8192
+          top_p: 0.95
+          top_k: 40
+
+  # OpenAI Provider
+  openai:
+    provider_name: "OpenAI"
+    default_model: "gpt-4-turbo"
+    models:
+      - name: "gpt-4"
+        display_name: "GPT-4"
+        description: "Most capable GPT-4 model"
+        costs:
+          input: 0.03
+          output: 0.06
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 8192
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      - name: "gpt-4-turbo"
+        display_name: "GPT-4 Turbo"
+        description: "Fast and capable GPT-4 variant"
+        costs:
+          input: 0.01
+          output: 0.03
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 4096
+          context_window: 128000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      - name: "gpt-3.5-turbo"
+        display_name: "GPT-3.5 Turbo"
+        description: "Fast and cost-effective model"
+        costs:
+          input: 0.0015
+          output: 0.002
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 4096
+          context_window: 16384
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      - name: "gpt-4o"
+        display_name: "GPT-4o"
+        description: "Multimodal flagship model"
+        costs:
+          input: 0.005
+          output: 0.015
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 16384
+          context_window: 128000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      - name: "gpt-4o-mini"
+        display_name: "GPT-4o Mini"
+        description: "Small, fast, and affordable model"
+        costs:
+          input: 0.00015
+          output: 0.0006
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 16384
+          context_window: 128000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+
+  # xAI Provider (Grok)
+  xai:
+    provider_name: "xAI"
+    default_model: "grok-4"
+    model_mappings:
+      # Legacy mappings
+      "grok": "grok-beta"
+      
+      # Grok 2 mappings
+      "Grok 2": "grok-2"
+      "Grok 2 Vision": "grok-2-vision"
+      
+      # Grok 3 mappings
+      "Grok 3 Normal": "grok-3"
+      "Grok 3 Fast": "grok-3-fast"
+      "Grok 3 Mini Normal": "grok-3-mini"
+      "Grok 3 Mini Fast": "grok-3-mini-fast"
+      "Grok 3 Reasoning Normal": "grok-3-reasoning"
+      "Grok 3 Reasoning Fast": "grok-3-reasoning-fast"
+      "Grok 3 Mini Reasoning Normal": "grok-3-mini-reasoning"
+      "Grok 3 Mini Reasoning Fast": "grok-3-mini-reasoning-fast"
+      
+      # Grok 4 mappings
+      "Grok 4 Normal": "grok-4"
+      "Grok 4 Fast": "grok-4-fast"
+      "Grok 4 0709": "grok-4-0709"
+    
+    models:
+      # Legacy Models
+      - name: "grok-beta"
+        display_name: "Grok Beta"
+        description: "Legacy Grok beta model"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: false
+          max_tokens: 8192
+          context_window: 128000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      # Grok 2 Models
+      - name: "grok-2"
+        display_name: "Grok 2"
+        description: "Grok 2 standard model"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 128000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      - name: "grok-2-vision"
+        display_name: "Grok 2 Vision"
+        description: "Grok 2 with vision capabilities"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 8192
+          context_window: 128000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      # Grok 3 Models
+      - name: "grok-3"
+        display_name: "Grok 3"
+        description: "Grok 3 standard model"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 128000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      - name: "grok-3-fast"
+        display_name: "Grok 3 Fast"
+        description: "Fast variant of Grok 3"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 128000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      - name: "grok-3-mini"
+        display_name: "Grok 3 Mini"
+        description: "Smaller, efficient Grok 3 variant"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 128000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      - name: "grok-3-mini-fast"
+        display_name: "Grok 3 Mini Fast"
+        description: "Fast, efficient Grok 3 variant"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 128000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      - name: "grok-3-reasoning"
+        display_name: "Grok 3 Reasoning"
+        description: "Grok 3 with enhanced reasoning"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 128000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      - name: "grok-3-reasoning-fast"
+        display_name: "Grok 3 Reasoning Fast"
+        description: "Fast reasoning variant of Grok 3"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 128000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      - name: "grok-3-mini-reasoning"
+        display_name: "Grok 3 Mini Reasoning"
+        description: "Mini model with reasoning capabilities"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 128000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      - name: "grok-3-mini-reasoning-fast"
+        display_name: "Grok 3 Mini Reasoning Fast"
+        description: "Fast mini reasoning model"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 128000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      # Grok 4 Models
+      - name: "grok-4"
+        display_name: "Grok 4"
+        description: "Latest Grok 4 model"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 128000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      - name: "grok-4-fast"
+        display_name: "Grok 4 Fast"
+        description: "Fast variant of Grok 4"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 128000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      - name: "grok-4-0709"
+        display_name: "Grok 4 (July 9)"
+        description: "Grok 4 snapshot from July 9"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 128000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+

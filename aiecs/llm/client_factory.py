@@ -2,12 +2,12 @@ import logging
 from typing import Dict, Any, Optional, Union, List
 from enum import Enum
 
-from .base_client import BaseLLMClient, LLMMessage, LLMResponse
-from .openai_client import OpenAIClient
-from .vertex_client import VertexAIClient
-from .googleai_client import GoogleAIClient
-from .xai_client import XAIClient
-from ..utils.base_callback import CustomAsyncCallbackHandler
+from .clients.base_client import BaseLLMClient, LLMMessage, LLMResponse
+from .clients.openai_client import OpenAIClient
+from .clients.vertex_client import VertexAIClient
+from .clients.googleai_client import GoogleAIClient
+from .clients.xai_client import XAIClient
+from .callbacks.custom_callbacks import CustomAsyncCallbackHandler
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +72,23 @@ class LLMClientFactory:
                 del cls._clients[provider]
             except Exception as e:
                 logger.error(f"Error closing client {provider}: {e}")
+    
+    @classmethod
+    def reload_config(cls):
+        """
+        Reload LLM models configuration.
+        
+        This reloads the configuration from the YAML file, allowing for
+        hot-reloading of model settings without restarting the application.
+        """
+        try:
+            from aiecs.llm.config import reload_llm_config
+            config = reload_llm_config()
+            logger.info(f"Reloaded LLM configuration: {len(config.providers)} providers")
+            return config
+        except Exception as e:
+            logger.error(f"Failed to reload LLM configuration: {e}")
+            raise
 
 class LLMClientManager:
     """High-level manager for LLM operations with context-aware provider selection"""

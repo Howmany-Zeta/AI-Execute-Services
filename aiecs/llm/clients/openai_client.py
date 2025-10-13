@@ -5,7 +5,7 @@ from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import httpx
 
-from aiecs.llm.base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
+from aiecs.llm.clients.base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
 from aiecs.config.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -17,15 +17,6 @@ class OpenAIClient(BaseLLMClient):
         super().__init__("OpenAI")
         self.settings = get_settings()
         self._client: Optional[AsyncOpenAI] = None
-
-        # Token cost estimates (USD per 1K tokens)
-        self.token_costs = {
-            "gpt-4": {"input": 0.03, "output": 0.06},
-            "gpt-4-turbo": {"input": 0.01, "output": 0.03},
-            "gpt-3.5-turbo": {"input": 0.0015, "output": 0.002},
-            "gpt-4o": {"input": 0.005, "output": 0.015},
-            "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},
-        }
 
     def _get_client(self) -> AsyncOpenAI:
         """Lazy initialization of OpenAI client"""
@@ -50,7 +41,9 @@ class OpenAIClient(BaseLLMClient):
     ) -> LLMResponse:
         """Generate text using OpenAI API"""
         client = self._get_client()
-        model = model or "gpt-4-turbo"
+        
+        # Get model name from config if not provided
+        model = model or self._get_default_model() or "gpt-4-turbo"
 
         # Convert to OpenAI message format
         openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
@@ -67,10 +60,10 @@ class OpenAIClient(BaseLLMClient):
             content = response.choices[0].message.content
             tokens_used = response.usage.total_tokens if response.usage else None
 
-            # Estimate cost
+            # Estimate cost using config
             input_tokens = response.usage.prompt_tokens if response.usage else 0
             output_tokens = response.usage.completion_tokens if response.usage else 0
-            cost = self._estimate_cost(model, input_tokens, output_tokens, self.token_costs)
+            cost = self._estimate_cost_from_config(model, input_tokens, output_tokens)
 
             return LLMResponse(
                 content=content,
@@ -95,7 +88,9 @@ class OpenAIClient(BaseLLMClient):
     ) -> AsyncGenerator[str, None]:
         """Stream text using OpenAI API"""
         client = self._get_client()
-        model = model or "gpt-4-turbo"
+        
+        # Get model name from config if not provided
+        model = model or self._get_default_model() or "gpt-4-turbo"
 
         openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
 

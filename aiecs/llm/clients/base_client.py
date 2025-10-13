@@ -6,6 +6,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Lazy import to avoid circular dependency
+def _get_config_loader():
+    """Lazy import of config loader to avoid circular dependency"""
+    from aiecs.llm.config import get_llm_config_loader
+    return get_llm_config_loader()
+
 @dataclass
 class LLMMessage:
     role: str  # "system", "user", "assistant"
@@ -93,8 +99,74 @@ class BaseLLMClient(ABC):
         return len(text) // 4
 
     def _estimate_cost(self, model: str, input_tokens: int, output_tokens: int, token_costs: Dict) -> float:
-        """Estimate the cost of the API call"""
+        """
+        Estimate the cost of the API call.
+        
+        DEPRECATED: Use _estimate_cost_from_config instead for config-based cost estimation.
+        This method is kept for backward compatibility.
+        """
         if model in token_costs:
             costs = token_costs[model]
             return (input_tokens * costs["input"] + output_tokens * costs["output"]) / 1000
         return 0.0
+    
+    def _estimate_cost_from_config(self, model_name: str, input_tokens: int, output_tokens: int) -> float:
+        """
+        Estimate the cost using configuration-based pricing.
+        
+        Args:
+            model_name: Name of the model
+            input_tokens: Number of input tokens
+            output_tokens: Number of output tokens
+        
+        Returns:
+            Estimated cost in USD
+        """
+        try:
+            loader = _get_config_loader()
+            model_config = loader.get_model_config(self.provider_name, model_name)
+            
+            if model_config and model_config.costs:
+                input_cost = (input_tokens * model_config.costs.input) / 1000
+                output_cost = (output_tokens * model_config.costs.output) / 1000
+                return input_cost + output_cost
+            else:
+                self.logger.warning(
+                    f"No cost configuration found for model {model_name} "
+                    f"in provider {self.provider_name}"
+                )
+                return 0.0
+        except Exception as e:
+            self.logger.warning(f"Failed to estimate cost from config: {e}")
+            return 0.0
+    
+    def _get_model_config(self, model_name: str):
+        """
+        Get model configuration from the config loader.
+        
+        Args:
+            model_name: Name of the model
+        
+        Returns:
+            ModelConfig if found, None otherwise
+        """
+        try:
+            loader = _get_config_loader()
+            return loader.get_model_config(self.provider_name, model_name)
+        except Exception as e:
+            self.logger.warning(f"Failed to get model config: {e}")
+            return None
+    
+    def _get_default_model(self) -> Optional[str]:
+        """
+        Get the default model for this provider from configuration.
+        
+        Returns:
+            Default model name if configured, None otherwise
+        """
+        try:
+            loader = _get_config_loader()
+            return loader.get_default_model(self.provider_name)
+        except Exception as e:
+            self.logger.warning(f"Failed to get default model: {e}")
+            return None
