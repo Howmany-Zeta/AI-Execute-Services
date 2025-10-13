@@ -29,7 +29,7 @@ except ImportError:
     GoogleCloudError = Exception
     DefaultCredentialsError = Exception
 
-from ..monitoring.executor_metrics import ExecutorMetrics
+from ..monitoring.global_metrics_manager import get_global_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -93,8 +93,8 @@ class FileStorage:
         self._cache_timestamps = {}
         self._initialized = False
 
-        # Metrics
-        self.metrics = ExecutorMetrics(enable_metrics=True)
+        # Metrics - use global metrics manager
+        self.metrics = get_global_metrics()
 
         # Ensure local storage directory exists
         if self.config.enable_local_fallback:
@@ -205,26 +205,30 @@ class FileStorage:
             if self._gcs_bucket:
                 success = await self._store_gcs(key, serialized_data, metadata, compressed)
                 if success:
-                    self.metrics.record_operation('gcs_store_success', 1)
-                    duration = (datetime.utcnow() - start_time).total_seconds()
-                    self.metrics.record_duration('gcs_store_duration', duration)
+                    if self.metrics:
+                        self.metrics.record_operation('gcs_store_success', 1)
+                        duration = (datetime.utcnow() - start_time).total_seconds()
+                        self.metrics.record_duration('gcs_store_duration', duration)
                     return True
 
             # Fallback to local storage
             if self.config.enable_local_fallback:
                 success = await self._store_local(key, serialized_data, metadata, compressed)
                 if success:
-                    self.metrics.record_operation('local_store_success', 1)
-                    duration = (datetime.utcnow() - start_time).total_seconds()
-                    self.metrics.record_duration('local_store_duration', duration)
+                    if self.metrics:
+                        self.metrics.record_operation('local_store_success', 1)
+                        duration = (datetime.utcnow() - start_time).total_seconds()
+                        self.metrics.record_duration('local_store_duration', duration)
                     return True
 
-            self.metrics.record_operation('store_failure', 1)
+            if self.metrics:
+                self.metrics.record_operation('store_failure', 1)
             return False
 
         except Exception as e:
             logger.error(f"Failed to store data for key {key}: {e}")
-            self.metrics.record_operation('store_error', 1)
+            if self.metrics:
+                self.metrics.record_operation('store_error', 1)
             raise FileStorageError(f"Storage failed: {e}")
 
     async def retrieve(self, key: str) -> Optional[Union[str, bytes, Dict[str, Any]]]:
@@ -247,7 +251,8 @@ class FileStorage:
             if self.config.enable_cache and key in self._cache:
                 cache_time = self._cache_timestamps.get(key)
                 if cache_time and (datetime.utcnow() - cache_time).total_seconds() < self.config.cache_ttl_seconds:
-                    self.metrics.record_operation('cache_hit', 1)
+                    if self.metrics:
+                        self.metrics.record_operation('cache_hit', 1)
                     return self._cache[key]['data']
                 else:
                     # Remove expired cache entry
@@ -258,9 +263,10 @@ class FileStorage:
             if self._gcs_bucket:
                 data = await self._retrieve_gcs(key)
                 if data is not None:
-                    self.metrics.record_operation('gcs_retrieve_success', 1)
-                    duration = (datetime.utcnow() - start_time).total_seconds()
-                    self.metrics.record_duration('gcs_retrieve_duration', duration)
+                    if self.metrics:
+                        self.metrics.record_operation('gcs_retrieve_success', 1)
+                        duration = (datetime.utcnow() - start_time).total_seconds()
+                        self.metrics.record_duration('gcs_retrieve_duration', duration)
 
                     # Update cache
                     if self.config.enable_cache:
@@ -273,9 +279,10 @@ class FileStorage:
             if self.config.enable_local_fallback:
                 data = await self._retrieve_local(key)
                 if data is not None:
-                    self.metrics.record_operation('local_retrieve_success', 1)
-                    duration = (datetime.utcnow() - start_time).total_seconds()
-                    self.metrics.record_duration('local_retrieve_duration', duration)
+                    if self.metrics:
+                        self.metrics.record_operation('local_retrieve_success', 1)
+                        duration = (datetime.utcnow() - start_time).total_seconds()
+                        self.metrics.record_duration('local_retrieve_duration', duration)
 
                     # Update cache
                     if self.config.enable_cache:
@@ -284,12 +291,14 @@ class FileStorage:
 
                     return data
 
-            self.metrics.record_operation('retrieve_not_found', 1)
+            if self.metrics:
+                self.metrics.record_operation('retrieve_not_found', 1)
             return None
 
         except Exception as e:
             logger.error(f"Failed to retrieve data for key {key}: {e}")
-            self.metrics.record_operation('retrieve_error', 1)
+            if self.metrics:
+                self.metrics.record_operation('retrieve_error', 1)
             raise FileStorageError(f"Retrieval failed: {e}")
 
     async def delete(self, key: str) -> bool:
@@ -317,7 +326,8 @@ class FileStorage:
             if self._gcs_bucket:
                 gcs_success = await self._delete_gcs(key)
                 if gcs_success:
-                    self.metrics.record_operation('gcs_delete_success', 1)
+                    if self.metrics:
+                        self.metrics.record_operation('gcs_delete_success', 1)
                 else:
                     success = False
 
@@ -325,20 +335,23 @@ class FileStorage:
             if self.config.enable_local_fallback:
                 local_success = await self._delete_local(key)
                 if local_success:
-                    self.metrics.record_operation('local_delete_success', 1)
+                    if self.metrics:
+                        self.metrics.record_operation('local_delete_success', 1)
                 else:
                     success = False
 
-            if success:
-                self.metrics.record_operation('delete_success', 1)
-            else:
-                self.metrics.record_operation('delete_failure', 1)
+            if self.metrics:
+                if success:
+                    self.metrics.record_operation('delete_success', 1)
+                else:
+                    self.metrics.record_operation('delete_failure', 1)
 
             return success
 
         except Exception as e:
             logger.error(f"Failed to delete data for key {key}: {e}")
-            self.metrics.record_operation('delete_error', 1)
+            if self.metrics:
+                self.metrics.record_operation('delete_error', 1)
             raise FileStorageError(f"Deletion failed: {e}")
 
     async def exists(self, key: str) -> bool:
@@ -646,7 +659,7 @@ class FileStorage:
             'local_fallback_enabled': self.config.enable_local_fallback,
             'cache_enabled': self.config.enable_cache,
             'cache_size': len(self._cache),
-            'metrics': self.metrics.get_metrics_summary() if hasattr(self.metrics, 'get_metrics_summary') else {}
+            'metrics': self.metrics.get_metrics_summary() if self.metrics and hasattr(self.metrics, 'get_metrics_summary') else {}
         }
 
 

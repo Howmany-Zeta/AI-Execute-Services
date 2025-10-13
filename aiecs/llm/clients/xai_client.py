@@ -2,10 +2,17 @@ import json
 import asyncio
 import logging
 from typing import Dict, Any, Optional, List, AsyncGenerator
+
+# Lazy import to avoid circular dependency
+def _get_config_loader():
+    """Lazy import of config loader to avoid circular dependency"""
+    from aiecs.llm.config import get_llm_config_loader
+    return get_llm_config_loader()
+
 from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-from aiecs.llm.base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
+from aiecs.llm.clients.base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
 from aiecs.config.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -17,51 +24,7 @@ class XAIClient(BaseLLMClient):
         super().__init__("xAI")
         self.settings = get_settings()
         self._openai_client: Optional[AsyncOpenAI] = None
-
-        # Enhanced model mapping for all Grok models
-        self.model_map = {
-            # Legacy Grok models
-            "grok-beta": "grok-beta",
-            "grok": "grok-beta",
-
-            # Current Grok models
-            "Grok 2": "grok-2",
-            "grok-2": "grok-2",
-            "Grok 2 Vision": "grok-2-vision",
-            "grok-2-vision": "grok-2-vision",
-
-            # Grok 3 models
-            "Grok 3 Normal": "grok-3",
-            "grok-3": "grok-3",
-            "Grok 3 Fast": "grok-3-fast",
-            "grok-3-fast": "grok-3-fast",
-
-            # Grok 3 Mini models
-            "Grok 3 Mini Normal": "grok-3-mini",
-            "grok-3-mini": "grok-3-mini",
-            "Grok 3 Mini Fast": "grok-3-mini-fast",
-            "grok-3-mini-fast": "grok-3-mini-fast",
-
-            # Grok 3 Reasoning models
-            "Grok 3 Reasoning Normal": "grok-3-reasoning",
-            "grok-3-reasoning": "grok-3-reasoning",
-            "Grok 3 Reasoning Fast": "grok-3-reasoning-fast",
-            "grok-3-reasoning-fast": "grok-3-reasoning-fast",
-
-            # Grok 3 Mini Reasoning models
-            "Grok 3 Mini Reasoning Normal": "grok-3-mini-reasoning",
-            "grok-3-mini-reasoning": "grok-3-mini-reasoning",
-            "Grok 3 Mini Reasoning Fast": "grok-3-mini-reasoning-fast",
-            "grok-3-mini-reasoning-fast": "grok-3-mini-reasoning-fast",
-
-            # Grok 4 models
-            "Grok 4 Normal": "grok-4",
-            "grok-4": "grok-4",
-            "Grok 4 Fast": "grok-4-fast",
-            "grok-4-fast": "grok-4-fast",
-            "Grok 4 0709": "grok-4-0709",
-            "grok-4-0709": "grok-4-0709",
-        }
+        self._model_map: Optional[Dict[str, str]] = None
 
     def _get_openai_client(self) -> AsyncOpenAI:
         """Lazy initialization of OpenAI client for XAI"""
@@ -81,6 +44,21 @@ class XAIClient(BaseLLMClient):
         if not api_key:
             raise ProviderNotAvailableError("xAI API key not configured")
         return api_key
+    
+    def _get_model_map(self) -> Dict[str, str]:
+        """Get model mappings from configuration"""
+        if self._model_map is None:
+            try:
+                loader = _get_config_loader()
+                provider_config = loader.get_provider_config("xAI")
+                if provider_config and provider_config.model_mappings:
+                    self._model_map = provider_config.model_mappings
+                else:
+                    self._model_map = {}
+            except Exception as e:
+                self.logger.warning(f"Failed to load model mappings from config: {e}")
+                self._model_map = {}
+        return self._model_map
 
     @retry(
         stop=stop_after_attempt(3),
@@ -103,8 +81,12 @@ class XAIClient(BaseLLMClient):
 
         client = self._get_openai_client()
 
-        selected_model = model or "grok-4"  # Default to grok-4 as in the example
-        api_model = self.model_map.get(selected_model, selected_model)
+        # Get model name from config if not provided
+        selected_model = model or self._get_default_model() or "grok-4"
+        
+        # Get model mappings from config
+        model_map = self._get_model_map()
+        api_model = model_map.get(selected_model, selected_model)
 
         # Convert to OpenAI format
         openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
@@ -151,8 +133,12 @@ class XAIClient(BaseLLMClient):
 
         client = self._get_openai_client()
 
-        selected_model = model or "grok-4"  # Default to grok-4
-        api_model = self.model_map.get(selected_model, selected_model)
+        # Get model name from config if not provided
+        selected_model = model or self._get_default_model() or "grok-4"
+        
+        # Get model mappings from config
+        model_map = self._get_model_map()
+        api_model = model_map.get(selected_model, selected_model)
 
         # Convert to OpenAI format
         openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]

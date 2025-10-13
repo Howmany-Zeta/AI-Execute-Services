@@ -76,9 +76,9 @@ class ExecutorConfig(BaseModel):
     model_config = ConfigDict(env_prefix="TOOL_EXECUTOR_")
 
 # Metrics counter
-class ExecutorMetrics:
+class ToolExecutorStats:
     """
-    Tracks executor performance metrics.
+    Tracks tool executor performance statistics.
     """
     def __init__(self):
         self.requests: int = 0
@@ -257,7 +257,7 @@ class ToolExecutor:
         )
         self._thread_pool = ThreadPoolExecutor(max_workers=max(os.cpu_count() or 4, self.config.max_workers))
         self._locks: Dict[str, threading.Lock] = {}
-        self._metrics = ExecutorMetrics()
+        self._metrics = ToolExecutorStats()
         self.execution_utils = ExecutionUtils(
             cache_size=self.config.cache_size,
             cache_ttl=self.config.cache_ttl,

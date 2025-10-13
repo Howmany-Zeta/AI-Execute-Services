@@ -1,6 +1,7 @@
 from pydantic import Field, ConfigDict
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+from pathlib import Path
 
 class Settings(BaseSettings):
     # LLM Provider Configuration (optional until used)
@@ -13,6 +14,13 @@ class Settings(BaseSettings):
     google_cse_id: str = Field(default="", alias="GOOGLE_CSE_ID")
     xai_api_key: str = Field(default="", alias="XAI_API_KEY")
     grok_api_key: str = Field(default="", alias="GROK_API_KEY")  # Backward compatibility
+    
+    # LLM Models Configuration
+    llm_models_config_path: str = Field(
+        default="",
+        alias="LLM_MODELS_CONFIG",
+        description="Path to LLM models YAML configuration file"
+    )
     
     # Infrastructure Configuration (with sensible defaults)
     celery_broker_url: str = Field(default="redis://localhost:6379/0", alias="CELERY_BROKER_URL")
@@ -69,6 +77,34 @@ class Settings(BaseSettings):
             "enable_local_fallback": True,
             "local_storage_path": "./storage"
         }
+    
+    def validate_llm_models_config(self) -> bool:
+        """
+        Validate that LLM models configuration file exists.
+        
+        Returns:
+            True if config file exists or can be found in default locations
+        
+        Raises:
+            FileNotFoundError: If config file doesn't exist
+        """
+        if self.llm_models_config_path:
+            config_path = Path(self.llm_models_config_path)
+            if not config_path.exists():
+                raise FileNotFoundError(
+                    f"LLM models config file not found: {config_path}"
+                )
+            return True
+        
+        # Check default locations
+        current_dir = Path(__file__).parent
+        default_path = current_dir / "llm_models.yaml"
+        
+        if default_path.exists():
+            return True
+        
+        # If not found, it's still okay - the config loader will try to find it
+        return True
 
 @lru_cache()
 def get_settings():

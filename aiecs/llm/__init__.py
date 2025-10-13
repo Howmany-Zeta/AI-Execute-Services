@@ -3,16 +3,26 @@ LLM Package - Modular AI Provider Architecture
 
 This package provides a unified interface to multiple AI providers through
 individual client implementations and a factory pattern.
+
+Package Structure:
+- clients/: LLM client implementations
+- config/: Configuration management
+- callbacks/: Callback handlers
+- utils/: Utility functions and scripts
 """
 
-# Import all main components
-from .base_client import (
+# Import from organized subpackages
+from .clients import (
     BaseLLMClient,
     LLMMessage,
     LLMResponse,
     LLMClientError,
     ProviderNotAvailableError,
-    RateLimitError
+    RateLimitError,
+    OpenAIClient,
+    VertexAIClient,
+    GoogleAIClient,
+    XAIClient
 )
 
 from .client_factory import (
@@ -24,10 +34,22 @@ from .client_factory import (
     stream_text
 )
 
-from .openai_client import OpenAIClient
-from .vertex_client import VertexAIClient
-from .googleai_client import GoogleAIClient
-from .xai_client import XAIClient
+from .config import (
+    ModelCostConfig,
+    ModelCapabilities,
+    ModelDefaultParams,
+    ModelConfig,
+    ProviderConfig,
+    LLMModelsConfig,
+    LLMConfigLoader,
+    get_llm_config_loader,
+    get_llm_config,
+    reload_llm_config
+)
+
+from .callbacks import (
+    CustomAsyncCallbackHandler
+)
 
 __all__ = [
     # Base classes and types
@@ -53,4 +75,19 @@ __all__ = [
     # Convenience functions
     'generate_text',
     'stream_text',
+    
+    # Configuration management
+    'ModelCostConfig',
+    'ModelCapabilities',
+    'ModelDefaultParams',
+    'ModelConfig',
+    'ProviderConfig',
+    'LLMModelsConfig',
+    'LLMConfigLoader',
+    'get_llm_config_loader',
+    'get_llm_config',
+    'reload_llm_config',
+    
+    # Callbacks
+    'CustomAsyncCallbackHandler',
 ]

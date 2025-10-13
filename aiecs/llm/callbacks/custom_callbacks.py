@@ -4,7 +4,7 @@ import logging
 # Import the base callback handler from utils
 from aiecs.utils.base_callback import CustomAsyncCallbackHandler
 # Import LLM types for internal use only
-from aiecs.llm.base_client import LLMMessage, LLMResponse
+from aiecs.llm.clients.base_client import LLMMessage, LLMResponse
 # Import token usage repository
 from aiecs.utils.token_usage_repository import token_usage_repo
 
