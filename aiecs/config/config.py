@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     reload: bool = Field(default=False, alias="RELOAD")
     port: int = Field(default=8000, alias="PORT")
 
-    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8", extra="allow")
 
     @property
     def database_config(self) -> dict:
@@ -77,6 +77,7 @@ class Settings(BaseSettings):
             "enable_local_fallback": True,
             "local_storage_path": "./storage"
         }
+
     
     def validate_llm_models_config(self) -> bool:
         """
