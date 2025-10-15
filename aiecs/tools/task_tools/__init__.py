@@ -4,6 +4,7 @@
 Task Tools Module
 
 This module contains specialized tools for various task-oriented operations:
+- apisource_tool: External API data source integration (economic, news, public databases)
 - chart_tool: Chart and visualization operations
 - classfire_tool: Classification and categorization operations
 - image_tool: Image processing and manipulation operations
@@ -21,6 +22,7 @@ import os
 
 # Define available tools for lazy loading
 _AVAILABLE_TOOLS = [
+    'apisource_tool',
     'chart_tool',
     'classfire_tool', 
     'image_tool',
@@ -45,7 +47,9 @@ def _lazy_load_tool(tool_name: str):
         return
         
     try:
-        if tool_name == 'chart_tool':
+        if tool_name == 'apisource_tool':
+            from . import apisource_tool
+        elif tool_name == 'chart_tool':
             from . import chart_tool
         elif tool_name == 'classfire_tool':
             from . import classfire_tool

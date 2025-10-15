@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import warnings
 from typing import Dict, Any, Optional, List, AsyncGenerator
 import vertexai
 from vertexai.generative_models import GenerativeModel, HarmCategory, HarmBlockThreshold, GenerationConfig, SafetySetting
@@ -8,6 +9,10 @@ from google.oauth2 import service_account
 
 from aiecs.llm.clients.base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
 from aiecs.config.config import get_settings
+
+# Suppress Vertex AI SDK deprecation warnings (deprecated June 2025, removal June 2026)
+# TODO: Migrate to Google Gen AI SDK when official migration guide is available
+warnings.filterwarnings('ignore', category=UserWarning, module='vertexai.generative_models._generative_models')
 
 logger = logging.getLogger(__name__)
 
