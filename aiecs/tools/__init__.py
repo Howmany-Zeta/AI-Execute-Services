@@ -155,48 +155,78 @@ def _ensure_task_tools_available():
         logger.error(f"Failed to import task_tools: {e}")
         return False
 
-def _register_known_tools():
-    """Register known tools without importing heavy dependencies"""
-    # Pre-register tool classes for discovery without importing modules
-    # This allows list_tools() to work before actual tool loading
-    # 
-    # NOTE: Tool names must match the names used in @register_tool decorators:
-    # - chart (not chart_tool)
-    # - classifier (not classfire_tool) 
-    # - image (not image_tool)
-    # - office (not office_tool)
-    # - pandas (not pandas_tool)
-    # - report (not report_tool)
-    # - research (not research_tool)
-    # - scraper (not scraper_tool)
-    # - search_api (same)
-    # - stats (not stats_tool)
+def _auto_discover_tools():
+    """Automatically discover all tools by scanning tool directories"""
+    import re
     
-    known_tools = [
-        ("chart", "Chart and visualization operations"),
-        ("classifier", "Text classification and keyword extraction"),
-        ("image", "Image processing and OCR operations"),
-        ("office", "Office document processing"),
-        ("pandas", "Data analysis and manipulation"), 
-        ("report", "Report generation and formatting"),
-        ("research", "Research and information gathering"),
-        ("scraper", "Web scraping and data extraction"),
-        ("search_api", "Search API integration"),
-        ("stats", "Statistical analysis and computation")
+    # Define tool directories and their categories
+    tool_dirs = [
+        ('task_tools', 'task'),
+        ('docs', 'docs'),
+        ('statistics', 'statistics'),
     ]
     
+    discovered_tools = []
+    
+    for dir_name, category in tool_dirs:
+        dir_path = os.path.join(os.path.dirname(__file__), dir_name)
+        if not os.path.exists(dir_path):
+            continue
+        
+        # Scan all Python files in the directory
+        for filename in os.listdir(dir_path):
+            if not filename.endswith('.py') or filename.startswith('__'):
+                continue
+            
+            file_path = os.path.join(dir_path, filename)
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    
+                    # Find @register_tool decorators
+                    pattern = r'@register_tool\([\'"]([^\'"]+)[\'"]\)'
+                    matches = re.findall(pattern, content)
+                    
+                    for tool_name in matches:
+                        # Try to extract description from class docstring
+                        description = f"{tool_name} tool"
+                        
+                        # Look for class definition after the decorator
+                        class_pattern = rf'@register_tool\([\'"]({tool_name})[\'"]\)\s*class\s+\w+.*?"""(.*?)"""'
+                        class_match = re.search(class_pattern, content, re.DOTALL)
+                        if class_match:
+                            doc = class_match.group(2).strip()
+                            # Get first line of docstring
+                            first_line = doc.split('\n')[0].strip()
+                            if first_line and len(first_line) < 200:
+                                description = first_line
+                        
+                        discovered_tools.append((tool_name, description, category))
+            except Exception as e:
+                logger.debug(f"Error scanning {filename}: {e}")
+    
+    return discovered_tools
+
+def _register_known_tools():
+    """Register known tools without importing heavy dependencies"""
+    # Automatically discover all tools
+    discovered_tools = _auto_discover_tools()
+    
+    logger.info(f"Auto-discovered {len(discovered_tools)} tools")
+    
     # Register as placeholder until actually loaded
-    for tool_name, description in known_tools:
+    for tool_info in discovered_tools:
+        tool_name, description, category = tool_info
         if tool_name not in TOOL_REGISTRY and tool_name not in TOOL_CLASSES:
             # Create a placeholder class for discovery
             class ToolPlaceholder:
-                def __init__(self, name, desc):
+                def __init__(self, name, desc, cat):
                     self.name = name
                     self.description = desc
-                    self.category = "task"
+                    self.category = cat
                     self.is_placeholder = True
             
-            TOOL_REGISTRY[tool_name] = ToolPlaceholder(tool_name, description)
+            TOOL_REGISTRY[tool_name] = ToolPlaceholder(tool_name, description, category)
 
 # Register known tools for discovery
 _register_known_tools()
