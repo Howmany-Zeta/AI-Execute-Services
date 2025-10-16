@@ -12,6 +12,7 @@ from .tool_executor import (
     get_executor,
     validate_input,
     cache_result,
+    cache_result_with_strategy,
     run_in_executor,
     measure_execution_time,
     sanitize_input
@@ -29,6 +30,7 @@ __all__ = [
     'get_executor',
     'validate_input',
     'cache_result',
+    'cache_result_with_strategy',
     'run_in_executor',
     'measure_execution_time',
     'sanitize_input'
