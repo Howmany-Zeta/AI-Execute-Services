@@ -92,32 +92,53 @@ def auto_discover_tool_modules():
         'docs': 'aiecs.tools.docs',
         'statistics': 'aiecs.tools.statistics',
         'api_sources': 'aiecs.tools.api_sources',
+        'search_tool': 'aiecs.tools.search_tool',
     }
     
     for dir_name, package_name in tool_dirs.items():
         dir_path = os.path.join(tools_dir, dir_name)
         if not os.path.exists(dir_path):
             continue
-        
-        # 扫描目录中的所有 Python 文件
+
+        # Check if this is a package (has __init__.py) or a directory of modules
+        init_file = os.path.join(dir_path, '__init__.py')
+        files_to_scan = []
+
+        if os.path.isfile(init_file):
+            # For packages, scan __init__.py and use package name directly
+            files_to_scan.append(('__init__.py', init_file, package_name))
+
+        # 扫描目录中的所有其他 Python 文件
         for filename in os.listdir(dir_path):
-            if not filename.endswith('.py') or filename.startswith('__'):
-                continue
-            
-            file_path = os.path.join(dir_path, filename)
+            if filename.endswith('.py') and not filename.startswith('__'):
+                file_path = os.path.join(dir_path, filename)
+                module_name = filename[:-3]  # 去掉 .py 扩展名
+                module_path = f"{package_name}.{module_name}"
+                files_to_scan.append((filename, file_path, module_path))
+
+        # Process all files
+        for filename, file_path, module_path in files_to_scan:
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
-                    
-                    # 查找 @register_tool 装饰器
-                    pattern = r'@register_tool\([\'"]([^\'"]+)[\'"]\)'
-                    matches = re.findall(pattern, content)
-                    
-                    for tool_name in matches:
-                        module_name = filename[:-3]  # 去掉 .py 扩展名
+
+                    # 查找 @register_tool 装饰器 (两种模式)
+                    # Pattern 1: @register_tool("name") decorator syntax
+                    decorator_pattern = r'@register_tool\([\'"]([^\'"]+)[\'"]\)'
+                    decorator_matches = re.findall(decorator_pattern, content)
+
+                    # Pattern 2: register_tool("name")(ClassName) function call syntax
+                    function_pattern = r'register_tool\([\'"]([^\'"]+)[\'"]\)\([A-Za-z_][A-Za-z0-9_]*\)'
+                    function_matches = re.findall(function_pattern, content)
+
+                    # Combine all matches
+                    all_matches = list(set(decorator_matches + function_matches))
+
+                    for tool_name in all_matches:
                         tool_module_map[tool_name] = {
-                            'module_file': module_name,
+                            'module_file': filename[:-3] if filename != '__init__.py' else '__init__',
                             'package': package_name,
+                            'module_path': module_path,
                             'category': dir_name,
                         }
             except Exception:
@@ -144,8 +165,8 @@ def load_and_inspect_tool(tool_name: str):
         # 如果找到了工具的模块信息，预加载模块
         if tool_name in tool_module_map:
             info = tool_module_map[tool_name]
-            module_path = f"{info['package']}.{info['module_file']}"
-            
+            module_path = info.get('module_path') or f"{info['package']}.{info['module_file']}"
+
             try:
                 importlib.import_module(module_path)
                 print(f"    已触发 {module_path} 模块加载")

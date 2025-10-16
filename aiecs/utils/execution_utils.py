@@ -62,14 +62,14 @@ class ExecutionUtils:
     def get_from_cache(self, cache_key: str) -> Optional[Any]:
         """
         Get result from cache if it exists and is not expired.
-        
+
         Args:
             cache_key (str): Cache key
-            
+
         Returns:
             Optional[Any]: Cached result or None
         """
-        if not self._cache:
+        if self._cache is None:
             return None
         with self._cache_lock:
             if cache_key in self._cache:
@@ -83,13 +83,13 @@ class ExecutionUtils:
     def add_to_cache(self, cache_key: str, result: Any, ttl: Optional[int] = None) -> None:
         """
         Add result to cache with optional time-to-live setting.
-        
+
         Args:
             cache_key (str): Cache key
             result (Any): Cached result
             ttl (Optional[int]): Time-to-live (seconds)
         """
-        if not self._cache:
+        if self._cache is None:
             return
         with self._cache_lock:
             self._cache[cache_key] = result
