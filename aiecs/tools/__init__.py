@@ -158,12 +158,14 @@ def _ensure_task_tools_available():
 def _auto_discover_tools():
     """Automatically discover all tools by scanning tool directories"""
     import re
-    
+
     # Define tool directories and their categories
     tool_dirs = [
         ('task_tools', 'task'),
         ('docs', 'docs'),
         ('statistics', 'statistics'),
+        ('search_tool', 'task'),  # Enhanced search tool
+        ('api_sources', 'task'),  # API data sources
     ]
     
     discovered_tools = []
@@ -172,26 +174,44 @@ def _auto_discover_tools():
         dir_path = os.path.join(os.path.dirname(__file__), dir_name)
         if not os.path.exists(dir_path):
             continue
-        
-        # Scan all Python files in the directory
+
+        # Check if this is a package (has __init__.py) or a directory of modules
+        init_file = os.path.join(dir_path, '__init__.py')
+        files_to_scan = []
+
+        if os.path.isfile(init_file):
+            # Scan __init__.py for package-level registrations
+            files_to_scan.append(('__init__.py', init_file))
+
+        # Scan all other Python files in the directory
         for filename in os.listdir(dir_path):
-            if not filename.endswith('.py') or filename.startswith('__'):
-                continue
-            
-            file_path = os.path.join(dir_path, filename)
+            if filename.endswith('.py') and not filename.startswith('__'):
+                file_path = os.path.join(dir_path, filename)
+                files_to_scan.append((filename, file_path))
+
+        # Process all files
+        for filename, file_path in files_to_scan:
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
-                    
-                    # Find @register_tool decorators
-                    pattern = r'@register_tool\([\'"]([^\'"]+)[\'"]\)'
-                    matches = re.findall(pattern, content)
-                    
-                    for tool_name in matches:
-                        # Try to extract description from class docstring
+
+                    # Find @register_tool decorators (two patterns)
+                    # Pattern 1: @register_tool("name") decorator syntax
+                    decorator_pattern = r'@register_tool\([\'"]([^\'"]+)[\'"]\)'
+                    decorator_matches = re.findall(decorator_pattern, content)
+
+                    # Pattern 2: register_tool("name")(ClassName) function call syntax
+                    function_pattern = r'register_tool\([\'"]([^\'"]+)[\'"]\)\([A-Za-z_][A-Za-z0-9_]*\)'
+                    function_matches = re.findall(function_pattern, content)
+
+                    # Combine all matches
+                    all_matches = list(set(decorator_matches + function_matches))
+
+                    for tool_name in all_matches:
+                        # Try to extract description from class docstring or module docstring
                         description = f"{tool_name} tool"
-                        
-                        # Look for class definition after the decorator
+
+                        # Method 1: Look for class definition after the decorator
                         class_pattern = rf'@register_tool\([\'"]({tool_name})[\'"]\)\s*class\s+\w+.*?"""(.*?)"""'
                         class_match = re.search(class_pattern, content, re.DOTALL)
                         if class_match:
@@ -200,7 +220,20 @@ def _auto_discover_tools():
                             first_line = doc.split('\n')[0].strip()
                             if first_line and len(first_line) < 200:
                                 description = first_line
-                        
+
+                        # Method 2: For __init__.py files, try to extract from module docstring
+                        if not class_match and filename == '__init__.py':
+                            module_doc_pattern = r'^"""(.*?)"""'
+                            module_doc_match = re.search(module_doc_pattern, content, re.DOTALL | re.MULTILINE)
+                            if module_doc_match:
+                                doc = module_doc_match.group(1).strip()
+                                # Get first non-empty line
+                                for line in doc.split('\n'):
+                                    line = line.strip()
+                                    if line and not line.startswith('#') and len(line) < 200:
+                                        description = line
+                                        break
+
                         discovered_tools.append((tool_name, description, category))
             except Exception as e:
                 logger.debug(f"Error scanning {filename}: {e}")

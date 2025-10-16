@@ -104,61 +104,113 @@ def validate_schema_quality(schema: Type[BaseModel], method: callable, method_na
     return issues
 
 
+def find_manual_schema(tool_class: Type, method_name: str) -> Optional[Type[BaseModel]]:
+    """
+    查找手动定义的 Schema（与 langchain_adapter 逻辑一致）
+
+    Args:
+        tool_class: 工具类
+        method_name: 方法名
+
+    Returns:
+        找到的 Schema 类，如果没有则返回 None
+    """
+    schemas = {}
+
+    # 1. 检查类级别的 schemas
+    for attr_name in dir(tool_class):
+        attr = getattr(tool_class, attr_name)
+        if isinstance(attr, type) and issubclass(attr, BaseModel) and attr.__name__.endswith('Schema'):
+            # 标准化：移除 'Schema' 后缀，转小写，移除下划线
+            schema_base_name = attr.__name__.replace('Schema', '')
+            normalized_name = schema_base_name.replace('_', '').lower()
+            schemas[normalized_name] = attr
+
+    # 2. 检查模块级别的 schemas
+    import inspect
+    tool_module = inspect.getmodule(tool_class)
+    if tool_module:
+        for attr_name in dir(tool_module):
+            if attr_name.startswith('_'):
+                continue
+            attr = getattr(tool_module, attr_name)
+            if isinstance(attr, type) and issubclass(attr, BaseModel) and attr.__name__.endswith('Schema'):
+                schema_base_name = attr.__name__.replace('Schema', '')
+                normalized_name = schema_base_name.replace('_', '').lower()
+                if normalized_name not in schemas:
+                    schemas[normalized_name] = attr
+
+    # 标准化方法名：移除下划线并转小写
+    normalized_method_name = method_name.replace('_', '').lower()
+
+    # 查找匹配的 schema
+    return schemas.get(normalized_method_name)
+
+
 def analyze_tool_schemas(tool_name: str, tool_class: Type) -> Dict[str, Any]:
-    """分析工具的 Schema 生成情况"""
-    
+    """分析工具的 Schema 生成情况（支持手动定义和自动生成）"""
+
     metrics = SchemaQualityMetrics()
     methods_info = []
-    
+
     for method_name in dir(tool_class):
         # 跳过私有方法和特殊方法
         if method_name.startswith('_'):
             continue
-        
+
         # 跳过基类方法
         if method_name in ['run', 'run_async', 'run_batch']:
             continue
-        
+
         method = getattr(tool_class, method_name)
-        
+
         # 跳过非方法属性
         if not callable(method) or isinstance(method, type):
             continue
-        
-        # 生成 Schema
-        schema = generate_schema_from_method(method, method_name)
-        
+
+        # 首先尝试查找手动定义的 Schema
+        manual_schema = find_manual_schema(tool_class, method_name)
+
+        if manual_schema:
+            schema = manual_schema
+            schema_type = 'manual'
+        else:
+            # 如果没有手动 Schema，则自动生成
+            schema = generate_schema_from_method(method, method_name)
+            schema_type = 'auto'
+
         method_info = {
             'name': method_name,
             'schema': schema,
+            'schema_type': schema_type,
             'issues': []
         }
-        
+
         if schema:
             metrics.add_method(True)
-            
+
             # 验证质量
             issues = validate_schema_quality(schema, method, method_name)
             method_info['issues'] = issues
-            
+
             # 统计字段
             for field_name, field_info in schema.model_fields.items():
                 has_type = field_info.annotation is not None
                 has_meaningful_desc = (
-                    field_info.description and 
+                    field_info.description and
                     field_info.description != f"Parameter {field_name}"
                 )
                 metrics.add_field(has_type, has_meaningful_desc)
-            
+
             # 记录问题
             for issue in issues:
                 metrics.add_issue(f"{tool_name}.{method_name}: {issue}")
         else:
             metrics.add_method(False)
             method_info['issues'] = ['⚠️  无法生成 Schema（可能是无参数方法）']
-        
+
         methods_info.append(method_info)
-    
+
     return {
         'metrics': metrics,
         'methods': methods_info
@@ -167,11 +219,15 @@ def analyze_tool_schemas(tool_name: str, tool_class: Type) -> Dict[str, Any]:
 
 def print_tool_report(tool_name: str, result: Dict, verbose: bool = False, show_examples: bool = False):
     """打印工具报告"""
-    
+
     metrics = result['metrics']
     methods = result['methods']
     scores = metrics.get_scores()
-    
+
+    # 统计手动和自动 schema
+    manual_schemas = [m for m in methods if m.get('schema_type') == 'manual']
+    auto_schemas = [m for m in methods if m.get('schema_type') == 'auto']
+
     # 状态图标
     overall = scores['overall_score']
     if overall >= 90:
@@ -186,10 +242,12 @@ def print_tool_report(tool_name: str, result: Dict, verbose: bool = False, show_
     else:
         status = "❌"
         grade = "D (需改进)"
-    
+
     print(f"\n{status} {tool_name}")
     print(f"  方法数: {metrics.total_methods}")
     print(f"  成功生成 Schema: {metrics.schemas_generated} ({scores['generation_rate']:.1f}%)")
+    print(f"    - 手动定义: {len(manual_schemas)} 个")
+    print(f"    - 自动生成: {len(auto_schemas)} 个")
     print(f"  描述质量: {scores['description_quality']:.1f}%")
     print(f"  综合评分: {scores['overall_score']:.1f}% ({grade})")
     
@@ -215,7 +273,8 @@ def print_tool_report(tool_name: str, result: Dict, verbose: bool = False, show_
             print(f"\n  示例 Schema:")
             for method_info in methods_with_schema[:2]:
                 schema = method_info['schema']
-                print(f"\n    {method_info['name']} → {schema.__name__}")
+                schema_type_label = "🔧 手动定义" if method_info.get('schema_type') == 'manual' else "🤖 自动生成"
+                print(f"\n    {method_info['name']} → {schema.__name__} [{schema_type_label}]")
                 print(f"      描述: {schema.__doc__}")
                 print(f"      字段:")
                 for field_name, field_info in list(schema.model_fields.items())[:3]:

@@ -13,6 +13,7 @@ from contextlib import contextmanager
 
 from cachetools import LRUCache
 from aiecs.utils.execution_utils import ExecutionUtils
+from aiecs.utils.cache_provider import ICacheProvider, LRUCacheProvider
 import re
 from pydantic import BaseModel, ValidationError, ConfigDict
 
@@ -58,6 +59,10 @@ class ExecutorConfig(BaseModel):
         retry_attempts (int): Number of retry attempts for transient errors.
         retry_backoff (float): Backoff factor for retries.
         timeout (int): Timeout for operations in seconds.
+        enable_dual_cache (bool): Enable dual-layer caching (L1: LRU + L2: Redis).
+        enable_redis_cache (bool): Enable Redis as L2 cache (requires enable_dual_cache=True).
+        redis_cache_ttl (int): Redis cache TTL in seconds (for L2 cache).
+        l1_cache_ttl (int): L1 cache TTL in seconds (for dual-layer cache).
     """
     enable_cache: bool = True
     cache_size: int = 100
@@ -72,6 +77,12 @@ class ExecutorConfig(BaseModel):
     retry_attempts: int = 3
     retry_backoff: float = 1.0
     timeout: int = 30
+
+    # Dual-layer cache configuration
+    enable_dual_cache: bool = False
+    enable_redis_cache: bool = False
+    redis_cache_ttl: int = 86400  # 1 day
+    l1_cache_ttl: int = 300  # 5 minutes
 
     model_config = ConfigDict(env_prefix="TOOL_EXECUTOR_")
 
@@ -154,6 +165,72 @@ def cache_result(ttl: Optional[int] = None) -> Callable:
             result = func(self, *args, **kwargs)
             self._executor._add_to_cache(cache_key, result, ttl)
             return result
+        return wrapper
+    return decorator
+
+
+def cache_result_with_strategy(ttl_strategy: Optional[Union[int, Callable]] = None) -> Callable:
+    """
+    Decorator to cache function results with flexible TTL strategy.
+
+    Supports multiple TTL strategy types:
+    1. Fixed TTL (int): Static TTL in seconds
+    2. Callable strategy: Function that calculates TTL based on result and context
+    3. None: Use default TTL from executor config
+
+    Args:
+        ttl_strategy: TTL strategy, can be:
+            - int: Fixed TTL in seconds
+            - Callable[[Any, tuple, dict], int]: Function(result, args, kwargs) -> ttl_seconds
+            - None: Use default TTL
+
+    Returns:
+        Callable: Decorated function with intelligent caching.
+
+    Example:
+        # Fixed TTL
+        @cache_result_with_strategy(ttl_strategy=3600)
+        def simple_operation(self, data):
+            return process(data)
+
+        # Dynamic TTL based on result
+        def calculate_ttl(result, args, kwargs):
+            if result.get('type') == 'static':
+                return 86400  # 1 day
+            return 3600  # 1 hour
+
+        @cache_result_with_strategy(ttl_strategy=calculate_ttl)
+        def smart_operation(self, query):
+            return search(query)
+    """
+    def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if not hasattr(self, '_executor') or not self._executor.config.enable_cache:
+                return func(self, *args, **kwargs)
+
+            # Generate cache key
+            cache_key = self._executor._get_cache_key(func.__name__, args, kwargs)
+
+            # Check cache
+            cached = self._executor._get_from_cache(cache_key)
+            if cached is not None:
+                logger.debug(f"Cache hit for {func.__name__}")
+                self._executor._metrics.record_cache_hit()
+                return cached
+
+            # Execute function
+            result = func(self, *args, **kwargs)
+
+            # Calculate TTL based on strategy
+            ttl = self._executor._calculate_ttl_from_strategy(
+                ttl_strategy, result, args, kwargs
+            )
+
+            # Cache with calculated TTL
+            self._executor._add_to_cache(cache_key, result, ttl)
+            return result
+
         return wrapper
     return decorator
 
@@ -240,12 +317,13 @@ class ToolExecutor:
         executor = ToolExecutor(config={'max_workers': 8})
         result = executor.execute(tool_instance, 'operation_name', param1='value')
     """
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None, cache_provider: Optional[ICacheProvider] = None):
         """
         Initialize the executor with optional configuration.
 
         Args:
             config (Dict[str, Any], optional): Configuration overrides for ExecutorConfig.
+            cache_provider (ICacheProvider, optional): Custom cache provider. If None, uses default based on config.
 
         Raises:
             ValueError: If config is invalid.
@@ -265,6 +343,66 @@ class ToolExecutor:
             retry_backoff=self.config.retry_backoff
         )
 
+        # Support pluggable cache provider
+        if cache_provider is not None:
+            # User provided custom cache provider
+            self.cache_provider = cache_provider
+            logger.info(f"Using custom cache provider: {cache_provider.__class__.__name__}")
+        elif self.config.enable_dual_cache and self.config.enable_redis_cache:
+            # Enable dual-layer cache (L1: LRU + L2: Redis)
+            self.cache_provider = self._initialize_dual_cache()
+        else:
+            # Default: use LRUCacheProvider wrapping ExecutionUtils
+            self.cache_provider = LRUCacheProvider(self.execution_utils)
+            logger.debug("Using default LRUCacheProvider")
+
+    def _initialize_dual_cache(self) -> ICacheProvider:
+        """
+        Initialize dual-layer cache (L1: LRU + L2: Redis).
+
+        Returns:
+            DualLayerCacheProvider instance or fallback to LRUCacheProvider
+        """
+        try:
+            from aiecs.utils.cache_provider import DualLayerCacheProvider, RedisCacheProvider
+
+            # Create L1 cache (LRU)
+            l1_cache = LRUCacheProvider(self.execution_utils)
+
+            # Create L2 cache (Redis) - this requires async initialization
+            # We'll use a lazy initialization approach
+            try:
+                # Try to get global Redis client synchronously
+                # Note: This assumes Redis client is already initialized
+                from aiecs.infrastructure.persistence import redis_client
+
+                if redis_client is not None:
+                    l2_cache = RedisCacheProvider(
+                        redis_client,
+                        prefix="tool_executor:",
+                        default_ttl=self.config.redis_cache_ttl
+                    )
+
+                    dual_cache = DualLayerCacheProvider(
+                        l1_provider=l1_cache,
+                        l2_provider=l2_cache,
+                        l1_ttl=self.config.l1_cache_ttl
+                    )
+
+                    logger.info("Dual-layer cache enabled (L1: LRU + L2: Redis)")
+                    return dual_cache
+                else:
+                    logger.warning("Redis client not initialized, falling back to LRU cache")
+                    return l1_cache
+
+            except ImportError:
+                logger.warning("Redis client not available, falling back to LRU cache")
+                return l1_cache
+
+        except Exception as e:
+            logger.warning(f"Failed to initialize dual-layer cache: {e}, falling back to LRU")
+            return LRUCacheProvider(self.execution_utils)
+
     def _get_cache_key(self, func_name: str, args: tuple, kwargs: Dict[str, Any]) -> str:
         """
         Generate a context-aware cache key from function name, user ID, task ID, and arguments.
@@ -281,9 +419,70 @@ class ToolExecutor:
         task_id = kwargs.get("task_id", "none")
         return self.execution_utils.generate_cache_key(func_name, user_id, task_id, args, kwargs)
 
+    def _calculate_ttl_from_strategy(
+        self,
+        ttl_strategy: Optional[Union[int, Callable]],
+        result: Any,
+        args: tuple,
+        kwargs: Dict[str, Any]
+    ) -> Optional[int]:
+        """
+        Calculate TTL based on the provided strategy.
+
+        Supports multiple strategy types:
+        1. None: Use default TTL from config
+        2. int: Fixed TTL in seconds
+        3. Callable: Dynamic TTL calculation function
+
+        Args:
+            ttl_strategy: TTL strategy (None, int, or Callable)
+            result: Function execution result
+            args: Function positional arguments
+            kwargs: Function keyword arguments
+
+        Returns:
+            Optional[int]: Calculated TTL in seconds, or None for default
+
+        Example:
+            # Strategy function signature
+            def my_ttl_strategy(result: Any, args: tuple, kwargs: dict) -> int:
+                if result.get('type') == 'permanent':
+                    return 86400 * 30  # 30 days
+                return 3600  # 1 hour
+        """
+        # Case 1: No strategy - use default
+        if ttl_strategy is None:
+            return None
+
+        # Case 2: Fixed TTL (integer)
+        if isinstance(ttl_strategy, int):
+            return ttl_strategy
+
+        # Case 3: Callable strategy - dynamic calculation
+        if callable(ttl_strategy):
+            try:
+                calculated_ttl = ttl_strategy(result, args, kwargs)
+                if not isinstance(calculated_ttl, int) or calculated_ttl < 0:
+                    logger.warning(
+                        f"TTL strategy returned invalid value: {calculated_ttl}. "
+                        f"Expected positive integer. Using default TTL."
+                    )
+                    return None
+                return calculated_ttl
+            except Exception as e:
+                logger.error(f"Error calculating TTL from strategy: {e}. Using default TTL.")
+                return None
+
+        # Invalid strategy type
+        logger.warning(
+            f"Invalid TTL strategy type: {type(ttl_strategy)}. "
+            f"Expected None, int, or Callable. Using default TTL."
+        )
+        return None
+
     def _get_from_cache(self, cache_key: str) -> Optional[Any]:
         """
-        Get a result from cache if it exists and is not expired.
+        Get a result from cache if it exists and is not expired (synchronous).
 
         Args:
             cache_key (str): Cache key.
@@ -293,11 +492,11 @@ class ToolExecutor:
         """
         if not self.config.enable_cache:
             return None
-        return self.execution_utils.get_from_cache(cache_key)
+        return self.cache_provider.get(cache_key)
 
     def _add_to_cache(self, cache_key: str, result: Any, ttl: Optional[int] = None) -> None:
         """
-        Add a result to the cache with optional TTL.
+        Add a result to the cache with optional TTL (synchronous).
 
         Args:
             cache_key (str): Cache key.
@@ -306,7 +505,46 @@ class ToolExecutor:
         """
         if not self.config.enable_cache:
             return
-        self.execution_utils.add_to_cache(cache_key, result, ttl)
+        self.cache_provider.set(cache_key, result, ttl)
+
+    async def _get_from_cache_async(self, cache_key: str) -> Optional[Any]:
+        """
+        Get a result from cache if it exists and is not expired (asynchronous).
+
+        Args:
+            cache_key (str): Cache key.
+
+        Returns:
+            Optional[Any]: Cached result or None.
+        """
+        if not self.config.enable_cache:
+            return None
+
+        # Use async interface if available
+        if hasattr(self.cache_provider, 'get_async'):
+            return await self.cache_provider.get_async(cache_key)
+        else:
+            # Fallback to sync interface
+            return self.cache_provider.get(cache_key)
+
+    async def _add_to_cache_async(self, cache_key: str, result: Any, ttl: Optional[int] = None) -> None:
+        """
+        Add a result to the cache with optional TTL (asynchronous).
+
+        Args:
+            cache_key (str): Cache key.
+            result (Any): Result to cache.
+            ttl (Optional[int]): Time-to-live in seconds.
+        """
+        if not self.config.enable_cache:
+            return
+
+        # Use async interface if available
+        if hasattr(self.cache_provider, 'set_async'):
+            await self.cache_provider.set_async(cache_key, result, ttl)
+        else:
+            # Fallback to sync interface
+            self.cache_provider.set(cache_key, result, ttl)
 
     def get_lock(self, resource_id: str) -> threading.Lock:
         """
@@ -443,13 +681,13 @@ class ToolExecutor:
                 for k, v in kwargs.items():
                     if isinstance(v, str) and re.search(r'(\bSELECT\b|\bINSERT\b|--|;|/\*)', v, re.IGNORECASE):
                         raise SecurityError(f"Input parameter '{k}' contains potentially malicious content")
-            # Use cache if enabled
+            # Use cache if enabled (async)
             if self.config.enable_cache:
                 cache_key = self._get_cache_key(operation, (), kwargs)
-                cached_result = self._get_from_cache(cache_key)
+                cached_result = await self._get_from_cache_async(cache_key)
                 if cached_result is not None:
                     self._metrics.record_cache_hit()
-                    logger.debug(f"Cache hit for {operation}")
+                    logger.debug(f"Cache hit for {operation} (async)")
                     return cached_result
 
             async def _execute():
@@ -462,9 +700,9 @@ class ToolExecutor:
             if self.config.log_execution_time:
                 logger.info(f"{tool_instance.__class__.__name__}.{operation} executed in {time.time() - start_time:.4f} seconds")
 
-            # Cache result if enabled
+            # Cache result if enabled (async)
             if self.config.enable_cache:
-                self._add_to_cache(cache_key, result)
+                await self._add_to_cache_async(cache_key, result)
             return result
         except Exception as e:
             self._metrics.record_failure()
@@ -499,20 +737,31 @@ class ToolExecutor:
                 logger.error(f"Batch operation {operations[i]['op']} failed: {result}")
         return results
 
-# Singleton executor instance
+# Singleton executor instance (for backward compatibility)
 _default_executor = None
 
 def get_executor(config: Optional[Dict[str, Any]] = None) -> ToolExecutor:
     """
-    Get or create the default executor instance.
+    Get or create executor instance.
+
+    If config is provided, creates a new executor with that config.
+    If config is None, returns the default singleton executor.
 
     Args:
         config (Dict[str, Any], optional): Configuration overrides.
+            If provided, creates a new executor instance.
+            If None, returns the default singleton.
 
     Returns:
-        ToolExecutor: Singleton executor instance.
+        ToolExecutor: Executor instance.
     """
     global _default_executor
+
+    # If config is provided, create a new executor with that config
+    if config is not None:
+        return ToolExecutor(config)
+
+    # Otherwise, return the default singleton
     if _default_executor is None:
-        _default_executor = ToolExecutor(config)
+        _default_executor = ToolExecutor()
     return _default_executor

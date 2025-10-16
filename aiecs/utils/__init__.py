@@ -5,16 +5,27 @@ This module provides utility functions including:
 - Prompt loading functionality
 - Token usage tracking
 - Execution utilities
+- Cache provider interfaces and implementations
 """
 
 from .prompt_loader import get_prompt
 from .token_usage_repository import TokenUsageRepository
 from .execution_utils import ExecutionUtils
+from .cache_provider import (
+    ICacheProvider,
+    LRUCacheProvider,
+    DualLayerCacheProvider,
+    RedisCacheProvider
+)
 
 __all__ = [
     'get_prompt',
     'TokenUsageRepository',
     'ExecutionUtils',
+    'ICacheProvider',
+    'LRUCacheProvider',
+    'DualLayerCacheProvider',
+    'RedisCacheProvider',
 ]
 
 # Version information
