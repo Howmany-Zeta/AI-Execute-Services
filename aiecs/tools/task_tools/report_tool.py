@@ -19,7 +19,7 @@ from docx import Document
 from docx.shared import Pt as DocxPt, RGBColor
 import markdown
 import matplotlib.pyplot as plt
-from pydantic import ValidationError, ConfigDict, Field
+from pydantic import BaseModel, ValidationError, ConfigDict, Field
 import tempfile
 import logging
 

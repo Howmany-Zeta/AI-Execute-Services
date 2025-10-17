@@ -223,9 +223,30 @@ def cache_result_with_strategy(ttl_strategy: Optional[Union[int, Callable]] = No
             result = func(self, *args, **kwargs)
 
             # Calculate TTL based on strategy
-            ttl = self._executor._calculate_ttl_from_strategy(
-                ttl_strategy, result, args, kwargs
-            )
+            # Support both regular callables and lambdas that need self
+            if callable(ttl_strategy):
+                try:
+                    # Try calling with self first (for lambda self, result, args, kwargs)
+                    import inspect
+                    sig = inspect.signature(ttl_strategy)
+                    if len(sig.parameters) == 4:  # self, result, args, kwargs
+                        ttl = ttl_strategy(self, result, args, kwargs)
+                    else:  # result, args, kwargs
+                        ttl = ttl_strategy(result, args, kwargs)
+
+                    if not isinstance(ttl, int) or ttl < 0:
+                        logger.warning(
+                            f"TTL strategy returned invalid value: {ttl}. "
+                            f"Expected positive integer. Using default TTL."
+                        )
+                        ttl = None
+                except Exception as e:
+                    logger.error(f"Error calculating TTL from strategy: {e}. Using default TTL.")
+                    ttl = None
+            else:
+                ttl = self._executor._calculate_ttl_from_strategy(
+                    ttl_strategy, result, args, kwargs
+                )
 
             # Cache with calculated TTL
             self._executor._add_to_cache(cache_key, result, ttl)

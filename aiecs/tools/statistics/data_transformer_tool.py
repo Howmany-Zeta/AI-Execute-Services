@@ -149,7 +149,7 @@ class DataTransformerTool(BaseTool):
         """Schema for transform_data operation"""
         data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(description="Data to transform")
         transformations: List[Dict[str, Any]] = Field(description="List of transformation steps")
-        validate: bool = Field(default=True, description="Validate transformations")
+        enable_validation: bool = Field(default=True, description="Validate transformations")
     
     class AutoTransformSchema(BaseModel):
         """Schema for auto_transform operation"""

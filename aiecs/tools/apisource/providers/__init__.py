@@ -1,16 +1,17 @@
 """
-API Sources Package
+API Providers Module
 
-Provider registry with auto-discovery for API data source providers.
-Automatically discovers and registers all provider plugins in this directory.
+Contains all API provider implementations for the APISource tool.
 """
 
-import importlib
-import logging
-import os
-from typing import Dict, List, Optional, Type
+from aiecs.tools.apisource.providers.base import BaseAPIProvider, RateLimiter
+from aiecs.tools.apisource.providers.fred import FREDProvider
+from aiecs.tools.apisource.providers.worldbank import WorldBankProvider
+from aiecs.tools.apisource.providers.newsapi import NewsAPIProvider
+from aiecs.tools.apisource.providers.census import CensusProvider
 
-from aiecs.tools.api_sources.base_provider import BaseAPIProvider
+import logging
+from typing import Dict, List, Optional, Type, Any
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,7 @@ def get_provider(name: str, config: Optional[Dict] = None) -> BaseAPIProvider:
     return provider_instance
 
 
-def list_providers() -> List[Dict[str, any]]:
+def list_providers() -> List[Dict[str, Any]]:
     """
     List all registered providers.
     
@@ -91,32 +92,20 @@ def list_providers() -> List[Dict[str, any]]:
     return providers
 
 
-def discover_providers():
-    """
-    Auto-discover and register all providers in this directory.
-    
-    Scans for *_provider.py files and imports them to trigger registration.
-    """
-    current_dir = os.path.dirname(__file__)
-    
-    for filename in os.listdir(current_dir):
-        if filename.endswith('_provider.py') and not filename.startswith('__'):
-            module_name = filename[:-3]  # Remove .py extension
-            
-            try:
-                # Import the module to trigger provider registration
-                importlib.import_module(f'aiecs.tools.api_sources.{module_name}')
-                logger.debug(f"Discovered provider module: {module_name}")
-            except Exception as e:
-                logger.warning(f"Failed to import provider module {module_name}: {e}")
+# Auto-register all providers
+register_provider(FREDProvider)
+register_provider(WorldBankProvider)
+register_provider(NewsAPIProvider)
+register_provider(CensusProvider)
 
 
-# Auto-discover providers on import
-discover_providers()
-
-# Export public API
 __all__ = [
     'BaseAPIProvider',
+    'RateLimiter',
+    'FREDProvider',
+    'WorldBankProvider',
+    'NewsAPIProvider',
+    'CensusProvider',
     'register_provider',
     'get_provider',
     'list_providers',

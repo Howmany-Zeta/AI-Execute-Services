@@ -10,8 +10,7 @@ API Documentation: https://datahelpdesk.worldbank.org/knowledgebase/articles/889
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-from aiecs.tools.api_sources import register_provider
-from aiecs.tools.api_sources.base_provider import BaseAPIProvider
+from aiecs.tools.apisource.providers.base import BaseAPIProvider
 
 logger = logging.getLogger(__name__)
 
@@ -152,8 +151,4 @@ class WorldBankProvider(BaseAPIProvider):
         except requests.exceptions.RequestException as e:
             self.logger.error(f"World Bank API request failed: {e}")
             raise Exception(f"World Bank API request failed: {str(e)}")
-
-
-# Register the provider
-register_provider(WorldBankProvider)
 

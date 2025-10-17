@@ -151,7 +151,7 @@ class DataLoaderTool(BaseTool):
         source: str = Field(description="Path to data source file")
         source_type: Optional[DataSourceType] = Field(default=DataSourceType.AUTO, description="Data source type")
         strategy: LoadStrategy = Field(default=LoadStrategy.FULL_LOAD, description="Loading strategy")
-        schema: Optional[Dict[str, Any]] = Field(default=None, description="Expected schema for validation")
+        data_schema: Optional[Dict[str, Any]] = Field(default=None, description="Expected schema for validation")
         validation_rules: Optional[Dict[str, Any]] = Field(default=None, description="Data quality validation rules")
         nrows: Optional[int] = Field(default=None, description="Number of rows to load")
         chunk_size: Optional[int] = Field(default=None, description="Chunk size for chunked loading")
@@ -164,7 +164,7 @@ class DataLoaderTool(BaseTool):
     class ValidateSchemaSchema(BaseModel):
         """Schema for validate_schema operation"""
         data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(description="Data to validate")
-        schema: Dict[str, Any] = Field(description="Expected schema")
+        data_schema: Dict[str, Any] = Field(description="Expected schema")
     
     class StreamDataSchema(BaseModel):
         """Schema for stream_data operation"""

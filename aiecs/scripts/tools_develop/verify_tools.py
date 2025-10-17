@@ -91,7 +91,8 @@ def auto_discover_tool_modules():
         'task_tools': 'aiecs.tools.task_tools',
         'docs': 'aiecs.tools.docs',
         'statistics': 'aiecs.tools.statistics',
-        'api_sources': 'aiecs.tools.api_sources',
+        'api_sources': 'aiecs.tools.api_sources',  # 旧的 API sources (如果存在)
+        'apisource': 'aiecs.tools.apisource',      # 新的 APISource Tool
         'search_tool': 'aiecs.tools.search_tool',
     }
     
