@@ -134,6 +134,10 @@ ENV/
 env.bak/
 venv.bak/
 
+# Environment files with API keys (never commit these!)
+.env.search
+.env.apisource
+
 # Spyder project settings
 .spyderproject
 .spyproject
