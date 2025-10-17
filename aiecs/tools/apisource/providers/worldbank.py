@@ -10,7 +10,7 @@ API Documentation: https://datahelpdesk.worldbank.org/knowledgebase/articles/889
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-from aiecs.tools.apisource.providers.base import BaseAPIProvider
+from aiecs.tools.apisource.providers.base import BaseAPIProvider, expose_operation
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,117 @@ class WorldBankProvider(BaseAPIProvider):
                 return False, "Missing required parameter: search_text"
         
         return True, None
-    
+
+    # Exposed operations for AI agent visibility
+
+    @expose_operation(
+        operation_name='get_indicator',
+        description='Get World Bank development indicator data for a specific country and indicator'
+    )
+    def get_indicator(
+        self,
+        indicator_code: str,
+        country_code: str,
+        start_year: Optional[int] = None,
+        end_year: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Get World Bank indicator data.
+
+        Args:
+            indicator_code: World Bank indicator code (e.g., 'NY.GDP.MKTP.CD', 'SP.POP.TOTL')
+            country_code: ISO 3-letter country code (e.g., 'USA', 'CHN', 'GBR')
+            start_year: Start year for data range
+            end_year: End year for data range
+
+        Returns:
+            Dictionary containing indicator data and metadata
+        """
+        params = {
+            'indicator_code': indicator_code,
+            'country_code': country_code
+        }
+        if start_year:
+            params['start_year'] = start_year
+        if end_year:
+            params['end_year'] = end_year
+
+        return self.execute('get_indicator', params)
+
+    @expose_operation(
+        operation_name='search_indicators',
+        description='Search for World Bank indicators by keywords'
+    )
+    def search_indicators(
+        self,
+        search_text: str,
+        limit: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Search for World Bank indicators.
+
+        Args:
+            search_text: Search keywords (e.g., 'GDP', 'population', 'education')
+            limit: Maximum number of results to return
+
+        Returns:
+            Dictionary containing search results and metadata
+        """
+        params = {'search_text': search_text}
+        if limit:
+            params['limit'] = limit
+
+        return self.execute('search_indicators', params)
+
+    @expose_operation(
+        operation_name='get_country_data',
+        description='Get general information and statistics about a specific country'
+    )
+    def get_country_data(self, country_code: str) -> Dict[str, Any]:
+        """
+        Get country data and metadata.
+
+        Args:
+            country_code: ISO 3-letter country code (e.g., 'USA', 'CHN')
+
+        Returns:
+            Dictionary containing country information
+        """
+        return self.execute('get_country_data', {'country_code': country_code})
+
+    @expose_operation(
+        operation_name='list_countries',
+        description='List all available countries in the World Bank database'
+    )
+    def list_countries(self) -> Dict[str, Any]:
+        """
+        List all available countries.
+
+        Returns:
+            Dictionary containing list of countries
+        """
+        return self.execute('list_countries', {})
+
+    @expose_operation(
+        operation_name='list_indicators',
+        description='List all available World Bank indicators'
+    )
+    def list_indicators(self, limit: Optional[int] = None) -> Dict[str, Any]:
+        """
+        List all available indicators.
+
+        Args:
+            limit: Maximum number of indicators to return
+
+        Returns:
+            Dictionary containing list of indicators
+        """
+        params = {}
+        if limit:
+            params['limit'] = limit
+
+        return self.execute('list_indicators', params)
+
     def fetch(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Fetch data from World Bank API"""
         
@@ -151,4 +261,86 @@ class WorldBankProvider(BaseAPIProvider):
         except requests.exceptions.RequestException as e:
             self.logger.error(f"World Bank API request failed: {e}")
             raise Exception(f"World Bank API request failed: {str(e)}")
+
+    def get_operation_schema(self, operation: str) -> Optional[Dict[str, Any]]:
+        """Get detailed schema for World Bank operations"""
+
+        schemas = {
+            'get_indicator': {
+                'description': 'Get World Bank development indicator data',
+                'parameters': {
+                    'indicator_code': {
+                        'type': 'string',
+                        'required': True,
+                        'description': 'World Bank indicator code',
+                        'examples': ['NY.GDP.MKTP.CD', 'SP.POP.TOTL', 'SE.PRM.ENRR']
+                    },
+                    'country_code': {
+                        'type': 'string',
+                        'required': True,
+                        'description': 'ISO 3-letter country code',
+                        'examples': ['USA', 'CHN', 'GBR', 'IND']
+                    },
+                    'start_year': {
+                        'type': 'integer',
+                        'required': False,
+                        'description': 'Start year for data range',
+                        'examples': [2010, 2015, 2020]
+                    },
+                    'end_year': {
+                        'type': 'integer',
+                        'required': False,
+                        'description': 'End year for data range',
+                        'examples': [2020, 2023, 2025]
+                    }
+                }
+            },
+            'search_indicators': {
+                'description': 'Search for World Bank indicators by keywords',
+                'parameters': {
+                    'search_text': {
+                        'type': 'string',
+                        'required': True,
+                        'description': 'Search keywords',
+                        'examples': ['GDP', 'population', 'education', 'health']
+                    },
+                    'limit': {
+                        'type': 'integer',
+                        'required': False,
+                        'description': 'Maximum number of results',
+                        'examples': [10, 20, 50],
+                        'default': 20
+                    }
+                }
+            },
+            'get_country_data': {
+                'description': 'Get country information and metadata',
+                'parameters': {
+                    'country_code': {
+                        'type': 'string',
+                        'required': True,
+                        'description': 'ISO 3-letter country code',
+                        'examples': ['USA', 'CHN', 'GBR']
+                    }
+                }
+            },
+            'list_countries': {
+                'description': 'List all available countries',
+                'parameters': {}
+            },
+            'list_indicators': {
+                'description': 'List all available indicators',
+                'parameters': {
+                    'limit': {
+                        'type': 'integer',
+                        'required': False,
+                        'description': 'Maximum number of indicators',
+                        'examples': [50, 100, 200],
+                        'default': 100
+                    }
+                }
+            }
+        }
+
+        return schemas.get(operation)
 

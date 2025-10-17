@@ -37,7 +37,8 @@ class LangchainToolAdapter(LangchainBaseTool):
     """
     Langchain tool adapter for single operation
 
-    Wraps one operation method of BaseTool as an independent Langchain tool
+    Wraps one operation method of BaseTool as an independent Langchain tool.
+    Supports both tool-level operations and provider-level operations.
     """
 
     # Define class attributes
@@ -46,13 +47,19 @@ class LangchainToolAdapter(LangchainBaseTool):
     base_tool_name: str = ""
     operation_name: str = ""
     operation_schema: Optional[Type[BaseModel]] = None
+    is_provider_operation: bool = False
+    provider_name: Optional[str] = None
+    method_name: Optional[str] = None
 
     def __init__(
         self,
         base_tool_name: str,
         operation_name: str,
         operation_schema: Optional[Type[BaseModel]] = None,
-        description: Optional[str] = None
+        description: Optional[str] = None,
+        is_provider_operation: bool = False,
+        provider_name: Optional[str] = None,
+        method_name: Optional[str] = None
     ):
         """
         Initialize adapter
@@ -62,6 +69,9 @@ class LangchainToolAdapter(LangchainBaseTool):
             operation_name: Operation name
             operation_schema: Pydantic Schema for the operation
             description: Tool description
+            is_provider_operation: Whether this is a provider-level operation
+            provider_name: Provider name (for provider operations)
+            method_name: Original method name (for provider operations)
         """
         # Construct tool name and description
         tool_name = f"{base_tool_name}_{operation_name}"
@@ -74,7 +84,10 @@ class LangchainToolAdapter(LangchainBaseTool):
             base_tool_name=base_tool_name,
             operation_name=operation_name,
             operation_schema=operation_schema,
-            args_schema=operation_schema
+            args_schema=operation_schema,
+            is_provider_operation=is_provider_operation,
+            provider_name=provider_name,
+            method_name=method_name
         )
     
     def _run(
@@ -87,8 +100,18 @@ class LangchainToolAdapter(LangchainBaseTool):
             # Get original tool instance
             base_tool = get_tool(self.base_tool_name)
 
-            # Execute operation
-            result = base_tool.run(self.operation_name, **kwargs)
+            # Handle provider operations differently
+            if self.is_provider_operation:
+                # For provider operations, call the query method with provider and operation
+                result = base_tool.run(
+                    'query',
+                    provider=self.provider_name,
+                    operation=self.method_name,
+                    params=kwargs
+                )
+            else:
+                # For tool-level operations, call directly
+                result = base_tool.run(self.operation_name, **kwargs)
 
             logger.info(f"Successfully executed {self.name} with result type: {type(result)}")
             return result
@@ -125,13 +148,59 @@ class ToolRegistry:
     
     def discover_operations(self, base_tool_class: Type[BaseTool]) -> List[Dict[str, Any]]:
         """
-        Discover all operation methods and Schemas of BaseTool class
+        Discover all operation methods and Schemas of BaseTool class.
+
+        Enhanced to support provider-level operations for tools like APISourceTool
+        that expose fine-grained operations from underlying providers.
 
         Args:
             base_tool_class: BaseTool subclass
 
         Returns:
             List of operation information, including method names, Schemas, descriptions, etc.
+        """
+        operations = []
+
+        # 1. Discover tool-level operations (existing logic)
+        tool_operations = self._discover_tool_operations(base_tool_class)
+        operations.extend(tool_operations)
+
+        # 2. Discover provider-level operations (new logic)
+        if hasattr(base_tool_class, '_discover_provider_operations'):
+            try:
+                provider_operations = base_tool_class._discover_provider_operations()
+
+                # Convert provider operations to the expected format
+                for provider_op in provider_operations:
+                    operation_info = {
+                        'name': provider_op['name'],
+                        'method': None,  # Will be handled specially in create_langchain_tools
+                        'schema': provider_op['schema'],
+                        'description': provider_op['description'],
+                        'is_async': False,
+                        'is_provider_operation': True,  # Mark as provider operation
+                        'provider_name': provider_op.get('provider_name'),
+                        'method_name': provider_op.get('method_name')
+                    }
+                    operations.append(operation_info)
+                    logger.debug(f"Added provider operation: {provider_op['name']}")
+
+                logger.info(f"Discovered {len(provider_operations)} provider operations for {base_tool_class.__name__}")
+
+            except Exception as e:
+                logger.warning(f"Error discovering provider operations for {base_tool_class.__name__}: {e}")
+
+        return operations
+
+    def _discover_tool_operations(self, base_tool_class: Type[BaseTool]) -> List[Dict[str, Any]]:
+        """
+        Discover tool-level operations (original logic extracted to separate method).
+
+        Args:
+            base_tool_class: BaseTool subclass
+
+        Returns:
+            List of tool-level operation information
         """
         operations = []
 
@@ -205,7 +274,8 @@ class ToolRegistry:
                 'method': method,
                 'schema': matching_schema,
                 'description': inspect.getdoc(method) or f"Execute {method_name} operation",
-                'is_async': inspect.iscoroutinefunction(method)
+                'is_async': inspect.iscoroutinefunction(method),
+                'is_provider_operation': False  # Mark as tool-level operation
             }
 
             operations.append(operation_info)
@@ -280,23 +350,31 @@ class ToolRegistry:
         langchain_tools = []
         for op_info in operations:
             # Generate enhanced description
-            enhanced_description = self._extract_description(
-                op_info['method'], 
-                tool_name, 
-                op_info['name'], 
-                op_info['schema']
-            )
-            
+            # For provider operations, use the description directly
+            if op_info.get('is_provider_operation', False):
+                enhanced_description = op_info['description']
+            else:
+                enhanced_description = self._extract_description(
+                    op_info['method'],
+                    tool_name,
+                    op_info['name'],
+                    op_info['schema']
+                )
+
+            # Create adapter with provider operation support
             adapter = LangchainToolAdapter(
                 base_tool_name=tool_name,
                 operation_name=op_info['name'],
                 operation_schema=op_info['schema'],
-                description=enhanced_description
+                description=enhanced_description,
+                is_provider_operation=op_info.get('is_provider_operation', False),
+                provider_name=op_info.get('provider_name'),
+                method_name=op_info.get('method_name')
             )
-            
+
             langchain_tools.append(adapter)
             self._langchain_tools[adapter.name] = adapter
-        
+
         logger.info(f"Created {len(langchain_tools)} Langchain tools for {tool_name}")
         return langchain_tools
     

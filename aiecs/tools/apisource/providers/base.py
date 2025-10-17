@@ -9,6 +9,7 @@ Enhanced with:
 - Smart error handling with retries
 - Data quality assessment
 - Comprehensive metadata with quality scores
+- Operation exposure for AI agent visibility
 """
 
 import logging
@@ -24,6 +25,37 @@ from aiecs.tools.apisource.reliability.error_handler import SmartErrorHandler
 from aiecs.tools.apisource.utils.validators import DataValidator
 
 logger = logging.getLogger(__name__)
+
+
+def expose_operation(operation_name: str, description: str):
+    """
+    Decorator: Mark provider operations that should be exposed to AI agents.
+
+    This decorator allows provider operations to be automatically discovered by the
+    LangChain adapter and exposed as individual tools to AI agents, providing
+    fine-grained visibility into provider capabilities.
+
+    Args:
+        operation_name: The name of the operation (e.g., 'get_series_observations')
+        description: Human-readable description of what the operation does
+
+    Returns:
+        Decorated function with metadata for operation discovery
+
+    Example:
+        @expose_operation(
+            operation_name='get_series_observations',
+            description='Get FRED economic time series data'
+        )
+        def get_series_observations(self, series_id: str, ...):
+            pass
+    """
+    def decorator(func):
+        func._exposed_operation = True
+        func._operation_name = operation_name
+        func._operation_description = description
+        return func
+    return decorator
 
 
 class RateLimiter:
@@ -217,15 +249,88 @@ class BaseAPIProvider(ABC):
     def get_operation_schema(self, operation: str) -> Optional[Dict[str, Any]]:
         """
         Get schema for a specific operation.
-        
+
         Args:
             operation: Operation name
-            
+
         Returns:
             Schema dictionary or None if not available
         """
         # Override in subclass to provide operation-specific schemas
         return None
+
+    @classmethod
+    def get_exposed_operations(cls) -> List[Dict[str, Any]]:
+        """
+        Get all operations that are exposed to AI agents via the @expose_operation decorator.
+
+        This method discovers all methods decorated with @expose_operation and returns
+        their metadata along with their schemas. This enables the LangChain adapter to
+        automatically create individual tools for each provider operation.
+
+        Returns:
+            List of operation dictionaries, each containing:
+                - name: Operation name
+                - description: Operation description
+                - schema: Operation schema (parameters, types, descriptions)
+                - method_name: The actual method name on the class
+
+        Example:
+            >>> FREDProvider.get_exposed_operations()
+            [
+                {
+                    'name': 'get_series_observations',
+                    'description': 'Get FRED economic time series data',
+                    'schema': {...},
+                    'method_name': 'get_series_observations'
+                },
+                ...
+            ]
+        """
+        operations = []
+
+        # Create a temporary instance to access get_operation_schema
+        # We need this because get_operation_schema might be an instance method
+        try:
+            # Try to get schema without instantiation first
+            for attr_name in dir(cls):
+                # Skip private and special methods
+                if attr_name.startswith('_'):
+                    continue
+
+                try:
+                    attr = getattr(cls, attr_name)
+                except AttributeError:
+                    continue
+
+                # Check if this is an exposed operation
+                if callable(attr) and hasattr(attr, '_exposed_operation'):
+                    operation_name = attr._operation_name
+                    operation_description = attr._operation_description
+
+                    # Try to get schema - this might require instantiation
+                    schema = None
+                    if hasattr(cls, 'get_operation_schema'):
+                        try:
+                            # Try calling as class method first
+                            schema = cls.get_operation_schema(cls, operation_name)
+                        except (TypeError, AttributeError):
+                            # If that fails, we'll need to handle it at runtime
+                            logger.debug(f"Could not get schema for {operation_name} at class level")
+
+                    operations.append({
+                        'name': operation_name,
+                        'description': operation_description,
+                        'schema': schema,
+                        'method_name': attr_name
+                    })
+
+                    logger.debug(f"Discovered exposed operation: {operation_name} from {cls.__name__}")
+
+        except Exception as e:
+            logger.warning(f"Error discovering exposed operations for {cls.__name__}: {e}")
+
+        return operations
     
     def validate_and_clean_data(
         self,

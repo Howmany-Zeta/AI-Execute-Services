@@ -10,7 +10,7 @@ API Documentation: https://www.census.gov/data/developers/guidance/api-user-guid
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-from aiecs.tools.apisource.providers.base import BaseAPIProvider
+from aiecs.tools.apisource.providers.base import BaseAPIProvider, expose_operation
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,133 @@ class CensusProvider(BaseAPIProvider):
                 return False, "Missing required parameter: variables"
         
         return True, None
-    
+
+    # Exposed operations for AI agent visibility
+
+    @expose_operation(
+        operation_name='get_acs_data',
+        description='Get American Community Survey (ACS) demographic and economic data'
+    )
+    def get_acs_data(
+        self,
+        variables: str,
+        geography: str,
+        year: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Get ACS data.
+
+        Args:
+            variables: Comma-separated variable codes (e.g., 'B01001_001E,B19013_001E')
+            geography: Geographic level (e.g., 'state:*', 'county:*', 'tract:*')
+            year: Year for data (default: latest available)
+
+        Returns:
+            Dictionary containing ACS data and metadata
+        """
+        params = {
+            'variables': variables,
+            'geography': geography
+        }
+        if year:
+            params['year'] = year
+
+        return self.execute('get_acs_data', params)
+
+    @expose_operation(
+        operation_name='get_population',
+        description='Get population estimates and demographic data'
+    )
+    def get_population(
+        self,
+        geography: str,
+        year: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Get population data.
+
+        Args:
+            geography: Geographic level (e.g., 'state:06', 'county:*')
+            year: Year for data (default: latest available)
+
+        Returns:
+            Dictionary containing population data
+        """
+        params = {'geography': geography}
+        if year:
+            params['year'] = year
+
+        return self.execute('get_population', params)
+
+    @expose_operation(
+        operation_name='get_economic_data',
+        description='Get economic indicators and business statistics'
+    )
+    def get_economic_data(
+        self,
+        variables: str,
+        geography: Optional[str] = None,
+        year: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Get economic data.
+
+        Args:
+            variables: Comma-separated variable codes
+            geography: Geographic level (optional)
+            year: Year for data (default: latest available)
+
+        Returns:
+            Dictionary containing economic data
+        """
+        params = {'variables': variables}
+        if geography:
+            params['geography'] = geography
+        if year:
+            params['year'] = year
+
+        return self.execute('get_economic_data', params)
+
+    @expose_operation(
+        operation_name='list_datasets',
+        description='List all available Census datasets'
+    )
+    def list_datasets(self) -> Dict[str, Any]:
+        """
+        List available datasets.
+
+        Returns:
+            Dictionary containing list of datasets
+        """
+        return self.execute('list_datasets', {})
+
+    @expose_operation(
+        operation_name='list_variables',
+        description='List available variables for a specific dataset'
+    )
+    def list_variables(
+        self,
+        dataset: Optional[str] = None,
+        year: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        List available variables.
+
+        Args:
+            dataset: Dataset name (e.g., 'acs/acs5')
+            year: Year for dataset
+
+        Returns:
+            Dictionary containing list of variables
+        """
+        params = {}
+        if dataset:
+            params['dataset'] = dataset
+        if year:
+            params['year'] = year
+
+        return self.execute('list_variables', params)
+
     def fetch(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Fetch data from Census API"""
         
@@ -191,4 +317,96 @@ class CensusProvider(BaseAPIProvider):
         except requests.exceptions.RequestException as e:
             self.logger.error(f"Census API request failed: {e}")
             raise Exception(f"Census API request failed: {str(e)}")
+
+    def get_operation_schema(self, operation: str) -> Optional[Dict[str, Any]]:
+        """Get detailed schema for Census API operations"""
+
+        schemas = {
+            'get_acs_data': {
+                'description': 'Get American Community Survey data',
+                'parameters': {
+                    'variables': {
+                        'type': 'string',
+                        'required': True,
+                        'description': 'Comma-separated variable codes',
+                        'examples': ['B01001_001E', 'B19013_001E', 'B25077_001E']
+                    },
+                    'geography': {
+                        'type': 'string',
+                        'required': True,
+                        'description': 'Geographic level specification',
+                        'examples': ['state:*', 'county:*', 'state:06', 'county:037']
+                    },
+                    'year': {
+                        'type': 'integer',
+                        'required': False,
+                        'description': 'Year for data',
+                        'examples': [2020, 2021, 2022]
+                    }
+                }
+            },
+            'get_population': {
+                'description': 'Get population estimates',
+                'parameters': {
+                    'geography': {
+                        'type': 'string',
+                        'required': True,
+                        'description': 'Geographic level specification',
+                        'examples': ['state:*', 'state:06', 'county:*']
+                    },
+                    'year': {
+                        'type': 'integer',
+                        'required': False,
+                        'description': 'Year for data',
+                        'examples': [2020, 2021, 2022]
+                    }
+                }
+            },
+            'get_economic_data': {
+                'description': 'Get economic indicators',
+                'parameters': {
+                    'variables': {
+                        'type': 'string',
+                        'required': True,
+                        'description': 'Comma-separated variable codes',
+                        'examples': ['EMP', 'PAYANN', 'ESTAB']
+                    },
+                    'geography': {
+                        'type': 'string',
+                        'required': False,
+                        'description': 'Geographic level specification',
+                        'examples': ['state:*', 'county:*']
+                    },
+                    'year': {
+                        'type': 'integer',
+                        'required': False,
+                        'description': 'Year for data',
+                        'examples': [2020, 2021, 2022]
+                    }
+                }
+            },
+            'list_datasets': {
+                'description': 'List all available datasets',
+                'parameters': {}
+            },
+            'list_variables': {
+                'description': 'List available variables',
+                'parameters': {
+                    'dataset': {
+                        'type': 'string',
+                        'required': False,
+                        'description': 'Dataset name',
+                        'examples': ['acs/acs5', 'acs/acs1', 'pep/population']
+                    },
+                    'year': {
+                        'type': 'integer',
+                        'required': False,
+                        'description': 'Year for dataset',
+                        'examples': [2020, 2021, 2022]
+                    }
+                }
+            }
+        }
+
+        return schemas.get(operation)
 

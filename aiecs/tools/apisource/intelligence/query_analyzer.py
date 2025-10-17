@@ -324,7 +324,7 @@ class QueryEnhancer:
             if intent and intent.get('intent_type') == 'time_series':
                 # Time series typically need more data
                 if provider == 'fred':
-                    completed_params['limit'] = 10000
+                    completed_params['limit'] = 1000  # FRED API max is 100000, but 1000 is reasonable default
                 elif provider == 'worldbank':
                     completed_params['per_page'] = 1000
             else:
