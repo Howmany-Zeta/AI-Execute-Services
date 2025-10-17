@@ -172,6 +172,141 @@ class APISourceTool(BaseTool):
             except Exception as e:
                 self.logger.warning(f"Failed to load provider {provider_name}: {e}")
 
+    @classmethod
+    def _discover_provider_operations(cls) -> List[Dict[str, Any]]:
+        """
+        Discover all exposed operations from all registered providers.
+
+        This method enables the LangChain adapter to automatically create individual
+        tools for each provider operation, giving AI agents fine-grained visibility
+        into provider capabilities.
+
+        Returns:
+            List of operation dictionaries, each containing:
+                - name: Full operation name (e.g., 'fred_get_series_observations')
+                - schema: Pydantic schema for the operation
+                - description: Operation description
+                - method: Callable method to execute the operation
+        """
+        operations = []
+
+        for provider_name, provider_class in PROVIDER_REGISTRY.items():
+            try:
+                # Get exposed operations from provider
+                exposed_ops = provider_class.get_exposed_operations()
+
+                for op in exposed_ops:
+                    # Convert Dict-based schema to Pydantic schema
+                    pydantic_schema = cls._convert_dict_schema_to_pydantic(
+                        op['schema'],
+                        f"{provider_name}_{op['name']}"
+                    ) if op['schema'] else None
+
+                    # Create operation info
+                    operation_info = {
+                        'name': f"{provider_name}_{op['name']}",
+                        'schema': pydantic_schema,
+                        'description': op['description'],
+                        'method_name': op['name'],  # Store original operation name
+                        'provider_name': provider_name  # Store provider name
+                    }
+
+                    operations.append(operation_info)
+                    logger.debug(f"Discovered provider operation: {operation_info['name']}")
+
+            except Exception as e:
+                logger.warning(f"Error discovering operations for provider {provider_name}: {e}")
+
+        logger.info(f"Discovered {len(operations)} provider operations across {len(PROVIDER_REGISTRY)} providers")
+        return operations
+
+    @staticmethod
+    def _convert_dict_schema_to_pydantic(
+        dict_schema: Optional[Dict[str, Any]],
+        schema_name: str
+    ) -> Optional[type[BaseModel]]:
+        """
+        Convert Dict-based provider schema to Pydantic BaseModel schema.
+
+        This enables provider operation schemas to be used by the LangChain adapter
+        and exposed to AI agents with full type information.
+
+        Args:
+            dict_schema: Dictionary schema from provider.get_operation_schema()
+            schema_name: Name for the generated Pydantic schema class
+
+        Returns:
+            Pydantic BaseModel class or None if schema is invalid
+        """
+        if not dict_schema or 'parameters' not in dict_schema:
+            return None
+
+        try:
+            from pydantic import create_model
+
+            fields = {}
+            parameters = dict_schema.get('parameters', {})
+
+            for param_name, param_info in parameters.items():
+                # Determine field type from schema
+                param_type_str = param_info.get('type', 'string')
+
+                # Map schema types to Python types
+                type_mapping = {
+                    'string': str,
+                    'integer': int,
+                    'number': float,
+                    'boolean': bool,
+                    'array': List[Any],
+                    'object': Dict[str, Any]
+                }
+
+                field_type = type_mapping.get(param_type_str, str)
+
+                # Make optional if not required
+                is_required = param_info.get('required', False)
+                if not is_required:
+                    field_type = Optional[field_type]
+
+                # Build field description
+                description_parts = [param_info.get('description', '')]
+
+                # Add examples if available
+                if 'examples' in param_info and param_info['examples']:
+                    examples_str = ', '.join(str(ex) for ex in param_info['examples'][:3])
+                    description_parts.append(f"Examples: {examples_str}")
+
+                # Add validation info if available
+                if 'validation' in param_info:
+                    validation = param_info['validation']
+                    if 'pattern' in validation:
+                        description_parts.append(f"Pattern: {validation['pattern']}")
+                    if 'min' in validation or 'max' in validation:
+                        range_str = f"Range: {validation.get('min', 'any')}-{validation.get('max', 'any')}"
+                        description_parts.append(range_str)
+
+                full_description = '. '.join(filter(None, description_parts))
+
+                # Create field with default value if not required
+                if is_required:
+                    fields[param_name] = (field_type, Field(description=full_description))
+                else:
+                    fields[param_name] = (field_type, Field(default=None, description=full_description))
+
+            # Create the Pydantic model
+            schema_class = create_model(
+                f"{schema_name.replace('_', '').title()}Schema",
+                __doc__=dict_schema.get('description', ''),
+                **fields
+            )
+
+            logger.debug(f"Created Pydantic schema: {schema_class.__name__} with {len(fields)} fields")
+            return schema_class
+
+        except Exception as e:
+            logger.error(f"Error converting schema {schema_name}: {e}")
+            return None
+
     def _create_query_ttl_strategy(self):
         """
         Create intelligent TTL strategy for API query results.
