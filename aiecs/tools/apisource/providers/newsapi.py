@@ -11,7 +11,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-from aiecs.tools.apisource.providers.base import BaseAPIProvider
+from aiecs.tools.apisource.providers.base import BaseAPIProvider, expose_operation
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,120 @@ class NewsAPIProvider(BaseAPIProvider):
                 return False, "Missing required parameter: q (search query)"
         
         return True, None
-    
+
+    # Exposed operations for AI agent visibility
+
+    @expose_operation(
+        operation_name='get_top_headlines',
+        description='Get top news headlines from various sources with optional filtering'
+    )
+    def get_top_headlines(
+        self,
+        q: Optional[str] = None,
+        country: Optional[str] = None,
+        category: Optional[str] = None,
+        sources: Optional[str] = None,
+        page_size: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Get top headlines.
+
+        Args:
+            q: Keywords or phrases to search for in article title and body
+            country: 2-letter ISO country code (e.g., 'us', 'gb', 'cn')
+            category: Category (business, entertainment, general, health, science, sports, technology)
+            sources: Comma-separated news source IDs
+            page_size: Number of results to return (max 100)
+
+        Returns:
+            Dictionary containing news articles and metadata
+        """
+        params = {}
+        if q:
+            params['q'] = q
+        if country:
+            params['country'] = country
+        if category:
+            params['category'] = category
+        if sources:
+            params['sources'] = sources
+        if page_size:
+            params['page_size'] = page_size
+
+        return self.execute('get_top_headlines', params)
+
+    @expose_operation(
+        operation_name='search_everything',
+        description='Search through millions of articles from news sources and blogs'
+    )
+    def search_everything(
+        self,
+        q: str,
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+        language: Optional[str] = None,
+        sort_by: Optional[str] = None,
+        page_size: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Search all articles.
+
+        Args:
+            q: Keywords or phrases to search for
+            from_date: Start date (YYYY-MM-DD or ISO 8601)
+            to_date: End date (YYYY-MM-DD or ISO 8601)
+            language: 2-letter ISO language code (e.g., 'en', 'es', 'fr')
+            sort_by: Sort order (relevancy, popularity, publishedAt)
+            page_size: Number of results to return (max 100)
+
+        Returns:
+            Dictionary containing search results and metadata
+        """
+        params = {'q': q}
+        if from_date:
+            params['from'] = from_date
+        if to_date:
+            params['to'] = to_date
+        if language:
+            params['language'] = language
+        if sort_by:
+            params['sortBy'] = sort_by
+        if page_size:
+            params['pageSize'] = page_size
+
+        return self.execute('search_everything', params)
+
+    @expose_operation(
+        operation_name='get_sources',
+        description='Get the list of available news sources'
+    )
+    def get_sources(
+        self,
+        category: Optional[str] = None,
+        language: Optional[str] = None,
+        country: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get available news sources.
+
+        Args:
+            category: Filter by category
+            language: Filter by language (2-letter ISO code)
+            country: Filter by country (2-letter ISO code)
+
+        Returns:
+            Dictionary containing list of news sources
+        """
+        params = {}
+        if category:
+            params['category'] = category
+        if language:
+            params['language'] = language
+        if country:
+            params['country'] = country
+
+        return self.execute('get_sources', params)
+
     def fetch(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Fetch data from News API"""
         
@@ -176,4 +289,114 @@ class NewsAPIProvider(BaseAPIProvider):
         except requests.exceptions.RequestException as e:
             self.logger.error(f"News API request failed: {e}")
             raise Exception(f"News API request failed: {str(e)}")
+
+    def get_operation_schema(self, operation: str) -> Optional[Dict[str, Any]]:
+        """Get detailed schema for News API operations"""
+
+        schemas = {
+            'get_top_headlines': {
+                'description': 'Get top news headlines',
+                'parameters': {
+                    'q': {
+                        'type': 'string',
+                        'required': False,
+                        'description': 'Keywords or phrases to search for',
+                        'examples': ['bitcoin', 'climate change', 'technology']
+                    },
+                    'country': {
+                        'type': 'string',
+                        'required': False,
+                        'description': '2-letter ISO country code',
+                        'examples': ['us', 'gb', 'cn', 'jp']
+                    },
+                    'category': {
+                        'type': 'string',
+                        'required': False,
+                        'description': 'News category',
+                        'examples': ['business', 'entertainment', 'health', 'science', 'sports', 'technology']
+                    },
+                    'sources': {
+                        'type': 'string',
+                        'required': False,
+                        'description': 'Comma-separated news source IDs',
+                        'examples': ['bbc-news', 'cnn', 'the-verge']
+                    },
+                    'page_size': {
+                        'type': 'integer',
+                        'required': False,
+                        'description': 'Number of results (max 100)',
+                        'examples': [10, 20, 50],
+                        'default': 20
+                    }
+                }
+            },
+            'search_everything': {
+                'description': 'Search all news articles',
+                'parameters': {
+                    'q': {
+                        'type': 'string',
+                        'required': True,
+                        'description': 'Keywords or phrases to search for',
+                        'examples': ['artificial intelligence', 'climate summit', 'stock market']
+                    },
+                    'from_date': {
+                        'type': 'string',
+                        'required': False,
+                        'description': 'Start date (YYYY-MM-DD)',
+                        'examples': ['2024-01-01', '2024-10-01']
+                    },
+                    'to_date': {
+                        'type': 'string',
+                        'required': False,
+                        'description': 'End date (YYYY-MM-DD)',
+                        'examples': ['2024-12-31', '2024-10-17']
+                    },
+                    'language': {
+                        'type': 'string',
+                        'required': False,
+                        'description': '2-letter ISO language code',
+                        'examples': ['en', 'es', 'fr', 'de']
+                    },
+                    'sort_by': {
+                        'type': 'string',
+                        'required': False,
+                        'description': 'Sort order',
+                        'examples': ['relevancy', 'popularity', 'publishedAt'],
+                        'default': 'publishedAt'
+                    },
+                    'page_size': {
+                        'type': 'integer',
+                        'required': False,
+                        'description': 'Number of results (max 100)',
+                        'examples': [10, 20, 50],
+                        'default': 20
+                    }
+                }
+            },
+            'get_sources': {
+                'description': 'Get available news sources',
+                'parameters': {
+                    'category': {
+                        'type': 'string',
+                        'required': False,
+                        'description': 'Filter by category',
+                        'examples': ['business', 'technology', 'sports']
+                    },
+                    'language': {
+                        'type': 'string',
+                        'required': False,
+                        'description': 'Filter by language (2-letter ISO code)',
+                        'examples': ['en', 'es', 'fr']
+                    },
+                    'country': {
+                        'type': 'string',
+                        'required': False,
+                        'description': 'Filter by country (2-letter ISO code)',
+                        'examples': ['us', 'gb', 'cn']
+                    }
+                }
+            }
+        }
+
+        return schemas.get(operation)
 

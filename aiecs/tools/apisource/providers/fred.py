@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
 
-from aiecs.tools.apisource.providers.base import BaseAPIProvider
+from aiecs.tools.apisource.providers.base import BaseAPIProvider, expose_operation
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,135 @@ class FREDProvider(BaseAPIProvider):
                 )
         
         return True, None
-    
+
+    # Exposed operations for AI agent visibility
+
+    @expose_operation(
+        operation_name='get_series_observations',
+        description='Get FRED economic time series observation data with optional date range filtering'
+    )
+    def get_series_observations(
+        self,
+        series_id: str,
+        observation_start: Optional[str] = None,
+        observation_end: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        sort_order: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get time series observation data from FRED.
+
+        Args:
+            series_id: FRED series ID (e.g., 'GDP', 'UNRATE', 'CPIAUCSL')
+            observation_start: Start date in YYYY-MM-DD format
+            observation_end: End date in YYYY-MM-DD format
+            limit: Maximum number of observations to return
+            offset: Offset for pagination
+            sort_order: Sort order ('asc' or 'desc')
+
+        Returns:
+            Dictionary containing observations and metadata
+        """
+        params = {'series_id': series_id}
+        if observation_start:
+            params['observation_start'] = observation_start
+        if observation_end:
+            params['observation_end'] = observation_end
+        if limit:
+            params['limit'] = limit
+        if offset:
+            params['offset'] = offset
+        if sort_order:
+            params['sort_order'] = sort_order
+
+        return self.execute('get_series_observations', params)
+
+    @expose_operation(
+        operation_name='search_series',
+        description='Search for FRED economic data series by keywords'
+    )
+    def search_series(
+        self,
+        search_text: str,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Search for FRED series by keywords.
+
+        Args:
+            search_text: Search keywords (e.g., 'unemployment', 'GDP growth')
+            limit: Maximum number of results to return
+            offset: Offset for pagination
+
+        Returns:
+            Dictionary containing search results and metadata
+        """
+        params = {'search_text': search_text}
+        if limit:
+            params['limit'] = limit
+        if offset:
+            params['offset'] = offset
+
+        return self.execute('search_series', params)
+
+    @expose_operation(
+        operation_name='get_series_info',
+        description='Get detailed metadata and information about a specific FRED series'
+    )
+    def get_series_info(self, series_id: str) -> Dict[str, Any]:
+        """
+        Get metadata about a FRED series.
+
+        Args:
+            series_id: FRED series ID (e.g., 'GDP', 'UNRATE')
+
+        Returns:
+            Dictionary containing series metadata
+        """
+        return self.execute('get_series_info', {'series_id': series_id})
+
+    @expose_operation(
+        operation_name='get_categories',
+        description='Get FRED data categories for browsing available datasets'
+    )
+    def get_categories(self, category_id: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Get FRED categories.
+
+        Args:
+            category_id: Optional category ID to get subcategories
+
+        Returns:
+            Dictionary containing category information
+        """
+        params = {}
+        if category_id:
+            params['category_id'] = category_id
+
+        return self.execute('get_categories', params)
+
+    @expose_operation(
+        operation_name='get_releases',
+        description='Get FRED data release information and schedules'
+    )
+    def get_releases(self, limit: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Get FRED releases.
+
+        Args:
+            limit: Maximum number of releases to return
+
+        Returns:
+            Dictionary containing release information
+        """
+        params = {}
+        if limit:
+            params['limit'] = limit
+
+        return self.execute('get_releases', params)
+
     def fetch(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Fetch data from FRED API"""
         
@@ -276,9 +404,65 @@ class FREDProvider(BaseAPIProvider):
                         'params': {'search_text': 'gdp', 'limit': 10}
                     }
                 ]
+            },
+            'get_series_info': {
+                'description': 'Get metadata about a FRED series',
+                'parameters': {
+                    'series_id': {
+                        'type': 'string',
+                        'required': True,
+                        'description': 'FRED series ID to get information about',
+                        'examples': ['GDP', 'UNRATE', 'CPIAUCSL']
+                    }
+                },
+                'examples': [
+                    {
+                        'description': 'Get info about GDP series',
+                        'params': {'series_id': 'GDP'}
+                    }
+                ]
+            },
+            'get_categories': {
+                'description': 'Get FRED data categories',
+                'parameters': {
+                    'category_id': {
+                        'type': 'integer',
+                        'required': False,
+                        'description': 'Category ID to get subcategories (omit for root categories)',
+                        'examples': [125, 32991]
+                    }
+                },
+                'examples': [
+                    {
+                        'description': 'Get root categories',
+                        'params': {}
+                    },
+                    {
+                        'description': 'Get subcategories of category 125',
+                        'params': {'category_id': 125}
+                    }
+                ]
+            },
+            'get_releases': {
+                'description': 'Get FRED data releases',
+                'parameters': {
+                    'limit': {
+                        'type': 'integer',
+                        'required': False,
+                        'description': 'Maximum number of releases to return',
+                        'examples': [10, 50],
+                        'default': 1000
+                    }
+                },
+                'examples': [
+                    {
+                        'description': 'Get recent releases',
+                        'params': {'limit': 20}
+                    }
+                ]
             }
         }
-        
+
         return schemas.get(operation)
     
     def validate_and_clean_data(

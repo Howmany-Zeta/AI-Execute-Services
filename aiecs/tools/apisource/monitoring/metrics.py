@@ -187,47 +187,54 @@ class DetailedMetrics:
         self.metrics['performance']['p95_response_time_ms'] = times[int(n * 0.95)]
         self.metrics['performance']['p99_response_time_ms'] = times[min(int(n * 0.99), n - 1)]
     
+    def _calculate_health_score_unlocked(self) -> float:
+        """
+        Calculate health score without acquiring lock (internal use only).
+        Must be called while holding self.lock.
+        """
+        total = self.metrics['requests']['total']
+        if total == 0:
+            return 1.0
+
+        # Success rate score (40%)
+        success_rate = self.metrics['requests']['successful'] / total
+        success_score = success_rate * 0.4
+
+        # Performance score (30%)
+        avg_time = self.metrics['performance']['avg_response_time_ms']
+        # Assume < 200ms is excellent, > 2000ms is poor
+        if avg_time < 200:
+            performance_score = 0.3
+        elif avg_time > 2000:
+            performance_score = 0.0
+        else:
+            performance_score = max(0, min(1, (2000 - avg_time) / 1800)) * 0.3
+
+        # Cache hit rate score (20%)
+        cache_rate = self.metrics['requests']['cached'] / total
+        cache_score = cache_rate * 0.2
+
+        # Error diversity score (10%) - fewer error types is better
+        error_types = len(self.metrics['errors']['by_type'])
+        error_score = max(0, (5 - error_types) / 5) * 0.1
+
+        return success_score + performance_score + cache_score + error_score
+
     def get_health_score(self) -> float:
         """
         Calculate overall health score (0-1).
-        
+
         The health score considers:
         - Success rate (40%)
         - Performance (30%)
         - Cache hit rate (20%)
         - Error diversity (10%)
-        
+
         Returns:
             Health score between 0 and 1
         """
         with self.lock:
-            total = self.metrics['requests']['total']
-            if total == 0:
-                return 1.0
-            
-            # Success rate score (40%)
-            success_rate = self.metrics['requests']['successful'] / total
-            success_score = success_rate * 0.4
-            
-            # Performance score (30%)
-            avg_time = self.metrics['performance']['avg_response_time_ms']
-            # Assume < 200ms is excellent, > 2000ms is poor
-            if avg_time < 200:
-                performance_score = 0.3
-            elif avg_time > 2000:
-                performance_score = 0.0
-            else:
-                performance_score = max(0, min(1, (2000 - avg_time) / 1800)) * 0.3
-            
-            # Cache hit rate score (20%)
-            cache_rate = self.metrics['requests']['cached'] / total
-            cache_score = cache_rate * 0.2
-            
-            # Error diversity score (10%) - fewer error types is better
-            error_types = len(self.metrics['errors']['by_type'])
-            error_score = max(0, (5 - error_types) / 5) * 0.1
-            
-            return success_score + performance_score + cache_score + error_score
+            return self._calculate_health_score_unlocked()
     
     def get_stats(self) -> Dict[str, Any]:
         """
@@ -262,7 +269,7 @@ class DetailedMetrics:
     def get_summary(self) -> Dict[str, Any]:
         """
         Get a concise summary of key metrics.
-        
+
         Returns:
             Summary dictionary with key metrics
         """
@@ -273,13 +280,14 @@ class DetailedMetrics:
                     'status': 'no_activity',
                     'health_score': 1.0
                 }
-            
+
             success_rate = self.metrics['requests']['successful'] / total
             cache_hit_rate = self.metrics['requests']['cached'] / total
-            
+            health_score = self._calculate_health_score_unlocked()  # Use unlocked version to avoid deadlock
+
             return {
-                'status': 'healthy' if self.get_health_score() > 0.7 else 'degraded',
-                'health_score': round(self.get_health_score(), 3),
+                'status': 'healthy' if health_score > 0.7 else 'degraded',
+                'health_score': round(health_score, 3),
                 'total_requests': total,
                 'success_rate': round(success_rate, 3),
                 'cache_hit_rate': round(cache_hit_rate, 3),
