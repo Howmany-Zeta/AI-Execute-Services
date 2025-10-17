@@ -4,7 +4,6 @@
 Task Tools Module
 
 This module contains specialized tools for various task-oriented operations:
-- apisource_tool: External API data source integration (economic, news, public databases)
 - chart_tool: Chart and visualization operations
 - classfire_tool: Classification and categorization operations
 - image_tool: Image processing and manipulation operations
@@ -13,8 +12,11 @@ This module contains specialized tools for various task-oriented operations:
 - report_tool: Report generation and formatting operations
 - research_tool: Research and information gathering operations
 - scraper_tool: Web scraping and data extraction operations
-- search_api: Search API integration operations
 - stats_tool: Statistical analysis and computation operations
+
+Note:
+- apisource_tool is now a standalone package at aiecs.tools.apisource
+- search_tool is now a standalone package at aiecs.tools.search_tool
 """
 
 # Lazy import all task tools to avoid heavy dependencies at import time
@@ -22,15 +24,13 @@ import os
 
 # Define available tools for lazy loading
 _AVAILABLE_TOOLS = [
-    'apisource_tool',
     'chart_tool',
-    'classfire_tool', 
+    'classfire_tool',
     'image_tool',
     'pandas_tool',
     'report_tool',
     'research_tool',
     'scraper_tool',
-    'search_api',
     'stats_tool'
 ]
 
@@ -45,11 +45,9 @@ def _lazy_load_tool(tool_name: str):
     """Lazy load a specific tool module"""
     if tool_name in _LOADED_TOOLS:
         return
-        
+
     try:
-        if tool_name == 'apisource_tool':
-            from . import apisource_tool
-        elif tool_name == 'chart_tool':
+        if tool_name == 'chart_tool':
             from . import chart_tool
         elif tool_name == 'classfire_tool':
             from . import classfire_tool
@@ -65,13 +63,11 @@ def _lazy_load_tool(tool_name: str):
             from . import research_tool
         elif tool_name == 'scraper_tool':
             from . import scraper_tool
-        elif tool_name == 'search_api':
-            from . import search_api
         elif tool_name == 'stats_tool':
             from . import stats_tool
-        
+
         _LOADED_TOOLS.add(tool_name)
-        
+
     except Exception as e:
         import logging
         logger = logging.getLogger(__name__)
