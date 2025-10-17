@@ -165,7 +165,8 @@ def _auto_discover_tools():
         ('docs', 'docs'),
         ('statistics', 'statistics'),
         ('search_tool', 'task'),  # Enhanced search tool
-        ('api_sources', 'task'),  # API data sources
+        ('api_sources', 'task'),  # API data sources (legacy)
+        ('apisource', 'task'),    # API Source Tool (new modular version)
     ]
     
     discovered_tools = []
