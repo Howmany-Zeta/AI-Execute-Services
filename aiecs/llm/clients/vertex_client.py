@@ -141,8 +141,23 @@ class VertexAIClient(BaseLLMClient):
                                     text_parts.append(part.text)
                             
                             if text_parts:
-                                content = "\n".join(text_parts)
-                                self.logger.info(f"Successfully extracted multi-part response: {len(text_parts)} parts")
+                                # Handle multi-part response format
+                                if len(text_parts) > 1:
+                                    # Multi-part response (typical for Gemini 2.5 with tool calling)
+                                    # Part 1: Thinking/reasoning content
+                                    # Part 2+: Actual output (JSON or other format)
+                                    
+                                    # Wrap first part (thinking) in <thinking> tags
+                                    thinking_part = text_parts[0]
+                                    actual_output_parts = text_parts[1:]
+                                    
+                                    # Format: <thinking>Part 1</thinking>\nPart 2\nPart 3...
+                                    content = f"<thinking>\n{thinking_part}\n</thinking>\n" + "\n".join(actual_output_parts)
+                                    self.logger.info(f"✅ Successfully wrapped multi-part response: {len(text_parts)} parts (thinking + output)")
+                                else:
+                                    # Single part response - use as is
+                                    content = text_parts[0]
+                                    self.logger.info("Successfully extracted single-part response")
                             else:
                                 self.logger.warning("No text content found in multi-part response")
                         except Exception as part_error:
