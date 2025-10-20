@@ -144,16 +144,49 @@ class VertexAIClient(BaseLLMClient):
                                 # Handle multi-part response format
                                 if len(text_parts) > 1:
                                     # Multi-part response (typical for Gemini 2.5 with tool calling)
-                                    # Part 1: Thinking/reasoning content
-                                    # Part 2+: Actual output (JSON or other format)
+                                    # Check if parts already contain <thinking> tags
+                                    first_part = text_parts[0]
+                                    has_thinking_tags = '<thinking>' in first_part
                                     
-                                    # Wrap first part (thinking) in <thinking> tags
-                                    thinking_part = text_parts[0]
-                                    actual_output_parts = text_parts[1:]
-                                    
-                                    # Format: <thinking>Part 1</thinking>\nPart 2\nPart 3...
-                                    content = f"<thinking>\n{thinking_part}\n</thinking>\n" + "\n".join(actual_output_parts)
-                                    self.logger.info(f"✅ Successfully wrapped multi-part response: {len(text_parts)} parts (thinking + output)")
+                                    if has_thinking_tags:
+                                        # Parts already have <thinking> tags, extract thinking content and actual output
+                                        thinking_contents = []
+                                        actual_outputs = []
+                                        
+                                        for part in text_parts:
+                                            if '<thinking>' in part and '</thinking>' in part:
+                                                # Extract thinking content from this part
+                                                import re
+                                                thinking_match = re.search(r'<thinking>(.*?)</thinking>', part, re.DOTALL)
+                                                if thinking_match:
+                                                    thinking_contents.append(thinking_match.group(1).strip())
+                                                    
+                                                # Extract content after </thinking>
+                                                after_thinking = part[thinking_match.end():].strip()
+                                                if after_thinking:
+                                                    actual_outputs.append(after_thinking)
+                                            else:
+                                                # This part doesn't have thinking tags, treat as actual output
+                                                actual_outputs.append(part)
+                                        
+                                        # Combine thinking content and actual outputs
+                                        if thinking_contents:
+                                            combined_thinking = '\n\n'.join(thinking_contents)
+                                            content = f"<thinking>\n{combined_thinking}\n</thinking>"
+                                            if actual_outputs:
+                                                content += "\n" + "\n".join(actual_outputs)
+                                        else:
+                                            content = "\n".join(text_parts)
+                                        
+                                        self.logger.info(f"✅ Multi-part response with existing <thinking> tags processed: {len(text_parts)} parts")
+                                    else:
+                                        # Parts don't have <thinking> tags, wrap first part
+                                        thinking_part = text_parts[0]
+                                        actual_output_parts = text_parts[1:]
+                                        
+                                        # Format: <thinking>Part 1</thinking>\nPart 2\nPart 3...
+                                        content = f"<thinking>\n{thinking_part}\n</thinking>\n" + "\n".join(actual_output_parts)
+                                        self.logger.info(f"✅ Multi-part response wrapped with <thinking> tags: {len(text_parts)} parts")
                                 else:
                                     # Single part response - use as is
                                     content = text_parts[0]
