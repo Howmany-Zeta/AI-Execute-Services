@@ -170,11 +170,29 @@ class VertexAIClient(BaseLLMClient):
                                     fixed_count = 0
                                     
                                     for i, part in enumerate(text_parts):
+                                        # Check for thinking content that needs formatting
+                                        needs_thinking_format = False
+                                        
                                         if '<thinking>' in part and '</thinking>' not in part:
-                                            # Incomplete thinking tag: add closing tag
+                                            # Incomplete <thinking> tag: add closing tag
                                             part = part + '\n</thinking>'
-                                            fixed_count += 1
+                                            needs_thinking_format = True
                                             self.logger.debug(f"  Part {i+1}: Incomplete <thinking> tag fixed")
+                                        elif part.startswith('thinking') and '</thinking>' not in part:
+                                            # thinking\n format: convert to <thinking>...</thinking>
+                                            if part.startswith('thinking\n'):
+                                                # thinking\n格式：提取内容并包装
+                                                content = part[8:]  # 跳过 "thinking\n"
+                                            else:
+                                                # thinking开头但无换行：提取内容并包装
+                                                content = part[7:]  # 跳过 "thinking"
+                                            
+                                            part = f"<thinking>\n{content}\n</thinking>"
+                                            needs_thinking_format = True
+                                            self.logger.debug(f"  Part {i+1}: thinking\\n format converted to <thinking> tags")
+                                        
+                                        if needs_thinking_format:
+                                            fixed_count += 1
                                         
                                         processed_parts.append(part)
                                     

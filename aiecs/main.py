@@ -142,7 +142,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="AIECS - AI Execute Services",
     description="Middleware service for AI-powered task execution and tool orchestration",
-    version="1.3.5",    
+    version="1.3.6",    
     lifespan=lifespan
 )
 
@@ -167,7 +167,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "aiecs",
-        "version": "1.3.5"
+        "version": "1.3.6"
     }
 
 
