@@ -23,6 +23,12 @@ class VertexAIClient(BaseLLMClient):
         super().__init__("Vertex")
         self.settings = get_settings()
         self._initialized = False
+        # Track part count statistics for monitoring
+        self._part_count_stats = {
+            "total_responses": 0,
+            "part_counts": {},  # {part_count: frequency}
+            "last_part_count": None
+        }
 
     def _init_vertex_ai(self):
         """Lazy initialization of Vertex AI with proper authentication"""
@@ -141,52 +147,44 @@ class VertexAIClient(BaseLLMClient):
                                     text_parts.append(part.text)
                             
                             if text_parts:
+                                # Log part count for monitoring
+                                part_count = len(text_parts)
+                                self.logger.info(f"📊 Vertex AI response: {part_count} parts detected")
+                                
+                                # Update statistics
+                                self._part_count_stats["total_responses"] += 1
+                                self._part_count_stats["part_counts"][part_count] = self._part_count_stats["part_counts"].get(part_count, 0) + 1
+                                self._part_count_stats["last_part_count"] = part_count
+                                
+                                # Log statistics if significant variation detected
+                                if part_count != self._part_count_stats.get("last_part_count", part_count):
+                                    self.logger.warning(f"⚠️ Part count variation detected: {part_count} parts (previous: {self._part_count_stats.get('last_part_count', 'unknown')})")
+                                
                                 # Handle multi-part response format
                                 if len(text_parts) > 1:
-                                    # Multi-part response (typical for Gemini 2.5 with tool calling)
-                                    # Check if parts already contain <thinking> tags
-                                    first_part = text_parts[0]
-                                    has_thinking_tags = '<thinking>' in first_part
+                                    # Multi-part response
+                                    # Minimal fix: only fix incomplete <thinking> tags, preserve original order
+                                    # Do NOT reorganize content - let downstream code handle semantics
                                     
-                                    if has_thinking_tags:
-                                        # Parts already have <thinking> tags, extract thinking content and actual output
-                                        thinking_contents = []
-                                        actual_outputs = []
+                                    processed_parts = []
+                                    fixed_count = 0
+                                    
+                                    for i, part in enumerate(text_parts):
+                                        if '<thinking>' in part and '</thinking>' not in part:
+                                            # Incomplete thinking tag: add closing tag
+                                            part = part + '\n</thinking>'
+                                            fixed_count += 1
+                                            self.logger.debug(f"  Part {i+1}: Incomplete <thinking> tag fixed")
                                         
-                                        for part in text_parts:
-                                            if '<thinking>' in part and '</thinking>' in part:
-                                                # Extract thinking content from this part
-                                                import re
-                                                thinking_match = re.search(r'<thinking>(.*?)</thinking>', part, re.DOTALL)
-                                                if thinking_match:
-                                                    thinking_contents.append(thinking_match.group(1).strip())
-                                                    
-                                                # Extract content after </thinking>
-                                                after_thinking = part[thinking_match.end():].strip()
-                                                if after_thinking:
-                                                    actual_outputs.append(after_thinking)
-                                            else:
-                                                # This part doesn't have thinking tags, treat as actual output
-                                                actual_outputs.append(part)
-                                        
-                                        # Combine thinking content and actual outputs
-                                        if thinking_contents:
-                                            combined_thinking = '\n\n'.join(thinking_contents)
-                                            content = f"<thinking>\n{combined_thinking}\n</thinking>"
-                                            if actual_outputs:
-                                                content += "\n" + "\n".join(actual_outputs)
-                                        else:
-                                            content = "\n".join(text_parts)
-                                        
-                                        self.logger.info(f"✅ Multi-part response with existing <thinking> tags processed: {len(text_parts)} parts")
+                                        processed_parts.append(part)
+                                    
+                                    # Merge in original order
+                                    content = "\n".join(processed_parts)
+                                    
+                                    if fixed_count > 0:
+                                        self.logger.info(f"✅ Multi-part response merged: {len(text_parts)} parts, {fixed_count} incomplete tags fixed, order preserved")
                                     else:
-                                        # Parts don't have <thinking> tags, wrap first part
-                                        thinking_part = text_parts[0]
-                                        actual_output_parts = text_parts[1:]
-                                        
-                                        # Format: <thinking>Part 1</thinking>\nPart 2\nPart 3...
-                                        content = f"<thinking>\n{thinking_part}\n</thinking>\n" + "\n".join(actual_output_parts)
-                                        self.logger.info(f"✅ Multi-part response wrapped with <thinking> tags: {len(text_parts)} parts")
+                                        self.logger.info(f"✅ Multi-part response merged: {len(text_parts)} parts, order preserved")
                                 else:
                                     # Single part response - use as is
                                     content = text_parts[0]
@@ -271,7 +269,64 @@ class VertexAIClient(BaseLLMClient):
             yield word + " "
             await asyncio.sleep(0.05)  # Small delay to simulate streaming
 
+    def get_part_count_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics about part count variations in Vertex AI responses.
+        
+        Returns:
+            Dictionary containing part count statistics and analysis
+        """
+        stats = self._part_count_stats.copy()
+        
+        if stats["total_responses"] > 0:
+            # Calculate variation metrics
+            part_counts = list(stats["part_counts"].keys())
+            stats["variation_analysis"] = {
+                "unique_part_counts": len(part_counts),
+                "most_common_count": max(stats["part_counts"].items(), key=lambda x: x[1])[0] if stats["part_counts"] else None,
+                "part_count_range": f"{min(part_counts)}-{max(part_counts)}" if part_counts else "N/A",
+                "stability_score": 1.0 - (len(part_counts) - 1) / max(stats["total_responses"], 1)  # 0-1, higher is more stable
+            }
+            
+            # Generate recommendations
+            if stats["variation_analysis"]["stability_score"] < 0.7:
+                stats["recommendations"] = [
+                    "High part count variation detected",
+                    "Consider optimizing prompt structure",
+                    "Monitor input complexity patterns",
+                    "Review tool calling configuration"
+                ]
+            else:
+                stats["recommendations"] = [
+                    "Part count variation is within acceptable range",
+                    "Continue monitoring for patterns"
+                ]
+        
+        return stats
+    
+    def log_part_count_summary(self):
+        """Log a summary of part count statistics"""
+        stats = self.get_part_count_stats()
+        
+        if stats["total_responses"] > 0:
+            self.logger.info("📈 Vertex AI Part Count Summary:")
+            self.logger.info(f"  Total responses: {stats['total_responses']}")
+            self.logger.info(f"  Part count distribution: {stats['part_counts']}")
+            
+            if "variation_analysis" in stats:
+                analysis = stats["variation_analysis"]
+                self.logger.info(f"  Stability score: {analysis['stability_score']:.2f}")
+                self.logger.info(f"  Most common count: {analysis['most_common_count']}")
+                self.logger.info(f"  Count range: {analysis['part_count_range']}")
+                
+                if "recommendations" in stats:
+                    self.logger.info("  Recommendations:")
+                    for rec in stats["recommendations"]:
+                        self.logger.info(f"    • {rec}")
+
     async def close(self):
         """Clean up resources"""
+        # Log final statistics before cleanup
+        self.log_part_count_summary()
         # Vertex AI doesn't require explicit cleanup
         self._initialized = False
