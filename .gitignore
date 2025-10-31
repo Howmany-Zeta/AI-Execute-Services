@@ -211,3 +211,7 @@ ehthumbs.db
 
 # Cursor IDE
 .cursor/
+
+# bug_report
+bug_report/
+

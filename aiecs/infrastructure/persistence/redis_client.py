@@ -74,10 +74,55 @@ class RedisClient:
         client = await self.get_client()
         return await client.hgetall(name)
 
-    async def hset(self, name: str, mapping: dict) -> int:
-        """Set hash fields"""
+    async def hset(
+        self, 
+        name: str, 
+        key: Optional[str] = None,
+        value: Optional[str] = None,
+        mapping: Optional[dict] = None
+    ) -> int:
+        """Set hash fields
+        
+        Supports two calling patterns:
+        1. hset(name, key, value) - Set single field (positional)
+        2. hset(name, key=key, value=value) - Set single field (keyword)
+        3. hset(name, mapping={...}) - Set multiple fields
+        
+        Args:
+            name: Redis hash key name
+            key: Field name (for single field set)
+            value: Field value (for single field set)
+            mapping: Dictionary of field-value pairs (for multiple fields)
+        
+        Returns:
+            Number of fields that were added
+            
+        Raises:
+            ValueError: If neither (key, value) nor mapping is provided
+        
+        Examples:
+            # Single field with positional args
+            await redis_client.hset("myhash", "field1", "value1")
+            
+            # Single field with keyword args
+            await redis_client.hset("myhash", key="field1", value="value1")
+            
+            # Multiple fields with mapping
+            await redis_client.hset("myhash", mapping={"field1": "value1", "field2": "value2"})
+        """
         client = await self.get_client()
-        return await client.hset(name, mapping=mapping)
+        
+        if mapping is not None:
+            # Multiple fields mode
+            return await client.hset(name, mapping=mapping)
+        elif key is not None and value is not None:
+            # Single field mode
+            return await client.hset(name, key=key, value=value)
+        else:
+            raise ValueError(
+                "Either provide (key, value) or mapping parameter. "
+                f"Got: key={key}, value={value}, mapping={mapping}"
+            )
 
     async def expire(self, name: str, time: int) -> bool:
         """Set expiration time"""
