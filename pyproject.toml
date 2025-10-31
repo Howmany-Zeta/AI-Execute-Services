@@ -28,7 +28,7 @@ pytest-timeout = "^2.4.0"
 
 [project]
 name = "aiecs"
-version = "1.3.7"
+version = "1.3.8"
 description = "AI Execute Services - A middleware framework for AI-powered task execution and tool orchestration"
 authors = [
     {name = "AIECS Team", email = "iretbl@gmail.com"}
