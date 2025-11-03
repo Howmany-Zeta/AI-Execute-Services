@@ -215,3 +215,8 @@ ehthumbs.db
 # bug_report
 bug_report/
 
+# openspec
+openspec/
+developer_sample/
+AGENTS.md
+
