@@ -41,6 +41,50 @@ from .community import (
     AgentAdapterError, CommunicationError, ContextError,
 )
 
+from .agent import (
+    # Exceptions
+    AgentException, AgentNotFoundError, AgentAlreadyRegisteredError,
+    InvalidStateTransitionError, ConfigurationError, TaskExecutionError,
+    ToolAccessDeniedError, SerializationError, AgentInitializationError,
+    
+    # Enums
+    AgentState, AgentType, GoalStatus, GoalPriority, CapabilityLevel, MemoryType,
+    
+    # Models
+    RetryPolicy, AgentConfiguration, AgentGoal, AgentCapabilityDeclaration,
+    AgentMetrics, AgentInteraction, AgentMemory,
+    
+    # Base and Concrete Agents
+    BaseAIAgent, LLMAgent, ToolAgent, HybridAgent,
+    
+    # Lifecycle Management
+    AgentRegistry, AgentLifecycleManager,
+    get_global_registry, get_global_lifecycle_manager,
+    
+    # Persistence
+    InMemoryPersistence, FilePersistence,
+    get_global_persistence, set_global_persistence,
+    
+    # Observability
+    AgentController, LoggingObserver, MetricsObserver,
+    
+    # Prompts
+    PromptTemplate, ChatPromptTemplate, MessageBuilder,
+    
+    # Tools
+    ToolSchemaGenerator, generate_tool_schema,
+    
+    # Memory
+    ConversationMemory, Session,
+    
+    # Integration
+    ContextEngineAdapter, EnhancedRetryPolicy, RoleConfiguration,
+    ContextCompressor, compress_messages,
+    
+    # Migration
+    LegacyAgentWrapper, convert_langchain_prompt, convert_legacy_config,
+)
+
 __all__ = [
     # Execution domain
     "TaskStepResult",
@@ -127,4 +171,80 @@ __all__ = [
     "AgentAdapterError",
     "CommunicationError",
     "ContextError",
+
+    # Agent domain - Exceptions
+    "AgentException",
+    "AgentNotFoundError",
+    "AgentAlreadyRegisteredError",
+    "InvalidStateTransitionError",
+    "ConfigurationError",
+    "TaskExecutionError",
+    "ToolAccessDeniedError",
+    "SerializationError",
+    "AgentInitializationError",
+
+    # Agent domain - Enums
+    "AgentState",
+    "AgentType",
+    "GoalStatus",
+    "GoalPriority",
+    "CapabilityLevel",
+    "MemoryType",
+
+    # Agent domain - Models
+    "RetryPolicy",
+    "AgentConfiguration",
+    "AgentGoal",
+    "AgentCapabilityDeclaration",
+    "AgentMetrics",
+    "AgentInteraction",
+    "AgentMemory",
+    
+    # Agent domain - Base and Concrete Agents
+    "BaseAIAgent",
+    "LLMAgent",
+    "ToolAgent",
+    "HybridAgent",
+    
+    # Agent domain - Lifecycle Management
+    "AgentRegistry",
+    "AgentLifecycleManager",
+    "get_global_registry",
+    "get_global_lifecycle_manager",
+    
+    # Agent domain - Persistence
+    "InMemoryPersistence",
+    "FilePersistence",
+    "get_global_persistence",
+    "set_global_persistence",
+    
+    # Agent domain - Observability
+    "AgentController",
+    "LoggingObserver",
+    "MetricsObserver",
+    
+    # Agent domain - Prompts
+    "PromptTemplate",
+    "ChatPromptTemplate",
+    "MessageBuilder",
+    
+    # Agent domain - Tools
+    "ToolSchemaGenerator",
+    "generate_tool_schema",
+    
+    # Agent domain - Memory
+    "ConversationMemory",
+    "Session",
+    
+    # Agent domain - Integration
+    "ContextEngineAdapter",
+    "EnhancedRetryPolicy",
+    "RoleConfiguration",
+    "ContextCompressor",
+    "compress_messages",
+    
+    # Agent domain - Migration
+    "LegacyAgentWrapper",
+    "convert_langchain_prompt",
+    "convert_legacy_config",
 ]
