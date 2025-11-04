@@ -18,7 +18,7 @@ class ToolSchemaGenerator:
 
     Example:
         generator = ToolSchemaGenerator()
-        schema = generator.generate_schema("search_tool", "search")
+        schema = generator.generate_schema("search", "search_web")
     """
 
     @staticmethod
