@@ -133,7 +133,14 @@ class FileStorage:
             if self.config.gcs_credentials_path:
                 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = self.config.gcs_credentials_path
 
-            # Create client
+            # Create client - project is required for bucket creation
+            # If project_id is None, client will use default project from credentials
+            # but we need it for bucket creation API calls
+            if not self.config.gcs_project_id:
+                logger.warning("GCS project ID not provided. Bucket creation will be disabled.")
+                logger.warning("Bucket must exist and be accessible. Falling back to local storage if bucket not found.")
+            
+            # Create client with project ID (can be None, but bucket creation will fail)
             self._gcs_client = storage.Client(project=self.config.gcs_project_id)
 
             # Get or create bucket
@@ -144,12 +151,28 @@ class FileStorage:
                 logger.info(f"Connected to GCS bucket: {self.config.gcs_bucket_name}")
 
             except NotFound:
-                # Create bucket if it doesn't exist
-                self._gcs_bucket = self._gcs_client.create_bucket(
-                    self.config.gcs_bucket_name,
-                    location=self.config.gcs_location
-                )
-                logger.info(f"Created GCS bucket: {self.config.gcs_bucket_name}")
+                # Only create bucket if project_id is provided
+                # Bucket creation requires project parameter in API call
+                if self.config.gcs_project_id:
+                    try:
+                        self._gcs_bucket = self._gcs_client.create_bucket(
+                            self.config.gcs_bucket_name,
+                            project=self.config.gcs_project_id,  # Explicitly pass project parameter
+                            location=self.config.gcs_location
+                        )
+                        logger.info(f"Created GCS bucket: {self.config.gcs_bucket_name} in project {self.config.gcs_project_id}")
+                    except Exception as create_error:
+                        logger.error(f"Failed to create GCS bucket {self.config.gcs_bucket_name}: {create_error}")
+                        logger.warning("Bucket creation failed. Will use local storage fallback.")
+                        self._gcs_bucket = None
+                else:
+                    logger.error(
+                        f"GCS bucket '{self.config.gcs_bucket_name}' not found and "
+                        "project ID is not provided. Cannot create bucket without project parameter."
+                    )
+                    logger.warning("Please ensure the bucket exists or provide DOC_PARSER_GCS_PROJECT_ID in configuration.")
+                    logger.warning("Falling back to local storage only.")
+                    self._gcs_bucket = None
 
         except DefaultCredentialsError:
             logger.warning("GCS credentials not found, using local storage only")
