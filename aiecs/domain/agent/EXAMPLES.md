@@ -50,7 +50,7 @@ config = AgentConfiguration(
 agent = ToolAgent(
     agent_id="searcher-1",
     name="Search Agent",
-    tools=["search_tool", "apisource_tool"],
+    tools=["search", "apisource"],
     config=config
 )
 
@@ -59,8 +59,8 @@ await agent.activate()
 
 # Execute tool task
 task = {
-    "tool": "search_tool",
-    "operation": "search",
+    "tool": "search",
+    "operation": "search_web",
     "parameters": {"query": "AI agents"}
 }
 result = await agent.execute_task(task, {})
@@ -85,7 +85,7 @@ agent = HybridAgent(
     agent_id="researcher-1",
     name="Research Agent",
     llm_client=llm_client,
-    tools=["search_tool", "apisource_tool"],
+    tools=["search", "apisource"],
     config=config,
     max_iterations=10
 )

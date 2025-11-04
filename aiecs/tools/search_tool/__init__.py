@@ -71,6 +71,7 @@ from .constants import (
 )
 
 # Register the tool with the AIECS tool registry
+# Note: Tool is registered as "search" (not "search_tool") for consistency
 register_tool("search")(SearchTool)
 
 __all__ = [
