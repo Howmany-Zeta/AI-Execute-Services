@@ -88,7 +88,11 @@ class DocumentParserTool(BaseTool):
     
     # Configuration schema
     class Config(BaseModel):
-        """Configuration for the document parser tool"""
+        """Configuration for the document parser tool
+        
+        Automatically reads from environment variables with DOC_PARSER_ prefix.
+        Example: DOC_PARSER_GCS_PROJECT_ID -> gcs_project_id
+        """
         model_config = ConfigDict(env_prefix="DOC_PARSER_")
         
         user_agent: str = Field(
@@ -133,7 +137,15 @@ class DocumentParserTool(BaseTool):
         super().__init__(config)
         
         # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # If config is None or empty, let Pydantic read from environment variables
+        # This ensures that get_tool() can properly load config from .env files
+        if config:
+            # Filter out None values to allow env vars to be used for missing keys
+            filtered_config = {k: v for k, v in config.items() if v is not None}
+            self.config = self.Config(**filtered_config)
+        else:
+            # No config provided, read entirely from environment variables
+            self.config = self.Config()
         
         self.logger = logging.getLogger(__name__)
         os.makedirs(self.config.temp_dir, exist_ok=True)
