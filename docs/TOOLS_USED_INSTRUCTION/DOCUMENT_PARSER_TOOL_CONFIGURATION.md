@@ -471,7 +471,7 @@ export DOC_PARSER_GCS_PROJECT_ID=""
 
 ### Automatic Type Validation
 
-Pydantic automatically validates configuration values:
+Pydantic's BaseSettings automatically validates configuration values:
 
 - `user_agent` must be a non-empty string
 - `max_file_size` must be a positive integer
@@ -834,7 +834,7 @@ except Exception as e:
 
 ```bash
 # Install core dependencies
-pip install pydantic python-dotenv httpx
+pip install pydantic pydantic-settings python-dotenv httpx
 
 # Install document processing dependencies
 pip install python-docx openpyxl python-pptx
@@ -868,6 +868,7 @@ pip install xlrd xlsxwriter
 # Test dependency availability
 try:
     import pydantic
+    from pydantic_settings import BaseSettings
     import httpx
     import docx
     import PyPDF2

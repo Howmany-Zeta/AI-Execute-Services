@@ -813,7 +813,7 @@ export DOC_WRITER_GCS_PROJECT_ID=""
 
 ### Automatic Type Validation
 
-Pydantic automatically validates configuration values:
+Pydantic's BaseSettings automatically validates configuration values:
 
 - `temp_dir` must be a non-empty string
 - `backup_dir` must be a non-empty string
@@ -1244,7 +1244,7 @@ except Exception as e:
 
 ```bash
 # Install core dependencies
-pip install pydantic python-dotenv
+pip install pydantic pydantic-settings python-dotenv
 
 # Install document processing dependencies
 pip install python-docx openpyxl python-pptx
@@ -1278,6 +1278,7 @@ pip install python-magic
 # Test dependency availability
 try:
     import pydantic
+    from pydantic_settings import BaseSettings
     import docx
     import openpyxl
     import reportlab

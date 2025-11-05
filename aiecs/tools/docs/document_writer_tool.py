@@ -12,8 +12,9 @@ from datetime import datetime
 from pathlib import Path
 import tempfile
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import Field, ConfigDict
 from pydantic import ValidationError as PydanticValidationError
+from pydantic_settings import BaseSettings
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -142,8 +143,12 @@ class DocumentWriterTool(BaseTool):
     """
     
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the document writer tool"""
+    class Config(BaseSettings):
+        """Configuration for the document writer tool
+        
+        Automatically reads from environment variables with DOC_WRITER_ prefix.
+        Example: DOC_WRITER_GCS_PROJECT_ID -> gcs_project_id
+        """
         model_config = ConfigDict(env_prefix="DOC_WRITER_")
         
         temp_dir: str = Field(

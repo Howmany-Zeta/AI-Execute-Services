@@ -10,7 +10,8 @@ from pathlib import Path
 import tempfile
 
 import httpx
-from pydantic import BaseModel, Field, ValidationError, ConfigDict
+from pydantic import Field, ValidationError, ConfigDict
+from pydantic_settings import BaseSettings
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -87,7 +88,7 @@ class DocumentParserTool(BaseTool):
     """
     
     # Configuration schema
-    class Config(BaseModel):
+    class Config(BaseSettings):
         """Configuration for the document parser tool
         
         Automatically reads from environment variables with DOC_PARSER_ prefix.
@@ -136,9 +137,9 @@ class DocumentParserTool(BaseTool):
         """Initialize DocumentParserTool with settings"""
         super().__init__(config)
         
-        # Parse configuration
-        # If config is None or empty, let Pydantic read from environment variables
-        # This ensures that get_tool() can properly load config from .env files
+        # Parse configuration with BaseSettings
+        # BaseSettings automatically reads from environment variables with DOC_PARSER_ prefix
+        # Config dict values override environment variables
         if config:
             # Filter out None values to allow env vars to be used for missing keys
             filtered_config = {k: v for k, v in config.items() if v is not None}
