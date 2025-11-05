@@ -518,7 +518,7 @@ export AI_DOC_WRITER_AUTO_BACKUP_ON_AI_WRITE=true
 
 ### Automatic Type Validation
 
-Pydantic automatically validates configuration values:
+Pydantic's BaseSettings automatically validates configuration values:
 
 - `default_ai_provider` must be a valid provider string
 - `max_content_length` must be a positive integer
@@ -866,7 +866,7 @@ except Exception as e:
 
 ```bash
 # Install core dependencies
-pip install pydantic python-dotenv
+pip install pydantic pydantic-settings python-dotenv
 
 # Install AI provider dependencies
 pip install openai google-cloud-aiplatform
@@ -897,6 +897,7 @@ pip install aiohttp asyncio
 # Test dependency availability
 try:
     import pydantic
+    from pydantic_settings import BaseSettings
     import openai
     import asyncio
     print("Core dependencies available")
