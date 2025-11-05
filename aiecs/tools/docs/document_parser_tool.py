@@ -10,8 +10,8 @@ from pathlib import Path
 import tempfile
 
 import httpx
-from pydantic import Field, ValidationError, ConfigDict
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, Field, ValidationError
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -94,7 +94,7 @@ class DocumentParserTool(BaseTool):
         Automatically reads from environment variables with DOC_PARSER_ prefix.
         Example: DOC_PARSER_GCS_PROJECT_ID -> gcs_project_id
         """
-        model_config = ConfigDict(env_prefix="DOC_PARSER_")
+        model_config = SettingsConfigDict(env_prefix="DOC_PARSER_")
         
         user_agent: str = Field(
             default="DocumentParser/1.0",

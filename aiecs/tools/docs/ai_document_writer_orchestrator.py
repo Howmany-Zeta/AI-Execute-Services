@@ -6,8 +6,8 @@ from typing import Dict, Any, List, Optional, Union, Callable
 from enum import Enum
 from datetime import datetime
 
-from pydantic import Field, ValidationError, ConfigDict
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, Field, ValidationError
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -91,7 +91,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
         
         Automatically reads from environment variables with AI_DOC_WRITER_ prefix.
         """
-        model_config = ConfigDict(env_prefix="AI_DOC_WRITER_")
+        model_config = SettingsConfigDict(env_prefix="AI_DOC_WRITER_")
         
         default_ai_provider: str = Field(
             default="openai",
