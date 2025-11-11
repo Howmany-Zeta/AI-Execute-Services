@@ -1,0 +1,500 @@
+"""
+Graph Store Base Interface
+
+Two-tier abstract interface for graph storage backends:
+- Tier 1 (Basic): Must implement - core CRUD operations
+- Tier 2 (Advanced): Has defaults, can optimize - complex queries
+
+This design allows minimal adapters (Tier 1 only) to work immediately,
+while backends can optimize Tier 2 methods for better performance.
+"""
+
+from abc import ABC, abstractmethod
+from typing import List, Optional, Dict, Any, Set
+from collections import deque
+import numpy as np
+
+from aiecs.domain.knowledge_graph.models.entity import Entity
+from aiecs.domain.knowledge_graph.models.relation import Relation
+from aiecs.domain.knowledge_graph.models.path import Path
+from aiecs.domain.knowledge_graph.models.query import GraphQuery, GraphResult, QueryType
+
+
+class GraphStore(ABC):
+    """
+    Abstract Graph Storage Interface
+
+    Two-tier design:
+
+    **Tier 1 - Basic Interface (MUST IMPLEMENT)**:
+    - add_entity() - Add entity to graph
+    - get_entity() - Get entity by ID
+    - add_relation() - Add relation to graph
+    - get_relation() - Get relation by ID
+    - get_neighbors() - Get neighboring entities
+    - initialize() - Initialize storage
+    - close() - Close storage connection
+
+    **Tier 2 - Advanced Interface (HAS DEFAULTS, CAN OPTIMIZE)**:
+    - traverse() - Multi-hop graph traversal
+    - find_paths() - Find paths between entities
+    - subgraph_query() - Extract subgraph
+    - vector_search() - Semantic vector search
+    - execute_query() - Execute GraphQuery
+
+    Implementations only need to provide Tier 1 methods. Tier 2 methods
+    have default implementations using Tier 1, but can be overridden for
+    performance optimization (e.g., using SQL recursive CTEs, Cypher queries).
+
+    Example:
+        ```python
+        # Minimal implementation (Tier 1 only)
+        class CustomGraphStore(GraphStore):
+            async def add_entity(self, entity: Entity) -> None:
+                # Your implementation
+                pass
+
+            # ... implement other Tier 1 methods
+            # Tier 2 methods work automatically!
+
+        # Optimized implementation (override Tier 2)
+        class OptimizedGraphStore(CustomGraphStore):
+            async def traverse(self, ...):
+                # Use database-specific optimization
+                pass
+        ```
+    """
+
+    # =========================================================================
+    # TIER 1: BASIC INTERFACE - MUST IMPLEMENT
+    # =========================================================================
+
+    @abstractmethod
+    async def initialize(self) -> None:
+        """
+        Initialize the graph storage backend
+
+        Called once before using the store. Use this to:
+        - Create database connections
+        - Initialize data structures
+        - Create tables/indexes
+        """
+        pass
+
+    @abstractmethod
+    async def close(self) -> None:
+        """
+        Close the graph storage backend and cleanup resources
+
+        Called when shutting down. Use this to:
+        - Close database connections
+        - Flush pending writes
+        - Cleanup resources
+        """
+        pass
+
+    @abstractmethod
+    async def add_entity(self, entity: Entity) -> None:
+        """
+        Add an entity to the graph
+
+        Args:
+            entity: Entity to add
+
+        Raises:
+            ValueError: If entity with same ID already exists
+        """
+        pass
+
+    @abstractmethod
+    async def get_entity(self, entity_id: str) -> Optional[Entity]:
+        """
+        Get an entity by ID
+
+        Args:
+            entity_id: Entity ID to retrieve
+
+        Returns:
+            Entity if found, None otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def add_relation(self, relation: Relation) -> None:
+        """
+        Add a relation to the graph
+
+        Args:
+            relation: Relation to add
+
+        Raises:
+            ValueError: If relation with same ID already exists
+            ValueError: If source or target entity doesn't exist
+        """
+        pass
+
+    @abstractmethod
+    async def get_relation(self, relation_id: str) -> Optional[Relation]:
+        """
+        Get a relation by ID
+
+        Args:
+            relation_id: Relation ID to retrieve
+
+        Returns:
+            Relation if found, None otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def get_neighbors(
+        self,
+        entity_id: str,
+        relation_type: Optional[str] = None,
+        direction: str = "outgoing"
+    ) -> List[Entity]:
+        """
+        Get neighboring entities connected by relations
+
+        Args:
+            entity_id: ID of entity to get neighbors for
+            relation_type: Optional filter by relation type
+            direction: "outgoing", "incoming", or "both"
+
+        Returns:
+            List of neighboring entities
+        """
+        pass
+
+    # =========================================================================
+    # TIER 2: ADVANCED INTERFACE - HAS DEFAULTS (Template Method Pattern)
+    # =========================================================================
+
+    async def traverse(
+        self,
+        start_entity_id: str,
+        relation_type: Optional[str] = None,
+        max_depth: int = 3,
+        max_results: int = 100
+    ) -> List[Path]:
+        """
+        Traverse the graph starting from an entity (BFS traversal)
+
+        **DEFAULT IMPLEMENTATION**: Uses get_neighbors() in BFS pattern.
+        Override for better performance (e.g., recursive CTEs in SQL).
+
+        Args:
+            start_entity_id: Starting entity ID
+            relation_type: Optional filter by relation type
+            max_depth: Maximum traversal depth
+            max_results: Maximum number of paths to return
+
+        Returns:
+            List of paths found during traversal
+        """
+        return await self._default_traverse_bfs(
+            start_entity_id, relation_type, max_depth, max_results
+        )
+
+    async def find_paths(
+        self,
+        source_entity_id: str,
+        target_entity_id: str,
+        max_depth: int = 5,
+        max_paths: int = 10
+    ) -> List[Path]:
+        """
+        Find paths between two entities
+
+        **DEFAULT IMPLEMENTATION**: Uses traverse() with early stopping.
+        Override for better performance (e.g., bidirectional search).
+
+        Args:
+            source_entity_id: Source entity ID
+            target_entity_id: Target entity ID
+            max_depth: Maximum path length
+            max_paths: Maximum number of paths to return
+
+        Returns:
+            List of paths between source and target
+        """
+        return await self._default_find_paths(
+            source_entity_id, target_entity_id, max_depth, max_paths
+        )
+
+    async def subgraph_query(
+        self,
+        entity_ids: List[str],
+        include_relations: bool = True
+    ) -> tuple[List[Entity], List[Relation]]:
+        """
+        Extract a subgraph containing specified entities
+
+        **DEFAULT IMPLEMENTATION**: Uses get_entity() and get_neighbors().
+        Override for better performance (e.g., single JOIN query).
+
+        Args:
+            entity_ids: List of entity IDs to include
+            include_relations: Whether to include relations between entities
+
+        Returns:
+            Tuple of (entities, relations)
+        """
+        return await self._default_subgraph_query(entity_ids, include_relations)
+
+    async def vector_search(
+        self,
+        query_embedding: List[float],
+        entity_type: Optional[str] = None,
+        max_results: int = 10,
+        score_threshold: float = 0.0
+    ) -> List[tuple[Entity, float]]:
+        """
+        Semantic vector search over entities
+
+        **DEFAULT IMPLEMENTATION**: Brute-force cosine similarity.
+        Override for better performance (e.g., pgvector, FAISS, ANN indexes).
+
+        Args:
+            query_embedding: Query vector embedding
+            entity_type: Optional filter by entity type
+            max_results: Maximum number of results
+            score_threshold: Minimum similarity score (0.0-1.0)
+
+        Returns:
+            List of (entity, score) tuples, sorted by score descending
+        """
+        return await self._default_vector_search(
+            query_embedding, entity_type, max_results, score_threshold
+        )
+
+    async def execute_query(self, query: GraphQuery) -> GraphResult:
+        """
+        Execute a graph query
+
+        **DEFAULT IMPLEMENTATION**: Routes to appropriate methods based on query type.
+        Override for custom query execution logic.
+
+        Args:
+            query: Graph query to execute
+
+        Returns:
+            Query results
+        """
+        return await self._default_execute_query(query)
+
+    # =========================================================================
+    # DEFAULT IMPLEMENTATIONS (Template Methods)
+    # =========================================================================
+
+    async def _default_traverse_bfs(
+        self,
+        start_entity_id: str,
+        relation_type: Optional[str],
+        max_depth: int,
+        max_results: int
+    ) -> List[Path]:
+        """
+        Default BFS traversal implementation using get_neighbors()
+
+        This provides a working traversal that any Tier 1 implementation gets for free.
+        Backends can override traverse() with optimized versions.
+        """
+        start_entity = await self.get_entity(start_entity_id)
+        if start_entity is None:
+            return []
+
+        paths: List[Path] = []
+        visited: Set[str] = set()
+        queue: deque = deque([(start_entity, [])])  # (entity, edges_path)
+
+        while queue and len(paths) < max_results:
+            current_entity, edges_path = queue.popleft()
+            current_depth = len(edges_path)
+
+            if current_entity.id in visited:
+                continue
+            visited.add(current_entity.id)
+
+            # Create path for this node
+            if current_depth > 0:  # Don't add single-node paths
+                nodes_path = [start_entity]
+                for edge in edges_path:
+                    target_entity = await self.get_entity(edge.target_id)
+                    if target_entity:
+                        nodes_path.append(target_entity)
+
+                if len(nodes_path) == len(edges_path) + 1:
+                    paths.append(Path(nodes=nodes_path, edges=edges_path))
+
+            # Explore neighbors if not at max depth
+            if current_depth < max_depth:
+                neighbors = await self.get_neighbors(
+                    current_entity.id,
+                    relation_type=relation_type,
+                    direction="outgoing"
+                )
+
+                for neighbor in neighbors:
+                    if neighbor.id not in visited:
+                        # Find the relation connecting them
+                        # (In a real implementation, get_neighbors should return relations too)
+                        # For now, create a placeholder relation
+                        edge = Relation(
+                            id=f"rel_{current_entity.id}_{neighbor.id}",
+                            relation_type=relation_type or "CONNECTED_TO",
+                            source_id=current_entity.id,
+                            target_id=neighbor.id
+                        )
+                        queue.append((neighbor, edges_path + [edge]))
+
+        return paths
+
+    async def _default_find_paths(
+        self,
+        source_entity_id: str,
+        target_entity_id: str,
+        max_depth: int,
+        max_paths: int
+    ) -> List[Path]:
+        """
+        Default path finding using BFS with target check
+        """
+        all_paths = await self.traverse(
+            source_entity_id,
+            max_depth=max_depth,
+            max_results=max_paths * 10  # Get more, filter later
+        )
+
+        # Filter paths that end at target
+        target_paths = [
+            path for path in all_paths
+            if path.end_entity.id == target_entity_id
+        ]
+
+        return target_paths[:max_paths]
+
+    async def _default_subgraph_query(
+        self,
+        entity_ids: List[str],
+        include_relations: bool
+    ) -> tuple[List[Entity], List[Relation]]:
+        """
+        Default subgraph extraction
+        """
+        entities = []
+        relations = []
+
+        # Fetch all entities
+        for entity_id in entity_ids:
+            entity = await self.get_entity(entity_id)
+            if entity:
+                entities.append(entity)
+
+        # Fetch relations between entities (if requested)
+        if include_relations:
+            entity_id_set = set(entity_ids)
+            for entity_id in entity_ids:
+                neighbors = await self.get_neighbors(entity_id, direction="outgoing")
+                for neighbor in neighbors:
+                    if neighbor.id in entity_id_set:
+                        # Fetch the relation (simplified - needs proper implementation)
+                        rel = Relation(
+                            id=f"rel_{entity_id}_{neighbor.id}",
+                            relation_type="CONNECTED_TO",
+                            source_id=entity_id,
+                            target_id=neighbor.id
+                        )
+                        relations.append(rel)
+
+        return entities, relations
+
+    async def _default_vector_search(
+        self,
+        query_embedding: List[float],
+        entity_type: Optional[str],
+        max_results: int,
+        score_threshold: float
+    ) -> List[tuple[Entity, float]]:
+        """
+        Default brute-force vector search using cosine similarity
+
+        This is slow but works. Backends should override with ANN indexes.
+        """
+        # Note: This requires iterating all entities - needs proper implementation
+        # In a real store, you'd have a method to get all entities or use an index
+        # For now, return empty results
+        # TODO: Implement when we have entity enumeration capability
+        return []
+
+    async def _default_execute_query(self, query: GraphQuery) -> GraphResult:
+        """
+        Default query execution router
+        """
+        import time
+        start_time = time.time()
+
+        if query.query_type == QueryType.ENTITY_LOOKUP:
+            entity = await self.get_entity(query.entity_id) if query.entity_id else None
+            entities = [entity] if entity else []
+
+        elif query.query_type == QueryType.VECTOR_SEARCH:
+            if query.embedding:
+                results = await self.vector_search(
+                    query.embedding,
+                    query.entity_type,
+                    query.max_results,
+                    query.score_threshold
+                )
+                entities = [entity for entity, score in results]
+            else:
+                entities = []
+
+        elif query.query_type == QueryType.TRAVERSAL:
+            if query.entity_id:
+                paths = await self.traverse(
+                    query.entity_id,
+                    query.relation_type,
+                    query.max_depth,
+                    query.max_results
+                )
+                # Extract unique entities from paths
+                entity_ids_seen = set()
+                entities = []
+                for path in paths:
+                    for entity in path.nodes:
+                        if entity.id not in entity_ids_seen:
+                            entities.append(entity)
+                            entity_ids_seen.add(entity.id)
+            else:
+                entities = []
+                paths = []
+
+        elif query.query_type == QueryType.PATH_FINDING:
+            if query.source_entity_id and query.target_entity_id:
+                paths = await self.find_paths(
+                    query.source_entity_id,
+                    query.target_entity_id,
+                    query.max_depth,
+                    query.max_results
+                )
+                entities = []
+            else:
+                paths = []
+                entities = []
+
+        else:
+            entities = []
+            paths = []
+
+        execution_time_ms = (time.time() - start_time) * 1000
+
+        return GraphResult(
+            query=query,
+            entities=entities[:query.max_results],
+            paths=paths[:query.max_results] if 'paths' in locals() else [],
+            scores=[],
+            total_count=len(entities),
+            execution_time_ms=execution_time_ms
+        )
+

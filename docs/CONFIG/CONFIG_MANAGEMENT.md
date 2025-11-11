@@ -223,10 +223,14 @@ db_password: str = Field(default="", alias="DB_PASSWORD")
 db_name: str = Field(default="aiecs", alias="DB_NAME")
 db_port: int = Field(default=5432, alias="DB_PORT")
 postgres_url: str = Field(default="", alias="POSTGRES_URL")
+db_connection_mode: str = Field(default="local", alias="DB_CONNECTION_MODE")
 ```
 - **用途**: PostgreSQL 数据库连接
-- **默认值**: 本地开发环境配置
-- **生产环境**: 建议使用 `POSTGRES_URL` 连接字符串
+- **连接模式**: 
+  - `"local"` (默认): 使用单独参数 (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`)
+  - `"cloud"`: 使用连接字符串 (`POSTGRES_URL`)
+- **默认值**: 本地开发环境配置 (`DB_CONNECTION_MODE=local`)
+- **生产环境**: 建议设置 `DB_CONNECTION_MODE=cloud` 并使用 `POSTGRES_URL` 连接字符串
 
 #### 消息队列配置
 ```python

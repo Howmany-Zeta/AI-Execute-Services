@@ -2,6 +2,9 @@ from pydantic import Field, ConfigDict
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Settings(BaseSettings):
     # LLM Provider Configuration (optional until used)
@@ -33,6 +36,9 @@ class Settings(BaseSettings):
     db_name: str = Field(default="aiecs", alias="DB_NAME")
     db_port: int = Field(default=5432, alias="DB_PORT")
     postgres_url: str = Field(default="", alias="POSTGRES_URL")
+    # Connection mode: "local" (use individual parameters) or "cloud" (use POSTGRES_URL)
+    # If "cloud" is set, POSTGRES_URL will be used; otherwise individual parameters are used
+    db_connection_mode: str = Field(default="local", alias="DB_CONNECTION_MODE")
 
     # Google Cloud Storage Configuration (optional)
     google_cloud_project_id: str = Field(default="", alias="GOOGLE_CLOUD_PROJECT_ID")
@@ -58,14 +64,44 @@ class Settings(BaseSettings):
 
     @property
     def database_config(self) -> dict:
-        """Get database configuration for asyncpg"""
-        return {
-            "host": self.db_host,
-            "user": self.db_user,
-            "password": self.db_password,
-            "database": self.db_name,
-            "port": self.db_port
-        }
+        """
+        Get database configuration for asyncpg.
+        
+        Supports both connection string (POSTGRES_URL) and individual parameters.
+        The connection mode is controlled by DB_CONNECTION_MODE:
+        - "cloud": Use POSTGRES_URL connection string (for cloud databases)
+        - "local": Use individual parameters (for local databases)
+        
+        If DB_CONNECTION_MODE is "cloud" but POSTGRES_URL is not provided,
+        falls back to individual parameters with a warning.
+        """
+        # Check connection mode
+        if self.db_connection_mode.lower() == "cloud":
+            # Use connection string for cloud databases
+            if self.postgres_url:
+                return {"dsn": self.postgres_url}
+            else:
+                logger.warning(
+                    "DB_CONNECTION_MODE is set to 'cloud' but POSTGRES_URL is not provided. "
+                    "Falling back to individual parameters (local mode)."
+                )
+                # Fall back to individual parameters
+                return {
+                    "host": self.db_host,
+                    "user": self.db_user,
+                    "password": self.db_password,
+                    "database": self.db_name,
+                    "port": self.db_port
+                }
+        else:
+            # Use individual parameters for local databases (default)
+            return {
+                "host": self.db_host,
+                "user": self.db_user,
+                "password": self.db_password,
+                "database": self.db_name,
+                "port": self.db_port
+            }
 
     @property
     def file_storage_config(self) -> dict:

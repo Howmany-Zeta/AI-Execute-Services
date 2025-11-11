@@ -127,6 +127,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.
 .venv
 env/
 venv/
@@ -137,6 +138,8 @@ venv.bak/
 # Environment files with API keys (never commit these!)
 .env.search
 .env.apisource
+.env.PostgreSQL
+.env.test
 
 # Spyder project settings
 .spyderproject
