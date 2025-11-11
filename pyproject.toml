@@ -25,6 +25,8 @@ pytest = "^8.4.2"
 pytest-asyncio = "^1.2.0"
 pytest-cov = "^7.0.0"
 pytest-timeout = "^2.4.0"
+mypy = "^1.18.2"
+flake8 = "^7.3.0"
 
 [project]
 name = "aiecs"
@@ -145,6 +147,8 @@ dependencies = [
     # =============================================================================
     "sqlalchemy (>=2.0.41,<3.0.0)",                 # SQL toolkit and ORM
     "asyncpg (>=0.30.0,<1.0.0)",                    # PostgreSQL async driver
+    "aiosqlite (>=0.20.0,<1.0.0)",                  # SQLite async driver for graph storage
+    "networkx (>=3.0,<4.0.0)",                      # Graph data structures and algorithms for knowledge graphs
 
     # =============================================================================
     # Monitoring, Metrics, and Observability

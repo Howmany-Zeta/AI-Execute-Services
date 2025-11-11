@@ -24,14 +24,19 @@ XAI_API_KEY=your-xai-api-key-here
 CELERY_BROKER_URL=redis://localhost:6379/0
 
 # PostgreSQL 数据库配置
+# 连接模式：设置为 "local" 使用单独参数，设置为 "cloud" 使用连接字符串
+# 默认：local
+DB_CONNECTION_MODE=local
+
+# 本地模式配置（当 DB_CONNECTION_MODE=local 时使用）
 DB_HOST=localhost
 DB_USER=postgres
 DB_PASSWORD=your_database_password
 DB_NAME=aiecs
 DB_PORT=5432
 
-# 或使用完整的数据库 URL（可选）
-# POSTGRES_URL=postgresql://postgres:password@localhost:5432/aiecs
+# 云端模式配置（当 DB_CONNECTION_MODE=cloud 时使用）
+# POSTGRES_URL=postgresql://user:password@host:port/database?sslmode=require
 
 # =====================================
 # 云存储配置（可选）

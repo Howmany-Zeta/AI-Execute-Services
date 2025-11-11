@@ -39,6 +39,7 @@ from .conversation_models import (
     ConversationParticipant, ConversationSession, AgentCommunicationMessage,
     create_session_key, validate_conversation_isolation_pattern
 )
+from .graph_memory import GraphMemoryMixin, ContextEngineWithGraph
 
 __all__ = [
     'ContextEngine',
@@ -48,6 +49,8 @@ __all__ = [
     'ConversationSession',
     'AgentCommunicationMessage',
     'create_session_key',
-    'validate_conversation_isolation_pattern'
+    'validate_conversation_isolation_pattern',
+    'GraphMemoryMixin',
+    'ContextEngineWithGraph',
 ]
 
