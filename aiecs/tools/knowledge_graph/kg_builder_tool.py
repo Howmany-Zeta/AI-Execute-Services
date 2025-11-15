@@ -24,6 +24,8 @@ from aiecs.application.knowledge_graph.builder.document_builder import (
 )
 from aiecs.application.knowledge_graph.builder.structured_pipeline import (
     StructuredDataPipeline,
+)
+from aiecs.application.knowledge_graph.builder.schema_mapping import (
     SchemaMapping,
     EntityMapping,
     RelationMapping,
