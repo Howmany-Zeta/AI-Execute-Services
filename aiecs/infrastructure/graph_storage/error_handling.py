@@ -5,6 +5,7 @@ Provides structured error handling, logging, and exception types
 for production-ready graph storage operations.
 """
 
+import asyncio
 import logging
 import traceback
 from typing import Optional, Dict, Any, Callable
@@ -18,41 +19,35 @@ logger = logging.getLogger(__name__)
 
 class GraphStoreError(Exception):
     """Base exception for graph store errors"""
-    pass
 
 
 class GraphStoreConnectionError(GraphStoreError):
     """Connection-related errors"""
-    pass
 
 
 class GraphStoreQueryError(GraphStoreError):
     """Query execution errors"""
-    pass
 
 
 class GraphStoreValidationError(GraphStoreError):
     """Data validation errors"""
-    pass
 
 
 class GraphStoreNotFoundError(GraphStoreError):
     """Entity/relation not found errors"""
-    pass
 
 
 class GraphStoreConflictError(GraphStoreError):
     """Conflict errors (duplicate IDs, etc.)"""
-    pass
 
 
 class GraphStoreTimeoutError(GraphStoreError):
     """Operation timeout errors"""
-    pass
 
 
 class ErrorSeverity(str, Enum):
     """Error severity levels"""
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -62,6 +57,7 @@ class ErrorSeverity(str, Enum):
 @dataclass
 class ErrorContext:
     """Context information for error reporting"""
+
     operation: str
     entity_id: Optional[str] = None
     relation_id: Optional[str] = None
@@ -80,10 +76,12 @@ class ErrorContext:
             "operation": self.operation,
             "entity_id": self.entity_id,
             "relation_id": self.relation_id,
-            "query": self.query[:100] + "..." if self.query and len(self.query) > 100 else self.query,
+            "query": (
+                self.query[:100] + "..." if self.query and len(self.query) > 100 else self.query
+            ),
             "parameters": self.parameters,
             "timestamp": self.timestamp.isoformat(),
-            "severity": self.severity.value
+            "severity": self.severity.value,
         }
 
 
@@ -120,12 +118,7 @@ class ErrorHandler:
         """
         self.log_level = log_level
 
-    def handle_error(
-        self,
-        error: Exception,
-        context: ErrorContext,
-        reraise: bool = True
-    ) -> None:
+    def handle_error(self, error: Exception, context: ErrorContext, reraise: bool = True) -> None:
         """
         Handle and log an error with context
 
@@ -158,27 +151,37 @@ class ErrorHandler:
         error_type = type(error).__name__
 
         # Connection errors
-        if any(keyword in error_str for keyword in ['connection', 'connect', 'timeout', 'network']):
+        if any(keyword in error_str for keyword in ["connection", "connect", "timeout", "network"]):
             return GraphStoreConnectionError(str(error))
 
         # Not found errors
-        if any(keyword in error_str for keyword in ['not found', 'does not exist', 'missing']):
+        if any(keyword in error_str for keyword in ["not found", "does not exist", "missing"]):
             return GraphStoreNotFoundError(str(error))
 
         # Conflict errors
-        if any(keyword in error_str for keyword in ['duplicate', 'already exists', 'conflict', 'unique']):
+        if any(
+            keyword in error_str
+            for keyword in [
+                "duplicate",
+                "already exists",
+                "conflict",
+                "unique",
+            ]
+        ):
             return GraphStoreConflictError(str(error))
 
         # Validation errors
-        if any(keyword in error_str for keyword in ['invalid', 'validation', 'required', 'missing']):
+        if any(
+            keyword in error_str for keyword in ["invalid", "validation", "required", "missing"]
+        ):
             return GraphStoreValidationError(str(error))
 
         # Timeout errors
-        if 'timeout' in error_str or 'TimeoutError' in error_type:
+        if "timeout" in error_str or "TimeoutError" in error_type:
             return GraphStoreTimeoutError(str(error))
 
         # Query errors
-        if any(keyword in error_str for keyword in ['syntax', 'query', 'sql', 'execute']):
+        if any(keyword in error_str for keyword in ["syntax", "query", "sql", "execute"]):
             return GraphStoreQueryError(str(error))
 
         # Return original if no mapping
@@ -196,7 +199,7 @@ class ErrorHandler:
             "error_type": type(error).__name__,
             "error_message": str(error),
             "context": context.to_dict(),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc(),
         }
 
         # Log based on severity
@@ -213,7 +216,7 @@ class ErrorHandler:
 def error_handler(
     operation: str,
     severity: ErrorSeverity = ErrorSeverity.MEDIUM,
-    reraise: bool = True
+    reraise: bool = True,
 ):
     """
     Decorator for automatic error handling
@@ -231,6 +234,7 @@ def error_handler(
             pass
         ```
     """
+
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         async def wrapper(self, *args, **kwargs):
@@ -240,18 +244,18 @@ def error_handler(
             entity_id = None
             relation_id = None
 
-            if args and hasattr(args[0], 'id'):
+            if args and hasattr(args[0], "id"):
                 entity_id = args[0].id
-            elif 'entity_id' in kwargs:
-                entity_id = kwargs['entity_id']
-            elif 'relation_id' in kwargs:
-                relation_id = kwargs['relation_id']
+            elif "entity_id" in kwargs:
+                entity_id = kwargs["entity_id"]
+            elif "relation_id" in kwargs:
+                relation_id = kwargs["relation_id"]
 
             context = ErrorContext(
                 operation=operation,
                 entity_id=entity_id,
                 relation_id=relation_id,
-                severity=severity
+                severity=severity,
             )
 
             try:
@@ -260,6 +264,7 @@ def error_handler(
                 handler.handle_error(e, context, reraise=reraise)
 
         return wrapper
+
     return decorator
 
 
@@ -286,7 +291,7 @@ class RetryHandler:
         max_retries: int = 3,
         base_delay: float = 1.0,
         max_delay: float = 60.0,
-        exponential_base: float = 2.0
+        exponential_base: float = 2.0,
     ):
         """
         Initialize retry handler
@@ -303,11 +308,7 @@ class RetryHandler:
         self.exponential_base = exponential_base
 
     async def execute(
-        self,
-        func: Callable,
-        retry_on: Optional[list] = None,
-        *args,
-        **kwargs
+        self, func: Callable, retry_on: Optional[list] = None, *args, **kwargs
     ) -> Any:
         """
         Execute function with retry logic
@@ -345,8 +346,8 @@ class RetryHandler:
 
                 # Calculate delay with exponential backoff
                 delay = min(
-                    self.base_delay * (self.exponential_base ** attempt),
-                    self.max_delay
+                    self.base_delay * (self.exponential_base**attempt),
+                    self.max_delay,
                 )
 
                 logger.warning(
@@ -361,8 +362,7 @@ class RetryHandler:
 
 # Configure logging for graph storage
 def configure_graph_storage_logging(
-    level: int = logging.INFO,
-    format_string: Optional[str] = None
+    level: int = logging.INFO, format_string: Optional[str] = None
 ) -> None:
     """
     Configure logging for graph storage modules
@@ -373,15 +373,14 @@ def configure_graph_storage_logging(
     """
     if format_string is None:
         format_string = (
-            '%(asctime)s - %(name)s - %(levelname)s - '
-            '%(message)s - [%(filename)s:%(lineno)d]'
+            "%(asctime)s - %(name)s - %(levelname)s - " "%(message)s - [%(filename)s:%(lineno)d]"
         )
 
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter(format_string))
 
     # Configure graph storage logger
-    graph_logger = logging.getLogger('aiecs.infrastructure.graph_storage')
+    graph_logger = logging.getLogger("aiecs.infrastructure.graph_storage")
     graph_logger.setLevel(level)
     graph_logger.addHandler(handler)
 
@@ -389,5 +388,3 @@ def configure_graph_storage_logging(
 
 
 # Import asyncio for retry handler
-import asyncio
-

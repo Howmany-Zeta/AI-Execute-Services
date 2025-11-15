@@ -10,10 +10,24 @@ from pydantic import BaseModel, Field
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
 from aiecs.infrastructure.graph_storage.in_memory import InMemoryGraphStore
-from aiecs.application.knowledge_graph.extractors.llm_entity_extractor import LLMEntityExtractor
-from aiecs.application.knowledge_graph.extractors.llm_relation_extractor import LLMRelationExtractor
-from aiecs.application.knowledge_graph.builder.graph_builder import GraphBuilder
-from aiecs.application.knowledge_graph.builder.document_builder import DocumentGraphBuilder
+from aiecs.application.knowledge_graph.extractors.llm_entity_extractor import (
+    LLMEntityExtractor,
+)
+from aiecs.application.knowledge_graph.extractors.llm_relation_extractor import (
+    LLMRelationExtractor,
+)
+from aiecs.application.knowledge_graph.builder.graph_builder import (
+    GraphBuilder,
+)
+from aiecs.application.knowledge_graph.builder.document_builder import (
+    DocumentGraphBuilder,
+)
+from aiecs.application.knowledge_graph.builder.structured_pipeline import (
+    StructuredDataPipeline,
+    SchemaMapping,
+    EntityMapping,
+    RelationMapping,
+)
 
 
 class KGBuilderInput(BaseModel):
@@ -21,72 +35,74 @@ class KGBuilderInput(BaseModel):
 
     action: str = Field(
         ...,
-        description="Action to perform: 'build_from_text', 'build_from_document', 'get_stats'"
+        description="Action to perform: 'build_from_text', 'build_from_document', 'build_from_structured_data', 'get_stats'",
     )
     text: Optional[str] = Field(
         None,
-        description="Text to extract knowledge from (for 'build_from_text' action)"
+        description="Text to extract knowledge from (for 'build_from_text' action)",
     )
     document_path: Optional[str] = Field(
         None,
-        description="Path to document file (for 'build_from_document' action)"
+        description="Path to document file (for 'build_from_document' action)",
     )
     source: Optional[str] = Field(
         None,
-        description="Optional source identifier (document name, URL, etc.)"
+        description="Optional source identifier (document name, URL, etc.)",
     )
     entity_types: Optional[List[str]] = Field(
         None,
         description=(
-            "Optional list of entity types to extract "
-            "(e.g., ['Person', 'Company', 'Location'])"
-        )
+            "Optional list of entity types to extract " "(e.g., ['Person', 'Company', 'Location'])"
+        ),
+    )
+    data_path: Optional[str] = Field(
+        None,
+        description="Path to structured data file (CSV or JSON) for 'build_from_structured_data' action",
+    )
+    schema_mapping: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Schema mapping configuration for structured data import (entity_mappings, relation_mappings)",
     )
     relation_types: Optional[List[str]] = Field(
         None,
-        description="Optional list of relation types to extract (e.g., ['WORKS_FOR', 'LOCATED_IN'])"
+        description="Optional list of relation types to extract (e.g., ['WORKS_FOR', 'LOCATED_IN'])",
     )
 
 
 # Schemas for individual operations (used with run_async)
 class BuildFromTextSchema(BaseModel):
     """Schema for build_from_text operation"""
-    text: str = Field(
-        ...,
-        description="Text to extract knowledge from"
-    )
+
+    text: str = Field(..., description="Text to extract knowledge from")
     source: Optional[str] = Field(
         default="unknown",
-        description="Optional source identifier (document name, URL, etc.)"
+        description="Optional source identifier (document name, URL, etc.)",
     )
     entity_types: Optional[List[str]] = Field(
         default=None,
-        description="Optional list of entity types to extract (e.g., ['Person', 'Company', 'Location'])"
+        description="Optional list of entity types to extract (e.g., ['Person', 'Company', 'Location'])",
     )
     relation_types: Optional[List[str]] = Field(
         default=None,
-        description="Optional list of relation types to extract (e.g., ['WORKS_FOR', 'LOCATED_IN'])"
+        description="Optional list of relation types to extract (e.g., ['WORKS_FOR', 'LOCATED_IN'])",
     )
 
 
 class BuildFromDocumentSchema(BaseModel):
     """Schema for build_from_document operation"""
-    document_path: str = Field(
-        ...,
-        description="Path to document file (PDF, DOCX, TXT, etc.)"
-    )
+
+    document_path: str = Field(..., description="Path to document file (PDF, DOCX, TXT, etc.)")
     entity_types: Optional[List[str]] = Field(
-        default=None,
-        description="Optional list of entity types to extract"
+        default=None, description="Optional list of entity types to extract"
     )
     relation_types: Optional[List[str]] = Field(
-        default=None,
-        description="Optional list of relation types to extract"
+        default=None, description="Optional list of relation types to extract"
     )
 
 
 class GetStatsSchema(BaseModel):
     """Schema for get_stats operation"""
+
     pass  # No parameters needed
 
 
@@ -169,14 +185,14 @@ class KnowledgeGraphBuilderTool(BaseTool):
             entity_extractor=entity_extractor,
             relation_extractor=relation_extractor,
             enable_deduplication=True,
-            enable_linking=True
+            enable_linking=True,
         )
 
         # Initialize document builder
         self.document_builder = DocumentGraphBuilder(
             graph_builder=self.graph_builder,
             chunk_size=2000,
-            enable_chunking=True
+            enable_chunking=True,
         )
 
         self._initialized = True
@@ -200,6 +216,8 @@ class KnowledgeGraphBuilderTool(BaseTool):
             return await self._build_from_text(kwargs)
         elif action == "build_from_document":
             return await self._build_from_document(kwargs)
+        elif action == "build_from_structured_data":
+            return await self._build_from_structured_data(kwargs)
         elif action == "get_stats":
             return await self._get_stats()
         else:
@@ -207,8 +225,8 @@ class KnowledgeGraphBuilderTool(BaseTool):
                 "success": False,
                 "error": (
                     f"Unknown action: {action}. "
-                    f"Supported actions: build_from_text, build_from_document, get_stats"
-                )
+                    f"Supported actions: build_from_text, build_from_document, build_from_structured_data, get_stats"
+                ),
             }
 
     async def _build_from_text(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
@@ -223,15 +241,15 @@ class KnowledgeGraphBuilderTool(BaseTool):
         """
         text = kwargs.get("text")
         if not text:
-            return {"success": False, "error": "Missing required parameter: text"}
+            return {
+                "success": False,
+                "error": "Missing required parameter: text",
+            }
 
         source = kwargs.get("source", "unknown")
 
         # Build graph
-        result = await self.graph_builder.build_from_text(
-            text=text,
-            source=source
-        )
+        result = await self.graph_builder.build_from_text(text=text, source=source)
 
         return {
             "success": result.success,
@@ -242,7 +260,7 @@ class KnowledgeGraphBuilderTool(BaseTool):
             "relations_deduplicated": result.relations_deduplicated,
             "duration_seconds": result.duration_seconds,
             "errors": result.errors,
-            "warnings": result.warnings
+            "warnings": result.warnings,
         }
 
     async def _build_from_document(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
@@ -257,7 +275,10 @@ class KnowledgeGraphBuilderTool(BaseTool):
         """
         document_path = kwargs.get("document_path")
         if not document_path:
-            return {"success": False, "error": "Missing required parameter: document_path"}
+            return {
+                "success": False,
+                "error": "Missing required parameter: document_path",
+            }
 
         # Build graph from document
         result = await self.document_builder.build_from_document(document_path)
@@ -270,8 +291,84 @@ class KnowledgeGraphBuilderTool(BaseTool):
             "chunks_processed": result.chunks_processed,
             "total_entities_added": result.total_entities_added,
             "total_relations_added": result.total_relations_added,
-            "errors": result.errors
+            "errors": result.errors,
         }
+
+    async def _build_from_structured_data(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Build knowledge graph from structured data (CSV or JSON)
+
+        Args:
+            kwargs: Tool input parameters
+
+        Returns:
+            Build result dictionary
+        """
+        data_path = kwargs.get("data_path")
+        if not data_path:
+            return {
+                "success": False,
+                "error": "Missing required parameter: data_path",
+            }
+
+        schema_mapping_dict = kwargs.get("schema_mapping")
+        if not schema_mapping_dict:
+            return {
+                "success": False,
+                "error": "Missing required parameter: schema_mapping",
+            }
+
+        try:
+            # Parse schema mapping
+            entity_mappings = []
+            for em_dict in schema_mapping_dict.get("entity_mappings", []):
+                entity_mappings.append(EntityMapping(**em_dict))
+
+            relation_mappings = []
+            for rm_dict in schema_mapping_dict.get("relation_mappings", []):
+                relation_mappings.append(RelationMapping(**rm_dict))
+
+            schema_mapping = SchemaMapping(
+                entity_mappings=entity_mappings,
+                relation_mappings=relation_mappings,
+            )
+
+            # Create structured data pipeline
+            pipeline = StructuredDataPipeline(
+                mapping=schema_mapping,
+                graph_store=self.graph_store,
+                batch_size=100,
+                skip_errors=True,
+            )
+
+            # Import data based on file extension
+            if data_path.endswith(".csv"):
+                result = await pipeline.import_from_csv(data_path)
+            elif data_path.endswith(".json"):
+                result = await pipeline.import_from_json(data_path)
+            else:
+                return {
+                    "success": False,
+                    "error": "Unsupported file format. Supported: .csv, .json",
+                }
+
+            return {
+                "success": result.success,
+                "data_path": data_path,
+                "entities_added": result.entities_added,
+                "relations_added": result.relations_added,
+                "rows_processed": result.rows_processed,
+                "rows_failed": result.rows_failed,
+                "duration_seconds": result.duration_seconds,
+                "errors": result.errors,
+                "warnings": result.warnings,
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to import structured data: {str(e)}",
+            }
 
     async def _get_stats(self) -> Dict[str, Any]:
         """
@@ -281,20 +378,17 @@ class KnowledgeGraphBuilderTool(BaseTool):
             Statistics dictionary
         """
         # Handle both async and sync get_stats methods
-        if hasattr(self.graph_store.get_stats, '__call__'):
+        if hasattr(self.graph_store.get_stats, "__call__"):
             stats_result = self.graph_store.get_stats()
             # Check if it's a coroutine
-            if hasattr(stats_result, '__await__'):
+            if hasattr(stats_result, "__await__"):
                 stats = await stats_result
             else:
                 stats = stats_result
         else:
             stats = self.graph_store.get_stats()
 
-        return {
-            "success": True,
-            "stats": stats
-        }
+        return {"success": True, "stats": stats}
 
     # Public methods for ToolExecutor integration
     async def build_from_text(
@@ -302,56 +396,60 @@ class KnowledgeGraphBuilderTool(BaseTool):
         text: str,
         source: Optional[str] = "unknown",
         entity_types: Optional[List[str]] = None,
-        relation_types: Optional[List[str]] = None
+        relation_types: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Build knowledge graph from text (public method for ToolExecutor)
-        
+
         Args:
             text: Text to extract knowledge from
             source: Optional source identifier
             entity_types: Optional list of entity types to extract
             relation_types: Optional list of relation types to extract
-            
+
         Returns:
             Build result dictionary
         """
         await self._initialize()
-        return await self._build_from_text({
-            "text": text,
-            "source": source,
-            "entity_types": entity_types,
-            "relation_types": relation_types
-        })
+        return await self._build_from_text(
+            {
+                "text": text,
+                "source": source,
+                "entity_types": entity_types,
+                "relation_types": relation_types,
+            }
+        )
 
     async def build_from_document(
         self,
         document_path: str,
         entity_types: Optional[List[str]] = None,
-        relation_types: Optional[List[str]] = None
+        relation_types: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Build knowledge graph from document (public method for ToolExecutor)
-        
+
         Args:
             document_path: Path to document file
             entity_types: Optional list of entity types to extract
             relation_types: Optional list of relation types to extract
-            
+
         Returns:
             Build result dictionary
         """
         await self._initialize()
-        return await self._build_from_document({
-            "document_path": document_path,
-            "entity_types": entity_types,
-            "relation_types": relation_types
-        })
+        return await self._build_from_document(
+            {
+                "document_path": document_path,
+                "entity_types": entity_types,
+                "relation_types": relation_types,
+            }
+        )
 
     async def get_stats(self) -> Dict[str, Any]:
         """
         Get knowledge graph statistics (public method for ToolExecutor)
-        
+
         Returns:
             Statistics dictionary
         """
@@ -361,10 +459,10 @@ class KnowledgeGraphBuilderTool(BaseTool):
     async def execute(self, **kwargs) -> Dict[str, Any]:
         """
         Execute the tool (public interface)
-        
+
         Args:
             **kwargs: Tool input parameters
-            
+
         Returns:
             Dictionary with results
         """

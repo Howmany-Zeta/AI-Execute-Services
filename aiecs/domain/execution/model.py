@@ -23,9 +23,17 @@ class ErrorCode(Enum):
 
 class TaskStepResult:
     """Task step result model"""
-    def __init__(self, step: str, result: Any, completed: bool = False,
-                 message: str = "", status: str = "pending",
-                 error_code: Optional[str] = None, error_message: Optional[str] = None):
+
+    def __init__(
+        self,
+        step: str,
+        result: Any,
+        completed: bool = False,
+        message: str = "",
+        status: str = "pending",
+        error_code: Optional[str] = None,
+        error_message: Optional[str] = None,
+    ):
         self.step = step
         self.result = result
         self.completed = completed
@@ -42,7 +50,7 @@ class TaskStepResult:
             "message": self.message,
             "status": self.status,
             "error_code": self.error_code,
-            "error_message": self.error_message
+            "error_message": self.error_message,
         }
 
     def __repr__(self) -> str:

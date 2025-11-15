@@ -33,11 +33,7 @@ class LegacyAgentWrapper:
         self._is_wrapped = True
         logger.info(f"Legacy agent wrapped: {type(legacy_agent).__name__}")
 
-    async def execute_task(
-        self,
-        task: Dict[str, Any],
-        context: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def execute_task(self, task: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute task using legacy agent.
 
@@ -49,12 +45,12 @@ class LegacyAgentWrapper:
             Result dictionary
         """
         # Try various legacy interfaces
-        if hasattr(self.legacy_agent, 'execute_task'):
+        if hasattr(self.legacy_agent, "execute_task"):
             return await self.legacy_agent.execute_task(task, context)
-        elif hasattr(self.legacy_agent, 'run'):
-            result = await self.legacy_agent.run(task.get('description', ''))
+        elif hasattr(self.legacy_agent, "run"):
+            result = await self.legacy_agent.run(task.get("description", ""))
             return {"output": result, "success": True}
-        elif hasattr(self.legacy_agent, 'process'):
+        elif hasattr(self.legacy_agent, "process"):
             result = await self.legacy_agent.process(task)
             return {"output": result, "success": True}
         else:
@@ -63,9 +59,7 @@ class LegacyAgentWrapper:
             )
 
     async def process_message(
-        self,
-        message: str,
-        sender_id: Optional[str] = None
+        self, message: str, sender_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Process message using legacy agent.
@@ -77,9 +71,9 @@ class LegacyAgentWrapper:
         Returns:
             Response dictionary
         """
-        if hasattr(self.legacy_agent, 'process_message'):
+        if hasattr(self.legacy_agent, "process_message"):
             return await self.legacy_agent.process_message(message, sender_id)
-        elif hasattr(self.legacy_agent, 'chat'):
+        elif hasattr(self.legacy_agent, "chat"):
             response = await self.legacy_agent.chat(message)
             return {"response": response}
         else:
@@ -94,4 +88,3 @@ class LegacyAgentWrapper:
 
     def __repr__(self) -> str:
         return f"LegacyAgentWrapper({type(self.legacy_agent).__name__})"
-

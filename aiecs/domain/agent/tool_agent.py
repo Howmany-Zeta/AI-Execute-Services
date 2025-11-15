@@ -52,7 +52,7 @@ class ToolAgent(BaseAIAgent):
             description=description or "Tool-based task execution agent",
             version=version,
         )
-        
+
         self._available_tools = tools
         self._tool_instances: Dict[str, BaseTool] = {}
         self._tool_usage_stats: Dict[str, Dict[str, int]] = {}
@@ -81,11 +81,7 @@ class ToolAgent(BaseAIAgent):
         self._tool_instances.clear()
         logger.info(f"ToolAgent {self.agent_id} shut down")
 
-    async def execute_task(
-        self,
-        task: Dict[str, Any],
-        context: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def execute_task(self, task: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute a task using tools.
 
@@ -103,15 +99,12 @@ class ToolAgent(BaseAIAgent):
 
         try:
             # Extract tool and operation
-            tool_name = task.get('tool')
-            operation = task.get('operation')
-            parameters = task.get('parameters', {})
+            tool_name = task.get("tool")
+            operation = task.get("operation")
+            parameters = task.get("parameters", {})
 
             if not tool_name:
-                raise TaskExecutionError(
-                    "Task must contain 'tool' field",
-                    agent_id=self.agent_id
-                )
+                raise TaskExecutionError("Task must contain 'tool' field", agent_id=self.agent_id)
 
             # Check tool access
             if tool_name not in self._available_tools:
@@ -119,7 +112,7 @@ class ToolAgent(BaseAIAgent):
 
             # Transition to busy state
             self._transition_state(self.state.__class__.BUSY)
-            self._current_task_id = task.get('task_id')
+            self._current_task_id = task.get("task_id")
 
             # Execute tool
             result = await self._execute_tool(tool_name, operation, parameters)
@@ -153,7 +146,7 @@ class ToolAgent(BaseAIAgent):
 
         except Exception as e:
             logger.error(f"Task execution failed for {self.agent_id}: {e}")
-            
+
             # Update metrics for failure
             execution_time = (datetime.utcnow() - start_time).total_seconds()
             self.update_metrics(execution_time=execution_time, success=False)
@@ -169,13 +162,11 @@ class ToolAgent(BaseAIAgent):
             raise TaskExecutionError(
                 f"Task execution failed: {str(e)}",
                 agent_id=self.agent_id,
-                task_id=task.get('task_id')
+                task_id=task.get("task_id"),
             )
 
     async def process_message(
-        self,
-        message: str,
-        sender_id: Optional[str] = None
+        self, message: str, sender_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Process an incoming message.
@@ -191,7 +182,7 @@ class ToolAgent(BaseAIAgent):
         """
         return {
             "response": f"ToolAgent {self.name} received message but requires explicit tool tasks. "
-                       f"Available tools: {', '.join(self._available_tools)}",
+            f"Available tools: {', '.join(self._available_tools)}",
             "available_tools": self._available_tools,
         }
 
@@ -199,7 +190,7 @@ class ToolAgent(BaseAIAgent):
         self,
         tool_name: str,
         operation: Optional[str],
-        parameters: Dict[str, Any]
+        parameters: Dict[str, Any],
     ) -> Any:
         """
         Execute a tool operation.
@@ -221,7 +212,7 @@ class ToolAgent(BaseAIAgent):
             result = await tool.run_async(operation, **parameters)
         else:
             # If no operation specified, try to call the tool directly
-            if hasattr(tool, 'run_async'):
+            if hasattr(tool, "run_async"):
                 result = await tool.run_async(**parameters)
             else:
                 raise ValueError(f"Tool {tool_name} requires operation to be specified")
@@ -264,4 +255,3 @@ class ToolAgent(BaseAIAgent):
             ToolAgent instance
         """
         raise NotImplementedError("ToolAgent.from_dict not fully implemented yet")
-

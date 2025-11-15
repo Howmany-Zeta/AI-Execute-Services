@@ -13,20 +13,36 @@ from enum import Enum
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
 from aiecs.infrastructure.graph_storage.base import GraphStore
-from aiecs.application.knowledge_graph.reasoning.query_planner import QueryPlanner
-from aiecs.application.knowledge_graph.reasoning.reasoning_engine import ReasoningEngine
-from aiecs.application.knowledge_graph.reasoning.inference_engine import InferenceEngine
-from aiecs.application.knowledge_graph.reasoning.evidence_synthesis import EvidenceSynthesizer
-from aiecs.domain.knowledge_graph.models.inference_rule import InferenceRule, RuleType
+from aiecs.application.knowledge_graph.reasoning.query_planner import (
+    QueryPlanner,
+)
+from aiecs.application.knowledge_graph.reasoning.reasoning_engine import (
+    ReasoningEngine,
+)
+from aiecs.application.knowledge_graph.reasoning.inference_engine import (
+    InferenceEngine,
+)
+from aiecs.application.knowledge_graph.reasoning.evidence_synthesis import (
+    EvidenceSynthesizer,
+)
+from aiecs.application.knowledge_graph.reasoning.logic_form_parser import (
+    LogicFormParser,
+)
+from aiecs.domain.knowledge_graph.models.inference_rule import (
+    InferenceRule,
+    RuleType,
+)
 from aiecs.domain.knowledge_graph.models.query_plan import OptimizationStrategy
 
 
 class ReasoningModeEnum(str, Enum):
     """Reasoning mode enumeration"""
+
     QUERY_PLAN = "query_plan"  # Plan a query execution
     MULTI_HOP = "multi_hop"  # Multi-hop path reasoning
     INFERENCE = "inference"  # Logical inference
     EVIDENCE_SYNTHESIS = "evidence_synthesis"  # Combine evidence
+    LOGICAL_QUERY = "logical_query"  # Parse natural language to logical query
     FULL_REASONING = "full_reasoning"  # Complete reasoning pipeline
 
 
@@ -39,89 +55,80 @@ class GraphReasoningInput(BaseModel):
             "Reasoning mode: 'query_plan' (plan execution), "
             "'multi_hop' (path reasoning), 'inference' (logical rules), "
             "'evidence_synthesis' (combine evidence), "
+            "'logical_query' (parse to logical form), "
             "'full_reasoning' (complete pipeline)"
-        )
+        ),
     )
 
-    query: str = Field(
-        ...,
-        description="Natural language query to reason about"
-    )
+    query: str = Field(..., description="Natural language query to reason about")
 
     start_entity_id: Optional[str] = Field(
-        None,
-        description="Starting entity ID for multi-hop reasoning"
+        None, description="Starting entity ID for multi-hop reasoning"
     )
 
-    target_entity_id: Optional[str] = Field(
-        None,
-        description="Target entity ID for path finding"
-    )
+    target_entity_id: Optional[str] = Field(None, description="Target entity ID for path finding")
 
     max_hops: int = Field(
         default=3,
         ge=1,
         le=5,
-        description="Maximum hops for multi-hop reasoning (1-5)"
+        description="Maximum hops for multi-hop reasoning (1-5)",
     )
 
     relation_types: Optional[List[str]] = Field(
-        None,
-        description="Filter by relation types for reasoning"
+        None, description="Filter by relation types for reasoning"
     )
 
     optimization_strategy: Optional[str] = Field(
         default="balanced",
-        description="Query optimization strategy: 'cost', 'latency', or 'balanced'"
+        description="Query optimization strategy: 'cost', 'latency', or 'balanced'",
     )
 
     apply_inference: bool = Field(
         default=False,
-        description="Apply logical inference rules (transitive, symmetric)"
+        description="Apply logical inference rules (transitive, symmetric)",
     )
 
     inference_relation_type: Optional[str] = Field(
         None,
-        description="Relation type to apply inference on (required if apply_inference=True)"
+        description="Relation type to apply inference on (required if apply_inference=True)",
     )
 
     inference_max_steps: int = Field(
-        default=3,
-        ge=1,
-        le=10,
-        description="Maximum inference steps (1-10)"
+        default=3, ge=1, le=10, description="Maximum inference steps (1-10)"
     )
 
     synthesize_evidence: bool = Field(
-        default=True,
-        description="Synthesize evidence from multiple sources"
+        default=True, description="Synthesize evidence from multiple sources"
     )
 
     synthesis_method: str = Field(
         default="weighted_average",
-        description="Evidence synthesis method: 'weighted_average', 'max', or 'voting'"
+        description="Evidence synthesis method: 'weighted_average', 'max', or 'voting'",
     )
 
     confidence_threshold: float = Field(
         default=0.5,
         ge=0.0,
         le=1.0,
-        description="Minimum confidence threshold for evidence (0.0-1.0)"
+        description="Minimum confidence threshold for evidence (0.0-1.0)",
     )
 
 
 # Schemas for individual operations (used with run_async)
 class QueryPlanSchema(BaseModel):
     """Schema for query_plan operation"""
+
     query: str = Field(..., description="Natural language query to plan")
     optimization_strategy: Optional[str] = Field(
         default="balanced",
-        description="Query optimization strategy: 'cost', 'latency', or 'balanced'"
+        description="Query optimization strategy: 'cost', 'latency', or 'balanced'",
     )
 
 
 class MultiHopSchema(BaseModel):
     """Schema for multi_hop operation"""
+
     query: str = Field(..., description="Natural language query to reason about")
     start_entity_id: str = Field(..., description="Starting entity ID")
     target_entity_id: Optional[str] = Field(None, description="Target entity ID")
@@ -134,24 +141,29 @@ class MultiHopSchema(BaseModel):
 
 class InferenceSchema(BaseModel):
     """Schema for inference operation"""
+
     relation_type: str = Field(..., description="Relation type to apply inference on")
     max_steps: int = Field(default=3, ge=1, le=10, description="Maximum inference steps")
 
 
 class EvidenceSynthesisSchema(BaseModel):
     """Schema for evidence_synthesis operation"""
+
     synthesis_method: str = Field(default="weighted_average", description="Synthesis method")
     confidence_threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="Min confidence")
 
 
 class FullReasoningSchema(BaseModel):
     """Schema for full_reasoning operation"""
+
     query: str = Field(..., description="Natural language query")
     start_entity_id: str = Field(..., description="Starting entity ID")
     target_entity_id: Optional[str] = Field(None, description="Target entity ID")
     max_hops: int = Field(default=3, ge=1, le=5, description="Maximum hops")
     relation_types: Optional[List[str]] = Field(None, description="Filter by relation types")
-    optimization_strategy: Optional[str] = Field(default="balanced", description="Optimization strategy")
+    optimization_strategy: Optional[str] = Field(
+        default="balanced", description="Optimization strategy"
+    )
     apply_inference: bool = Field(default=False, description="Apply logical inference rules")
     inference_relation_type: Optional[str] = Field(None, description="Relation type for inference")
     inference_max_steps: int = Field(default=3, ge=1, le=10, description="Max inference steps")
@@ -206,28 +218,42 @@ class GraphReasoningTool(BaseTool):
     def _setup_default_rules(self):
         """Setup default inference rules"""
         # Common transitive rules
-        transitive_relations = ["KNOWS", "FOLLOWS", "CONNECTED_TO", "RELATED_TO"]
+        transitive_relations = [
+            "KNOWS",
+            "FOLLOWS",
+            "CONNECTED_TO",
+            "RELATED_TO",
+        ]
         for rel_type in transitive_relations:
-            self.inference_engine.add_rule(InferenceRule(
-                rule_id=f"transitive_{rel_type.lower()}",
-                rule_type=RuleType.TRANSITIVE,
-                relation_type=rel_type,
-                description=f"Transitive closure for {rel_type}",
-                confidence_decay=0.1,
-                enabled=False  # Only enable when requested
-            ))
+            self.inference_engine.add_rule(
+                InferenceRule(
+                    rule_id=f"transitive_{rel_type.lower()}",
+                    rule_type=RuleType.TRANSITIVE,
+                    relation_type=rel_type,
+                    description=f"Transitive closure for {rel_type}",
+                    confidence_decay=0.1,
+                    enabled=False,  # Only enable when requested
+                )
+            )
 
         # Common symmetric rules
-        symmetric_relations = ["FRIEND_OF", "COLLEAGUE_OF", "PARTNER_WITH", "SIBLING_OF"]
+        symmetric_relations = [
+            "FRIEND_OF",
+            "COLLEAGUE_OF",
+            "PARTNER_WITH",
+            "SIBLING_OF",
+        ]
         for rel_type in symmetric_relations:
-            self.inference_engine.add_rule(InferenceRule(
-                rule_id=f"symmetric_{rel_type.lower()}",
-                rule_type=RuleType.SYMMETRIC,
-                relation_type=rel_type,
-                description=f"Symmetric relationship for {rel_type}",
-                confidence_decay=0.05,
-                enabled=False  # Only enable when requested
-            ))
+            self.inference_engine.add_rule(
+                InferenceRule(
+                    rule_id=f"symmetric_{rel_type.lower()}",
+                    rule_type=RuleType.SYMMETRIC,
+                    relation_type=rel_type,
+                    description=f"Symmetric relationship for {rel_type}",
+                    confidence_decay=0.05,
+                    enabled=False,  # Only enable when requested
+                )
+            )
 
     @property
     def name(self) -> str:
@@ -265,6 +291,9 @@ class GraphReasoningTool(BaseTool):
         elif mode == ReasoningModeEnum.EVIDENCE_SYNTHESIS:
             return await self._execute_evidence_synthesis(validated_input)
 
+        elif mode == ReasoningModeEnum.LOGICAL_QUERY:
+            return await self._execute_logical_query(validated_input)
+
         elif mode == ReasoningModeEnum.FULL_REASONING:
             return await self._execute_full_reasoning(validated_input)
 
@@ -280,7 +309,7 @@ class GraphReasoningTool(BaseTool):
         strategy_map = {
             "cost": OptimizationStrategy.MINIMIZE_COST,
             "latency": OptimizationStrategy.MINIMIZE_LATENCY,
-            "balanced": OptimizationStrategy.BALANCED
+            "balanced": OptimizationStrategy.BALANCED,
         }
         strategy = strategy_map.get(input_data.optimization_strategy, OptimizationStrategy.BALANCED)
         optimized_plan = self.query_planner.optimize_plan(plan, strategy)
@@ -295,14 +324,15 @@ class GraphReasoningTool(BaseTool):
                         "operation": step.operation.value,
                         "depends_on": step.depends_on,
                         "estimated_cost": step.estimated_cost,
-                        "description": step.description
+                        "description": step.description,
                     }
                     for step in optimized_plan.steps
                 ],
                 "total_cost": optimized_plan.calculate_total_cost(),
-                "estimated_latency_ms": optimized_plan.calculate_total_cost() * 100,  # Rough estimate
-                "optimization_strategy": strategy.value
-            }
+                "estimated_latency_ms": optimized_plan.calculate_total_cost()
+                * 100,  # Rough estimate
+                "optimization_strategy": strategy.value,
+            },
         }
 
     async def _execute_multi_hop(self, input_data: GraphReasoningInput) -> Dict[str, Any]:
@@ -323,20 +353,18 @@ class GraphReasoningTool(BaseTool):
         result = await self.reasoning_engine.reason(
             query=input_data.query,
             context=context,
-            max_hops=input_data.max_hops
+            max_hops=input_data.max_hops,
         )
 
         # Optionally synthesize evidence
         evidence_list = result.evidence
         if input_data.synthesize_evidence and evidence_list:
             evidence_list = self.evidence_synthesizer.synthesize_evidence(
-                evidence_list,
-                method=input_data.synthesis_method
+                evidence_list, method=input_data.synthesis_method
             )
             # Filter by confidence
             evidence_list = self.evidence_synthesizer.filter_by_confidence(
-                evidence_list,
-                threshold=input_data.confidence_threshold
+                evidence_list, threshold=input_data.confidence_threshold
             )
 
         return {
@@ -352,12 +380,12 @@ class GraphReasoningTool(BaseTool):
                     "confidence": ev.confidence,
                     "relevance_score": ev.relevance_score,
                     "explanation": ev.explanation,
-                    "entity_ids": ev.get_entity_ids()
+                    "entity_ids": ev.get_entity_ids(),
                 }
                 for ev in evidence_list[:10]  # Limit to top 10
             ],
             "execution_time_ms": result.execution_time_ms,
-            "reasoning_trace": result.reasoning_trace
+            "reasoning_trace": result.reasoning_trace,
         }
 
     async def _execute_inference(self, input_data: GraphReasoningInput) -> Dict[str, Any]:
@@ -376,7 +404,7 @@ class GraphReasoningTool(BaseTool):
         result = await self.inference_engine.infer_relations(
             relation_type=input_data.inference_relation_type,
             max_steps=input_data.inference_max_steps,
-            use_cache=True
+            use_cache=True,
         )
 
         # Get trace
@@ -391,13 +419,13 @@ class GraphReasoningTool(BaseTool):
                     "source_id": rel.source_id,
                     "target_id": rel.target_id,
                     "relation_type": rel.relation_type,
-                    "properties": rel.properties
+                    "properties": rel.properties,
                 }
                 for rel in result.inferred_relations[:10]  # Limit to top 10
             ],
             "confidence": result.confidence,
             "total_steps": result.total_steps,
-            "inference_trace": trace[:20]  # Limit trace lines
+            "inference_trace": trace[:20],  # Limit trace lines
         }
 
     async def _execute_evidence_synthesis(self, input_data: GraphReasoningInput) -> Dict[str, Any]:
@@ -409,8 +437,62 @@ class GraphReasoningTool(BaseTool):
             "mode": "evidence_synthesis",
             "message": "Evidence synthesis requires pre-collected evidence. Use 'full_reasoning' mode for end-to-end reasoning with synthesis.",
             "synthesis_method": input_data.synthesis_method,
-            "confidence_threshold": input_data.confidence_threshold
+            "confidence_threshold": input_data.confidence_threshold,
         }
+
+    async def _execute_logical_query(self, input_data: GraphReasoningInput) -> Dict[str, Any]:
+        """
+        Parse natural language query to logical form
+
+        Converts natural language queries into structured logical representations
+        that can be executed against the knowledge graph.
+
+        Args:
+            input_data: Reasoning input with query
+
+        Returns:
+            Dictionary with parsed logical query
+        """
+        # Create logic form parser
+        parser = LogicFormParser()
+
+        # Parse query to logical form
+        logical_query = parser.parse(input_data.query)
+
+        # Extract components
+        result = {
+            "mode": "logical_query",
+            "query": input_data.query,
+            "logical_form": logical_query.to_dict(),
+            "query_type": logical_query.query_type.value,
+            "variables": [v.name for v in logical_query.variables],
+            "predicates": [
+                {
+                    "name": p.name,
+                    "arguments": [
+                        arg.name if hasattr(arg, "name") else str(arg) for arg in p.arguments
+                    ],
+                }
+                for p in logical_query.predicates
+            ],
+            "constraints": [
+                {
+                    "type": c.constraint_type.value,
+                    "variable": c.variable.name,
+                    "value": c.value,
+                }
+                for c in logical_query.constraints
+            ],
+        }
+
+        # Add execution plan if available
+        if hasattr(logical_query, "execution_plan"):
+            result["execution_plan"] = {
+                "steps": len(logical_query.execution_plan.steps),
+                "estimated_cost": logical_query.execution_plan.calculate_total_cost(),
+            }
+
+        return result
 
     async def _execute_full_reasoning(self, input_data: GraphReasoningInput) -> Dict[str, Any]:
         """Execute full reasoning pipeline"""
@@ -420,7 +502,7 @@ class GraphReasoningTool(BaseTool):
         results = {
             "mode": "full_reasoning",
             "query": input_data.query,
-            "steps": []
+            "steps": [],
         }
 
         # Step 1: Query Planning
@@ -428,17 +510,20 @@ class GraphReasoningTool(BaseTool):
         strategy_map = {
             "cost": OptimizationStrategy.MINIMIZE_COST,
             "latency": OptimizationStrategy.MINIMIZE_LATENCY,
-            "balanced": OptimizationStrategy.BALANCED
+            "balanced": OptimizationStrategy.BALANCED,
         }
         strategy = strategy_map.get(input_data.optimization_strategy, OptimizationStrategy.BALANCED)
         optimized_plan = self.query_planner.optimize_plan(plan, strategy)
 
-        results["steps"].append({
-            "name": "query_planning",
-            "plan_steps": len(optimized_plan.steps),
-            "estimated_cost": optimized_plan.calculate_total_cost(),
-            "estimated_latency_ms": optimized_plan.calculate_total_cost() * 100  # Rough estimate
-        })
+        results["steps"].append(
+            {
+                "name": "query_planning",
+                "plan_steps": len(optimized_plan.steps),
+                "estimated_cost": optimized_plan.calculate_total_cost(),
+                "estimated_latency_ms": optimized_plan.calculate_total_cost()
+                * 100,  # Rough estimate
+            }
+        )
 
         # Step 2: Multi-Hop Reasoning
         # Build context for reasoning
@@ -453,15 +538,17 @@ class GraphReasoningTool(BaseTool):
         reasoning_result = await self.reasoning_engine.reason(
             query=input_data.query,
             context=context,
-            max_hops=input_data.max_hops
+            max_hops=input_data.max_hops,
         )
 
-        results["steps"].append({
-            "name": "multi_hop_reasoning",
-            "evidence_collected": len(reasoning_result.evidence),
-            "confidence": reasoning_result.confidence,
-            "execution_time_ms": reasoning_result.execution_time_ms
-        })
+        results["steps"].append(
+            {
+                "name": "multi_hop_reasoning",
+                "evidence_collected": len(reasoning_result.evidence),
+                "confidence": reasoning_result.confidence,
+                "execution_time_ms": reasoning_result.execution_time_ms,
+            }
+        )
 
         # Step 3: Logical Inference (if requested)
         if input_data.apply_inference and input_data.inference_relation_type:
@@ -472,40 +559,42 @@ class GraphReasoningTool(BaseTool):
             inference_result = await self.inference_engine.infer_relations(
                 relation_type=input_data.inference_relation_type,
                 max_steps=input_data.inference_max_steps,
-                use_cache=True
+                use_cache=True,
             )
 
-            results["steps"].append({
-                "name": "logical_inference",
-                "inferred_relations": len(inference_result.inferred_relations),
-                "inference_confidence": inference_result.confidence,
-                "inference_steps": inference_result.total_steps
-            })
+            results["steps"].append(
+                {
+                    "name": "logical_inference",
+                    "inferred_relations": len(inference_result.inferred_relations),
+                    "inference_confidence": inference_result.confidence,
+                    "inference_steps": inference_result.total_steps,
+                }
+            )
 
         # Step 4: Evidence Synthesis
         evidence_list = reasoning_result.evidence
         if input_data.synthesize_evidence and evidence_list:
             synthesized = self.evidence_synthesizer.synthesize_evidence(
-                evidence_list,
-                method=input_data.synthesis_method
+                evidence_list, method=input_data.synthesis_method
             )
 
             filtered = self.evidence_synthesizer.filter_by_confidence(
-                synthesized,
-                threshold=input_data.confidence_threshold
+                synthesized, threshold=input_data.confidence_threshold
             )
 
             ranked = self.evidence_synthesizer.rank_by_reliability(filtered)
 
             overall_confidence = self.evidence_synthesizer.estimate_overall_confidence(ranked)
 
-            results["steps"].append({
-                "name": "evidence_synthesis",
-                "original_evidence": len(evidence_list),
-                "synthesized_evidence": len(synthesized),
-                "filtered_evidence": len(filtered),
-                "overall_confidence": overall_confidence
-            })
+            results["steps"].append(
+                {
+                    "name": "evidence_synthesis",
+                    "original_evidence": len(evidence_list),
+                    "synthesized_evidence": len(synthesized),
+                    "filtered_evidence": len(filtered),
+                    "overall_confidence": overall_confidence,
+                }
+            )
 
             evidence_list = ranked
 
@@ -513,7 +602,8 @@ class GraphReasoningTool(BaseTool):
         results["answer"] = reasoning_result.answer
         results["final_confidence"] = (
             self.evidence_synthesizer.estimate_overall_confidence(evidence_list)
-            if evidence_list else reasoning_result.confidence
+            if evidence_list
+            else reasoning_result.confidence
         )
         results["evidence_count"] = len(evidence_list)
         results["top_evidence"] = [
@@ -522,26 +612,25 @@ class GraphReasoningTool(BaseTool):
                 "type": ev.evidence_type.value,
                 "confidence": ev.confidence,
                 "relevance_score": ev.relevance_score,
-                "explanation": ev.explanation
+                "explanation": ev.explanation,
             }
             for ev in evidence_list[:5]  # Top 5
         ]
-        results["reasoning_trace"] = reasoning_result.reasoning_trace[:10]  # Limit trace
+        # Limit trace
+        results["reasoning_trace"] = reasoning_result.reasoning_trace[:10]
 
         return results
 
     # Public methods for ToolExecutor integration
     async def query_plan(
-        self,
-        query: str,
-        optimization_strategy: Optional[str] = "balanced"
+        self, query: str, optimization_strategy: Optional[str] = "balanced"
     ) -> Dict[str, Any]:
         """Query planning (public method for ToolExecutor)"""
         input_data = GraphReasoningInput(
             mode=ReasoningModeEnum.QUERY_PLAN,
             query=query,
             optimization_strategy=optimization_strategy,
-            start_entity_id="dummy"  # Not used for query_plan
+            start_entity_id="dummy",  # Not used for query_plan
         )
         return await self._execute_query_plan(input_data)
 
@@ -554,7 +643,7 @@ class GraphReasoningTool(BaseTool):
         relation_types: Optional[List[str]] = None,
         synthesize_evidence: bool = True,
         synthesis_method: str = "weighted_average",
-        confidence_threshold: float = 0.5
+        confidence_threshold: float = 0.5,
     ) -> Dict[str, Any]:
         """Multi-hop reasoning (public method for ToolExecutor)"""
         input_data = GraphReasoningInput(
@@ -566,15 +655,11 @@ class GraphReasoningTool(BaseTool):
             relation_types=relation_types,
             synthesize_evidence=synthesize_evidence,
             synthesis_method=synthesis_method,
-            confidence_threshold=confidence_threshold
+            confidence_threshold=confidence_threshold,
         )
         return await self._execute_multi_hop(input_data)
 
-    async def inference(
-        self,
-        relation_type: str,
-        max_steps: int = 3
-    ) -> Dict[str, Any]:
+    async def inference(self, relation_type: str, max_steps: int = 3) -> Dict[str, Any]:
         """Logical inference (public method for ToolExecutor)"""
         input_data = GraphReasoningInput(
             mode=ReasoningModeEnum.INFERENCE,
@@ -582,14 +667,14 @@ class GraphReasoningTool(BaseTool):
             start_entity_id="dummy",  # Not used for inference mode
             apply_inference=True,
             inference_relation_type=relation_type,
-            inference_max_steps=max_steps
+            inference_max_steps=max_steps,
         )
         return await self._execute_inference(input_data)
 
     async def evidence_synthesis(
         self,
         synthesis_method: str = "weighted_average",
-        confidence_threshold: float = 0.5
+        confidence_threshold: float = 0.5,
     ) -> Dict[str, Any]:
         """Evidence synthesis (public method for ToolExecutor)"""
         input_data = GraphReasoningInput(
@@ -597,7 +682,7 @@ class GraphReasoningTool(BaseTool):
             query="synthesis",  # Not used
             start_entity_id="dummy",  # Not used
             synthesis_method=synthesis_method,
-            confidence_threshold=confidence_threshold
+            confidence_threshold=confidence_threshold,
         )
         return await self._execute_evidence_synthesis(input_data)
 
@@ -614,7 +699,7 @@ class GraphReasoningTool(BaseTool):
         inference_max_steps: int = 3,
         synthesize_evidence: bool = True,
         synthesis_method: str = "weighted_average",
-        confidence_threshold: float = 0.5
+        confidence_threshold: float = 0.5,
     ) -> Dict[str, Any]:
         """Full reasoning pipeline (public method for ToolExecutor)"""
         input_data = GraphReasoningInput(
@@ -630,21 +715,20 @@ class GraphReasoningTool(BaseTool):
             inference_max_steps=inference_max_steps,
             synthesize_evidence=synthesize_evidence,
             synthesis_method=synthesis_method,
-            confidence_threshold=confidence_threshold
+            confidence_threshold=confidence_threshold,
         )
         return await self._execute_full_reasoning(input_data)
 
     async def execute(self, **kwargs) -> Dict[str, Any]:
         """
         Execute the tool (public interface)
-        
+
         Args:
             **kwargs: Tool input parameters (will be validated against input_schema)
-            
+
         Returns:
             Dictionary with reasoning results
         """
         # Validate input using Pydantic schema
         validated_input = self.input_schema(**kwargs)
         return await self._execute(validated_input)
-

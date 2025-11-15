@@ -4,7 +4,7 @@ Relation Deduplicator
 Identifies and removes duplicate relations.
 """
 
-from typing import List, Set, Tuple, Dict
+from typing import List, Tuple, Dict
 from aiecs.domain.knowledge_graph.models.relation import Relation
 
 
@@ -66,7 +66,11 @@ class RelationDeduplicator:
         relation_groups: Dict[Tuple[str, str, str], List[Relation]] = {}
 
         for relation in relations:
-            key = (relation.source_id, relation.target_id, relation.relation_type)
+            key = (
+                relation.source_id,
+                relation.target_id,
+                relation.relation_type,
+            )
 
             if key not in relation_groups:
                 relation_groups[key] = []
@@ -121,9 +125,7 @@ class RelationDeduplicator:
 
         # Take highest confidence (if present in properties)
         confidences = [
-            r.properties.get("_extraction_confidence", 0.5)
-            for r in relations
-            if r.properties
+            r.properties.get("_extraction_confidence", 0.5) for r in relations if r.properties
         ]
         if confidences:
             merged_properties["_extraction_confidence"] = max(confidences)
@@ -139,15 +141,12 @@ class RelationDeduplicator:
             target_id=base.target_id,
             properties=merged_properties,
             weight=max_weight,
-            source=base.source
+            source=base.source,
         )
 
         return merged
 
-    def find_duplicates(
-        self,
-        relations: List[Relation]
-    ) -> List[Tuple[Relation, Relation]]:
+    def find_duplicates(self, relations: List[Relation]) -> List[Tuple[Relation, Relation]]:
         """
         Find pairs of duplicate relations without merging
 
@@ -184,8 +183,7 @@ class RelationDeduplicator:
             True if relations are duplicates
         """
         return (
-            r1.source_id == r2.source_id and
-            r1.target_id == r2.target_id and
-            r1.relation_type == r2.relation_type
+            r1.source_id == r2.source_id
+            and r1.target_id == r2.target_id
+            and r1.relation_type == r2.relation_type
         )
-

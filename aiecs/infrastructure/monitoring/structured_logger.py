@@ -1,7 +1,7 @@
 """Structured logging setup for aiecs."""
+
 import logging
 import sys
-from typing import Optional
 
 
 def setup_structured_logging(level: str = "INFO", format_type: str = "json") -> None:
@@ -23,9 +23,7 @@ def setup_structured_logging(level: str = "INFO", format_type: str = "json") -> 
         )
     else:
         # Standard text format
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
+        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
     # Setup root logger
     root_logger = logging.getLogger()

@@ -1,0 +1,119 @@
+// Logic Query DSL Grammar for Knowledge Graph Reasoning
+// 
+// This grammar defines the syntax for declarative knowledge graph queries.
+// It supports entity selection, property filters, graph traversal, and boolean logic.
+//
+// Grammar Format: Lark EBNF (LALR parser)
+// Version: 1.0
+// Phase: 2.4 - Logic Query Parser
+
+?start: query
+
+// ============================================================================
+// Top-Level Query Structure
+// ============================================================================
+
+query: find_clause traversal_clause* where_clause?
+
+// ============================================================================
+// Find Clause - Entity Selection
+// ============================================================================
+
+find_clause: "Find" "(" entity_spec ")"
+
+entity_spec: IDENTIFIER ("[" entity_name "]")?
+
+entity_name: BACKTICK_STRING
+
+// ============================================================================
+// Traversal Clause - Graph Navigation
+// ============================================================================
+
+traversal_clause: "FOLLOWS" relation_spec direction?
+
+relation_spec: IDENTIFIER
+
+direction: "INCOMING" -> incoming
+         | "OUTGOING" -> outgoing
+
+// ============================================================================
+// Where Clause - Filtering
+// ============================================================================
+
+where_clause: "WHERE" condition
+
+// Condition with operator precedence (NOT > AND > OR)
+?condition: or_condition
+
+or_condition: and_condition ("OR" and_condition)*
+
+and_condition: not_condition ("AND" not_condition)*
+
+not_condition: "NOT" not_condition -> negate
+             | primary_condition
+
+primary_condition: "(" condition ")"
+                 | simple_condition
+
+simple_condition: property_path operator value
+
+// ============================================================================
+// Property Paths and Operators
+// ============================================================================
+
+property_path: IDENTIFIER ("." IDENTIFIER)*
+
+operator: "==" -> eq
+        | "!=" -> ne
+        | ">" -> gt
+        | "<" -> lt
+        | ">=" -> gte
+        | "<=" -> lte
+        | "IN" -> in_op
+        | "CONTAINS" -> contains
+
+// ============================================================================
+// Values and Literals
+// ============================================================================
+
+?value: STRING -> string_value
+      | NUMBER -> number_value
+      | BOOLEAN -> boolean_value
+      | list -> list_value
+      | IDENTIFIER -> identifier_value
+
+list: "[" [value ("," value)*] "]"
+
+// ============================================================================
+// Terminals (Lexical Tokens)
+// ============================================================================
+
+// Booleans: case-insensitive (higher priority than IDENTIFIER)
+BOOLEAN.2: "true"i | "false"i
+
+// Identifiers: variable names, entity types, property names
+IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/
+
+// Strings: double-quoted or single-quoted
+STRING: /"[^"]*"/ | /'[^']*'/
+
+// Backtick strings: for entity names with special characters
+BACKTICK_STRING: /`[^`]*`/
+
+// Numbers: integers or floats
+NUMBER: /[0-9]+(\.[0-9]+)?/
+
+// ============================================================================
+// Whitespace and Comments
+// ============================================================================
+
+// Import common whitespace handling
+%import common.WS
+
+// Ignore whitespace
+%ignore WS
+
+// Comments (optional, for future use)
+COMMENT: "#" /[^\n]*/
+%ignore COMMENT
+

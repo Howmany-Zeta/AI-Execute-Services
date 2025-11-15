@@ -5,14 +5,13 @@ Provides sophisticated retrieval methods including Personalized PageRank,
 multi-hop neighbor retrieval, filtered retrieval, and query caching.
 """
 
+import asyncio
 from typing import List, Dict, Set, Optional, Tuple, Any, Callable
 from collections import defaultdict, deque
-from functools import lru_cache
 import hashlib
 import json
 import time
 from aiecs.domain.knowledge_graph.models.entity import Entity
-from aiecs.domain.knowledge_graph.models.relation import Relation
 from aiecs.infrastructure.graph_storage.base import GraphStore
 
 
@@ -61,7 +60,7 @@ class PersonalizedPageRank:
         max_results: int = 20,
         alpha: float = 0.15,
         max_iterations: int = 100,
-        convergence_threshold: float = 1e-6
+        convergence_threshold: float = 1e-6,
     ) -> List[Tuple[Entity, float]]:
         """
         Retrieve entities using Personalized PageRank
@@ -81,7 +80,7 @@ class PersonalizedPageRank:
 
         # Initialize scores
         scores: Dict[str, float] = defaultdict(float)
-        seed_set = set(seed_entity_ids)
+        set(seed_entity_ids)
 
         # Initialize seed scores uniformly
         initial_score = 1.0 / len(seed_entity_ids)
@@ -109,8 +108,7 @@ class PersonalizedPageRank:
                 # Get neighbors (cache for efficiency)
                 if entity_id not in adjacency:
                     neighbors = await self.graph_store.get_neighbors(
-                        entity_id,
-                        direction="outgoing"
+                        entity_id, direction="outgoing"
                     )
                     adjacency[entity_id] = [n.id for n in neighbors]
 
@@ -192,7 +190,7 @@ class MultiHopRetrieval:
         max_results: int = 50,
         relation_types: Optional[List[str]] = None,
         score_decay: float = 0.5,
-        include_seeds: bool = True
+        include_seeds: bool = True,
     ) -> List[Tuple[Entity, float]]:
         """
         Retrieve entities within N hops from seeds
@@ -225,7 +223,7 @@ class MultiHopRetrieval:
             next_level: Set[str] = set()
 
             # Score for this hop level
-            hop_score = score_decay ** hop
+            hop_score = score_decay**hop
 
             for entity_id in current_level:
                 if entity_id in visited:
@@ -242,9 +240,7 @@ class MultiHopRetrieval:
                 # Get neighbors for next level
                 if hop < max_hops:
                     neighbors = await self.graph_store.get_neighbors(
-                        entity_id,
-                        relation_type=None,
-                        direction="outgoing"
+                        entity_id, relation_type=None, direction="outgoing"
                     )
 
                     for neighbor in neighbors:
@@ -322,7 +318,7 @@ class FilteredRetrieval:
         property_exists: Optional[List[str]] = None,
         filter_fn: Optional[Callable[[Entity], bool]] = None,
         max_results: int = 100,
-        score_by_match_count: bool = False
+        score_by_match_count: bool = False,
     ) -> List[Tuple[Entity, float]]:
         """
         Retrieve entities with flexible filtering
@@ -353,7 +349,7 @@ class FilteredRetrieval:
                 query_embedding=dummy_embedding,
                 entity_type=entity_type,
                 max_results=1000,
-                score_threshold=0.0
+                score_threshold=0.0,
             )
             candidate_entities = [entity for entity, _ in candidates]
         else:
@@ -469,7 +465,8 @@ class RetrievalCache:
         """
         self.max_size = max_size
         self.ttl = ttl
-        self._cache: Dict[str, Tuple[Any, float]] = {}  # key -> (value, timestamp)
+        # key -> (value, timestamp)
+        self._cache: Dict[str, Tuple[Any, float]] = {}
         self._access_order: deque = deque()  # LRU tracking
         self._hits = 0
         self._misses = 0
@@ -503,7 +500,7 @@ class RetrievalCache:
         self,
         cache_key: Optional[str] = None,
         compute_fn: Optional[Callable] = None,
-        **kwargs
+        **kwargs,
     ) -> Any:
         """
         Get cached result or compute and cache
@@ -592,10 +589,8 @@ class RetrievalCache:
             "hit_rate": hit_rate,
             "cache_size": len(self._cache),
             "max_size": self.max_size,
-            "ttl": self.ttl
+            "ttl": self.ttl,
         }
 
 
 # Import asyncio for async checks
-import asyncio
-

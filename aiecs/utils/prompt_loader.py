@@ -1,6 +1,7 @@
 import yaml
 import os
 
+
 def get_prompt(mode: str, service: str) -> str:
     """
     Load the prompt for the specified service from services/{mode}/prompts.yaml.

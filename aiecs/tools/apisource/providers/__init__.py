@@ -23,14 +23,14 @@ PROVIDER_INSTANCES: Dict[str, BaseAPIProvider] = {}
 def register_provider(provider_class: Type[BaseAPIProvider]):
     """
     Register a provider class.
-    
+
     Args:
         provider_class: Provider class to register
     """
     # Instantiate to get name
     temp_instance = provider_class()
     provider_name = temp_instance.name
-    
+
     PROVIDER_REGISTRY[provider_name] = provider_class
     logger.debug(f"Registered provider: {provider_name}")
 
@@ -38,14 +38,14 @@ def register_provider(provider_class: Type[BaseAPIProvider]):
 def get_provider(name: str, config: Optional[Dict] = None) -> BaseAPIProvider:
     """
     Get a provider instance by name.
-    
+
     Args:
         name: Provider name
         config: Optional configuration for the provider
-        
+
     Returns:
         Provider instance
-        
+
     Raises:
         ValueError: If provider is not registered
     """
@@ -54,23 +54,23 @@ def get_provider(name: str, config: Optional[Dict] = None) -> BaseAPIProvider:
             f"Provider '{name}' not found. "
             f"Available providers: {', '.join(PROVIDER_REGISTRY.keys())}"
         )
-    
+
     # Return cached instance or create new one with config
     if config is None and name in PROVIDER_INSTANCES:
         return PROVIDER_INSTANCES[name]
-    
+
     provider_instance = PROVIDER_REGISTRY[name](config)
-    
+
     if config is None:
         PROVIDER_INSTANCES[name] = provider_instance
-    
+
     return provider_instance
 
 
 def list_providers() -> List[Dict[str, Any]]:
     """
     List all registered providers.
-    
+
     Returns:
         List of provider metadata dictionaries
     """
@@ -82,13 +82,15 @@ def list_providers() -> List[Dict[str, Any]]:
             providers.append(provider.get_metadata())
         except Exception as e:
             logger.warning(f"Failed to get metadata for provider {name}: {e}")
-            providers.append({
-                'name': name,
-                'description': 'Provider metadata unavailable',
-                'operations': [],
-                'error': str(e)
-            })
-    
+            providers.append(
+                {
+                    "name": name,
+                    "description": "Provider metadata unavailable",
+                    "operations": [],
+                    "error": str(e),
+                }
+            )
+
     return providers
 
 
@@ -100,15 +102,14 @@ register_provider(CensusProvider)
 
 
 __all__ = [
-    'BaseAPIProvider',
-    'RateLimiter',
-    'FREDProvider',
-    'WorldBankProvider',
-    'NewsAPIProvider',
-    'CensusProvider',
-    'register_provider',
-    'get_provider',
-    'list_providers',
-    'PROVIDER_REGISTRY'
+    "BaseAPIProvider",
+    "RateLimiter",
+    "FREDProvider",
+    "WorldBankProvider",
+    "NewsAPIProvider",
+    "CensusProvider",
+    "register_provider",
+    "get_provider",
+    "list_providers",
+    "PROVIDER_REGISTRY",
 ]
-

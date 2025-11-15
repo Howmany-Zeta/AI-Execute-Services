@@ -1,13 +1,17 @@
 AI_SERVICE_REGISTRY = {}
 
+
 def register_ai_service(mode: str, service: str):
     """
     Decorator for registering a class to the service center, so it can be found and called by (mode, service).
     """
+
     def decorator(cls):
         AI_SERVICE_REGISTRY[(mode, service)] = cls
         return cls
+
     return decorator
+
 
 def get_ai_service(mode: str, service: str):
     """

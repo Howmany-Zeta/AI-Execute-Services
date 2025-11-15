@@ -33,7 +33,7 @@ class RoleConfiguration:
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         tools: Optional[list] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Initialize role configuration.
@@ -73,7 +73,7 @@ class RoleConfiguration:
             llm_model=self.llm_model,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
-            **self.additional_config
+            **self.additional_config,
         )
 
     @classmethod
@@ -88,11 +88,11 @@ class RoleConfiguration:
             RoleConfiguration instance
         """
         path = Path(file_path)
-        
+
         if not path.exists():
             raise FileNotFoundError(f"Role configuration file not found: {file_path}")
 
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             data = yaml.safe_load(f)
 
         logger.info(f"Loaded role configuration from {file_path}")
@@ -127,7 +127,7 @@ class RoleConfiguration:
             "backstory": other.backstory or self.backstory,
             "domain_knowledge": other.domain_knowledge or self.domain_knowledge,
             "llm_model": other.llm_model or self.llm_model,
-            "temperature": other.temperature if other.temperature != 0.7 else self.temperature,
+            "temperature": (other.temperature if other.temperature != 0.7 else self.temperature),
             "max_tokens": other.max_tokens or self.max_tokens,
             "tools": other.tools if other.tools else self.tools,
             **{**self.additional_config, **other.additional_config},
@@ -149,10 +149,7 @@ class RoleConfiguration:
         }
 
 
-def load_role_config(
-    role_name: str,
-    base_path: str = "./agent_roles"
-) -> RoleConfiguration:
+def load_role_config(role_name: str, base_path: str = "./agent_roles") -> RoleConfiguration:
     """
     Load role configuration by name.
 
@@ -214,4 +211,3 @@ def get_role_template(role_name: str) -> RoleConfiguration:
         raise ValueError(f"Unknown role template: {role_name}")
 
     return RoleConfiguration.load_from_dict(ROLE_TEMPLATES[role_name])
-

@@ -27,6 +27,8 @@ pytest-cov = "^7.0.0"
 pytest-timeout = "^2.4.0"
 mypy = "^1.18.2"
 flake8 = "^7.3.0"
+lark-parser = "^0.12.0"
+black = "^25.1.0"
 
 [project]
 name = "aiecs"
@@ -157,20 +159,6 @@ dependencies = [
     "jaeger-client (>=4.8.0,<5.0.0)",               # Jaeger distributed tracing client
     "opentracing (>=2.4.0,<3.0.0)",                 # OpenTracing API for distributed tracing
     "psutil (>=7.0.0,<8.0.0)",                      # System and process monitoring utilities
-]
-
-# 开发依赖项 - 移动到 optional-dependencies，use `pip install aiecs[dev]`
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.3.5",                               # Testing framework
-    "pytest-asyncio>=1.0.0",                       # Async testing support
-    "pytest-cov>=4.0.0",                           # Coverage reporting for pytest
-    "pytest-xdist>=3.0.0",                         # Parallel test execution
-    "pytest-mock>=3.10.0",                         # Mock fixtures for pytest
-    "black>=25.1.0",                               # Code formatter
-    "flake8>=7.2.0",                               # Code linter
-    "mypy>=1.15.0",                                # Static type checker
-    "bump-pydantic>=0.8.0",
 ]
 
 [project.urls]

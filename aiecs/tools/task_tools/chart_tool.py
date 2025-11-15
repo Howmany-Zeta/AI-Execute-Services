@@ -17,12 +17,15 @@ from aiecs.tools.base_tool import BaseTool
 from aiecs.tools.tool_executor import measure_execution_time
 
 # Enums for configuration options
+
+
 class ExportFormat(str, Enum):
     JSON = "json"
     CSV = "csv"
     HTML = "html"
     EXCEL = "excel"
     MARKDOWN = "markdown"
+
 
 class VisualizationType(str, Enum):
     HISTOGRAM = "histogram"
@@ -33,164 +36,135 @@ class VisualizationType(str, Enum):
     HEATMAP = "heatmap"
     PAIR = "pair"
 
-@register_tool('chart')
+
+@register_tool("chart")
 class ChartTool(BaseTool):
     """Chart and visualization tool: creates charts and exports data in various formats."""
 
     # Configuration schema
     class Config(BaseModel):
         """Configuration for the chart tool"""
+
         model_config = ConfigDict(env_prefix="CHART_TOOL_")
-        
+
         export_dir: str = Field(
-            default=os.path.join(tempfile.gettempdir(), 'chart_exports'),
-            description="Directory to export files to"
+            default=os.path.join(tempfile.gettempdir(), "chart_exports"),
+            description="Directory to export files to",
         )
-        plot_dpi: int = Field(
-            default=100,
-            description="DPI for plot exports"
-        )
+        plot_dpi: int = Field(default=100, description="DPI for plot exports")
         plot_figsize: Tuple[int, int] = Field(
             default=(10, 6),
-            description="Default figure size (width, height) in inches"
+            description="Default figure size (width, height) in inches",
         )
         allowed_extensions: List[str] = Field(
-            default=['.csv', '.xlsx', '.xls', '.json', '.parquet', '.feather', '.sav', '.sas7bdat', '.por'],
-            description="Allowed file extensions"
+            default=[
+                ".csv",
+                ".xlsx",
+                ".xls",
+                ".json",
+                ".parquet",
+                ".feather",
+                ".sav",
+                ".sas7bdat",
+                ".por",
+            ],
+            description="Allowed file extensions",
         )
 
     # Input schemas for operations
     class ReadDataSchema(BaseModel):
         """Schema for reading data files"""
-        file_path: str = Field(
-            description="Path to the data file"
-        )
-        nrows: Optional[int] = Field(
-            default=None,
-            description="Number of rows to read"
-        )
+
+        file_path: str = Field(description="Path to the data file")
+        nrows: Optional[int] = Field(default=None, description="Number of rows to read")
         sheet_name: Optional[Union[str, int]] = Field(
-            default=0,
-            description="Sheet name or index for Excel files"
+            default=0, description="Sheet name or index for Excel files"
         )
         export_format: Optional[ExportFormat] = Field(
-            default=None,
-            description="Format to export results in"
+            default=None, description="Format to export results in"
         )
-        export_path: Optional[str] = Field(
-            default=None,
-            description="Path to export results to"
-        )
+        export_path: Optional[str] = Field(default=None, description="Path to export results to")
 
-        @field_validator('file_path')
+        @field_validator("file_path")
         @classmethod
         def validate_file_path(cls, v):
             if not os.path.isfile(v):
                 raise ValueError(f"File not found: {v}")
             return v
 
-        @field_validator('export_path')
+        @field_validator("export_path")
         @classmethod
         def validate_export_path(cls, v, info):
-            if v and 'export_format' not in info.data:
+            if v and "export_format" not in info.data:
                 raise ValueError("export_format must be specified when export_path is provided")
             return v
 
     class VisualizationSchema(BaseModel):
         """Schema for data visualization"""
-        file_path: str = Field(
-            description="Path to the data file"
-        )
-        plot_type: VisualizationType = Field(
-            description="Type of visualization to create"
-        )
-        x: Optional[str] = Field(
-            default=None,
-            description="Column to use for x-axis"
-        )
-        y: Optional[str] = Field(
-            default=None,
-            description="Column to use for y-axis"
-        )
-        hue: Optional[str] = Field(
-            default=None,
-            description="Column to use for color encoding"
-        )
+
+        file_path: str = Field(description="Path to the data file")
+        plot_type: VisualizationType = Field(description="Type of visualization to create")
+        x: Optional[str] = Field(default=None, description="Column to use for x-axis")
+        y: Optional[str] = Field(default=None, description="Column to use for y-axis")
+        hue: Optional[str] = Field(default=None, description="Column to use for color encoding")
         variables: Optional[List[str]] = Field(
             default=None,
-            description="List of variables to include in the visualization"
+            description="List of variables to include in the visualization",
         )
-        title: Optional[str] = Field(
-            default=None,
-            description="Title for the visualization"
-        )
+        title: Optional[str] = Field(default=None, description="Title for the visualization")
         figsize: Optional[Tuple[int, int]] = Field(
-            default=None,
-            description="Figure size (width, height) in inches"
+            default=None, description="Figure size (width, height) in inches"
         )
         output_path: Optional[str] = Field(
-            default=None,
-            description="Path to save the visualization"
+            default=None, description="Path to save the visualization"
         )
-        dpi: Optional[int] = Field(
-            default=None,
-            description="DPI for the visualization"
-        )
+        dpi: Optional[int] = Field(default=None, description="DPI for the visualization")
         export_format: Optional[ExportFormat] = Field(
-            default=None,
-            description="Format to export results in"
+            default=None, description="Format to export results in"
         )
-        export_path: Optional[str] = Field(
-            default=None,
-            description="Path to export results to"
-        )
+        export_path: Optional[str] = Field(default=None, description="Path to export results to")
 
-        @field_validator('file_path')
+        @field_validator("file_path")
         @classmethod
         def validate_file_path(cls, v):
             if not os.path.isfile(v):
                 raise ValueError(f"File not found: {v}")
             return v
 
-        @field_validator('export_path')
+        @field_validator("export_path")
         @classmethod
         def validate_export_path(cls, v, info):
-            if v and 'export_format' not in info.data:
+            if v and "export_format" not in info.data:
                 raise ValueError("export_format must be specified when export_path is provided")
             return v
 
     class ExportDataSchema(BaseModel):
         """Schema for exporting data"""
-        file_path: str = Field(
-            description="Path to the data file"
-        )
+
+        file_path: str = Field(description="Path to the data file")
         variables: Optional[List[str]] = Field(
             default=None,
-            description="List of variables to include in the export"
+            description="List of variables to include in the export",
         )
-        format: ExportFormat = Field(
-            description="Format to export data in"
-        )
+        format: ExportFormat = Field(description="Format to export data in")
         export_path: Optional[str] = Field(
-            default=None,
-            description="Path to save the exported data"
+            default=None, description="Path to save the exported data"
         )
         export_format: Optional[ExportFormat] = Field(
-            default=None,
-            description="Format to export results in"
+            default=None, description="Format to export results in"
         )
 
-        @field_validator('file_path')
+        @field_validator("file_path")
         @classmethod
         def validate_file_path(cls, v):
             if not os.path.isfile(v):
                 raise ValueError(f"File not found: {v}")
             return v
 
-        @field_validator('export_path')
+        @field_validator("export_path")
         @classmethod
         def validate_export_path(cls, v, info):
-            if v and 'export_format' not in info.data:
+            if v and "export_format" not in info.data:
                 raise ValueError("export_format must be specified when export_path is provided")
             return v
 
@@ -213,9 +187,14 @@ class ChartTool(BaseTool):
         self.logger = logging.getLogger(__name__)
 
         # Set default matplotlib style
-        plt.style.use('seaborn-v0_8-whitegrid')
+        plt.style.use("seaborn-v0_8-whitegrid")
 
-    def _load_data(self, file_path: str, nrows: Optional[int] = None, sheet_name: Optional[Union[str, int]] = 0) -> pd.DataFrame:
+    def _load_data(
+        self,
+        file_path: str,
+        nrows: Optional[int] = None,
+        sheet_name: Optional[Union[str, int]] = 0,
+    ) -> pd.DataFrame:
         """
         Load data from various file formats into a pandas DataFrame
 
@@ -231,27 +210,30 @@ class ChartTool(BaseTool):
         ext = os.path.splitext(file_path)[1].lower()
 
         try:
-            if ext == '.sav':
+            if ext == ".sav":
                 import pyreadstat
+
                 df, meta = pyreadstat.read_sav(file_path)
                 return df
-            elif ext == '.sas7bdat':
+            elif ext == ".sas7bdat":
                 import pyreadstat
+
                 df, meta = pyreadstat.read_sas7bdat(file_path)
                 return df
-            elif ext == '.por':
+            elif ext == ".por":
                 import pyreadstat
+
                 df, meta = pyreadstat.read_por(file_path)
                 return df
-            elif ext == '.csv':
+            elif ext == ".csv":
                 return pd.read_csv(file_path, nrows=nrows)
-            elif ext in ['.xlsx', '.xls']:
+            elif ext in [".xlsx", ".xls"]:
                 return pd.read_excel(file_path, sheet_name=sheet_name, nrows=nrows)
-            elif ext == '.json':
+            elif ext == ".json":
                 return pd.read_json(file_path)
-            elif ext == '.parquet':
+            elif ext == ".parquet":
                 return pd.read_parquet(file_path)
-            elif ext == '.feather':
+            elif ext == ".feather":
                 return pd.read_feather(file_path)
             else:
                 raise ValueError(f"Unsupported file format: {ext}")
@@ -280,10 +262,10 @@ class ChartTool(BaseTool):
                     elif isinstance(obj, np.ndarray):
                         return obj.tolist()
                     elif isinstance(obj, pd.DataFrame):
-                        return obj.to_dict(orient='records')
+                        return obj.to_dict(orient="records")
                     return str(obj)
 
-                with open(path, 'w') as f:
+                with open(path, "w") as f:
                     json.dump(result, f, default=json_serialize, indent=2)
 
             elif format == ExportFormat.CSV:
@@ -306,7 +288,7 @@ class ChartTool(BaseTool):
                         if not isinstance(v, (dict, list, pd.DataFrame)):
                             flat_data[k] = v
 
-                    with open(path, 'w', newline='') as f:
+                    with open(path, "w", newline="") as f:
                         writer = csv.writer(f)
                         writer.writerow(flat_data.keys())
                         writer.writerow(flat_data.values())
@@ -319,7 +301,9 @@ class ChartTool(BaseTool):
                     if isinstance(value, pd.DataFrame):
                         html_content += value.to_html()
                     elif isinstance(value, dict):
-                        html_content += "<table border='1'><tr><th>Parameter</th><th>Value</th></tr>"
+                        html_content += (
+                            "<table border='1'><tr><th>Parameter</th><th>Value</th></tr>"
+                        )
                         for k, v in value.items():
                             html_content += f"<tr><td>{k}</td><td>{v}</td></tr>"
                         html_content += "</table>"
@@ -327,21 +311,22 @@ class ChartTool(BaseTool):
                         html_content += f"<p>{value}</p>"
                 html_content += "</body></html>"
 
-                with open(path, 'w') as f:
+                with open(path, "w") as f:
                     f.write(html_content)
 
             elif format == ExportFormat.EXCEL:
                 with pd.ExcelWriter(path) as writer:
                     for key, value in result.items():
                         if isinstance(value, pd.DataFrame):
-                            value.to_excel(writer, sheet_name=key[:31])  # Excel sheet names limited to 31 chars
+                            # Excel sheet names limited to 31 chars
+                            value.to_excel(writer, sheet_name=key[:31])
                         elif isinstance(value, dict):
                             pd.DataFrame(value, index=[0]).to_excel(writer, sheet_name=key[:31])
                         else:
-                            pd.DataFrame({key: [value]}).to_excel(writer, sheet_name='Summary')
+                            pd.DataFrame({key: [value]}).to_excel(writer, sheet_name="Summary")
 
             elif format == ExportFormat.MARKDOWN:
-                with open(path, 'w') as f:
+                with open(path, "w") as f:
                     f.write("# Chart Results\n\n")
                     for key, value in result.items():
                         f.write(f"## {key}\n\n")
@@ -358,11 +343,19 @@ class ChartTool(BaseTool):
         except Exception as e:
             raise ValueError(f"Error exporting to {format}: {str(e)}")
 
-    def _create_visualization(self, df: pd.DataFrame, plot_type: VisualizationType,
-                             x: Optional[str] = None, y: Optional[str] = None,
-                             hue: Optional[str] = None, variables: Optional[List[str]] = None,
-                             title: Optional[str] = None, figsize: Optional[Tuple[int, int]] = None,
-                             output_path: Optional[str] = None, dpi: Optional[int] = None) -> str:
+    def _create_visualization(
+        self,
+        df: pd.DataFrame,
+        plot_type: VisualizationType,
+        x: Optional[str] = None,
+        y: Optional[str] = None,
+        hue: Optional[str] = None,
+        variables: Optional[List[str]] = None,
+        title: Optional[str] = None,
+        figsize: Optional[Tuple[int, int]] = None,
+        output_path: Optional[str] = None,
+        dpi: Optional[int] = None,
+    ) -> str:
         """
         Create a visualization based on the parameters and return the path to the saved image
 
@@ -419,7 +412,7 @@ class ChartTool(BaseTool):
                     corr = df[variables].corr()
                 else:
                     corr = df.corr()
-                sns.heatmap(corr, annot=True, cmap='coolwarm', fmt=".2f")
+                sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f")
 
             elif plot_type == VisualizationType.PAIR:
                 if variables:
@@ -460,7 +453,9 @@ class ChartTool(BaseTool):
                 f"Variables not found in dataset: {', '.join(missing)}. Available columns: {list(available_columns)}"
             )
 
-    def _to_json_serializable(self, result: Union[pd.DataFrame, pd.Series, Dict]) -> Union[List[Dict], Dict]:
+    def _to_json_serializable(
+        self, result: Union[pd.DataFrame, pd.Series, Dict]
+    ) -> Union[List[Dict], Dict]:
         """
         Convert result to JSON serializable format
 
@@ -472,12 +467,12 @@ class ChartTool(BaseTool):
         """
         if isinstance(result, pd.DataFrame):
             # Handle datetime columns
-            for col in result.select_dtypes(include=['datetime64']).columns:
-                result[col] = result[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+            for col in result.select_dtypes(include=["datetime64"]).columns:
+                result[col] = result[col].dt.strftime("%Y-%m-%d %H:%M:%S")
             return result.to_dict(orient="records")
         elif isinstance(result, pd.Series):
             if pd.api.types.is_datetime64_any_dtype(result):
-                result = result.dt.strftime('%Y-%m-%d %H:%M:%S')
+                result = result.dt.strftime("%Y-%m-%d %H:%M:%S")
             return result.to_dict()
         elif isinstance(result, dict):
             # Handle numpy types and datetime objects
@@ -498,10 +493,14 @@ class ChartTool(BaseTool):
         return result
 
     @measure_execution_time
-    def read_data(self, file_path: str, nrows: Optional[int] = None,
-                 sheet_name: Optional[Union[str, int]] = 0,
-                 export_format: Optional[ExportFormat] = None,
-                 export_path: Optional[str] = None) -> Dict[str, Any]:
+    def read_data(
+        self,
+        file_path: str,
+        nrows: Optional[int] = None,
+        sheet_name: Optional[Union[str, int]] = 0,
+        export_format: Optional[ExportFormat] = None,
+        export_path: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Read data from various file formats
 
@@ -522,18 +521,21 @@ class ChartTool(BaseTool):
         # Check file extension
         ext = os.path.splitext(file_path)[1].lower()
         if ext not in self.config.allowed_extensions:
-            raise ValueError(f"Extension '{ext}' not allowed. Supported formats: {', '.join(self.config.allowed_extensions)}")
+            raise ValueError(
+                f"Extension '{ext}' not allowed. Supported formats: {', '.join(self.config.allowed_extensions)}"
+            )
 
         # Load data
         df = self._load_data(file_path, nrows, sheet_name)
 
         # Create result
         result = {
-            'variables': df.columns.tolist(),
-            'observations': len(df),
-            'dtypes': {col: str(dtype) for col, dtype in df.dtypes.items()},
-            'memory_usage': df.memory_usage(deep=True).sum() / (1024 * 1024),  # MB
-            'preview': df.head(5).to_dict(orient='records')
+            "variables": df.columns.tolist(),
+            "observations": len(df),
+            "dtypes": {col: str(dtype) for col, dtype in df.dtypes.items()},
+            # MB
+            "memory_usage": df.memory_usage(deep=True).sum() / (1024 * 1024),
+            "preview": df.head(5).to_dict(orient="records"),
         }
 
         # Handle export if requested
@@ -542,18 +544,26 @@ class ChartTool(BaseTool):
                 export_path = os.path.join(self.config.export_dir, export_path)
 
             self._export_result(result, export_path, export_format)
-            result['exported_to'] = export_path
+            result["exported_to"] = export_path
 
         return result
 
     @measure_execution_time
-    def visualize(self, file_path: str, plot_type: VisualizationType,
-                 x: Optional[str] = None, y: Optional[str] = None,
-                 hue: Optional[str] = None, variables: Optional[List[str]] = None,
-                 title: Optional[str] = None, figsize: Optional[Tuple[int, int]] = None,
-                 output_path: Optional[str] = None, dpi: Optional[int] = None,
-                 export_format: Optional[ExportFormat] = None,
-                 export_path: Optional[str] = None) -> Dict[str, Any]:
+    def visualize(
+        self,
+        file_path: str,
+        plot_type: VisualizationType,
+        x: Optional[str] = None,
+        y: Optional[str] = None,
+        hue: Optional[str] = None,
+        variables: Optional[List[str]] = None,
+        title: Optional[str] = None,
+        figsize: Optional[Tuple[int, int]] = None,
+        output_path: Optional[str] = None,
+        dpi: Optional[int] = None,
+        export_format: Optional[ExportFormat] = None,
+        export_path: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Create data visualizations
 
@@ -581,7 +591,9 @@ class ChartTool(BaseTool):
         # Check file extension
         ext = os.path.splitext(file_path)[1].lower()
         if ext not in self.config.allowed_extensions:
-            raise ValueError(f"Extension '{ext}' not allowed. Supported formats: {', '.join(self.config.allowed_extensions)}")
+            raise ValueError(
+                f"Extension '{ext}' not allowed. Supported formats: {', '.join(self.config.allowed_extensions)}"
+            )
 
         # Load data
         df = self._load_data(file_path)
@@ -601,15 +613,24 @@ class ChartTool(BaseTool):
 
         # Create visualization
         output_path = self._create_visualization(
-            df, plot_type, x, y, hue, variables, title, figsize, output_path, dpi
+            df,
+            plot_type,
+            x,
+            y,
+            hue,
+            variables,
+            title,
+            figsize,
+            output_path,
+            dpi,
         )
 
         # Create result
         result = {
-            'plot_type': plot_type,
-            'output_path': output_path,
-            'variables': variables or [x, y, hue],
-            'title': title or f"{plot_type.capitalize()} Plot"
+            "plot_type": plot_type,
+            "output_path": output_path,
+            "variables": variables or [x, y, hue],
+            "title": title or f"{plot_type.capitalize()} Plot",
         }
 
         # Handle export if requested
@@ -618,15 +639,19 @@ class ChartTool(BaseTool):
                 export_path = os.path.join(self.config.export_dir, export_path)
 
             self._export_result(result, export_path, export_format)
-            result['exported_to'] = export_path
+            result["exported_to"] = export_path
 
         return result
 
     @measure_execution_time
-    def export_data(self, file_path: str, format: ExportFormat,
-                   variables: Optional[List[str]] = None,
-                   export_path: Optional[str] = None,
-                   export_format: Optional[ExportFormat] = None) -> Dict[str, Any]:
+    def export_data(
+        self,
+        file_path: str,
+        format: ExportFormat,
+        variables: Optional[List[str]] = None,
+        export_path: Optional[str] = None,
+        export_format: Optional[ExportFormat] = None,
+    ) -> Dict[str, Any]:
         """
         Export data to various formats
 
@@ -647,7 +672,9 @@ class ChartTool(BaseTool):
         # Check file extension
         ext = os.path.splitext(file_path)[1].lower()
         if ext not in self.config.allowed_extensions:
-            raise ValueError(f"Extension '{ext}' not allowed. Supported formats: {', '.join(self.config.allowed_extensions)}")
+            raise ValueError(
+                f"Extension '{ext}' not allowed. Supported formats: {', '.join(self.config.allowed_extensions)}"
+            )
 
         # Load data
         df = self._load_data(file_path)
@@ -672,7 +699,7 @@ class ChartTool(BaseTool):
         # Export data
         try:
             if format == ExportFormat.JSON:
-                df.to_json(export_path, orient='records', indent=2)
+                df.to_json(export_path, orient="records", indent=2)
             elif format == ExportFormat.CSV:
                 df.to_csv(export_path, index=False)
             elif format == ExportFormat.HTML:
@@ -680,18 +707,18 @@ class ChartTool(BaseTool):
             elif format == ExportFormat.EXCEL:
                 df.to_excel(export_path, index=False)
             elif format == ExportFormat.MARKDOWN:
-                with open(export_path, 'w') as f:
+                with open(export_path, "w") as f:
                     f.write(df.to_markdown())
         except Exception as e:
             raise ValueError(f"Error exporting to {format}: {str(e)}")
 
         # Create result
         result = {
-            'format': format,
-            'path': export_path,
-            'rows': len(df),
-            'columns': len(df.columns),
-            'variables': df.columns.tolist()
+            "format": format,
+            "path": export_path,
+            "rows": len(df),
+            "columns": len(df.columns),
+            "variables": df.columns.tolist(),
         }
 
         # Handle export if requested
@@ -700,6 +727,6 @@ class ChartTool(BaseTool):
                 export_path = os.path.join(self.config.export_dir, export_path)
 
             self._export_result(result, export_path, export_format)
-            result['exported_to'] = export_path
+            result["exported_to"] = export_path
 
         return result

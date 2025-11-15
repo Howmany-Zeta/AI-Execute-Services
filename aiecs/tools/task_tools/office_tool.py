@@ -1,3 +1,11 @@
+from aiecs.tools import register_tool
+from aiecs.tools.base_tool import BaseTool
+from pydantic import BaseModel, field_validator, ConfigDict, Field
+from pptx.util import Inches
+from pptx import Presentation
+from docx.shared import Pt
+from docx import Document as DocxDocument
+from tika import parser
 import os
 import logging
 import warnings
@@ -9,121 +17,152 @@ import pytesseract
 from PIL import Image
 
 # Configure Tika log path to user-writable directory before importing
-os.environ['TIKA_LOG_PATH'] = os.path.expanduser('~/.cache/tika')
-os.makedirs(os.path.expanduser('~/.cache/tika'), exist_ok=True)
+os.environ["TIKA_LOG_PATH"] = os.path.expanduser("~/.cache/tika")
+os.makedirs(os.path.expanduser("~/.cache/tika"), exist_ok=True)
 
 # Suppress pkg_resources deprecation warning from tika
-warnings.filterwarnings('ignore', category=UserWarning, module='tika')
+warnings.filterwarnings("ignore", category=UserWarning, module="tika")
 
-from tika import parser
-from docx import Document as DocxDocument
-from docx.shared import Pt
-from pptx import Presentation
-from pptx.util import Inches
-from pydantic import BaseModel, field_validator, ValidationError, ConfigDict, Field
-
-from aiecs.tools.base_tool import BaseTool
-from aiecs.tools import register_tool
 
 # Module-level default configuration for validators
 _DEFAULT_MAX_FILE_SIZE_MB = 100
-_DEFAULT_ALLOWED_EXTENSIONS = ['.docx', '.pptx', '.xlsx', '.pdf', '.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif']
+_DEFAULT_ALLOWED_EXTENSIONS = [
+    ".docx",
+    ".pptx",
+    ".xlsx",
+    ".pdf",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".tiff",
+    ".bmp",
+    ".gif",
+]
 
 # Exceptions
+
+
 class OfficeToolError(Exception):
     """Base exception for OfficeTool errors."""
-    pass
+
 
 class InputValidationError(OfficeToolError):
     """Raised when input validation fails."""
-    pass
+
 
 class FileOperationError(OfficeToolError):
     """Raised when file operations fail."""
-    pass
+
 
 class SecurityError(OfficeToolError):
     """Raised for security-related issues."""
-    pass
+
 
 class ContentValidationError(OfficeToolError):
     """Raised when document content validation fails."""
-    pass
+
 
 # Base schema for common fields
+
+
 class BaseFileSchema(BaseModel):
     file_path: Optional[str] = None
     output_path: Optional[str] = None
     image_path: Optional[str] = None
 
-    @field_validator('file_path', 'output_path', 'image_path')
+    @field_validator("file_path", "output_path", "image_path")
     def validate_path(cls, v: Optional[str], field) -> Optional[str]:
         """Validate file paths for existence, size, extension, and path traversal."""
         if not v:
             return v
         abs_path = os.path.abspath(os.path.normpath(v))
         # Check for path traversal
-        if '..' in v or '~' in v or '%' in v:
+        if ".." in v or "~" in v or "%" in v:
             raise SecurityError(f"Path traversal attempt detected: {v}")
         # Ensure path is in allowed directories
         base_dir = os.path.abspath(os.getcwd())
-        allowed_dirs = [os.path.abspath(os.path.normpath(d)) for d in ['/tmp', './data', './uploads']]
-        if not abs_path.startswith(base_dir) and not any(abs_path.startswith(d) for d in allowed_dirs):
+        allowed_dirs = [
+            os.path.abspath(os.path.normpath(d)) for d in ["/tmp", "./data", "./uploads"]
+        ]
+        if not abs_path.startswith(base_dir) and not any(
+            abs_path.startswith(d) for d in allowed_dirs
+        ):
             raise SecurityError(f"Path not in allowed directories: {abs_path}")
         # Check extension
         ext = os.path.splitext(abs_path)[1].lower()
         if ext not in _DEFAULT_ALLOWED_EXTENSIONS:
-            raise SecurityError(f"Extension '{ext}' not allowed for '{field.field_name}', expected {_DEFAULT_ALLOWED_EXTENSIONS}")
+            raise SecurityError(
+                f"Extension '{ext}' not allowed for '{field.field_name}', expected {_DEFAULT_ALLOWED_EXTENSIONS}"
+            )
         # Check file existence and size for input paths
-        if field.field_name == 'file_path':
+        if field.field_name == "file_path":
             if not os.path.isfile(abs_path):
                 raise FileOperationError(f"{field.field_name}: File not found: {abs_path}")
             size_mb = os.path.getsize(abs_path) / (1024 * 1024)
             if size_mb > _DEFAULT_MAX_FILE_SIZE_MB:
-                raise FileOperationError(f"{field.field_name}: File too large: {size_mb:.1f}MB, max {_DEFAULT_MAX_FILE_SIZE_MB}MB")
+                raise FileOperationError(
+                    f"{field.field_name}: File too large: {size_mb:.1f}MB, max {_DEFAULT_MAX_FILE_SIZE_MB}MB"
+                )
         # Check for existing output paths
-        elif field.field_name == 'output_path' and os.path.exists(abs_path):
+        elif field.field_name == "output_path" and os.path.exists(abs_path):
             raise FileOperationError(f"{field.field_name}: File already exists: {abs_path}")
         return abs_path
 
+
 # Schemas for operations
+
+
 class ReadDocxSchema(BaseFileSchema):
     """Schema for reading DOCX files."""
+
     file_path: str
     include_tables: bool = False
 
+
 class WriteDocxSchema(BaseFileSchema):
     """Schema for writing DOCX files."""
+
     text: str
     output_path: str
     table_data: Optional[List[List[str]]] = None
 
+
 class ReadPptxSchema(BaseFileSchema):
     """Schema for reading PPTX files."""
+
     file_path: str
+
 
 class WritePptxSchema(BaseFileSchema):
     """Schema for writing PPTX files."""
+
     slides: List[str]
     output_path: str
     image_path: Optional[str] = None
 
+
 class ReadXlsxSchema(BaseFileSchema):
     """Schema for reading XLSX files."""
+
     file_path: str
     sheet_name: Optional[str] = None
 
+
 class WriteXlsxSchema(BaseFileSchema):
     """Schema for writing XLSX files."""
+
     data: List[Dict]
     output_path: str
-    sheet_name: str = 'Sheet1'
+    sheet_name: str = "Sheet1"
+
 
 class ExtractTextSchema(BaseFileSchema):
     """Schema for extracting text from files."""
+
     file_path: str
 
-@register_tool('office')
+
+@register_tool("office")
 class OfficeTool(BaseTool):
     """
     Office document processing tool supporting:
@@ -137,29 +176,32 @@ class OfficeTool(BaseTool):
 
     Inherits from BaseTool to leverage ToolExecutor for caching, concurrency, and error handling.
     """
-    
+
     # Configuration schema
     class Config(BaseModel):
         """Configuration for the office tool"""
+
         model_config = ConfigDict(env_prefix="OFFICE_TOOL_")
-        
-        max_file_size_mb: int = Field(
-            default=100,
-            description="Maximum file size in megabytes"
-        )
-        default_font: str = Field(
-            default="Arial",
-            description="Default font for documents"
-        )
-        default_font_size: int = Field(
-            default=12,
-            description="Default font size in points"
-        )
+
+        max_file_size_mb: int = Field(default=100, description="Maximum file size in megabytes")
+        default_font: str = Field(default="Arial", description="Default font for documents")
+        default_font_size: int = Field(default=12, description="Default font size in points")
         allowed_extensions: List[str] = Field(
-            default=['.docx', '.pptx', '.xlsx', '.pdf', '.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif'],
-            description="Allowed document file extensions"
+            default=[
+                ".docx",
+                ".pptx",
+                ".xlsx",
+                ".pdf",
+                ".png",
+                ".jpg",
+                ".jpeg",
+                ".tiff",
+                ".bmp",
+                ".gif",
+            ],
+            description="Allowed document file extensions",
         )
-    
+
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         Initialize OfficeTool with configuration.
@@ -171,14 +213,14 @@ class OfficeTool(BaseTool):
             ValueError: If config contains invalid settings.
         """
         super().__init__(config)
-        
+
         # Parse configuration
         self.config = self.Config(**(config or {}))
-        
+
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
             handler = logging.StreamHandler()
-            handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
+            handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
             self.logger.addHandler(handler)
         self.logger.setLevel(logging.INFO)
 
@@ -194,28 +236,29 @@ class OfficeTool(BaseTool):
             ContentValidationError: If document structure is invalid.
         """
         try:
-            if file_type == 'docx':
+            if file_type == "docx":
                 doc = DocxDocument(file_path)
-                if not hasattr(doc, 'paragraphs'):
+                if not hasattr(doc, "paragraphs"):
                     raise ContentValidationError("Invalid DOCX structure")
-            elif file_type == 'pptx':
+            elif file_type == "pptx":
                 prs = Presentation(file_path)
-                if not hasattr(prs, 'slides'):
+                if not hasattr(prs, "slides"):
                     raise ContentValidationError("Invalid PPTX structure")
-            elif file_type == 'xlsx':
-                # Just validate that file can be read - don't care about return type
+            elif file_type == "xlsx":
+                # Just validate that file can be read - don't care about return
+                # type
                 pd.read_excel(file_path, nrows=5)
-            elif file_type == 'pdf':
+            elif file_type == "pdf":
                 with pdfplumber.open(file_path) as pdf:
                     if len(pdf.pages) == 0:
                         raise ContentValidationError("PDF has no pages")
-            elif file_type == 'image':
+            elif file_type == "image":
                 img = Image.open(file_path)
                 img.verify()  # Verify it's a valid image
             else:
                 # Use tika as fallback for other formats
                 parsed = parser.from_file(file_path)
-                if not parsed or not parsed.get('content'):
+                if not parsed or not parsed.get("content"):
                     raise ContentValidationError("Unable to parse file content")
         except Exception as e:
             raise ContentValidationError(f"Invalid {file_type.upper()} file: {str(e)}")
@@ -232,9 +275,11 @@ class OfficeTool(BaseTool):
         """
         if not text:
             return ""
-        return ''.join(char for char in text if ord(char) >= 32 or char in '\n\r\t')
+        return "".join(char for char in text if ord(char) >= 32 or char in "\n\r\t")
 
-    def _sanitize_table_data(self, table_data: Optional[List[List[str]]]) -> Optional[List[List[str]]]:
+    def _sanitize_table_data(
+        self, table_data: Optional[List[List[str]]]
+    ) -> Optional[List[List[str]]]:
         """
         Sanitize table data to remove harmful content.
 
@@ -264,7 +309,8 @@ class OfficeTool(BaseTool):
         for item in data_list:
             clean_item = {}
             for k, v in item.items():
-                clean_key = self._sanitize_text(str(k))[:255]  # Excel key limit with sanitization
+                # Excel key limit with sanitization
+                clean_key = self._sanitize_text(str(k))[:255]
                 if isinstance(v, str):
                     clean_value = self._sanitize_text(v)[:32767]  # Excel cell limit
                 else:
@@ -293,7 +339,7 @@ class OfficeTool(BaseTool):
                     page_text = page.extract_text()
                     if page_text:
                         text_content.append(page_text)
-            return '\n'.join(text_content)
+            return "\n".join(text_content)
         except Exception as e:
             raise FileOperationError(f"Failed to extract PDF text: {str(e)}")
 
@@ -313,9 +359,9 @@ class OfficeTool(BaseTool):
         try:
             image = Image.open(file_path)
             # Convert to RGB if necessary
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
-            text = pytesseract.image_to_string(image, lang='eng+chi_sim')
+            if image.mode != "RGB":
+                image = image.convert("RGB")
+            text = pytesseract.image_to_string(image, lang="eng+chi_sim")
             return text.strip()
         except Exception as e:
             raise FileOperationError(f"Failed to extract image text: {str(e)}")
@@ -335,7 +381,7 @@ class OfficeTool(BaseTool):
         """
         try:
             parsed = parser.from_file(file_path)
-            content = parsed.get('content', '')
+            content = parsed.get("content", "")
             return content.strip() if content else ""
         except Exception as e:
             raise FileOperationError(f"Failed to extract text with Tika: {str(e)}")
@@ -356,19 +402,27 @@ class OfficeTool(BaseTool):
             ContentValidationError: If document structure is invalid.
         """
         try:
-            self._validate_document(file_path, 'docx')
+            self._validate_document(file_path, "docx")
             doc = DocxDocument(file_path)
             paras = [p.text for p in doc.paragraphs if p.text.strip()]
             tables = None
             if include_tables:
-                tables = [[[cell.text for cell in row.cells] for row in table.rows] for table in doc.tables]
-            return {'paragraphs': paras, 'tables': tables}
+                tables = [
+                    [[cell.text for cell in row.cells] for row in table.rows]
+                    for table in doc.tables
+                ]
+            return {"paragraphs": paras, "tables": tables}
         except ContentValidationError:
             raise
         except Exception as e:
             raise FileOperationError(f"Failed to read DOCX: {str(e)}")
 
-    def write_docx(self, text: str, output_path: str, table_data: Optional[List[List[str]]] = None) -> Dict[str, Any]:
+    def write_docx(
+        self,
+        text: str,
+        output_path: str,
+        table_data: Optional[List[List[str]]] = None,
+    ) -> Dict[str, Any]:
         """
         Write content to a DOCX file.
 
@@ -387,7 +441,7 @@ class OfficeTool(BaseTool):
             sanitized_text = self._sanitize_text(text)
             sanitized_table_data = self._sanitize_table_data(table_data)
             doc = DocxDocument()
-            style = doc.styles['Normal']
+            style = doc.styles["Normal"]
             style.font.name = self.config.default_font
             style.font.size = Pt(self.config.default_font_size)
             for line in sanitized_text.splitlines():
@@ -401,9 +455,10 @@ class OfficeTool(BaseTool):
                         if j < len(row):
                             table.rows[i].cells[j].text = str(row[j])
                         else:
-                            table.rows[i].cells[j].text = ""  # Empty cell for missing data
+                            # Empty cell for missing data
+                            table.rows[i].cells[j].text = ""
             doc.save(output_path)
-            return {'success': True, 'file_path': output_path}
+            return {"success": True, "file_path": output_path}
         except Exception as e:
             raise FileOperationError(f"Failed to write DOCX: {str(e)}")
 
@@ -422,12 +477,12 @@ class OfficeTool(BaseTool):
             ContentValidationError: If document structure is invalid.
         """
         try:
-            self._validate_document(file_path, 'pptx')
+            self._validate_document(file_path, "pptx")
             prs = Presentation(file_path)
             texts = []
             for slide in prs.slides:
                 for shape in slide.shapes:
-                    if hasattr(shape, 'text'):
+                    if hasattr(shape, "text"):
                         txt = shape.text.strip()
                         if txt:
                             texts.append(txt)
@@ -437,7 +492,12 @@ class OfficeTool(BaseTool):
         except Exception as e:
             raise FileOperationError(f"Failed to read PPTX: {str(e)}")
 
-    def write_pptx(self, slides: List[str], output_path: str, image_path: Optional[str] = None) -> Dict[str, Any]:
+    def write_pptx(
+        self,
+        slides: List[str],
+        output_path: str,
+        image_path: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Write content to a PPTX file.
 
@@ -474,7 +534,7 @@ class OfficeTool(BaseTool):
                     except Exception as img_err:
                         self.logger.warning(f"Could not add image to slide: {img_err}")
             prs.save(output_path)
-            return {'success': True, 'file_path': output_path}
+            return {"success": True, "file_path": output_path}
         except Exception as e:
             raise FileOperationError(f"Failed to write PPTX: {str(e)}")
 
@@ -494,27 +554,29 @@ class OfficeTool(BaseTool):
             ContentValidationError: If document structure is invalid.
         """
         try:
-            self._validate_document(file_path, 'xlsx')
+            self._validate_document(file_path, "xlsx")
             data = pd.read_excel(file_path, sheet_name=sheet_name)
-            
+
             # Handle different return types from pd.read_excel()
             if isinstance(data, pd.DataFrame):
                 # Single sheet or specific sheet requested
-                return data.to_dict(orient='records')
+                return data.to_dict(orient="records")
             elif isinstance(data, dict):
                 # Multiple sheets returned as dict - use the first sheet
                 first_sheet_name = list(data.keys())[0]
                 first_df = data[first_sheet_name]
-                return first_df.to_dict(orient='records')
+                return first_df.to_dict(orient="records")
             else:
                 raise FileOperationError("Unexpected data type returned from Excel file")
-                
+
         except ContentValidationError:
             raise
         except Exception as e:
             raise FileOperationError(f"Failed to read XLSX: {str(e)}")
 
-    def write_xlsx(self, data: List[Dict], output_path: str, sheet_name: str = 'Sheet1') -> Dict[str, Any]:
+    def write_xlsx(
+        self, data: List[Dict], output_path: str, sheet_name: str = "Sheet1"
+    ) -> Dict[str, Any]:
         """
         Write content to an XLSX file.
 
@@ -534,8 +596,10 @@ class OfficeTool(BaseTool):
             if not sanitized_data:
                 pd.DataFrame().to_excel(output_path, index=False, sheet_name=sheet_name)
             else:
-                pd.DataFrame(sanitized_data).to_excel(output_path, index=False, sheet_name=sheet_name)
-            return {'success': True, 'file_path': output_path}
+                pd.DataFrame(sanitized_data).to_excel(
+                    output_path, index=False, sheet_name=sheet_name
+                )
+            return {"success": True, "file_path": output_path}
         except Exception as e:
             raise FileOperationError(f"Failed to write XLSX: {str(e)}")
 
@@ -557,38 +621,45 @@ class OfficeTool(BaseTool):
             file_ext = os.path.splitext(file_path)[1].lower()
 
             # Determine file type and validate
-            if file_ext == '.pdf':
-                file_type = 'pdf'
-            elif file_ext == '.docx':
-                file_type = 'docx'
-            elif file_ext == '.pptx':
-                file_type = 'pptx'
-            elif file_ext == '.xlsx':
-                file_type = 'xlsx'
-            elif file_ext in ['.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif']:
-                file_type = 'image'
+            if file_ext == ".pdf":
+                file_type = "pdf"
+            elif file_ext == ".docx":
+                file_type = "docx"
+            elif file_ext == ".pptx":
+                file_type = "pptx"
+            elif file_ext == ".xlsx":
+                file_type = "xlsx"
+            elif file_ext in [
+                ".png",
+                ".jpg",
+                ".jpeg",
+                ".tiff",
+                ".bmp",
+                ".gif",
+            ]:
+                file_type = "image"
             else:
-                file_type = 'other'
+                file_type = "other"
 
             # Validate document structure
             self._validate_document(file_path, file_type)
 
             # Extract text based on file type
-            if file_type == 'pdf':
+            if file_type == "pdf":
                 return self._sanitize_text(self._extract_pdf_text(file_path))
-            elif file_type == 'docx':
+            elif file_type == "docx":
                 doc = DocxDocument(file_path)
                 paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-                return self._sanitize_text('\n'.join(paragraphs))
-            elif file_type == 'pptx':
+                return self._sanitize_text("\n".join(paragraphs))
+            elif file_type == "pptx":
                 prs = Presentation(file_path)
                 texts = []
                 for slide in prs.slides:
                     for shape in slide.shapes:
-                        if hasattr(shape, 'text') and shape.text.strip():
+                        if hasattr(shape, "text") and shape.text.strip():
                             texts.append(shape.text)
-                return self._sanitize_text('\n'.join(texts))
-            elif file_type == 'xlsx':
+                return self._sanitize_text("\n".join(texts))
+            elif file_type == "xlsx":
                 data = pd.read_excel(file_path)
                 # Handle different return types from pd.read_excel()
                 if isinstance(data, pd.DataFrame):
@@ -599,8 +670,9 @@ class OfficeTool(BaseTool):
                     first_df = data[first_sheet_name]
                     return self._sanitize_text(first_df.to_string(index=False))
                 else:
-                    return self._sanitize_text("")  # Fallback for unexpected data types
-            elif file_type == 'image':
+                    # Fallback for unexpected data types
+                    return self._sanitize_text("")
+            elif file_type == "image":
                 return self._sanitize_text(self._extract_image_text(file_path))
             else:
                 # Use Tika as fallback for other formats

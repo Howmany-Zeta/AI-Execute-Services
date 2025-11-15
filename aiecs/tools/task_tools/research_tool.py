@@ -1,8 +1,8 @@
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 import spacy
 from spacy.language import Language
-from pydantic import BaseModel, ValidationError, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field
 from collections import Counter
 from scipy.stats import pearsonr
 import os
@@ -14,13 +14,13 @@ from aiecs.tools import register_tool
 # Exceptions
 class ResearchToolError(Exception):
     """Base exception for ResearchTool errors."""
-    pass
+
 
 class FileOperationError(ResearchToolError):
     """Raised when file operations fail."""
-    pass
 
-@register_tool('research')
+
+@register_tool("research")
 class ResearchTool(BaseTool):
     """
     Tool for causal inference using Mill's methods, advanced induction, deduction, and text summarization.
@@ -37,29 +37,24 @@ class ResearchTool(BaseTool):
 
     Inherits from BaseTool.
     """
-    
+
     # Configuration schema
     class Config(BaseModel):
         """Configuration for the research tool"""
+
         model_config = ConfigDict(env_prefix="RESEARCH_TOOL_")
-        
+
         max_workers: int = Field(
             default=min(32, (os.cpu_count() or 4) * 2),
-            description="Maximum number of worker threads"
+            description="Maximum number of worker threads",
         )
-        spacy_model: str = Field(
-            default="en_core_web_sm",
-            description="Default spaCy model to use"
-        )
-        max_text_length: int = Field(
-            default=10_000,
-            description="Maximum text length for inputs"
-        )
+        spacy_model: str = Field(default="en_core_web_sm", description="Default spaCy model to use")
+        max_text_length: int = Field(default=10_000, description="Maximum text length for inputs")
         allowed_spacy_models: List[str] = Field(
             default=["en_core_web_sm", "zh_core_web_sm"],
-            description="Allowed spaCy models"
+            description="Allowed spaCy models",
         )
-    
+
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         Initialize ResearchTool with settings and resources.
@@ -71,21 +66,21 @@ class ResearchTool(BaseTool):
             ValueError: If config contains invalid settings.
         """
         super().__init__(config)
-        
+
         # Parse configuration
         self.config = self.Config(**(config or {}))
-        
+
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
             handler = logging.StreamHandler()
-            handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
+            handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
             self.logger.addHandler(handler)
         self.logger.setLevel(logging.INFO)
         self._spacy_nlp: Optional[Language] = None
 
     def __del__(self):
         """Clean up resources when the object is destroyed."""
-        if hasattr(self, '_spacy_nlp') and self._spacy_nlp is not None:
+        if hasattr(self, "_spacy_nlp") and self._spacy_nlp is not None:
             self._spacy_nlp = None
 
     def _get_spacy(self) -> Language:
@@ -100,7 +95,9 @@ class ResearchTool(BaseTool):
         """
         if self._spacy_nlp is None:
             if self.config.spacy_model not in self.config.allowed_spacy_models:
-                raise ResearchToolError(f"Invalid spaCy model '{self.config.spacy_model}', expected {self.config.allowed_spacy_models}")
+                raise ResearchToolError(
+                    f"Invalid spaCy model '{self.config.spacy_model}', expected {self.config.allowed_spacy_models}"
+                )
             self._spacy_nlp = spacy.load(self.config.spacy_model, disable=["textcat"])
         return self._spacy_nlp
 
@@ -118,17 +115,19 @@ class ResearchTool(BaseTool):
             FileOperationError: If processing fails.
         """
         try:
-            truthy = [c['attrs'] for c in cases if c.get('outcome')]
+            truthy = [c["attrs"] for c in cases if c.get("outcome")]
             if not truthy:
-                return {'common_factors': []}
+                return {"common_factors": []}
             common = set(k for k, v in truthy[0].items() if v)
             for attrs in truthy[1:]:
                 common &= set(k for k, v in attrs.items() if v)
-            return {'common_factors': list(common)}
+            return {"common_factors": list(common)}
         except Exception as e:
             raise FileOperationError(f"Failed to process mill_agreement: {str(e)}")
 
-    def mill_difference(self, positive_case: Dict[str, Any], negative_case: Dict[str, Any]) -> Dict[str, Any]:
+    def mill_difference(
+        self, positive_case: Dict[str, Any], negative_case: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Find attribute(s) present in positive case but absent in negative case using Mill's Method of Difference.
 
@@ -143,14 +142,18 @@ class ResearchTool(BaseTool):
             FileOperationError: If processing fails.
         """
         try:
-            pos = {k for k, v in positive_case.get('attrs', {}).items() if v}
-            neg = {k for k, v in negative_case.get('attrs', {}).items() if v}
+            pos = {k for k, v in positive_case.get("attrs", {}).items() if v}
+            neg = {k for k, v in negative_case.get("attrs", {}).items() if v}
             diff = pos - neg
-            return {'difference_factors': list(diff)}
+            return {"difference_factors": list(diff)}
         except Exception as e:
             raise FileOperationError(f"Failed to process mill_difference: {str(e)}")
 
-    def mill_joint(self, positive_cases: List[Dict[str, Any]], negative_cases: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def mill_joint(
+        self,
+        positive_cases: List[Dict[str, Any]],
+        negative_cases: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
         """
         Combine Mill's Method of Agreement and Difference to identify causal factors.
 
@@ -165,22 +168,24 @@ class ResearchTool(BaseTool):
             FileOperationError: If processing fails.
         """
         try:
-            truthy = [c['attrs'] for c in positive_cases if c.get('outcome')]
+            truthy = [c["attrs"] for c in positive_cases if c.get("outcome")]
             if not truthy:
-                return {'causal_factors': []}
+                return {"causal_factors": []}
             common = set(k for k, v in truthy[0].items() if v)
             for attrs in truthy[1:]:
                 common &= set(k for k, v in attrs.items() if v)
-            falsy = [c['attrs'] for c in negative_cases if not c.get('outcome')]
+            falsy = [c["attrs"] for c in negative_cases if not c.get("outcome")]
             if not falsy:
-                return {'causal_factors': list(common)}
+                return {"causal_factors": list(common)}
             for attrs in falsy:
                 common -= set(k for k, v in attrs.items() if v)
-            return {'causal_factors': list(common)}
+            return {"causal_factors": list(common)}
         except Exception as e:
             raise FileOperationError(f"Failed to process mill_joint: {str(e)}")
 
-    def mill_residues(self, cases: List[Dict[str, Any]], known_causes: Dict[str, List[str]]) -> Dict[str, Any]:
+    def mill_residues(
+        self, cases: List[Dict[str, Any]], known_causes: Dict[str, List[str]]
+    ) -> Dict[str, Any]:
         """
         Identify residual causes after accounting for known causes using Mill's Method of Residues.
 
@@ -197,19 +202,21 @@ class ResearchTool(BaseTool):
         try:
             residual = {}
             for case in cases:
-                effects = case.get('effects', {})
-                attrs = set(k for k, v in case.get('attrs', {}).items() if v)
+                effects = case.get("effects", {})
+                attrs = set(k for k, v in case.get("attrs", {}).items() if v)
                 for effect in effects:
                     if effect in known_causes:
                         known = set(known_causes[effect])
                         residual[effect] = list(attrs - known)
                     else:
                         residual[effect] = list(attrs)
-            return {'residual_causes': residual}
+            return {"residual_causes": residual}
         except Exception as e:
             raise FileOperationError(f"Failed to process mill_residues: {str(e)}")
 
-    def mill_concomitant(self, cases: List[Dict[str, Any]], factor: str, effect: str) -> Dict[str, Any]:
+    def mill_concomitant(
+        self, cases: List[Dict[str, Any]], factor: str, effect: str
+    ) -> Dict[str, Any]:
         """
         Analyze correlation between factor and effect variations using Mill's Method of Concomitant Variations.
 
@@ -225,16 +232,17 @@ class ResearchTool(BaseTool):
             FileOperationError: If processing fails.
         """
         try:
-            factor_vals = [case['attrs'].get(factor, 0) for case in cases]
-            effect_vals = [case['attrs'].get(effect, 0) for case in cases]
+            factor_vals = [case["attrs"].get(factor, 0) for case in cases]
+            effect_vals = [case["attrs"].get(effect, 0) for case in cases]
             if len(factor_vals) < 2:
-                return {'correlation': 0.0, 'pvalue': 1.0}
-            
+                return {"correlation": 0.0, "pvalue": 1.0}
+
             # Convert to numpy arrays to avoid PyTorch compatibility issues
             import numpy as np
+
             factor_array = np.array(factor_vals, dtype=np.float64)
             effect_array = np.array(effect_vals, dtype=np.float64)
-            
+
             # Calculate correlation using numpy if scipy fails
             try:
                 corr, pval = pearsonr(factor_array, effect_array)
@@ -242,7 +250,8 @@ class ResearchTool(BaseTool):
                 # Fallback to numpy correlation calculation
                 self.logger.warning(f"scipy pearsonr failed ({e}), using numpy fallback")
                 corr = np.corrcoef(factor_array, effect_array)[0, 1]
-                # Simple p-value approximation (not statistically rigorous but functional)
+                # Simple p-value approximation (not statistically rigorous but
+                # functional)
                 n = len(factor_array)
                 if n <= 2:
                     pval = 1.0
@@ -250,9 +259,10 @@ class ResearchTool(BaseTool):
                     # Approximate p-value using t-distribution
                     t_stat = corr * np.sqrt((n - 2) / (1 - corr**2 + 1e-10))
                     from scipy.stats import t
+
                     pval = 2 * (1 - t.cdf(abs(t_stat), n - 2))
-            
-            return {'correlation': float(corr), 'pvalue': float(pval)}
+
+            return {"correlation": float(corr), "pvalue": float(pval)}
         except Exception as e:
             raise FileOperationError(f"Failed to process mill_concomitant: {str(e)}")
 
@@ -276,10 +286,10 @@ class ResearchTool(BaseTool):
             patterns = []
             for doc in docs:
                 patterns.extend([chunk.text.lower() for chunk in doc.noun_chunks])
-                patterns.extend([token.lemma_.lower() for token in doc if token.pos_ == 'VERB'])
+                patterns.extend([token.lemma_.lower() for token in doc if token.pos_ == "VERB"])
             counter = Counter(patterns)
             common = [word for word, count in counter.most_common() if count > 1][:max_keywords]
-            return {'patterns': common}
+            return {"patterns": common}
         except Exception as e:
             raise FileOperationError(f"Failed to process induction: {str(e)}")
 
@@ -302,14 +312,22 @@ class ResearchTool(BaseTool):
             premises_docs = [nlp(p) for p in premises]
             conclusion_doc = nlp(conclusion) if conclusion else None
             if not conclusion_doc:
-                return {'valid': False, 'conclusion': None, 'reason': 'No conclusion provided'}
+                return {
+                    "valid": False,
+                    "conclusion": None,
+                    "reason": "No conclusion provided",
+                }
             premise_entities = set()
             premise_predicates = set()
             for doc in premises_docs:
                 premise_entities.update(ent.text.lower() for ent in doc.ents)
-                premise_predicates.update(token.lemma_.lower() for token in doc if token.pos_ == 'VERB')
+                premise_predicates.update(
+                    token.lemma_.lower() for token in doc if token.pos_ == "VERB"
+                )
             conclusion_entities = set(ent.text.lower() for ent in conclusion_doc.ents)
-            conclusion_predicates = set(token.lemma_.lower() for token in conclusion_doc if token.pos_ == 'VERB')
+            conclusion_predicates = set(
+                token.lemma_.lower() for token in conclusion_doc if token.pos_ == "VERB"
+            )
             entities_valid = conclusion_entities.issubset(premise_entities)
             predicates_valid = conclusion_predicates.issubset(premise_predicates)
             valid = entities_valid and predicates_valid
@@ -317,10 +335,10 @@ class ResearchTool(BaseTool):
                 "Conclusion matches premise patterns."
                 if valid
                 else f"Conclusion contains unmatched {'entities' if not entities_valid else ''} "
-                     f"{'and ' if not entities_valid and not predicates_valid else ''}"
-                     f"{'predicates' if not predicates_valid else ''}."
+                f"{'and ' if not entities_valid and not predicates_valid else ''}"
+                f"{'predicates' if not predicates_valid else ''}."
             )
-            return {'valid': valid, 'conclusion': conclusion, 'reason': reason}
+            return {"valid": valid, "conclusion": conclusion, "reason": reason}
         except Exception as e:
             raise FileOperationError(f"Failed to process deduction: {str(e)}")
 
@@ -345,20 +363,30 @@ class ResearchTool(BaseTool):
             sentences = [sent.text for sent in doc.sents]
             if not sentences:
                 return ""
-            keywords = [token.lemma_.lower() for token in doc if token.pos_ in ('NOUN', 'VERB', 'ADJ') and not token.is_stop]
+            keywords = [
+                token.lemma_.lower()
+                for token in doc
+                if token.pos_ in ("NOUN", "VERB", "ADJ") and not token.is_stop
+            ]
             keyword_freq = Counter(keywords)
             scores = []
             for sent in sentences:
                 sent_doc = nlp(sent)
-                sent_keywords = [token.lemma_.lower() for token in sent_doc if token.pos_ in ('NOUN', 'VERB', 'ADJ')]
-                score = sum(keyword_freq.get(k, 0) for k in sent_keywords) / (len(sent_keywords) + 1)
+                sent_keywords = [
+                    token.lemma_.lower()
+                    for token in sent_doc
+                    if token.pos_ in ("NOUN", "VERB", "ADJ")
+                ]
+                score = sum(keyword_freq.get(k, 0) for k in sent_keywords) / (
+                    len(sent_keywords) + 1
+                )
                 scores.append((sent, score))
             scores.sort(key=lambda x: x[1], reverse=True)
-            selected = [sent for sent, _ in scores[:max(1, max_length // 50)]]
-            summary = ' '.join(selected)
+            selected = [sent for sent, _ in scores[: max(1, max_length // 50)]]
+            summary = " ".join(selected)
             words = summary.split()
             if len(words) > max_length:
-                summary = ' '.join(words[:max_length]) + '...'
+                summary = " ".join(words[:max_length]) + "..."
             return summary
         except Exception as e:
             raise FileOperationError(f"Failed to process summarize: {str(e)}")

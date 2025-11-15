@@ -35,24 +35,20 @@ class GraphSchema(BaseModel):
         ```
     """
 
-    version: str = Field(
-        default="1.0",
-        description="Schema version identifier"
-    )
+    version: str = Field(default="1.0", description="Schema version identifier")
 
     entity_types: Dict[str, EntityType] = Field(
         default_factory=dict,
-        description="Dictionary of entity type schemas (key=type name)"
+        description="Dictionary of entity type schemas (key=type name)",
     )
 
     relation_types: Dict[str, RelationType] = Field(
         default_factory=dict,
-        description="Dictionary of relation type schemas (key=type name)"
+        description="Dictionary of relation type schemas (key=type name)",
     )
 
     description: Optional[str] = Field(
-        default=None,
-        description="Human-readable description of this schema"
+        default=None, description="Human-readable description of this schema"
     )
 
     class Config:
@@ -235,9 +231,7 @@ class GraphSchema(BaseModel):
         ]
 
     def get_relation_types_for_entities(
-        self,
-        source_type: str,
-        target_type: str
+        self, source_type: str, target_type: str
     ) -> List[RelationType]:
         """
         Get all relation types allowed between two entity types
@@ -275,4 +269,3 @@ class GraphSchema(BaseModel):
 
     def __repr__(self) -> str:
         return self.__str__()
-

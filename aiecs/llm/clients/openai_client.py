@@ -1,14 +1,25 @@
-import asyncio
 import logging
-from typing import Dict, Any, Optional, List, AsyncGenerator
+from typing import Optional, List, AsyncGenerator
 from openai import AsyncOpenAI
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 import httpx
 
-from aiecs.llm.clients.base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
+from aiecs.llm.clients.base_client import (
+    BaseLLMClient,
+    LLMMessage,
+    LLMResponse,
+    ProviderNotAvailableError,
+    RateLimitError,
+)
 from aiecs.config.config import get_settings
 
 logger = logging.getLogger(__name__)
+
 
 class OpenAIClient(BaseLLMClient):
     """OpenAI provider client"""
@@ -29,7 +40,7 @@ class OpenAIClient(BaseLLMClient):
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type((httpx.RequestError, RateLimitError))
+        retry=retry_if_exception_type((httpx.RequestError, RateLimitError)),
     )
     async def generate_text(
         self,
@@ -37,11 +48,11 @@ class OpenAIClient(BaseLLMClient):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ) -> LLMResponse:
         """Generate text using OpenAI API"""
         client = self._get_client()
-        
+
         # Get model name from config if not provided
         model = model or self._get_default_model() or "gpt-4-turbo"
 
@@ -54,7 +65,7 @@ class OpenAIClient(BaseLLMClient):
                 messages=openai_messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                **kwargs
+                **kwargs,
             )
 
             content = response.choices[0].message.content
@@ -70,7 +81,7 @@ class OpenAIClient(BaseLLMClient):
                 provider=self.provider_name,
                 model=model,
                 tokens_used=tokens_used,
-                cost_estimate=cost
+                cost_estimate=cost,
             )
 
         except Exception as e:
@@ -84,11 +95,11 @@ class OpenAIClient(BaseLLMClient):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ) -> AsyncGenerator[str, None]:
         """Stream text using OpenAI API"""
         client = self._get_client()
-        
+
         # Get model name from config if not provided
         model = model or self._get_default_model() or "gpt-4-turbo"
 
@@ -101,7 +112,7 @@ class OpenAIClient(BaseLLMClient):
                 temperature=temperature,
                 max_tokens=max_tokens,
                 stream=True,
-                **kwargs
+                **kwargs,
             )
 
             async for chunk in stream:

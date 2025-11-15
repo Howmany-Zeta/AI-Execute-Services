@@ -6,7 +6,7 @@ Automatically generate Pydantic Schema from method signatures and type annotatio
 
 import inspect
 import logging
-from typing import Any, Dict, List, Optional, Type, get_type_hints, Union
+from typing import Any, Dict, Optional, Type, get_type_hints
 from pydantic import BaseModel, Field, create_model, ConfigDict
 
 logger = logging.getLogger(__name__)
@@ -19,10 +19,10 @@ def _normalize_type(param_type: Type) -> Type:
     Map complex types like pandas.DataFrame to Any
     """
     # Get type name
-    type_name = getattr(param_type, '__name__', str(param_type))
+    type_name = getattr(param_type, "__name__", str(param_type))
 
     # Check if it's a pandas type
-    if 'DataFrame' in type_name or 'Series' in type_name:
+    if "DataFrame" in type_name or "Series" in type_name:
         return Any
 
     return param_type
@@ -39,7 +39,7 @@ def _extract_param_description_from_docstring(docstring: str, param_name: str) -
     if not docstring:
         return None
 
-    lines = docstring.split('\n')
+    lines = docstring.split("\n")
     in_args_section = False
     current_param = None
     description_lines = []
@@ -48,28 +48,36 @@ def _extract_param_description_from_docstring(docstring: str, param_name: str) -
         stripped = line.strip()
 
         # Detect Args/Parameters section
-        if stripped in ['Args:', 'Arguments:', 'Parameters:']:
+        if stripped in ["Args:", "Arguments:", "Parameters:"]:
             in_args_section = True
             continue
 
         # Detect end
-        if in_args_section and stripped in ['Returns:', 'Raises:', 'Yields:', 'Examples:', 'Note:', 'Notes:']:
+        if in_args_section and stripped in [
+            "Returns:",
+            "Raises:",
+            "Yields:",
+            "Examples:",
+            "Note:",
+            "Notes:",
+        ]:
             break
 
         if in_args_section:
-            # Google style: param_name: description or param_name (type): description
-            if ':' in stripped and not stripped.startswith(' '):
+            # Google style: param_name: description or param_name (type):
+            # description
+            if ":" in stripped and not stripped.startswith(" "):
                 # Save previous parameter
                 if current_param == param_name and description_lines:
-                    return ' '.join(description_lines).strip()
+                    return " ".join(description_lines).strip()
 
                 # Parse new parameter
-                parts = stripped.split(':', 1)
+                parts = stripped.split(":", 1)
                 if len(parts) == 2:
                     # Remove possible type annotation (type)
                     param_part = parts[0].strip()
-                    if '(' in param_part:
-                        param_part = param_part.split('(')[0].strip()
+                    if "(" in param_part:
+                        param_part = param_part.split("(")[0].strip()
 
                     current_param = param_part
                     description_lines = [parts[1].strip()]
@@ -79,15 +87,13 @@ def _extract_param_description_from_docstring(docstring: str, param_name: str) -
 
     # Check last parameter
     if current_param == param_name and description_lines:
-        return ' '.join(description_lines).strip()
+        return " ".join(description_lines).strip()
 
     return None
 
 
 def generate_schema_from_method(
-    method: callable,
-    method_name: str,
-    base_class: Type[BaseModel] = BaseModel
+    method: callable, method_name: str, base_class: Type[BaseModel] = BaseModel
 ) -> Optional[Type[BaseModel]]:
     """
     Automatically generate Pydantic Schema from method signature
@@ -115,7 +121,7 @@ def generate_schema_from_method(
         docstring = inspect.getdoc(method) or f"Execute {method_name} operation"
 
         # Extract short description (first line)
-        first_line = docstring.split('\n')[0].strip()
+        first_line = docstring.split("\n")[0].strip()
         schema_description = first_line if first_line else f"Execute {method_name} operation"
 
         # Build field definitions
@@ -123,7 +129,7 @@ def generate_schema_from_method(
 
         for param_name, param in sig.parameters.items():
             # Skip self parameter
-            if param_name == 'self':
+            if param_name == "self":
                 continue
 
             # Get parameter type and normalize
@@ -145,18 +151,21 @@ def generate_schema_from_method(
                     # Optional parameter
                     field_definitions[param_name] = (
                         param_type,
-                        Field(default=None, description=field_description)
+                        Field(default=None, description=field_description),
                     )
                 else:
                     field_definitions[param_name] = (
                         param_type,
-                        Field(default=default_value, description=field_description)
+                        Field(
+                            default=default_value,
+                            description=field_description,
+                        ),
                     )
             else:
                 # Required parameter
                 field_definitions[param_name] = (
                     param_type,
-                    Field(description=field_description)
+                    Field(description=field_description),
                 )
 
         # If no parameters (except self), return None
@@ -173,7 +182,7 @@ def generate_schema_from_method(
             __base__=base_class,
             __doc__=schema_description,
             __config__=ConfigDict(arbitrary_types_allowed=True),
-            **field_definitions
+            **field_definitions,
         )
 
         logger.debug(f"Generated schema {schema_name} for method {method_name}")
@@ -187,53 +196,51 @@ def generate_schema_from_method(
 def generate_schemas_for_tool(tool_class: Type) -> Dict[str, Type[BaseModel]]:
     """
     Generate Schema for all methods of a tool class
-    
+
     Args:
         tool_class: Tool class
-        
+
     Returns:
         Mapping from method names to Schema classes
     """
     schemas = {}
-    
+
     for method_name in dir(tool_class):
         # Skip private methods and special methods
-        if method_name.startswith('_'):
+        if method_name.startswith("_"):
             continue
-        
+
         # Skip base class methods
-        if method_name in ['run', 'run_async', 'run_batch']:
+        if method_name in ["run", "run_async", "run_batch"]:
             continue
-        
+
         method = getattr(tool_class, method_name)
-        
+
         # Skip non-method attributes
         if not callable(method):
             continue
-        
+
         # Skip classes (like Config, Schema, etc.)
         if isinstance(method, type):
             continue
-        
+
         # Generate Schema
         schema = generate_schema_from_method(method, method_name)
-        
+
         if schema:
             # Normalize method name (remove underscores, convert to lowercase)
-            normalized_name = method_name.replace('_', '').lower()
+            normalized_name = method_name.replace("_", "").lower()
             schemas[normalized_name] = schema
             logger.info(f"Generated schema for {method_name}")
-    
+
     return schemas
 
 
-
-
-
 # Usage example
-if __name__ == '__main__':
+if __name__ == "__main__":
     import sys
-    sys.path.insert(0, '/home/coder1/python-middleware-dev')
+
+    sys.path.insert(0, "/home/coder1/python-middleware-dev")
 
     from aiecs.tools import discover_tools, TOOL_CLASSES
 
@@ -247,7 +254,7 @@ if __name__ == '__main__':
     print("Generating Schema for PandasTool:")
     print("=" * 80)
 
-    pandas_tool = TOOL_CLASSES['pandas']
+    pandas_tool = TOOL_CLASSES["pandas"]
     schemas = generate_schemas_for_tool(pandas_tool)
 
     print(f"\nGenerated {len(schemas)} Schemas:\n")
@@ -256,10 +263,13 @@ if __name__ == '__main__':
     for method_name, schema in list(schemas.items())[:3]:
         print(f"{schema.__name__}:")
         print(f"  Description: {schema.__doc__}")
-        print(f"  Fields:")
+        print("  Fields:")
         for field_name, field_info in schema.model_fields.items():
             required = "Required" if field_info.is_required() else "Optional"
-            default = f" (default: {field_info.default})" if not field_info.is_required() and field_info.default is not None else ""
+            default = (
+                f" (default: {field_info.default})"
+                if not field_info.is_required() and field_info.default is not None
+                else ""
+            )
             print(f"    - {field_name}: {field_info.description} [{required}]{default}")
         print()
-

@@ -11,11 +11,13 @@ from .callbacks.custom_callbacks import CustomAsyncCallbackHandler
 
 logger = logging.getLogger(__name__)
 
+
 class AIProvider(str, Enum):
     OPENAI = "OpenAI"
     VERTEX = "Vertex"
     GOOGLEAI = "GoogleAI"
     XAI = "xAI"
+
 
 class LLMClientFactory:
     """Factory for creating and managing LLM provider clients"""
@@ -72,17 +74,18 @@ class LLMClientFactory:
                 del cls._clients[provider]
             except Exception as e:
                 logger.error(f"Error closing client {provider}: {e}")
-    
+
     @classmethod
     def reload_config(cls):
         """
         Reload LLM models configuration.
-        
+
         This reloads the configuration from the YAML file, allowing for
         hot-reloading of model settings without restarting the application.
         """
         try:
             from aiecs.llm.config import reload_llm_config
+
             config = reload_llm_config()
             logger.info(f"Reloaded LLM configuration: {len(config.providers)} providers")
             return config
@@ -90,30 +93,33 @@ class LLMClientFactory:
             logger.error(f"Failed to reload LLM configuration: {e}")
             raise
 
+
 class LLMClientManager:
     """High-level manager for LLM operations with context-aware provider selection"""
 
     def __init__(self):
         self.factory = LLMClientFactory()
 
-    def _extract_ai_preference(self, context: Optional[Dict[str, Any]]) -> tuple[Optional[str], Optional[str]]:
+    def _extract_ai_preference(
+        self, context: Optional[Dict[str, Any]]
+    ) -> tuple[Optional[str], Optional[str]]:
         """Extract AI provider and model from context"""
         if not context:
             return None, None
 
-        metadata = context.get('metadata', {})
+        metadata = context.get("metadata", {})
 
         # First, check for aiPreference in metadata
-        ai_preference = metadata.get('aiPreference', {})
+        ai_preference = metadata.get("aiPreference", {})
         if isinstance(ai_preference, dict):
-            provider = ai_preference.get('provider')
-            model = ai_preference.get('model')
+            provider = ai_preference.get("provider")
+            model = ai_preference.get("model")
             if provider is not None:
                 return provider, model
 
         # Fallback to direct provider/model in metadata
-        provider = metadata.get('provider')
-        model = metadata.get('model')
+        provider = metadata.get("provider")
+        model = metadata.get("model")
         return provider, model
 
     async def generate_text(
@@ -125,7 +131,7 @@ class LLMClientManager:
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         callbacks: Optional[List[CustomAsyncCallbackHandler]] = None,
-        **kwargs
+        **kwargs,
     ) -> LLMResponse:
         """
         Generate text using context-aware provider selection
@@ -160,7 +166,12 @@ class LLMClientManager:
             messages_dict = [{"role": msg.role, "content": msg.content} for msg in messages]
             for callback in callbacks:
                 try:
-                    await callback.on_llm_start(messages_dict, provider=final_provider, model=final_model, **kwargs)
+                    await callback.on_llm_start(
+                        messages_dict,
+                        provider=final_provider,
+                        model=final_model,
+                        **kwargs,
+                    )
                 except Exception as e:
                     logger.error(f"Error in callback on_llm_start: {e}")
 
@@ -174,7 +185,7 @@ class LLMClientManager:
                 model=final_model,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                **kwargs
+                **kwargs,
             )
 
             # Execute on_llm_end callbacks
@@ -188,11 +199,16 @@ class LLMClientManager:
                     "prompt_tokens": response.prompt_tokens,
                     "completion_tokens": response.completion_tokens,
                     "cost_estimate": response.cost_estimate,
-                    "response_time": response.response_time
+                    "response_time": response.response_time,
                 }
                 for callback in callbacks:
                     try:
-                        await callback.on_llm_end(response_dict, provider=final_provider, model=final_model, **kwargs)
+                        await callback.on_llm_end(
+                            response_dict,
+                            provider=final_provider,
+                            model=final_model,
+                            **kwargs,
+                        )
                     except Exception as e:
                         logger.error(f"Error in callback on_llm_end: {e}")
 
@@ -204,7 +220,12 @@ class LLMClientManager:
             if callbacks:
                 for callback in callbacks:
                     try:
-                        await callback.on_llm_error(e, provider=final_provider, model=final_model, **kwargs)
+                        await callback.on_llm_error(
+                            e,
+                            provider=final_provider,
+                            model=final_model,
+                            **kwargs,
+                        )
                     except Exception as callback_error:
                         logger.error(f"Error in callback on_llm_error: {callback_error}")
 
@@ -220,7 +241,7 @@ class LLMClientManager:
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         callbacks: Optional[List[CustomAsyncCallbackHandler]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Stream text generation using context-aware provider selection
@@ -255,7 +276,12 @@ class LLMClientManager:
             messages_dict = [{"role": msg.role, "content": msg.content} for msg in messages]
             for callback in callbacks:
                 try:
-                    await callback.on_llm_start(messages_dict, provider=final_provider, model=final_model, **kwargs)
+                    await callback.on_llm_start(
+                        messages_dict,
+                        provider=final_provider,
+                        model=final_model,
+                        **kwargs,
+                    )
                 except Exception as e:
                     logger.error(f"Error in callback on_llm_start: {e}")
 
@@ -272,7 +298,7 @@ class LLMClientManager:
                 model=final_model,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                **kwargs
+                **kwargs,
             ):
                 collected_content += chunk
                 yield chunk
@@ -284,7 +310,7 @@ class LLMClientManager:
                 content=collected_content,
                 provider=str(final_provider),
                 model=final_model or "unknown",
-                tokens_used=estimated_tokens
+                tokens_used=estimated_tokens,
             )
 
             # Execute on_llm_end callbacks
@@ -298,11 +324,16 @@ class LLMClientManager:
                     "prompt_tokens": stream_response.prompt_tokens,
                     "completion_tokens": stream_response.completion_tokens,
                     "cost_estimate": stream_response.cost_estimate,
-                    "response_time": stream_response.response_time
+                    "response_time": stream_response.response_time,
                 }
                 for callback in callbacks:
                     try:
-                        await callback.on_llm_end(response_dict, provider=final_provider, model=final_model, **kwargs)
+                        await callback.on_llm_end(
+                            response_dict,
+                            provider=final_provider,
+                            model=final_model,
+                            **kwargs,
+                        )
                     except Exception as e:
                         logger.error(f"Error in callback on_llm_end: {e}")
 
@@ -311,7 +342,12 @@ class LLMClientManager:
             if callbacks:
                 for callback in callbacks:
                     try:
-                        await callback.on_llm_error(e, provider=final_provider, model=final_model, **kwargs)
+                        await callback.on_llm_error(
+                            e,
+                            provider=final_provider,
+                            model=final_model,
+                            **kwargs,
+                        )
                     except Exception as callback_error:
                         logger.error(f"Error in callback on_llm_error: {callback_error}")
 
@@ -322,14 +358,19 @@ class LLMClientManager:
         """Close all clients"""
         await self.factory.close_all()
 
+
 # Global instance for easy access
 _llm_manager = LLMClientManager()
+
 
 async def get_llm_manager() -> LLMClientManager:
     """Get the global LLM manager instance"""
     return _llm_manager
 
+
 # Convenience functions for backward compatibility
+
+
 async def generate_text(
     messages: Union[str, list[LLMMessage]],
     provider: Optional[Union[str, AIProvider]] = None,
@@ -338,11 +379,21 @@ async def generate_text(
     temperature: float = 0.7,
     max_tokens: Optional[int] = None,
     callbacks: Optional[List[CustomAsyncCallbackHandler]] = None,
-    **kwargs
+    **kwargs,
 ) -> LLMResponse:
     """Generate text using the global LLM manager"""
     manager = await get_llm_manager()
-    return await manager.generate_text(messages, provider, model, context, temperature, max_tokens, callbacks, **kwargs)
+    return await manager.generate_text(
+        messages,
+        provider,
+        model,
+        context,
+        temperature,
+        max_tokens,
+        callbacks,
+        **kwargs,
+    )
+
 
 async def stream_text(
     messages: Union[str, list[LLMMessage]],
@@ -352,9 +403,18 @@ async def stream_text(
     temperature: float = 0.7,
     max_tokens: Optional[int] = None,
     callbacks: Optional[List[CustomAsyncCallbackHandler]] = None,
-    **kwargs
+    **kwargs,
 ):
     """Stream text using the global LLM manager"""
     manager = await get_llm_manager()
-    async for chunk in manager.stream_text(messages, provider, model, context, temperature, max_tokens, callbacks, **kwargs):
+    async for chunk in manager.stream_text(
+        messages,
+        provider,
+        model,
+        context,
+        temperature,
+        max_tokens,
+        callbacks,
+        **kwargs,
+    ):
         yield chunk

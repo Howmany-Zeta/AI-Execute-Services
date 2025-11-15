@@ -36,29 +36,25 @@ class EntityType(BaseModel):
         ```
     """
 
-    name: str = Field(
-        ...,
-        description="Entity type name (must be unique)"
-    )
+    name: str = Field(..., description="Entity type name (must be unique)")
 
     description: Optional[str] = Field(
         default=None,
-        description="Human-readable description of this entity type"
+        description="Human-readable description of this entity type",
     )
 
     properties: Dict[str, PropertySchema] = Field(
         default_factory=dict,
-        description="Dictionary of property schemas (key=property name)"
+        description="Dictionary of property schemas (key=property name)",
     )
 
     parent_type: Optional[str] = Field(
-        default=None,
-        description="Parent entity type name for inheritance"
+        default=None, description="Parent entity type name for inheritance"
     )
 
     is_abstract: bool = Field(
         default=False,
-        description="Whether this is an abstract type (cannot be instantiated)"
+        description="Whether this is an abstract type (cannot be instantiated)",
     )
 
     class Config:
@@ -130,15 +126,10 @@ class EntityType(BaseModel):
         Returns:
             List of required property names
         """
-        return [
-            prop.name
-            for prop in self.properties.values()
-            if prop.required
-        ]
+        return [prop.name for prop in self.properties.values() if prop.required]
 
     def __str__(self) -> str:
         return f"EntityType(name='{self.name}', properties={len(self.properties)})"
 
     def __repr__(self) -> str:
         return self.__str__()
-

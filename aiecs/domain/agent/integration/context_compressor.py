@@ -5,7 +5,7 @@ Smart context compression for token limits.
 """
 
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 from enum import Enum
 
 from aiecs.llm import LLMMessage
@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 class CompressionStrategy(Enum):
     """Context compression strategies."""
+
     TRUNCATE_MIDDLE = "truncate_middle"
     TRUNCATE_START = "truncate_start"
     PRESERVE_RECENT = "preserve_recent"
@@ -51,7 +52,7 @@ class ContextCompressor:
     def compress_messages(
         self,
         messages: List[LLMMessage],
-        priority_indices: Optional[List[int]] = None
+        priority_indices: Optional[List[int]] = None,
     ) -> List[LLMMessage]:
         """
         Compress message list to fit within token limit.
@@ -85,9 +86,7 @@ class ContextCompressor:
             return self._compress_preserve_recent(messages, priority_indices)
 
     def _compress_preserve_recent(
-        self,
-        messages: List[LLMMessage],
-        priority_indices: Optional[List[int]]
+        self, messages: List[LLMMessage], priority_indices: Optional[List[int]]
     ) -> List[LLMMessage]:
         """Preserve recent messages and priority messages."""
         priority_indices = set(priority_indices or [])
@@ -122,9 +121,7 @@ class ContextCompressor:
         return compressed
 
     def _compress_truncate_middle(
-        self,
-        messages: List[LLMMessage],
-        priority_indices: Optional[List[int]]
+        self, messages: List[LLMMessage], priority_indices: Optional[List[int]]
     ) -> List[LLMMessage]:
         """Keep start and end messages, truncate middle."""
         if len(messages) <= 4:
@@ -138,9 +135,16 @@ class ContextCompressor:
         start_msgs = messages[:keep_start]
         end_msgs = messages[-keep_end:]
 
-        compressed = start_msgs + [
-            LLMMessage(role="system", content="[... conversation history compressed ...]")
-        ] + end_msgs
+        compressed = (
+            start_msgs
+            + [
+                LLMMessage(
+                    role="system",
+                    content="[... conversation history compressed ...]",
+                )
+            ]
+            + end_msgs
+        )
 
         return compressed
 
@@ -195,13 +199,13 @@ class ContextCompressor:
         if len(text) <= max_chars:
             return text
 
-        return text[:max_chars - 20] + "... [truncated]"
+        return text[: max_chars - 20] + "... [truncated]"
 
 
 def compress_messages(
     messages: List[LLMMessage],
     max_tokens: int = 4000,
-    strategy: CompressionStrategy = CompressionStrategy.PRESERVE_RECENT
+    strategy: CompressionStrategy = CompressionStrategy.PRESERVE_RECENT,
 ) -> List[LLMMessage]:
     """
     Convenience function for compressing messages.
@@ -216,4 +220,3 @@ def compress_messages(
     """
     compressor = ContextCompressor(max_tokens=max_tokens, strategy=strategy)
     return compressor.compress_messages(messages)
-

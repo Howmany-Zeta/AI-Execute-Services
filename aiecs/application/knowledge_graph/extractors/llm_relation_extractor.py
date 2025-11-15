@@ -6,7 +6,7 @@ Extracts relations between entities using Large Language Models.
 
 import json
 import uuid
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from aiecs.application.knowledge_graph.extractors.base import RelationExtractor
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.relation import Relation
@@ -56,7 +56,7 @@ class LLMRelationExtractor(RelationExtractor):
         provider: Optional[AIProvider] = None,
         model: Optional[str] = None,
         temperature: float = 0.1,
-        max_tokens: Optional[int] = 2000
+        max_tokens: Optional[int] = 2000,
     ):
         """
         Initialize LLM relation extractor
@@ -80,7 +80,7 @@ class LLMRelationExtractor(RelationExtractor):
         text: str,
         entities: List[Entity],
         relation_types: Optional[List[str]] = None,
-        **kwargs
+        **kwargs,
     ) -> List[Relation]:
         """
         Extract relations from text given known entities
@@ -119,7 +119,7 @@ class LLMRelationExtractor(RelationExtractor):
                 provider=self.provider,
                 model=self.model,
                 temperature=self.temperature,
-                max_tokens=self.max_tokens
+                max_tokens=self.max_tokens,
             )
 
             # Parse LLM response to Relation objects
@@ -134,7 +134,7 @@ class LLMRelationExtractor(RelationExtractor):
         self,
         text: str,
         entities: List[Entity],
-        relation_types: Optional[List[str]] = None
+        relation_types: Optional[List[str]] = None,
     ) -> str:
         """
         Build prompt for LLM relation extraction
@@ -177,8 +177,14 @@ class LLMRelationExtractor(RelationExtractor):
         else:
             # No schema, use common relation types
             types_to_extract = [
-                "WORKS_FOR", "LOCATED_IN", "PART_OF", "KNOWS",
-                "OWNS", "MANAGES", "PRODUCES", "RELATED_TO"
+                "WORKS_FOR",
+                "LOCATED_IN",
+                "PART_OF",
+                "KNOWS",
+                "OWNS",
+                "MANAGES",
+                "PRODUCES",
+                "RELATED_TO",
             ]
 
         # Build relation type descriptions
@@ -236,11 +242,7 @@ JSON output:"""
 
         return prompt
 
-    def _parse_llm_response(
-        self,
-        response_text: str,
-        entities: List[Entity]
-    ) -> List[Relation]:
+    def _parse_llm_response(self, response_text: str, entities: List[Entity]) -> List[Relation]:
         """
         Parse LLM response to Relation objects
 
@@ -304,7 +306,7 @@ JSON output:"""
                     relation_type=relation_type,
                     source_id=source_id,
                     target_id=target_id,
-                    properties=properties
+                    properties=properties,
                 )
 
                 # Store confidence
@@ -340,9 +342,8 @@ JSON output:"""
     def _get_entity_name(self, entity: Entity) -> str:
         """Extract entity name from properties"""
         return (
-            entity.properties.get("name") or
-            entity.properties.get("title") or
-            entity.properties.get("text") or
-            f"{entity.entity_type}_{entity.id[:8]}"
+            entity.properties.get("name")
+            or entity.properties.get("title")
+            or entity.properties.get("text")
+            or f"{entity.entity_type}_{entity.id[:8]}"
         )
-

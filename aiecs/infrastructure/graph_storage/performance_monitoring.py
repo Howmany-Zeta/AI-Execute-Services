@@ -10,7 +10,6 @@ import asyncpg
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from collections import defaultdict
-import statistics
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +17,12 @@ logger = logging.getLogger(__name__)
 @dataclass
 class QueryStats:
     """Statistics for a single query"""
+
     query_type: str
     query_text: str
     execution_count: int = 0
     total_time_ms: float = 0.0
-    min_time_ms: float = float('inf')
+    min_time_ms: float = float("inf")
     max_time_ms: float = 0.0
     avg_time_ms: float = 0.0
     execution_times: List[float] = field(default_factory=list)
@@ -53,7 +53,9 @@ class QueryStats:
         """Convert to dictionary"""
         return {
             "query_type": self.query_type,
-            "query_text": self.query_text[:100] + "..." if len(self.query_text) > 100 else self.query_text,
+            "query_text": (
+                self.query_text[:100] + "..." if len(self.query_text) > 100 else self.query_text
+            ),
             "execution_count": self.execution_count,
             "total_time_ms": round(self.total_time_ms, 2),
             "avg_time_ms": round(self.avg_time_ms, 2),
@@ -68,6 +70,7 @@ class QueryStats:
 @dataclass
 class QueryPlan:
     """PostgreSQL query execution plan"""
+
     query: str
     plan: Dict[str, Any]
     total_cost: float
@@ -137,7 +140,7 @@ class PerformanceMonitor:
         self,
         enabled: bool = True,
         slow_query_threshold_ms: float = 100.0,
-        log_slow_queries: bool = True
+        log_slow_queries: bool = True,
     ):
         """
         Initialize performance monitor
@@ -158,6 +161,7 @@ class PerformanceMonitor:
     async def initialize(self) -> None:
         """Initialize monitor (create locks, etc.)"""
         import asyncio
+
         self._lock = asyncio.Lock()
 
     def track_query(self, query_type: str, query_text: str):
@@ -184,7 +188,7 @@ class PerformanceMonitor:
         query_type: str,
         query_text: str,
         duration_ms: float,
-        row_count: Optional[int] = None
+        row_count: Optional[int] = None,
     ) -> None:
         """
         Record a query execution
@@ -212,7 +216,7 @@ class PerformanceMonitor:
                 "query_text": query_text[:200],
                 "duration_ms": duration_ms,
                 "row_count": row_count,
-                "timestamp": time.time()
+                "timestamp": time.time(),
             }
             self.slow_queries.append(slow_query)
 
@@ -227,10 +231,7 @@ class PerformanceMonitor:
                 )
 
     async def analyze_query_plan(
-        self,
-        conn: asyncpg.Connection,
-        query: str,
-        params: tuple = ()
+        self, conn: asyncpg.Connection, query: str, params: tuple = ()
     ) -> QueryPlan:
         """
         Analyze query execution plan
@@ -268,9 +269,10 @@ class PerformanceMonitor:
                 raise ValueError("No query plan returned")
 
             # Parse JSON plan
-            plan_json = result[0]['QUERY PLAN']
+            plan_json = result[0]["QUERY PLAN"]
             if isinstance(plan_json, str):
                 import json
+
                 plan_json = json.loads(plan_json)
 
             # Extract plan details
@@ -281,7 +283,7 @@ class PerformanceMonitor:
                 query=query,
                 plan=plan_data,
                 total_cost=total_cost,
-                execution_time_ms=duration_ms
+                execution_time_ms=duration_ms,
             )
 
         except Exception as e:
@@ -313,7 +315,7 @@ class PerformanceMonitor:
         sorted_stats = sorted(
             self.query_stats.values(),
             key=lambda s: s.avg_time_ms,
-            reverse=True
+            reverse=True,
         )
         top_slow = [stats.to_dict() for stats in sorted_stats[:10]]
 
@@ -321,7 +323,7 @@ class PerformanceMonitor:
         sorted_by_count = sorted(
             self.query_stats.values(),
             key=lambda s: s.execution_count,
-            reverse=True
+            reverse=True,
         )
         most_frequent = [stats.to_dict() for stats in sorted_by_count[:10]]
 
@@ -329,7 +331,9 @@ class PerformanceMonitor:
             "enabled": True,
             "total_queries": total_queries,
             "total_time_ms": round(total_time_ms, 2),
-            "avg_query_time_ms": round(total_time_ms / total_queries, 2) if total_queries > 0 else 0,
+            "avg_query_time_ms": (
+                round(total_time_ms / total_queries, 2) if total_queries > 0 else 0
+            ),
             "unique_queries": len(self.query_stats),
             "slow_query_count": len(self.slow_queries),
             "slow_query_threshold_ms": self.slow_query_threshold_ms,
@@ -367,12 +371,7 @@ class PerformanceMonitor:
 class QueryTracker:
     """Context manager for tracking query execution time"""
 
-    def __init__(
-        self,
-        monitor: PerformanceMonitor,
-        query_type: str,
-        query_text: str
-    ):
+    def __init__(self, monitor: PerformanceMonitor, query_type: str, query_text: str):
         """
         Initialize query tracker
 
@@ -397,11 +396,7 @@ class QueryTracker:
             return
 
         duration_ms = (time.time() - self.start_time) * 1000
-        await self.monitor.record_query(
-            self.query_type,
-            self.query_text,
-            duration_ms
-        )
+        await self.monitor.record_query(self.query_type, self.query_text, duration_ms)
 
 
 class PreparedStatementCache:
@@ -435,12 +430,7 @@ class PreparedStatementCache:
         self.cache: Dict[str, Any] = {}
         self.access_count: Dict[str, int] = defaultdict(int)
 
-    async def get_or_prepare(
-        self,
-        conn: asyncpg.Connection,
-        name: str,
-        query: str
-    ) -> Any:
+    async def get_or_prepare(self, conn: asyncpg.Connection, name: str, query: str) -> Any:
         """
         Get cached prepared statement or create new one
 
@@ -474,4 +464,3 @@ class PreparedStatementCache:
         """Clear all cached statements"""
         self.cache.clear()
         self.access_count.clear()
-

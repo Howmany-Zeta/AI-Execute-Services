@@ -9,12 +9,15 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any, Union
 from dataclasses import dataclass, field
 
-from aiecs.application.knowledge_graph.builder.graph_builder import GraphBuilder, BuildResult
+from aiecs.application.knowledge_graph.builder.graph_builder import (
+    GraphBuilder,
+    BuildResult,
+)
 from aiecs.application.knowledge_graph.builder.text_chunker import TextChunker
 from aiecs.tools.docs.document_parser_tool import (
     DocumentParserTool,
     ParsingStrategy,
-    OutputFormat
+    OutputFormat,
 )
 
 
@@ -25,6 +28,7 @@ class DocumentBuildResult:
 
     Extends BuildResult with document-specific information.
     """
+
     document_path: str
     document_type: str
     total_chunks: int = 0
@@ -78,7 +82,7 @@ class DocumentGraphBuilder:
         chunk_overlap: int = 200,
         enable_chunking: bool = True,
         parallel_chunks: bool = True,
-        max_parallel_chunks: int = 3
+        max_parallel_chunks: int = 3,
     ):
         """
         Initialize document graph builder
@@ -98,20 +102,21 @@ class DocumentGraphBuilder:
         self.parallel_chunks = parallel_chunks
         self.max_parallel_chunks = max_parallel_chunks
 
-        # Initialize document parser (will read config from environment variables)
+        # Initialize document parser (will read config from environment
+        # variables)
         self.document_parser = DocumentParserTool()
 
         # Initialize text chunker
         self.text_chunker = TextChunker(
             chunk_size=chunk_size,
             overlap=chunk_overlap,
-            respect_sentences=True
+            respect_sentences=True,
         )
 
     async def build_from_document(
         self,
         document_path: Union[str, Path],
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> DocumentBuildResult:
         """
         Build knowledge graph from a document
@@ -124,10 +129,7 @@ class DocumentGraphBuilder:
             DocumentBuildResult with statistics
         """
         document_path = str(document_path)
-        result = DocumentBuildResult(
-            document_path=document_path,
-            document_type="unknown"
-        )
+        result = DocumentBuildResult(document_path=document_path, document_type="unknown")
 
         try:
             # Step 1: Parse document to text
@@ -143,37 +145,33 @@ class DocumentGraphBuilder:
 
             # Step 2: Chunk text if needed
             if self.enable_chunking and len(text) > self.chunk_size:
-                chunks = self.text_chunker.chunk_text(
-                    text,
-                    metadata={"document": document_path}
-                )
+                chunks = self.text_chunker.chunk_text(text, metadata={"document": document_path})
                 result.total_chunks = len(chunks)
             else:
                 # Single chunk (small document)
-                from aiecs.application.knowledge_graph.builder.text_chunker import TextChunk
-                chunks = [TextChunk(
-                    text=text,
-                    start_char=0,
-                    end_char=len(text),
-                    chunk_index=0,
-                    metadata={"document": document_path}
-                )]
+                from aiecs.application.knowledge_graph.builder.text_chunker import (
+                    TextChunk,
+                )
+
+                chunks = [
+                    TextChunk(
+                        text=text,
+                        start_char=0,
+                        end_char=len(text),
+                        chunk_index=0,
+                        metadata={"document": document_path},
+                    )
+                ]
                 result.total_chunks = 1
 
             # Step 3: Process each chunk
             if self.parallel_chunks and len(chunks) > 1:
                 # Process chunks in parallel
-                chunk_results = await self._process_chunks_parallel(
-                    chunks,
-                    document_path,
-                    metadata
-                )
+                chunk_results = await self._process_chunks_parallel(chunks, document_path, metadata)
             else:
                 # Process chunks sequentially
                 chunk_results = await self._process_chunks_sequential(
-                    chunks,
-                    document_path,
-                    metadata
+                    chunks, document_path, metadata
                 )
 
             result.chunk_results = chunk_results
@@ -196,7 +194,7 @@ class DocumentGraphBuilder:
         self,
         document_paths: List[Union[str, Path]],
         parallel: bool = True,
-        max_parallel: int = 3
+        max_parallel: int = 3,
     ) -> List[DocumentBuildResult]:
         """
         Build knowledge graph from multiple documents
@@ -226,7 +224,7 @@ class DocumentGraphBuilder:
                     error_result = DocumentBuildResult(
                         document_path=str(document_paths[i]),
                         document_type="unknown",
-                        success=False
+                        success=False,
                     )
                     error_result.errors.append(str(result))
                     results.append(error_result)
@@ -237,7 +235,7 @@ class DocumentGraphBuilder:
                     error_result = DocumentBuildResult(
                         document_path=str(document_paths[i]),
                         document_type="unknown",
-                        success=False
+                        success=False,
                     )
                     error_result.errors.append(f"Unexpected result type: {type(result)}")
                     results.append(error_result)
@@ -266,7 +264,7 @@ class DocumentGraphBuilder:
             parse_result = self.document_parser.parse_document(
                 source=document_path,
                 strategy=ParsingStrategy.TEXT_ONLY,
-                output_format=OutputFormat.TEXT
+                output_format=OutputFormat.TEXT,
             )
 
             if isinstance(parse_result, dict):
@@ -279,7 +277,7 @@ class DocumentGraphBuilder:
         except Exception:
             # Fallback: try reading as plain text
             try:
-                with open(document_path, 'r', encoding='utf-8') as f:
+                with open(document_path, "r", encoding="utf-8") as f:
                     return f.read()
             except Exception as fallback_error:
                 raise RuntimeError(f"Failed to parse document: {str(fallback_error)}")
@@ -288,7 +286,7 @@ class DocumentGraphBuilder:
         self,
         chunks: List,
         document_path: str,
-        metadata: Optional[Dict[str, Any]]
+        metadata: Optional[Dict[str, Any]],
     ) -> List[BuildResult]:
         """
         Process chunks in parallel
@@ -309,16 +307,14 @@ class DocumentGraphBuilder:
                     "document": document_path,
                     "chunk_index": chunk.chunk_index,
                     "chunk_start": chunk.start_char,
-                    "chunk_end": chunk.end_char
+                    "chunk_end": chunk.end_char,
                 }
                 if metadata:
                     chunk_metadata.update(metadata)
 
                 source = f"{document_path}#chunk{chunk.chunk_index}"
                 return await self.graph_builder.build_from_text(
-                    text=chunk.text,
-                    source=source,
-                    metadata=chunk_metadata
+                    text=chunk.text, source=source, metadata=chunk_metadata
                 )
 
         tasks = [process_chunk(chunk) for chunk in chunks]
@@ -345,7 +341,7 @@ class DocumentGraphBuilder:
         self,
         chunks: List,
         document_path: str,
-        metadata: Optional[Dict[str, Any]]
+        metadata: Optional[Dict[str, Any]],
     ) -> List[BuildResult]:
         """
         Process chunks sequentially
@@ -365,18 +361,15 @@ class DocumentGraphBuilder:
                 "document": document_path,
                 "chunk_index": chunk.chunk_index,
                 "chunk_start": chunk.start_char,
-                "chunk_end": chunk.end_char
+                "chunk_end": chunk.end_char,
             }
             if metadata:
                 chunk_metadata.update(metadata)
 
             source = f"{document_path}#chunk{chunk.chunk_index}"
             result = await self.graph_builder.build_from_text(
-                text=chunk.text,
-                source=source,
-                metadata=chunk_metadata
+                text=chunk.text, source=source, metadata=chunk_metadata
             )
             results.append(result)
 
         return results
-

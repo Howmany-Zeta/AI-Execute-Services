@@ -9,7 +9,7 @@ Note: Current implementation focuses on single-node optimizations.
 """
 
 import logging
-from typing import Optional, List, Dict, Any, Callable
+from typing import Optional, List, Dict, Any
 from enum import Enum
 from dataclasses import dataclass
 
@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 class PartitionStrategy(str, Enum):
     """Graph partitioning strategy"""
+
     HASH = "hash"  # Hash-based partitioning
     RANGE = "range"  # Range-based partitioning
     COMMUNITY = "community"  # Community detection-based
@@ -31,6 +32,7 @@ class GraphPartition:
 
     Describes a partition of the graph for distributed processing.
     """
+
     partition_id: int
     node_count: int
     edge_count: int
@@ -42,7 +44,7 @@ class GraphPartition:
             "partition_id": self.partition_id,
             "node_count": self.node_count,
             "edge_count": self.edge_count,
-            "has_node_list": self.node_ids is not None
+            "has_node_list": self.node_ids is not None,
         }
 
 
@@ -71,7 +73,7 @@ class DistributedGraphMixin:
     async def partition_graph(
         self,
         num_partitions: int,
-        strategy: PartitionStrategy = PartitionStrategy.HASH
+        strategy: PartitionStrategy = PartitionStrategy.HASH,
     ) -> List[GraphPartition]:
         """
         Partition graph for distributed processing
@@ -87,19 +89,15 @@ class DistributedGraphMixin:
             This is a placeholder for future implementation.
             Current version returns conceptual partitions.
         """
-        logger.info(f"Graph partitioning requested but not yet implemented")
-        logger.info(f"For production distributed graphs, consider:")
+        logger.info("Graph partitioning requested but not yet implemented")
+        logger.info("For production distributed graphs, consider:")
         logger.info("  - Neo4j Fabric for distributed queries")
         logger.info("  - TigerGraph for native distributed processing")
         logger.info("  - Amazon Neptune with read replicas")
 
         # Placeholder: Return empty partitions
         return [
-            GraphPartition(
-                partition_id=i,
-                node_count=0,
-                edge_count=0
-            )
+            GraphPartition(partition_id=i, node_count=0, edge_count=0)
             for i in range(num_partitions)
         ]
 
@@ -117,11 +115,7 @@ class DistributedGraphMixin:
         logger.warning("Partition info not available in current implementation")
         return None
 
-    async def distributed_query(
-        self,
-        query: str,
-        partitions: Optional[List[int]] = None
-    ) -> Any:
+    async def distributed_query(self, query: str, partitions: Optional[List[int]] = None) -> Any:
         """
         Execute query across distributed partitions
 
@@ -141,6 +135,7 @@ class DistributedGraphMixin:
 
 
 # Utility functions for future distributed implementations
+
 
 def hash_partition_key(entity_id: str, num_partitions: int) -> int:
     """
@@ -229,4 +224,3 @@ When to consider distributed:
    - Use GraphStorageMigrator for data migration
    - Test with compatibility suite
 """
-

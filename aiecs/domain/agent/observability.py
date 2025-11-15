@@ -5,9 +5,8 @@ Observer pattern and controllers for monitoring agent behavior.
 """
 
 import logging
-from typing import Dict, Any, List, Protocol, Optional
+from typing import Dict, Any, List, Protocol
 from datetime import datetime
-from abc import ABC, abstractmethod
 
 from .base_agent import BaseAIAgent
 from .models import AgentState
@@ -23,7 +22,7 @@ class AgentObserver(Protocol):
         agent_id: str,
         old_state: AgentState,
         new_state: AgentState,
-        timestamp: datetime
+        timestamp: datetime,
     ) -> None:
         """
         Called when agent state changes.
@@ -41,7 +40,7 @@ class AgentObserver(Protocol):
         agent_id: str,
         task_id: str,
         task: Dict[str, Any],
-        timestamp: datetime
+        timestamp: datetime,
     ) -> None:
         """
         Called when agent starts a task.
@@ -59,7 +58,7 @@ class AgentObserver(Protocol):
         agent_id: str,
         task_id: str,
         result: Dict[str, Any],
-        timestamp: datetime
+        timestamp: datetime,
     ) -> None:
         """
         Called when agent completes a task.
@@ -77,7 +76,7 @@ class AgentObserver(Protocol):
         agent_id: str,
         task_id: str,
         error: Exception,
-        timestamp: datetime
+        timestamp: datetime,
     ) -> None:
         """
         Called when agent task fails.
@@ -95,7 +94,7 @@ class AgentObserver(Protocol):
         agent_id: str,
         tool_name: str,
         parameters: Dict[str, Any],
-        timestamp: datetime
+        timestamp: datetime,
     ) -> None:
         """
         Called when agent calls a tool.
@@ -127,12 +126,12 @@ class LoggingObserver:
         agent_id: str,
         old_state: AgentState,
         new_state: AgentState,
-        timestamp: datetime
+        timestamp: datetime,
     ) -> None:
         """Log state change."""
         self.logger.log(
             self.log_level,
-            f"Agent {agent_id}: {old_state.value} → {new_state.value}"
+            f"Agent {agent_id}: {old_state.value} → {new_state.value}",
         )
 
     def on_task_started(
@@ -140,38 +139,32 @@ class LoggingObserver:
         agent_id: str,
         task_id: str,
         task: Dict[str, Any],
-        timestamp: datetime
+        timestamp: datetime,
     ) -> None:
         """Log task start."""
-        self.logger.log(
-            self.log_level,
-            f"Agent {agent_id}: Task {task_id} started"
-        )
+        self.logger.log(self.log_level, f"Agent {agent_id}: Task {task_id} started")
 
     def on_task_completed(
         self,
         agent_id: str,
         task_id: str,
         result: Dict[str, Any],
-        timestamp: datetime
+        timestamp: datetime,
     ) -> None:
         """Log task completion."""
-        self.logger.log(
-            self.log_level,
-            f"Agent {agent_id}: Task {task_id} completed"
-        )
+        self.logger.log(self.log_level, f"Agent {agent_id}: Task {task_id} completed")
 
     def on_task_failed(
         self,
         agent_id: str,
         task_id: str,
         error: Exception,
-        timestamp: datetime
+        timestamp: datetime,
     ) -> None:
         """Log task failure."""
         self.logger.log(
             self.log_level,
-            f"Agent {agent_id}: Task {task_id} failed - {str(error)}"
+            f"Agent {agent_id}: Task {task_id} failed - {str(error)}",
         )
 
     def on_tool_called(
@@ -179,13 +172,10 @@ class LoggingObserver:
         agent_id: str,
         tool_name: str,
         parameters: Dict[str, Any],
-        timestamp: datetime
+        timestamp: datetime,
     ) -> None:
         """Log tool call."""
-        self.logger.log(
-            self.log_level,
-            f"Agent {agent_id}: Tool '{tool_name}' called"
-        )
+        self.logger.log(self.log_level, f"Agent {agent_id}: Tool '{tool_name}' called")
 
 
 class MetricsObserver:
@@ -202,75 +192,85 @@ class MetricsObserver:
         agent_id: str,
         old_state: AgentState,
         new_state: AgentState,
-        timestamp: datetime
+        timestamp: datetime,
     ) -> None:
         """Record state change."""
-        self.state_changes.append({
-            "agent_id": agent_id,
-            "old_state": old_state.value,
-            "new_state": new_state.value,
-            "timestamp": timestamp.isoformat(),
-        })
+        self.state_changes.append(
+            {
+                "agent_id": agent_id,
+                "old_state": old_state.value,
+                "new_state": new_state.value,
+                "timestamp": timestamp.isoformat(),
+            }
+        )
 
     def on_task_started(
         self,
         agent_id: str,
         task_id: str,
         task: Dict[str, Any],
-        timestamp: datetime
+        timestamp: datetime,
     ) -> None:
         """Record task start."""
-        self.task_events.append({
-            "agent_id": agent_id,
-            "task_id": task_id,
-            "event": "started",
-            "timestamp": timestamp.isoformat(),
-        })
+        self.task_events.append(
+            {
+                "agent_id": agent_id,
+                "task_id": task_id,
+                "event": "started",
+                "timestamp": timestamp.isoformat(),
+            }
+        )
 
     def on_task_completed(
         self,
         agent_id: str,
         task_id: str,
         result: Dict[str, Any],
-        timestamp: datetime
+        timestamp: datetime,
     ) -> None:
         """Record task completion."""
-        self.task_events.append({
-            "agent_id": agent_id,
-            "task_id": task_id,
-            "event": "completed",
-            "timestamp": timestamp.isoformat(),
-        })
+        self.task_events.append(
+            {
+                "agent_id": agent_id,
+                "task_id": task_id,
+                "event": "completed",
+                "timestamp": timestamp.isoformat(),
+            }
+        )
 
     def on_task_failed(
         self,
         agent_id: str,
         task_id: str,
         error: Exception,
-        timestamp: datetime
+        timestamp: datetime,
     ) -> None:
         """Record task failure."""
-        self.task_events.append({
-            "agent_id": agent_id,
-            "task_id": task_id,
-            "event": "failed",
-            "error": str(error),
-            "timestamp": timestamp.isoformat(),
-        })
+        self.task_events.append(
+            {
+                "agent_id": agent_id,
+                "task_id": task_id,
+                "event": "failed",
+                "error": str(error),
+                "timestamp": timestamp.isoformat(),
+            }
+        )
 
     def on_tool_called(
         self,
         agent_id: str,
         tool_name: str,
         parameters: Dict[str, Any],
-        timestamp: datetime
+        timestamp: datetime,
     ) -> None:
         """Record tool call."""
-        self.tool_calls.append({
-            "agent_id": agent_id,
-            "tool_name": tool_name,
-            "timestamp": timestamp.isoformat(),
-        })
+        self.tool_calls.append(
+            {
+                "agent_id": agent_id,
+                "tool_name": tool_name,
+                "timestamp": timestamp.isoformat(),
+            }
+        )
 
     def get_metrics(self) -> Dict[str, Any]:
         """Get collected metrics."""
@@ -329,21 +329,12 @@ class AgentController:
             self.observers.remove(observer)
             logger.debug(f"Observer removed from agent {self.agent.agent_id}")
 
-    def notify_state_changed(
-        self,
-        old_state: AgentState,
-        new_state: AgentState
-    ) -> None:
+    def notify_state_changed(self, old_state: AgentState, new_state: AgentState) -> None:
         """Notify observers of state change."""
         timestamp = datetime.utcnow()
         for observer in self.observers:
             try:
-                observer.on_state_changed(
-                    self.agent.agent_id,
-                    old_state,
-                    new_state,
-                    timestamp
-                )
+                observer.on_state_changed(self.agent.agent_id, old_state, new_state, timestamp)
             except Exception as e:
                 logger.error(f"Observer notification failed: {e}")
 
@@ -352,12 +343,7 @@ class AgentController:
         timestamp = datetime.utcnow()
         for observer in self.observers:
             try:
-                observer.on_task_started(
-                    self.agent.agent_id,
-                    task_id,
-                    task,
-                    timestamp
-                )
+                observer.on_task_started(self.agent.agent_id, task_id, task, timestamp)
             except Exception as e:
                 logger.error(f"Observer notification failed: {e}")
 
@@ -366,12 +352,7 @@ class AgentController:
         timestamp = datetime.utcnow()
         for observer in self.observers:
             try:
-                observer.on_task_completed(
-                    self.agent.agent_id,
-                    task_id,
-                    result,
-                    timestamp
-                )
+                observer.on_task_completed(self.agent.agent_id, task_id, result, timestamp)
             except Exception as e:
                 logger.error(f"Observer notification failed: {e}")
 
@@ -380,37 +361,21 @@ class AgentController:
         timestamp = datetime.utcnow()
         for observer in self.observers:
             try:
-                observer.on_task_failed(
-                    self.agent.agent_id,
-                    task_id,
-                    error,
-                    timestamp
-                )
+                observer.on_task_failed(self.agent.agent_id, task_id, error, timestamp)
             except Exception as e:
                 logger.error(f"Observer notification failed: {e}")
 
-    def notify_tool_called(
-        self,
-        tool_name: str,
-        parameters: Dict[str, Any]
-    ) -> None:
+    def notify_tool_called(self, tool_name: str, parameters: Dict[str, Any]) -> None:
         """Notify observers of tool call."""
         timestamp = datetime.utcnow()
         for observer in self.observers:
             try:
-                observer.on_tool_called(
-                    self.agent.agent_id,
-                    tool_name,
-                    parameters,
-                    timestamp
-                )
+                observer.on_tool_called(self.agent.agent_id, tool_name, parameters, timestamp)
             except Exception as e:
                 logger.error(f"Observer notification failed: {e}")
 
     async def execute_task_with_observation(
-        self,
-        task: Dict[str, Any],
-        context: Dict[str, Any]
+        self, task: Dict[str, Any], context: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Execute task with observer notifications.
@@ -422,22 +387,21 @@ class AgentController:
         Returns:
             Task result
         """
-        task_id = task.get('task_id', f"task_{datetime.utcnow().timestamp()}")
-        
+        task_id = task.get("task_id", f"task_{datetime.utcnow().timestamp()}")
+
         # Notify start
         self.notify_task_started(task_id, task)
 
         try:
             # Execute task
             result = await self.agent.execute_task(task, context)
-            
+
             # Notify completion
             self.notify_task_completed(task_id, result)
-            
+
             return result
 
         except Exception as e:
             # Notify failure
             self.notify_task_failed(task_id, e)
             raise
-
