@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from aiecs.tools import get_tool
 from aiecs.tools.tool_executor import ToolExecutor
 from aiecs.utils.execution_utils import ExecutionUtils
@@ -14,27 +14,33 @@ class OperationExecutor:
     Core logic for handling operation execution
     """
 
-    def __init__(self, tool_executor: ToolExecutor, execution_utils: ExecutionUtils, config: Dict[str, Any]):
+    def __init__(
+        self,
+        tool_executor: ToolExecutor,
+        execution_utils: ExecutionUtils,
+        config: Dict[str, Any],
+    ):
         self.tool_executor = tool_executor
         self.execution_utils = execution_utils
         self.config = config
         self._tool_instances = {}
-        self.semaphore = asyncio.Semaphore(config.get('rate_limit_requests_per_second', 5))
+        self.semaphore = asyncio.Semaphore(config.get("rate_limit_requests_per_second", 5))
 
     def _filter_tool_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Filter out system-related parameters, keeping only parameters needed by tool methods
         """
         # System-related parameters that should not be passed to tool methods
-        system_params = {'user_id', 'task_id', 'op'}
+        system_params = {"user_id", "task_id", "op"}
         return {k: v for k, v in params.items() if k not in system_params}
 
     def _filter_tool_call_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Filter out system-related parameters in tool calls, but keep 'op' parameter (needed by BaseTool.run())
         """
-        # Only filter user and task IDs, keep 'op' parameter for BaseTool.run() to use
-        system_params = {'user_id', 'task_id'}
+        # Only filter user and task IDs, keep 'op' parameter for BaseTool.run()
+        # to use
+        system_params = {"user_id", "task_id"}
         return {k: v for k, v in params.items() if k not in system_params}
 
     async def execute_operation(self, operation_spec: str, params: Dict[str, Any]) -> Any:
@@ -42,7 +48,9 @@ class OperationExecutor:
         Execute a single operation (tool_name.operation_name)
         """
         if "." not in operation_spec:
-            raise ValueError(f"Invalid operation spec: {operation_spec}, expected 'tool_name.operation_name'")
+            raise ValueError(
+                f"Invalid operation spec: {operation_spec}, expected 'tool_name.operation_name'"
+            )
 
         tool_name, operation_name = operation_spec.split(".", 1)
 
@@ -69,22 +77,28 @@ class OperationExecutor:
         Batch execute operations with rate limiting
         """
         results = []
-        batch_size = self.config.get('batch_size', 10)
-        rate_limit = self.config.get('rate_limit_requests_per_second', 5)
+        batch_size = self.config.get("batch_size", 10)
+        rate_limit = self.config.get("rate_limit_requests_per_second", 5)
 
         for i in range(0, len(operations), batch_size):
-            batch = operations[i:i + batch_size]
+            batch = operations[i : i + batch_size]
             batch_results = await asyncio.gather(
                 *[self.execute_operation(op["operation"], op.get("params", {})) for op in batch],
-                return_exceptions=True
+                return_exceptions=True,
             )
             results.extend(batch_results)
             await asyncio.sleep(1.0 / rate_limit)
 
         return results
 
-    async def execute_operations_sequence(self, operations: List[Dict[str, Any]], user_id: str, task_id: str,
-                                        stop_on_failure: bool = False, save_callback=None) -> List[TaskStepResult]:
+    async def execute_operations_sequence(
+        self,
+        operations: List[Dict[str, Any]],
+        user_id: str,
+        task_id: str,
+        stop_on_failure: bool = False,
+        save_callback=None,
+    ) -> List[TaskStepResult]:
         """
         Execute operations sequence sequentially, with option to stop on failure
         """
@@ -104,7 +118,7 @@ class OperationExecutor:
                     result=result,
                     completed=True,
                     message=f"Completed operation {operation_spec}",
-                    status=TaskStatus.COMPLETED.value
+                    status=TaskStatus.COMPLETED.value,
                 )
             except Exception as e:
                 step_result = TaskStepResult(
@@ -114,7 +128,7 @@ class OperationExecutor:
                     message=f"Failed to execute {operation_spec}",
                     status=TaskStatus.FAILED.value,
                     error_code=ErrorCode.EXECUTION_ERROR.value,
-                    error_message=str(e)
+                    error_message=str(e),
                 )
 
                 if stop_on_failure:
@@ -131,16 +145,18 @@ class OperationExecutor:
 
         return results
 
-    def _process_param_references(self, params: Dict[str, Any], results: List[TaskStepResult]) -> Dict[str, Any]:
+    def _process_param_references(
+        self, params: Dict[str, Any], results: List[TaskStepResult]
+    ) -> Dict[str, Any]:
         """
         Process parameter references, such as $result[0] in operation parameters
         """
         processed = {}
 
         for name, value in params.items():
-            if isinstance(value, str) and value.startswith('$result['):
+            if isinstance(value, str) and value.startswith("$result["):
                 try:
-                    ref_parts = value[8:].split(']', 1)
+                    ref_parts = value[8:].split("]", 1)
                     idx = int(ref_parts[0])
 
                     if idx >= len(results):
@@ -148,9 +164,10 @@ class OperationExecutor:
 
                     ref_value = results[idx].result
 
-                    # Handle nested attribute access, such as $result[0].data.field
-                    if len(ref_parts) > 1 and ref_parts[1].startswith('.'):
-                        for attr in ref_parts[1][1:].split('.'):
+                    # Handle nested attribute access, such as
+                    # $result[0].data.field
+                    if len(ref_parts) > 1 and ref_parts[1].startswith("."):
+                        for attr in ref_parts[1][1:].split("."):
                             if attr:
                                 if isinstance(ref_value, dict):
                                     ref_value = ref_value.get(attr)
@@ -171,14 +188,14 @@ class OperationExecutor:
         Execute batch tool calls with rate limiting
         """
         results = []
-        batch_size = self.config.get('batch_size', 10)
-        rate_limit = self.config.get('rate_limit_requests_per_second', 5)
+        batch_size = self.config.get("batch_size", 10)
+        rate_limit = self.config.get("rate_limit_requests_per_second", 5)
 
         for i in range(0, len(tool_calls), batch_size):
-            batch = tool_calls[i:i + batch_size]
+            batch = tool_calls[i : i + batch_size]
             batch_results = await asyncio.gather(
                 *[self._execute_tool_call(call, tool_executor_func) for call in batch],
-                return_exceptions=True
+                return_exceptions=True,
             )
             results.extend(batch_results)
             await asyncio.sleep(1.0 / rate_limit)
@@ -194,10 +211,12 @@ class OperationExecutor:
             params = call.get("params", {})
 
             # Use context-aware caching
-            if self.config.get('enable_cache', True):
+            if self.config.get("enable_cache", True):
                 user_id = params.get("user_id", "anonymous")
                 task_id = params.get("task_id", "none")
-                cache_key = self.execution_utils.generate_cache_key("tool_call", user_id, task_id, (), params)
+                cache_key = self.execution_utils.generate_cache_key(
+                    "tool_call", user_id, task_id, (), params
+                )
                 cached_result = self.execution_utils.get_from_cache(cache_key)
                 if cached_result is not None:
                     return cached_result
@@ -211,14 +230,16 @@ class OperationExecutor:
                 if tool_name not in self._tool_instances:
                     self._tool_instances[tool_name] = get_tool(tool_name)
                 tool = self._tool_instances[tool_name]
-                
-                # Filter parameters, remove system-related parameters (but keep 'op' parameter)
+
+                # Filter parameters, remove system-related parameters (but keep
+                # 'op' parameter)
                 tool_params = self._filter_tool_call_params(params)
-                # Execute through BaseTool.run method, passing filtered parameters
+                # Execute through BaseTool.run method, passing filtered
+                # parameters
                 result = await self.tool_executor.execute_async(tool, "run", **tool_params)
 
             # Cache result
-            if self.config.get('enable_cache', True):
+            if self.config.get("enable_cache", True):
                 self.execution_utils.add_to_cache(cache_key, result)
 
             return result
@@ -230,7 +251,7 @@ class OperationExecutor:
         import re
 
         tool_calls = []
-        tool_pattern = r'\{\{(\w+)\((.*?)\)\}\}'
+        tool_pattern = r"\{\{(\w+)\((.*?)\)\}\}"
         matches = re.finditer(tool_pattern, description)
 
         for match in matches:
@@ -256,14 +277,13 @@ class OperationExecutor:
 
                 params[param_name] = param_value
 
-            tool_calls.append({
-                "tool": tool_name,
-                "params": params
-            })
+            tool_calls.append({"tool": tool_name, "params": params})
 
         return tool_calls
 
-    async def execute_parallel_operations(self, operations: List[Dict[str, Any]]) -> List[TaskStepResult]:
+    async def execute_parallel_operations(
+        self, operations: List[Dict[str, Any]]
+    ) -> List[TaskStepResult]:
         """
         Execute multiple operations in parallel
         """
@@ -281,7 +301,7 @@ class OperationExecutor:
                         result=result,
                         completed=True,
                         message=f"Completed parallel operation {spec}",
-                        status=TaskStatus.COMPLETED.value
+                        status=TaskStatus.COMPLETED.value,
                     )
                 except Exception as e:
                     return TaskStepResult(
@@ -291,7 +311,7 @@ class OperationExecutor:
                         message=f"Failed parallel operation {spec}",
                         status=TaskStatus.FAILED.value,
                         error_code=ErrorCode.EXECUTION_ERROR.value,
-                        error_message=str(e)
+                        error_message=str(e),
                     )
 
             tasks.append(execute_single_op(operation_spec, params, i))
@@ -302,15 +322,17 @@ class OperationExecutor:
         processed_results = []
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                processed_results.append(TaskStepResult(
-                    step=f"parallel_{i}_error",
-                    result=None,
-                    completed=False,
-                    message=f"Parallel operation failed with exception",
-                    status=TaskStatus.FAILED.value,
-                    error_code=ErrorCode.EXECUTION_ERROR.value,
-                    error_message=str(result)
-                ))
+                processed_results.append(
+                    TaskStepResult(
+                        step=f"parallel_{i}_error",
+                        result=None,
+                        completed=False,
+                        message="Parallel operation failed with exception",
+                        status=TaskStatus.FAILED.value,
+                        error_code=ErrorCode.EXECUTION_ERROR.value,
+                        error_message=str(result),
+                    )
+                )
             else:
                 processed_results.append(result)
 
@@ -334,8 +356,8 @@ class OperationExecutor:
             "tool_names": list(self._tool_instances.keys()),
             "semaphore_value": self.semaphore._value,
             "config": {
-                "batch_size": self.config.get('batch_size', 10),
-                "rate_limit": self.config.get('rate_limit_requests_per_second', 5),
-                "enable_cache": self.config.get('enable_cache', True)
-            }
+                "batch_size": self.config.get("batch_size", 10),
+                "rate_limit": self.config.get("rate_limit_requests_per_second", 5),
+                "enable_cache": self.config.get("enable_cache", True),
+            },
         }

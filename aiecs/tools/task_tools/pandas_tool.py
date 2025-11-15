@@ -1,33 +1,35 @@
 from io import StringIO
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Union, Optional, Any
-from pydantic import BaseModel, ValidationError as PydanticValidationError, ConfigDict, Field
+from typing import List, Dict, Union, Optional
+from pydantic import BaseModel, ConfigDict, Field
 import logging
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
 
 # Custom exceptions
+
+
 class PandasToolError(Exception):
     """Base exception for PandasTool errors."""
-    pass
+
 
 class InputValidationError(PandasToolError):
     """Input validation error."""
-    pass
+
 
 class DataFrameError(PandasToolError):
     """DataFrame operation error."""
-    pass
+
 
 class SecurityError(PandasToolError):
     """Security-related error."""
-    pass
+
 
 class ValidationError(PandasToolError):
     """Validation error."""
-    pass
+
 
 @register_tool("pandas")
 class PandasTool(BaseTool):
@@ -47,37 +49,28 @@ class PandasTool(BaseTool):
 
     Inherits from BaseTool to leverage ToolExecutor for caching, concurrency, and error handling.
     """
-    
+
     # Configuration schema
     class Config(BaseModel):
         """Configuration for the pandas tool"""
+
         model_config = ConfigDict(env_prefix="PANDAS_TOOL_")
-        
-        csv_delimiter: str = Field(
-            default=",",
-            description="Delimiter for CSV files"
-        )
-        encoding: str = Field(
-            default="utf-8",
-            description="Encoding for file operations"
-        )
+
+        csv_delimiter: str = Field(default=",", description="Delimiter for CSV files")
+        encoding: str = Field(default="utf-8", description="Encoding for file operations")
         default_agg: Dict[str, str] = Field(
             default={"numeric": "mean", "object": "count"},
-            description="Default aggregation functions"
+            description="Default aggregation functions",
         )
-        chunk_size: int = Field(
-            default=10000,
-            description="Chunk size for large file processing"
-        )
+        chunk_size: int = Field(default=10000, description="Chunk size for large file processing")
         max_csv_size: int = Field(
-            default=1000000,
-            description="Threshold for chunked CSV processing"
+            default=1000000, description="Threshold for chunked CSV processing"
         )
         allowed_file_extensions: List[str] = Field(
-            default=['.csv', '.xlsx', '.json'],
-            description="Allowed file extensions"
+            default=[".csv", ".xlsx", ".json"],
+            description="Allowed file extensions",
         )
-    
+
     def __init__(self, config: Optional[Dict] = None):
         """
         Initialize PandasTool with configuration.
@@ -89,14 +82,14 @@ class PandasTool(BaseTool):
             ValueError: If config is invalid.
         """
         super().__init__(config)
-        
+
         # Parse configuration
         self.config = self.Config(**(config or {}))
-        
+
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
             handler = logging.StreamHandler()
-            handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
+            handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
             self.logger.addHandler(handler)
         self.logger.setLevel(logging.INFO)
 
@@ -143,7 +136,9 @@ class PandasTool(BaseTool):
                 f"Columns not found: {missing}. Available columns: {list(available_columns)}"
             )
 
-    def _to_json_serializable(self, result: Union[pd.DataFrame, pd.Series, Dict]) -> Union[List[Dict], Dict]:
+    def _to_json_serializable(
+        self, result: Union[pd.DataFrame, pd.Series, Dict]
+    ) -> Union[List[Dict], Dict]:
         """
         Convert result to JSON-serializable format.
 
@@ -154,14 +149,15 @@ class PandasTool(BaseTool):
             Union[List[Dict], Dict]: JSON-serializable result.
         """
         if isinstance(result, pd.DataFrame):
-            for col in result.select_dtypes(include=['datetime64']).columns:
-                result[col] = result[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+            for col in result.select_dtypes(include=["datetime64"]).columns:
+                result[col] = result[col].dt.strftime("%Y-%m-%d %H:%M:%S")
             return result.to_dict(orient="records")
         elif isinstance(result, pd.Series):
             if pd.api.types.is_datetime64_any_dtype(result):
-                result = result.dt.strftime('%Y-%m-%d %H:%M:%S')
+                result = result.dt.strftime("%Y-%m-%d %H:%M:%S")
             return result.to_dict()
         elif isinstance(result, dict):
+
             def convert_value(v):
                 if isinstance(v, (np.floating, np.integer)):
                     return float(v)
@@ -174,6 +170,7 @@ class PandasTool(BaseTool):
                 elif pd.isna(v):
                     return None
                 return v
+
             return {k: convert_value(v) for k, v in result.items()}
         return result
 
@@ -186,12 +183,16 @@ class PandasTool(BaseTool):
                     StringIO(csv_str),
                     sep=self.config.csv_delimiter,
                     encoding=self.config.encoding,
-                    chunksize=self.config.chunk_size
+                    chunksize=self.config.chunk_size,
                 ):
                     chunks.append(chunk)
                 df = pd.concat(chunks)
             else:
-                df = pd.read_csv(StringIO(csv_str), sep=self.config.csv_delimiter, encoding=self.config.encoding)
+                df = pd.read_csv(
+                    StringIO(csv_str),
+                    sep=self.config.csv_delimiter,
+                    encoding=self.config.encoding,
+                )
             return self._to_json_serializable(df)
         except Exception as e:
             raise DataFrameError(f"Failed to read CSV: {e}")
@@ -208,19 +209,23 @@ class PandasTool(BaseTool):
         """Read data from a file (CSV, Excel, JSON)."""
         try:
             if file_type == "csv":
-                file_size = sum(1 for _ in open(file_path, 'r', encoding=self.config.encoding))
+                file_size = sum(1 for _ in open(file_path, "r", encoding=self.config.encoding))
                 if file_size > self.config.chunk_size:
                     chunks = []
                     for chunk in pd.read_csv(
                         file_path,
                         sep=self.config.csv_delimiter,
                         encoding=self.config.encoding,
-                        chunksize=self.config.chunk_size
+                        chunksize=self.config.chunk_size,
                     ):
                         chunks.append(chunk)
                     df = pd.concat(chunks)
                 else:
-                    df = pd.read_csv(file_path, sep=self.config.csv_delimiter, encoding=self.config.encoding)
+                    df = pd.read_csv(
+                        file_path,
+                        sep=self.config.csv_delimiter,
+                        encoding=self.config.encoding,
+                    )
             elif file_type == "excel":
                 df = pd.read_excel(file_path)
             elif file_type == "json":
@@ -238,7 +243,12 @@ class PandasTool(BaseTool):
         df = self._validate_df(records)
         try:
             if file_type == "csv":
-                df.to_csv(file_path, index=False, sep=self.config.csv_delimiter, encoding=self.config.encoding)
+                df.to_csv(
+                    file_path,
+                    index=False,
+                    sep=self.config.csv_delimiter,
+                    encoding=self.config.encoding,
+                )
             elif file_type == "excel":
                 df.to_excel(file_path, index=False)
             elif file_type == "json":
@@ -292,7 +302,9 @@ class PandasTool(BaseTool):
         self._validate_columns(df, columns)
         return self._to_json_serializable(df.drop(columns=columns))
 
-    def drop_duplicates(self, records: List[Dict], columns: Optional[List[str]] = None) -> List[Dict]:
+    def drop_duplicates(
+        self, records: List[Dict], columns: Optional[List[str]] = None
+    ) -> List[Dict]:
         """Drop duplicate rows based on specified columns."""
         df = self._validate_df(records)
         if columns:
@@ -316,17 +328,36 @@ class PandasTool(BaseTool):
         except Exception as e:
             raise DataFrameError(f"Groupby failed: {e}")
 
-    def pivot_table(self, records: List[Dict], values: List[str], index: List[str], columns: List[str], aggfunc: str = "mean") -> List[Dict]:
+    def pivot_table(
+        self,
+        records: List[Dict],
+        values: List[str],
+        index: List[str],
+        columns: List[str],
+        aggfunc: str = "mean",
+    ) -> List[Dict]:
         """Create a pivot table from DataFrame."""
         df = self._validate_df(records)
         self._validate_columns(df, values + index + columns)
         try:
-            df = pd.pivot_table(df, values=values, index=index, columns=columns, aggfunc=aggfunc)
+            df = pd.pivot_table(
+                df,
+                values=values,
+                index=index,
+                columns=columns,
+                aggfunc=aggfunc,
+            )
             return self._to_json_serializable(df.reset_index())
         except Exception as e:
             raise DataFrameError(f"Pivot table failed: {e}")
 
-    def merge(self, records: List[Dict], records_right: List[Dict], on: Union[str, List[str]], join_type: str = "inner") -> List[Dict]:
+    def merge(
+        self,
+        records: List[Dict],
+        records_right: List[Dict],
+        on: Union[str, List[str]],
+        join_type: str = "inner",
+    ) -> List[Dict]:
         """Merge two DataFrames."""
         df_left = self._validate_df(records)
         df_right = self._validate_df(records_right)
@@ -351,7 +382,12 @@ class PandasTool(BaseTool):
         except Exception as e:
             raise DataFrameError(f"Concat failed: {e}")
 
-    def sort_values(self, records: List[Dict], sort_by: List[str], ascending: Union[bool, List[bool]] = True) -> List[Dict]:
+    def sort_values(
+        self,
+        records: List[Dict],
+        sort_by: List[str],
+        ascending: Union[bool, List[bool]] = True,
+    ) -> List[Dict]:
         """Sort DataFrame by specified columns."""
         df = self._validate_df(records)
         self._validate_columns(df, sort_by)
@@ -367,7 +403,12 @@ class PandasTool(BaseTool):
         self._validate_columns(df, list(mapping.keys()))
         return self._to_json_serializable(df.rename(columns=mapping))
 
-    def replace_values(self, records: List[Dict], to_replace: Dict, columns: Optional[List[str]] = None) -> List[Dict]:
+    def replace_values(
+        self,
+        records: List[Dict],
+        to_replace: Dict,
+        columns: Optional[List[str]] = None,
+    ) -> List[Dict]:
         """Replace values in DataFrame."""
         df = self._validate_df(records)
         if columns:
@@ -375,7 +416,12 @@ class PandasTool(BaseTool):
             df = df[columns]
         return self._to_json_serializable(df.replace(to_replace))
 
-    def fill_na(self, records: List[Dict], value: Union[str, int, float], columns: Optional[List[str]] = None) -> List[Dict]:
+    def fill_na(
+        self,
+        records: List[Dict],
+        value: Union[str, int, float],
+        columns: Optional[List[str]] = None,
+    ) -> List[Dict]:
         """Fill missing values in DataFrame."""
         df = self._validate_df(records)
         if columns:
@@ -395,29 +441,33 @@ class PandasTool(BaseTool):
         except Exception as e:
             raise DataFrameError(f"Type conversion failed: {e}")
 
-    def apply(self, records: List[Dict], func: str, columns: List[str], axis: int = 0) -> List[Dict]:
+    def apply(
+        self, records: List[Dict], func: str, columns: List[str], axis: int = 0
+    ) -> List[Dict]:
         """Apply a function to specified columns or rows."""
         df = self._validate_df(records)
         self._validate_columns(df, columns)
         allowed_funcs = {
-            'upper': lambda x: x.upper() if isinstance(x, str) else x,
-            'lower': lambda x: x.lower() if isinstance(x, str) else x,
-            'strip': lambda x: x.strip() if isinstance(x, str) else x,
-            'capitalize': lambda x: x.capitalize() if isinstance(x, str) else x,
-            'title': lambda x: x.title() if isinstance(x, str) else x,
-            'len': lambda x: len(str(x)) if pd.notna(x) else 0,
-            'abs': lambda x: abs(float(x)) if pd.notna(x) and not isinstance(x, str) else x,
-            'round': lambda x: round(float(x)) if pd.notna(x) and not isinstance(x, str) else x,
-            'ceil': lambda x: np.ceil(float(x)) if pd.notna(x) and not isinstance(x, str) else x,
-            'floor': lambda x: np.floor(float(x)) if pd.notna(x) and not isinstance(x, str) else x,
-            'int': lambda x: int(float(x)) if pd.notna(x) and not isinstance(x, str) else None,
-            'float': lambda x: float(x) if pd.notna(x) and not isinstance(x, str) else None,
-            'str': lambda x: str(x) if pd.notna(x) else "",
-            'bool': lambda x: bool(x) if pd.notna(x) else False,
-            'date_only': lambda x: x.date() if isinstance(x, pd.Timestamp) else x,
-            'year': lambda x: x.year if isinstance(x, pd.Timestamp) else None,
-            'month': lambda x: x.month if isinstance(x, pd.Timestamp) else None,
-            'day': lambda x: x.day if isinstance(x, pd.Timestamp) else None,
+            "upper": lambda x: x.upper() if isinstance(x, str) else x,
+            "lower": lambda x: x.lower() if isinstance(x, str) else x,
+            "strip": lambda x: x.strip() if isinstance(x, str) else x,
+            "capitalize": lambda x: (x.capitalize() if isinstance(x, str) else x),
+            "title": lambda x: x.title() if isinstance(x, str) else x,
+            "len": lambda x: len(str(x)) if pd.notna(x) else 0,
+            "abs": lambda x: (abs(float(x)) if pd.notna(x) and not isinstance(x, str) else x),
+            "round": lambda x: (round(float(x)) if pd.notna(x) and not isinstance(x, str) else x),
+            "ceil": lambda x: (np.ceil(float(x)) if pd.notna(x) and not isinstance(x, str) else x),
+            "floor": lambda x: (
+                np.floor(float(x)) if pd.notna(x) and not isinstance(x, str) else x
+            ),
+            "int": lambda x: (int(float(x)) if pd.notna(x) and not isinstance(x, str) else None),
+            "float": lambda x: (float(x) if pd.notna(x) and not isinstance(x, str) else None),
+            "str": lambda x: str(x) if pd.notna(x) else "",
+            "bool": lambda x: bool(x) if pd.notna(x) else False,
+            "date_only": lambda x: (x.date() if isinstance(x, pd.Timestamp) else x),
+            "year": lambda x: x.year if isinstance(x, pd.Timestamp) else None,
+            "month": lambda x: (x.month if isinstance(x, pd.Timestamp) else None),
+            "day": lambda x: x.day if isinstance(x, pd.Timestamp) else None,
         }
         try:
             if axis == 0:
@@ -487,7 +537,12 @@ class PandasTool(BaseTool):
         except Exception as e:
             raise DataFrameError(f"To numeric failed: {e}")
 
-    def to_datetime(self, records: List[Dict], columns: List[str], format: Optional[str] = None) -> List[Dict]:
+    def to_datetime(
+        self,
+        records: List[Dict],
+        columns: List[str],
+        format: Optional[str] = None,
+    ) -> List[Dict]:
         """Convert columns to datetime type."""
         df = self._validate_df(records)
         self._validate_columns(df, columns)
@@ -538,7 +593,13 @@ class PandasTool(BaseTool):
             df = df[columns]
         return self._to_json_serializable(df.max())
 
-    def rolling(self, records: List[Dict], columns: List[str], window: int, function: str = "mean") -> List[Dict]:
+    def rolling(
+        self,
+        records: List[Dict],
+        columns: List[str],
+        window: int,
+        function: str = "mean",
+    ) -> List[Dict]:
         """Apply rolling window function to columns."""
         df = self._validate_df(records)
         self._validate_columns(df, columns)
@@ -563,7 +624,12 @@ class PandasTool(BaseTool):
         df = self._validate_df(records)
         return self._to_json_serializable(df.tail(n))
 
-    def sample(self, records: List[Dict], n: int = 5, random_state: Optional[int] = None) -> List[Dict]:
+    def sample(
+        self,
+        records: List[Dict],
+        n: int = 5,
+        random_state: Optional[int] = None,
+    ) -> List[Dict]:
         """Return random sample of n rows from DataFrame."""
         df = self._validate_df(records)
         return self._to_json_serializable(df.sample(n=min(n, len(df)), random_state=random_state))

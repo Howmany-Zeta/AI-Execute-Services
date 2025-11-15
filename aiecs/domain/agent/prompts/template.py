@@ -5,7 +5,7 @@ Native template system with variable substitution.
 """
 
 import re
-from typing import Dict, Any, List, Optional
+from typing import Dict, List, Optional
 from dataclasses import dataclass
 
 from aiecs.llm import LLMMessage
@@ -13,7 +13,6 @@ from aiecs.llm import LLMMessage
 
 class TemplateMissingVariableError(Exception):
     """Raised when required template variable is missing."""
-    pass
 
 
 class PromptTemplate:
@@ -52,7 +51,7 @@ class PromptTemplate:
     def _extract_variables(self) -> None:
         """Extract variable names from template."""
         # Find all {variable_name} patterns
-        pattern = r'\{(\w+)\}'
+        pattern = r"\{(\w+)\}"
         self.variables = set(re.findall(pattern, self.template))
 
     def format(self, **kwargs) -> str:
@@ -71,9 +70,7 @@ class PromptTemplate:
         # Check required variables
         for var in self.required_variables:
             if var not in kwargs and var not in self.defaults:
-                raise TemplateMissingVariableError(
-                    f"Required variable '{var}' not provided"
-                )
+                raise TemplateMissingVariableError(f"Required variable '{var}' not provided")
 
         # Merge with defaults
         values = {**self.defaults, **kwargs}
@@ -82,9 +79,7 @@ class PromptTemplate:
         try:
             return self.template.format(**values)
         except KeyError as e:
-            raise TemplateMissingVariableError(
-                f"Variable {e} not provided and has no default"
-            )
+            raise TemplateMissingVariableError(f"Variable {e} not provided and has no default")
 
     def partial(self, **kwargs) -> "PromptTemplate":
         """
@@ -110,6 +105,7 @@ class PromptTemplate:
 @dataclass
 class MessageTemplate:
     """Template for a single message."""
+
     role: str
     content: str
 
@@ -150,8 +146,8 @@ class ChatPromptTemplate:
     def _extract_variables(self) -> None:
         """Extract variables from all message templates."""
         self.variables = set()
-        pattern = r'\{(\w+)\}'
-        
+        pattern = r"\{(\w+)\}"
+
         for msg in self.messages:
             vars_in_msg = set(re.findall(pattern, msg.content))
             self.variables.update(vars_in_msg)
@@ -172,9 +168,7 @@ class ChatPromptTemplate:
         # Check required variables
         for var in self.required_variables:
             if var not in kwargs and var not in self.defaults:
-                raise TemplateMissingVariableError(
-                    f"Required variable '{var}' not provided"
-                )
+                raise TemplateMissingVariableError(f"Required variable '{var}' not provided")
 
         # Merge with defaults
         values = {**self.defaults, **kwargs}
@@ -184,13 +178,9 @@ class ChatPromptTemplate:
         for msg_template in self.messages:
             try:
                 content = msg_template.content.format(**values)
-                formatted_messages.append(
-                    LLMMessage(role=msg_template.role, content=content)
-                )
+                formatted_messages.append(LLMMessage(role=msg_template.role, content=content))
             except KeyError as e:
-                raise TemplateMissingVariableError(
-                    f"Variable {e} not provided and has no default"
-                )
+                raise TemplateMissingVariableError(f"Variable {e} not provided and has no default")
 
         return formatted_messages
 
@@ -257,8 +247,9 @@ def create_basic_chat(system: str, user: str) -> ChatPromptTemplate:
     Returns:
         ChatPromptTemplate with system and user messages
     """
-    return ChatPromptTemplate([
-        MessageTemplate("system", system),
-        MessageTemplate("user", user),
-    ])
-
+    return ChatPromptTemplate(
+        [
+            MessageTemplate("system", system),
+            MessageTemplate("user", user),
+        ]
+    )

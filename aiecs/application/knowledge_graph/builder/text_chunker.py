@@ -20,6 +20,7 @@ class TextChunk:
         chunk_index: Index of this chunk (0-based)
         metadata: Optional metadata about this chunk
     """
+
     text: str
     start_char: int
     end_char: int
@@ -54,7 +55,7 @@ class TextChunker:
         overlap: int = 100,
         respect_sentences: bool = True,
         respect_paragraphs: bool = False,
-        min_chunk_size: int = 100
+        min_chunk_size: int = 100,
     ):
         """
         Initialize text chunker
@@ -88,13 +89,15 @@ class TextChunker:
 
         # Handle short texts
         if len(text) <= self.chunk_size:
-            return [TextChunk(
-                text=text,
-                start_char=0,
-                end_char=len(text),
-                chunk_index=0,
-                metadata=metadata
-            )]
+            return [
+                TextChunk(
+                    text=text,
+                    start_char=0,
+                    end_char=len(text),
+                    chunk_index=0,
+                    metadata=metadata,
+                )
+            ]
 
         # Choose chunking strategy
         if self.respect_paragraphs:
@@ -127,7 +130,7 @@ class TextChunker:
                 start_char=start,
                 end_char=end,
                 chunk_index=chunk_index,
-                metadata=metadata
+                metadata=metadata,
             )
             chunks.append(chunk)
 
@@ -163,16 +166,18 @@ class TextChunker:
             # If adding this sentence would exceed chunk_size
             if current_length + sent_length > self.chunk_size and current_chunk:
                 # Finalize current chunk
-                chunk_text = ' '.join(current_chunk)
+                chunk_text = " ".join(current_chunk)
                 chunk_end = current_start + len(chunk_text)
 
-                chunks.append(TextChunk(
-                    text=chunk_text,
-                    start_char=current_start,
-                    end_char=chunk_end,
-                    chunk_index=chunk_index,
-                    metadata=metadata
-                ))
+                chunks.append(
+                    TextChunk(
+                        text=chunk_text,
+                        start_char=current_start,
+                        end_char=chunk_end,
+                        chunk_index=chunk_index,
+                        metadata=metadata,
+                    )
+                )
 
                 # Start new chunk with overlap (last few sentences)
                 overlap_sentences: List[str] = self._get_overlap_sentences(current_chunk)
@@ -186,18 +191,22 @@ class TextChunker:
 
         # Add final chunk
         if current_chunk:
-            chunk_text = ' '.join(current_chunk)
-            chunks.append(TextChunk(
-                text=chunk_text,
-                start_char=current_start,
-                end_char=len(text),
-                chunk_index=chunk_index,
-                metadata=metadata
-            ))
+            chunk_text = " ".join(current_chunk)
+            chunks.append(
+                TextChunk(
+                    text=chunk_text,
+                    start_char=current_start,
+                    end_char=len(text),
+                    chunk_index=chunk_index,
+                    metadata=metadata,
+                )
+            )
 
         return chunks
 
-    def _chunk_by_paragraphs(self, text: str, metadata: Optional[Dict[str, Any]]) -> List[TextChunk]:
+    def _chunk_by_paragraphs(
+        self, text: str, metadata: Optional[Dict[str, Any]]
+    ) -> List[TextChunk]:
         """
         Chunk text respecting paragraph boundaries
 
@@ -209,7 +218,7 @@ class TextChunker:
             List of TextChunk objects
         """
         # Split by double newlines (paragraphs)
-        paragraphs = text.split('\n\n')
+        paragraphs = text.split("\n\n")
 
         chunks: List[TextChunk] = []
         current_chunk: List[str] = []
@@ -227,16 +236,18 @@ class TextChunker:
             # If adding this paragraph would exceed chunk_size
             if current_length + para_length > self.chunk_size and current_chunk:
                 # Finalize current chunk
-                chunk_text = '\n\n'.join(current_chunk)
+                chunk_text = "\n\n".join(current_chunk)
                 chunk_end = current_start + len(chunk_text)
 
-                chunks.append(TextChunk(
-                    text=chunk_text,
-                    start_char=current_start,
-                    end_char=chunk_end,
-                    chunk_index=chunk_index,
-                    metadata=metadata
-                ))
+                chunks.append(
+                    TextChunk(
+                        text=chunk_text,
+                        start_char=current_start,
+                        end_char=chunk_end,
+                        chunk_index=chunk_index,
+                        metadata=metadata,
+                    )
+                )
 
                 # Start new chunk
                 current_chunk = []
@@ -249,14 +260,16 @@ class TextChunker:
 
         # Add final chunk
         if current_chunk:
-            chunk_text = '\n\n'.join(current_chunk)
-            chunks.append(TextChunk(
-                text=chunk_text,
-                start_char=current_start,
-                end_char=len(text),
-                chunk_index=chunk_index,
-                metadata=metadata
-            ))
+            chunk_text = "\n\n".join(current_chunk)
+            chunks.append(
+                TextChunk(
+                    text=chunk_text,
+                    start_char=current_start,
+                    end_char=len(text),
+                    chunk_index=chunk_index,
+                    metadata=metadata,
+                )
+            )
 
         return chunks
 
@@ -276,7 +289,7 @@ class TextChunker:
 
         # Simple sentence splitting by period, question mark, exclamation
         # This is a basic implementation - can be improved
-        sentences = re.split(r'(?<=[.!?])\s+', text)
+        sentences = re.split(r"(?<=[.!?])\s+", text)
         return [s.strip() for s in sentences if s.strip()]
 
     def _get_overlap_sentences(self, sentences: List[str]) -> List[str]:
@@ -304,4 +317,3 @@ class TextChunker:
                 break
 
         return overlap_sentences
-

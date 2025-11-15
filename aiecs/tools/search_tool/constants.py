@@ -12,8 +12,10 @@ from enum import Enum
 # Enums
 # ============================================================================
 
+
 class SearchType(str, Enum):
     """Supported search types"""
+
     WEB = "web"
     IMAGE = "image"
     NEWS = "news"
@@ -22,6 +24,7 @@ class SearchType(str, Enum):
 
 class SafeSearch(str, Enum):
     """Safe search levels"""
+
     OFF = "off"
     MEDIUM = "medium"
     HIGH = "high"
@@ -29,6 +32,7 @@ class SafeSearch(str, Enum):
 
 class ImageSize(str, Enum):
     """Image size filters"""
+
     ICON = "icon"
     SMALL = "small"
     MEDIUM = "medium"
@@ -40,6 +44,7 @@ class ImageSize(str, Enum):
 
 class ImageType(str, Enum):
     """Image type filters"""
+
     CLIPART = "clipart"
     FACE = "face"
     LINEART = "lineart"
@@ -50,6 +55,7 @@ class ImageType(str, Enum):
 
 class ImageColorType(str, Enum):
     """Image color type filters"""
+
     COLOR = "color"
     GRAY = "gray"
     MONO = "mono"
@@ -58,6 +64,7 @@ class ImageColorType(str, Enum):
 
 class CircuitState(str, Enum):
     """Circuit breaker states"""
+
     CLOSED = "closed"
     OPEN = "open"
     HALF_OPEN = "half_open"
@@ -65,6 +72,7 @@ class CircuitState(str, Enum):
 
 class QueryIntentType(str, Enum):
     """Query intent types"""
+
     DEFINITION = "definition"
     HOW_TO = "how_to"
     COMPARISON = "comparison"
@@ -77,6 +85,7 @@ class QueryIntentType(str, Enum):
 
 class CredibilityLevel(str, Enum):
     """Result credibility levels"""
+
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
@@ -86,42 +95,34 @@ class CredibilityLevel(str, Enum):
 # Exception Hierarchy
 # ============================================================================
 
+
 class SearchToolError(Exception):
     """Base exception for SearchTool errors"""
-    pass
 
 
 class AuthenticationError(SearchToolError):
     """Authentication-related errors"""
-    pass
 
 
 class QuotaExceededError(SearchToolError):
     """API quota exceeded"""
-    pass
 
 
 class RateLimitError(SearchToolError):
     """Rate limit exceeded"""
-    pass
 
 
 class CircuitBreakerOpenError(SearchToolError):
     """Circuit breaker is open"""
-    pass
 
 
 class SearchAPIError(SearchToolError):
     """Search API errors"""
-    pass
 
 
 class ValidationError(SearchToolError):
     """Input validation errors"""
-    pass
 
 
 class CacheError(SearchToolError):
     """Cache-related errors"""
-    pass
-

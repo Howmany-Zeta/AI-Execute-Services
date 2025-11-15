@@ -7,7 +7,7 @@ based on query patterns and workload analysis.
 
 import logging
 import asyncpg
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class IndexRecommendation:
     """Index creation recommendation"""
+
     table_name: str
     columns: List[str]
     index_type: str  # btree, gin, gist, ivfflat
@@ -31,13 +32,14 @@ class IndexRecommendation:
             "type": self.index_type,
             "reason": self.reason,
             "benefit": self.estimated_benefit,
-            "sql": self.create_sql
+            "sql": self.create_sql,
         }
 
 
 @dataclass
 class IndexInfo:
     """Information about an existing index"""
+
     index_name: str
     table_name: str
     columns: List[str]
@@ -55,7 +57,7 @@ class IndexInfo:
             "type": self.index_type,
             "unique": self.is_unique,
             "size_mb": round(self.size_bytes / (1024 * 1024), 2),
-            "usage_count": self.usage_count
+            "usage_count": self.usage_count,
         }
 
 
@@ -133,15 +135,17 @@ class IndexOptimizer:
 
             indexes = []
             for row in rows:
-                indexes.append(IndexInfo(
-                    index_name=str(row['index_name']),
-                    table_name=str(row['table_name']),
-                    columns=list(row['columns']),
-                    index_type=row['index_type'],
-                    is_unique=row['is_unique'],
-                    size_bytes=row['size_bytes'],
-                    usage_count=row['usage_count']
-                ))
+                indexes.append(
+                    IndexInfo(
+                        index_name=str(row["index_name"]),
+                        table_name=str(row["table_name"]),
+                        columns=list(row["columns"]),
+                        index_type=row["index_type"],
+                        is_unique=row["is_unique"],
+                        size_bytes=row["size_bytes"],
+                        usage_count=row["usage_count"],
+                    )
+                )
 
             return indexes
 
@@ -159,7 +163,9 @@ class IndexOptimizer:
         unused = [idx for idx in indexes if idx.usage_count < min_usage_threshold]
         return unused
 
-    async def get_missing_index_recommendations(self) -> List[IndexRecommendation]:
+    async def get_missing_index_recommendations(
+        self,
+    ) -> List[IndexRecommendation]:
         """
         Analyze query patterns and recommend missing indexes
 
@@ -174,93 +180,98 @@ class IndexOptimizer:
             # 1. Check if composite index on (entity_type, properties) would be beneficial
             # This is useful for queries filtering by type and JSONB properties
             entity_type_props_exists = await self._index_exists(
-                conn, 'graph_entities', ['entity_type', 'properties']
+                conn, "graph_entities", ["entity_type", "properties"]
             )
             if not entity_type_props_exists:
-                recommendations.append(IndexRecommendation(
-                    table_name='graph_entities',
-                    columns=['entity_type', 'properties'],
-                    index_type='gin',
-                    reason='Queries often filter by entity_type and search properties',
-                    estimated_benefit='medium',
-                    create_sql=(
-                        "CREATE INDEX CONCURRENTLY idx_graph_entities_type_props "
-                        "ON graph_entities (entity_type, properties jsonb_path_ops)"
+                recommendations.append(
+                    IndexRecommendation(
+                        table_name="graph_entities",
+                        columns=["entity_type", "properties"],
+                        index_type="gin",
+                        reason="Queries often filter by entity_type and search properties",
+                        estimated_benefit="medium",
+                        create_sql=(
+                            "CREATE INDEX CONCURRENTLY idx_graph_entities_type_props "
+                            "ON graph_entities (entity_type, properties jsonb_path_ops)"
+                        ),
                     )
-                ))
+                )
 
             # 2. Check for relation composite indexes
             source_type_exists = await self._index_exists(
-                conn, 'graph_relations', ['source_id', 'relation_type']
+                conn, "graph_relations", ["source_id", "relation_type"]
             )
             if not source_type_exists:
-                recommendations.append(IndexRecommendation(
-                    table_name='graph_relations',
-                    columns=['source_id', 'relation_type'],
-                    index_type='btree',
-                    reason='Queries often filter relations by source and type',
-                    estimated_benefit='high',
-                    create_sql=(
-                        "CREATE INDEX CONCURRENTLY idx_graph_relations_source_type "
-                        "ON graph_relations (source_id, relation_type)"
+                recommendations.append(
+                    IndexRecommendation(
+                        table_name="graph_relations",
+                        columns=["source_id", "relation_type"],
+                        index_type="btree",
+                        reason="Queries often filter relations by source and type",
+                        estimated_benefit="high",
+                        create_sql=(
+                            "CREATE INDEX CONCURRENTLY idx_graph_relations_source_type "
+                            "ON graph_relations (source_id, relation_type)"
+                        ),
                     )
-                ))
+                )
 
             target_type_exists = await self._index_exists(
-                conn, 'graph_relations', ['target_id', 'relation_type']
+                conn, "graph_relations", ["target_id", "relation_type"]
             )
             if not target_type_exists:
-                recommendations.append(IndexRecommendation(
-                    table_name='graph_relations',
-                    columns=['target_id', 'relation_type'],
-                    index_type='btree',
-                    reason='Queries often filter incoming relations by target and type',
-                    estimated_benefit='high',
-                    create_sql=(
-                        "CREATE INDEX CONCURRENTLY idx_graph_relations_target_type "
-                        "ON graph_relations (target_id, relation_type)"
+                recommendations.append(
+                    IndexRecommendation(
+                        table_name="graph_relations",
+                        columns=["target_id", "relation_type"],
+                        index_type="btree",
+                        reason="Queries often filter incoming relations by target and type",
+                        estimated_benefit="high",
+                        create_sql=(
+                            "CREATE INDEX CONCURRENTLY idx_graph_relations_target_type "
+                            "ON graph_relations (target_id, relation_type)"
+                        ),
                     )
-                ))
+                )
 
             # 3. Check for weight index (useful for weighted path finding)
-            weight_exists = await self._index_exists(conn, 'graph_relations', ['weight'])
+            weight_exists = await self._index_exists(conn, "graph_relations", ["weight"])
             if not weight_exists:
-                recommendations.append(IndexRecommendation(
-                    table_name='graph_relations',
-                    columns=['weight'],
-                    index_type='btree',
-                    reason='Weight-based path finding and sorting',
-                    estimated_benefit='low',
-                    create_sql=(
-                        "CREATE INDEX CONCURRENTLY idx_graph_relations_weight "
-                        "ON graph_relations (weight)"
+                recommendations.append(
+                    IndexRecommendation(
+                        table_name="graph_relations",
+                        columns=["weight"],
+                        index_type="btree",
+                        reason="Weight-based path finding and sorting",
+                        estimated_benefit="low",
+                        create_sql=(
+                            "CREATE INDEX CONCURRENTLY idx_graph_relations_weight "
+                            "ON graph_relations (weight)"
+                        ),
                     )
-                ))
+                )
 
             # 4. Check for timestamp indexes (useful for temporal queries)
-            entity_created_exists = await self._index_exists(
-                conn, 'graph_entities', ['created_at']
-            )
+            entity_created_exists = await self._index_exists(conn, "graph_entities", ["created_at"])
             if not entity_created_exists:
-                recommendations.append(IndexRecommendation(
-                    table_name='graph_entities',
-                    columns=['created_at'],
-                    index_type='btree',
-                    reason='Temporal queries (recently created entities)',
-                    estimated_benefit='low',
-                    create_sql=(
-                        "CREATE INDEX CONCURRENTLY idx_graph_entities_created "
-                        "ON graph_entities (created_at)"
+                recommendations.append(
+                    IndexRecommendation(
+                        table_name="graph_entities",
+                        columns=["created_at"],
+                        index_type="btree",
+                        reason="Temporal queries (recently created entities)",
+                        estimated_benefit="low",
+                        create_sql=(
+                            "CREATE INDEX CONCURRENTLY idx_graph_entities_created "
+                            "ON graph_entities (created_at)"
+                        ),
                     )
-                ))
+                )
 
         return recommendations
 
     async def _index_exists(
-        self,
-        conn: asyncpg.Connection,
-        table_name: str,
-        columns: List[str]
+        self, conn: asyncpg.Connection, table_name: str, columns: List[str]
     ) -> bool:
         """Check if an index exists on specified columns"""
         query = """
@@ -278,9 +289,7 @@ class IndexOptimizer:
         return result or False
 
     async def apply_recommendations(
-        self,
-        recommendations: List[IndexRecommendation],
-        dry_run: bool = False
+        self, recommendations: List[IndexRecommendation], dry_run: bool = False
     ) -> Dict[str, Any]:
         """
         Apply index recommendations
@@ -295,17 +304,16 @@ class IndexOptimizer:
         results: Dict[str, List[IndexRecommendation]] = {
             "applied": [],
             "failed": [],
-            "skipped": []
+            "skipped": [],
         }
 
         for rec in recommendations:
             try:
                 if dry_run:
                     logger.info(f"[DRY RUN] Would create index: {rec.create_sql}")
-                    results["skipped"].append({
-                        "recommendation": rec.to_dict(),
-                        "reason": "dry_run"
-                    })
+                    results["skipped"].append(
+                        {"recommendation": rec.to_dict(), "reason": "dry_run"}
+                    )
                     continue
 
                 # Create index
@@ -313,14 +321,13 @@ class IndexOptimizer:
                     logger.info(f"Creating index: {rec.create_sql}")
                     await conn.execute(rec.create_sql)
                     results["applied"].append(rec.to_dict())
-                    logger.info(f"Successfully created index on {rec.table_name}({', '.join(rec.columns)})")
+                    logger.info(
+                        f"Successfully created index on {rec.table_name}({', '.join(rec.columns)})"
+                    )
 
             except Exception as e:
                 logger.error(f"Failed to create index: {e}")
-                results["failed"].append({
-                    "recommendation": rec.to_dict(),
-                    "error": str(e)
-                })
+                results["failed"].append({"recommendation": rec.to_dict(), "error": str(e)})
 
         return results
 
@@ -351,14 +358,20 @@ class IndexOptimizer:
 
             stats = {}
             for row in rows:
-                stats[row['tablename']] = {
-                    "total_size": row['total_size'],
-                    "row_count": row['row_count'],
-                    "dead_tuples": row['dead_tuples'],
-                    "last_vacuum": row['last_vacuum'].isoformat() if row['last_vacuum'] else None,
-                    "last_autovacuum": row['last_autovacuum'].isoformat() if row['last_autovacuum'] else None,
-                    "last_analyze": row['last_analyze'].isoformat() if row['last_analyze'] else None,
-                    "last_autoanalyze": row['last_autoanalyze'].isoformat() if row['last_autoanalyze'] else None,
+                stats[row["tablename"]] = {
+                    "total_size": row["total_size"],
+                    "row_count": row["row_count"],
+                    "dead_tuples": row["dead_tuples"],
+                    "last_vacuum": (row["last_vacuum"].isoformat() if row["last_vacuum"] else None),
+                    "last_autovacuum": (
+                        row["last_autovacuum"].isoformat() if row["last_autovacuum"] else None
+                    ),
+                    "last_analyze": (
+                        row["last_analyze"].isoformat() if row["last_analyze"] else None
+                    ),
+                    "last_autoanalyze": (
+                        row["last_autoanalyze"].isoformat() if row["last_autoanalyze"] else None
+                    ),
                 }
 
             return stats
@@ -370,7 +383,7 @@ class IndexOptimizer:
         Args:
             table_name: Specific table to analyze (None for all graph tables)
         """
-        tables = [table_name] if table_name else ['graph_entities', 'graph_relations']
+        tables = [table_name] if table_name else ["graph_entities", "graph_relations"]
 
         async with self.pool.acquire() as conn:
             for table in tables:
@@ -401,7 +414,7 @@ class IndexOptimizer:
                 "total_size_mb": round(total_index_size / (1024 * 1024), 2),
                 "unused_count": len(unused_indexes),
                 "unused_size_mb": round(unused_index_size / (1024 * 1024), 2),
-                "details": [idx.to_dict() for idx in indexes]
+                "details": [idx.to_dict() for idx in indexes],
             },
             "unused_indexes": [idx.to_dict() for idx in unused_indexes],
             "recommendations": [rec.to_dict() for rec in recommendations],
@@ -409,10 +422,12 @@ class IndexOptimizer:
             "summary": {
                 "total_recommendations": len(recommendations),
                 "high_priority": len([r for r in recommendations if r.estimated_benefit == "high"]),
-                "medium_priority": len([r for r in recommendations if r.estimated_benefit == "medium"]),
+                "medium_priority": len(
+                    [r for r in recommendations if r.estimated_benefit == "medium"]
+                ),
                 "low_priority": len([r for r in recommendations if r.estimated_benefit == "low"]),
-                "potential_space_savings_mb": round(unused_index_size / (1024 * 1024), 2)
-            }
+                "potential_space_savings_mb": round(unused_index_size / (1024 * 1024), 2),
+            },
         }
 
         return report
@@ -423,47 +438,46 @@ OPTIMAL_INDEXES = [
     {
         "name": "idx_graph_entities_type",
         "table": "graph_entities",
-        "sql": "CREATE INDEX IF NOT EXISTS idx_graph_entities_type ON graph_entities(entity_type)"
+        "sql": "CREATE INDEX IF NOT EXISTS idx_graph_entities_type ON graph_entities(entity_type)",
     },
     {
         "name": "idx_graph_entities_properties",
         "table": "graph_entities",
-        "sql": "CREATE INDEX IF NOT EXISTS idx_graph_entities_properties ON graph_entities USING GIN(properties)"
+        "sql": "CREATE INDEX IF NOT EXISTS idx_graph_entities_properties ON graph_entities USING GIN(properties)",
     },
     {
         "name": "idx_graph_relations_type",
         "table": "graph_relations",
-        "sql": "CREATE INDEX IF NOT EXISTS idx_graph_relations_type ON graph_relations(relation_type)"
+        "sql": "CREATE INDEX IF NOT EXISTS idx_graph_relations_type ON graph_relations(relation_type)",
     },
     {
         "name": "idx_graph_relations_source",
         "table": "graph_relations",
-        "sql": "CREATE INDEX IF NOT EXISTS idx_graph_relations_source ON graph_relations(source_id)"
+        "sql": "CREATE INDEX IF NOT EXISTS idx_graph_relations_source ON graph_relations(source_id)",
     },
     {
         "name": "idx_graph_relations_target",
         "table": "graph_relations",
-        "sql": "CREATE INDEX IF NOT EXISTS idx_graph_relations_target ON graph_relations(target_id)"
+        "sql": "CREATE INDEX IF NOT EXISTS idx_graph_relations_target ON graph_relations(target_id)",
     },
     {
         "name": "idx_graph_relations_source_target",
         "table": "graph_relations",
-        "sql": "CREATE INDEX IF NOT EXISTS idx_graph_relations_source_target ON graph_relations(source_id, target_id)"
+        "sql": "CREATE INDEX IF NOT EXISTS idx_graph_relations_source_target ON graph_relations(source_id, target_id)",
     },
     {
         "name": "idx_graph_relations_properties",
         "table": "graph_relations",
-        "sql": "CREATE INDEX IF NOT EXISTS idx_graph_relations_properties ON graph_relations USING GIN(properties)"
+        "sql": "CREATE INDEX IF NOT EXISTS idx_graph_relations_properties ON graph_relations USING GIN(properties)",
     },
     {
         "name": "idx_graph_relations_source_type",
         "table": "graph_relations",
-        "sql": "CREATE INDEX IF NOT EXISTS idx_graph_relations_source_type ON graph_relations(source_id, relation_type)"
+        "sql": "CREATE INDEX IF NOT EXISTS idx_graph_relations_source_type ON graph_relations(source_id, relation_type)",
     },
     {
         "name": "idx_graph_relations_target_type",
         "table": "graph_relations",
-        "sql": "CREATE INDEX IF NOT EXISTS idx_graph_relations_target_type ON graph_relations(target_id, relation_type)"
+        "sql": "CREATE INDEX IF NOT EXISTS idx_graph_relations_target_type ON graph_relations(target_id, relation_type)",
     },
 ]
-

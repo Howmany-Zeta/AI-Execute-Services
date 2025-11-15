@@ -10,12 +10,11 @@ from typing import List, Optional, Dict, Any, Set, Tuple
 from collections import defaultdict
 from aiecs.infrastructure.graph_storage.base import GraphStore
 from aiecs.domain.knowledge_graph.models.relation import Relation
-from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.inference_rule import (
     InferenceRule,
     InferenceStep,
     InferenceResult,
-    RuleType
+    RuleType,
 )
 from aiecs.domain.knowledge_graph.schema.relation_type import RelationType
 
@@ -44,7 +43,7 @@ class InferenceCache:
         self,
         relation_type: str,
         source_id: Optional[str] = None,
-        target_id: Optional[str] = None
+        target_id: Optional[str] = None,
     ) -> str:
         """Create cache key"""
         if source_id and target_id:
@@ -60,7 +59,7 @@ class InferenceCache:
         self,
         relation_type: str,
         source_id: Optional[str] = None,
-        target_id: Optional[str] = None
+        target_id: Optional[str] = None,
     ) -> Optional[InferenceResult]:
         """
         Get cached inference result
@@ -96,7 +95,7 @@ class InferenceCache:
         relation_type: str,
         result: InferenceResult,
         source_id: Optional[str] = None,
-        target_id: Optional[str] = None
+        target_id: Optional[str] = None,
     ) -> None:
         """
         Cache inference result
@@ -129,7 +128,7 @@ class InferenceCache:
         return {
             "size": len(self._cache),
             "max_size": self.max_size,
-            "ttl_seconds": self.ttl_seconds
+            "ttl_seconds": self.ttl_seconds,
         }
 
 
@@ -168,11 +167,7 @@ class InferenceEngine:
         ```
     """
 
-    def __init__(
-        self,
-        graph_store: GraphStore,
-        cache: Optional[InferenceCache] = None
-    ):
+    def __init__(self, graph_store: GraphStore, cache: Optional[InferenceCache] = None):
         """
         Initialize inference engine
 
@@ -225,7 +220,7 @@ class InferenceEngine:
         max_steps: int = 10,
         source_id: Optional[str] = None,
         target_id: Optional[str] = None,
-        use_cache: bool = True
+        use_cache: bool = True,
     ) -> InferenceResult:
         """
         Infer relations using enabled rules
@@ -246,16 +241,14 @@ class InferenceEngine:
             if cached:
                 return cached
 
-        start_time = time.time()
+        time.time()
         inferred_relations: List[Relation] = []
         inference_steps: List[InferenceStep] = []
-        visited: Set[str] = set()  # Track inferred relation IDs to avoid duplicates
+        # Track inferred relation IDs to avoid duplicates
+        visited: Set[str] = set()
 
         # Get applicable rules
-        applicable_rules = [
-            rule for rule in self.get_rules(relation_type)
-            if rule.enabled
-        ]
+        applicable_rules = [rule for rule in self.get_rules(relation_type) if rule.enabled]
 
         if not applicable_rules:
             result = InferenceResult(
@@ -263,7 +256,7 @@ class InferenceEngine:
                 inference_steps=[],
                 total_steps=0,
                 confidence=0.0,
-                explanation=f"No inference rules enabled for relation type: {relation_type}"
+                explanation=f"No inference rules enabled for relation type: {relation_type}",
             )
             return result
 
@@ -285,14 +278,10 @@ class InferenceEngine:
 
             for rule in applicable_rules:
                 if rule.rule_type == RuleType.TRANSITIVE:
-                    inferred = await self._apply_transitive_rule(
-                        rule, current_relations, visited
-                    )
+                    inferred = await self._apply_transitive_rule(rule, current_relations, visited)
                     new_relations.extend(inferred)
                 elif rule.rule_type == RuleType.SYMMETRIC:
-                    inferred = await self._apply_symmetric_rule(
-                        rule, current_relations, visited
-                    )
+                    inferred = await self._apply_symmetric_rule(rule, current_relations, visited)
                     new_relations.extend(inferred)
 
             if not new_relations:
@@ -320,7 +309,7 @@ class InferenceEngine:
             inference_steps=inference_steps,
             total_steps=step_count,
             confidence=confidence,
-            explanation=f"Inferred {len(inferred_relations)} relations using {len(applicable_rules)} rules in {step_count} steps"
+            explanation=f"Inferred {len(inferred_relations)} relations using {len(applicable_rules)} rules in {step_count} steps",
         )
 
         # Cache result
@@ -337,7 +326,7 @@ class InferenceEngine:
         In production, GraphStore should have a get_relations_by_type method.
         """
         relations: List[Relation] = []
-        visited_entities: Set[str] = set()
+        # visited_entities: Set[str] = set()  # Reserved for future use
 
         # Get all entities (we'll need to traverse to find them)
         # For now, we'll collect relations as we traverse
@@ -350,10 +339,7 @@ class InferenceEngine:
         return relations
 
     async def _apply_transitive_rule(
-        self,
-        rule: InferenceRule,
-        relations: List[Relation],
-        visited: Set[str]
+        self, rule: InferenceRule, relations: List[Relation], visited: Set[str]
     ) -> List[Tuple[Relation, InferenceStep]]:
         """
         Apply transitive rule: A->B, B->C => A->C
@@ -406,8 +392,8 @@ class InferenceEngine:
                     properties={
                         "inferred": True,
                         "source_relations": [rel1.id, rel2.id],
-                        "rule_id": rule.rule_id
-                    }
+                        "rule_id": rule.rule_id,
+                    },
                 )
 
                 # Create inference step
@@ -417,7 +403,7 @@ class InferenceEngine:
                     source_relations=[rel1, rel2],
                     rule=rule,
                     confidence=confidence,
-                    explanation=f"Transitive: {rel1.source_id} -> {rel1.target_id} -> {rel2.target_id} => {rel1.source_id} -> {rel2.target_id}"
+                    explanation=f"Transitive: {rel1.source_id} -> {rel1.target_id} -> {rel2.target_id} => {rel1.source_id} -> {rel2.target_id}",
                 )
 
                 inferred.append((inferred_rel, step))
@@ -425,10 +411,7 @@ class InferenceEngine:
         return inferred
 
     async def _apply_symmetric_rule(
-        self,
-        rule: InferenceRule,
-        relations: List[Relation],
-        visited: Set[str]
+        self, rule: InferenceRule, relations: List[Relation], visited: Set[str]
     ) -> List[Tuple[Relation, InferenceStep]]:
         """
         Apply symmetric rule: A->B => B->A
@@ -482,8 +465,8 @@ class InferenceEngine:
                 properties={
                     "inferred": True,
                     "source_relations": [rel.id],
-                    "rule_id": rule.rule_id
-                }
+                    "rule_id": rule.rule_id,
+                },
             )
 
             # Create inference step
@@ -493,7 +476,7 @@ class InferenceEngine:
                 source_relations=[rel],
                 rule=rule,
                 confidence=confidence,
-                explanation=f"Symmetric: {rel.source_id} -> {rel.target_id} => {rel.target_id} -> {rel.source_id}"
+                explanation=f"Symmetric: {rel.source_id} -> {rel.target_id} => {rel.target_id} -> {rel.source_id}",
             )
 
             inferred.append((inferred_rel, step))
@@ -519,4 +502,3 @@ class InferenceEngine:
             trace.append(f"    Rule: {step.rule.rule_id} ({step.rule.rule_type})")
 
         return trace
-

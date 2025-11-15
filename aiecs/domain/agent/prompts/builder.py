@@ -106,9 +106,7 @@ class MessageBuilder:
         return self
 
     def add_conversation_history(
-        self,
-        history: List[Dict[str, str]],
-        max_messages: Optional[int] = None
+        self, history: List[Dict[str, str]], max_messages: Optional[int] = None
     ) -> "MessageBuilder":
         """
         Add conversation history.
@@ -151,7 +149,7 @@ class MessageBuilder:
         """Format context dictionary as string."""
         lines = []
         for key, value in context.items():
-            if not key.startswith('_') and value is not None:
+            if not key.startswith("_") and value is not None:
                 lines.append(f"{key}: {value}")
         return "\n".join(lines) if lines else ""
 
@@ -161,4 +159,3 @@ class MessageBuilder:
 
     def __repr__(self) -> str:
         return f"MessageBuilder(messages={len(self.messages)})"
-

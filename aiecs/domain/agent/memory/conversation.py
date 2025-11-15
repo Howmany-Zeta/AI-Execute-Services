@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Session:
     """Conversation session."""
+
     session_id: str
     agent_id: str
     created_at: datetime = field(default_factory=datetime.utcnow)
@@ -80,10 +81,7 @@ class ConversationMemory:
             logger.warning(f"Session {session_id} already exists")
             return session_id
 
-        self._sessions[session_id] = Session(
-            session_id=session_id,
-            agent_id=self.agent_id
-        )
+        self._sessions[session_id] = Session(session_id=session_id, agent_id=self.agent_id)
 
         # Cleanup old sessions if limit exceeded
         if len(self._sessions) > self.max_sessions:
@@ -92,12 +90,7 @@ class ConversationMemory:
         logger.debug(f"Session {session_id} created")
         return session_id
 
-    def add_message(
-        self,
-        session_id: str,
-        role: str,
-        content: str
-    ) -> None:
+    def add_message(self, session_id: str, role: str, content: str) -> None:
         """
         Add message to session.
 
@@ -112,11 +105,7 @@ class ConversationMemory:
 
         self._sessions[session_id].add_message(role, content)
 
-    def get_history(
-        self,
-        session_id: str,
-        limit: Optional[int] = None
-    ) -> List[LLMMessage]:
+    def get_history(self, session_id: str, limit: Optional[int] = None) -> List[LLMMessage]:
         """
         Get conversation history for session.
 
@@ -133,11 +122,7 @@ class ConversationMemory:
         session = self._sessions[session_id]
         return session.get_recent_messages(limit) if limit else session.messages.copy()
 
-    def format_history(
-        self,
-        session_id: str,
-        limit: Optional[int] = None
-    ) -> str:
+    def format_history(self, session_id: str, limit: Optional[int] = None) -> str:
         """
         Format conversation history as string.
 
@@ -195,10 +180,7 @@ class ConversationMemory:
     def _cleanup_old_sessions(self) -> None:
         """Remove oldest sessions to maintain limit."""
         # Sort by last activity
-        sorted_sessions = sorted(
-            self._sessions.items(),
-            key=lambda x: x[1].last_activity
-        )
+        sorted_sessions = sorted(self._sessions.items(), key=lambda x: x[1].last_activity)
 
         # Remove oldest sessions
         num_to_remove = len(self._sessions) - self.max_sessions
@@ -213,4 +195,3 @@ class ConversationMemory:
             "total_sessions": len(self._sessions),
             "total_messages": sum(len(s.messages) for s in self._sessions.values()),
         }
-

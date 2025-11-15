@@ -1,26 +1,18 @@
-import asyncio
 import inspect
 import logging
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Type
 
 from pydantic import BaseModel, ValidationError
 import re
 
 from aiecs.tools.tool_executor import (
-    ToolExecutor,
-    ToolExecutionError,
     InputValidationError,
-    OperationError,
     SecurityError,
     get_executor,
-    validate_input,
-    cache_result,
-    run_in_executor,
-    measure_execution_time,
-    sanitize_input
 )
 
 logger = logging.getLogger(__name__)
+
 
 class BaseTool:
     """
@@ -49,6 +41,7 @@ class BaseTool:
                 # Implementation
                 pass
     """
+
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         Initialize the tool with optional configuration.
@@ -80,8 +73,12 @@ class BaseTool:
         """
         for attr_name in dir(self.__class__):
             attr = getattr(self.__class__, attr_name)
-            if isinstance(attr, type) and issubclass(attr, BaseModel) and attr.__name__.endswith('Schema'):
-                op_name = attr.__name__.replace('Schema', '').lower()
+            if (
+                isinstance(attr, type)
+                and issubclass(attr, BaseModel)
+                and attr.__name__.endswith("Schema")
+            ):
+                op_name = attr.__name__.replace("Schema", "").lower()
                 self._schemas[op_name] = attr
 
     def _register_async_methods(self) -> None:
@@ -90,7 +87,7 @@ class BaseTool:
         """
         for attr_name in dir(self.__class__):
             attr = getattr(self.__class__, attr_name)
-            if inspect.iscoroutinefunction(attr) and not attr_name.startswith('_'):
+            if inspect.iscoroutinefunction(attr) and not attr_name.startswith("_"):
                 self._async_methods.append(attr_name)
 
     def _sanitize_kwargs(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
@@ -108,7 +105,9 @@ class BaseTool:
         """
         sanitized = {}
         for k, v in kwargs.items():
-            if isinstance(v, str) and re.search(r'(\bSELECT\b|\bINSERT\b|--|;|/\*)', v, re.IGNORECASE):
+            if isinstance(v, str) and re.search(
+                r"(\bSELECT\b|\bINSERT\b|--|;|/\*)", v, re.IGNORECASE
+            ):
                 raise SecurityError(f"Input parameter '{k}' contains potentially malicious content")
             sanitized[k] = v
         return sanitized
@@ -193,7 +192,7 @@ class BaseTool:
         """
         if method_name in self._schemas:
             return self._schemas[method_name]
-        schema_name = method_name[0].upper() + method_name[1:] + 'Schema'
+        schema_name = method_name[0].upper() + method_name[1:] + "Schema"
         for attr_name in dir(self.__class__):
             if attr_name == schema_name:
                 attr = getattr(self.__class__, attr_name)

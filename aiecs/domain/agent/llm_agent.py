@@ -8,11 +8,11 @@ import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
-from aiecs.llm import BaseLLMClient, LLMMessage, LLMResponse
+from aiecs.llm import BaseLLMClient, LLMMessage
 
 from .base_agent import BaseAIAgent
 from .models import AgentType, AgentConfiguration
-from .exceptions import TaskExecutionError, AgentInitializationError
+from .exceptions import TaskExecutionError
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class LLMAgent(BaseAIAgent):
             description=description or "LLM-powered conversational agent",
             version=version,
         )
-        
+
         self.llm_client = llm_client
         self._system_prompt: Optional[str] = None
         self._conversation_history: List[LLMMessage] = []
@@ -69,11 +69,11 @@ class LLMAgent(BaseAIAgent):
         """Shutdown LLM agent."""
         # Clear conversation history
         self._conversation_history.clear()
-        
+
         # Close LLM client if it has a close method
-        if hasattr(self.llm_client, 'close'):
+        if hasattr(self.llm_client, "close"):
             await self.llm_client.close()
-        
+
         logger.info(f"LLMAgent {self.agent_id} shut down")
 
     def _build_system_prompt(self) -> str:
@@ -97,11 +97,7 @@ class LLMAgent(BaseAIAgent):
 
         return "\n\n".join(parts)
 
-    async def execute_task(
-        self,
-        task: Dict[str, Any],
-        context: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def execute_task(self, task: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute a task using the LLM.
 
@@ -119,16 +115,16 @@ class LLMAgent(BaseAIAgent):
 
         try:
             # Extract task description
-            task_description = task.get('description') or task.get('prompt') or task.get('task')
+            task_description = task.get("description") or task.get("prompt") or task.get("task")
             if not task_description:
                 raise TaskExecutionError(
                     "Task must contain 'description', 'prompt', or 'task' field",
-                    agent_id=self.agent_id
+                    agent_id=self.agent_id,
                 )
 
             # Transition to busy state
             self._transition_state(self.state.__class__.BUSY)
-            self._current_task_id = task.get('task_id')
+            self._current_task_id = task.get("task_id")
 
             # Build messages
             messages = self._build_messages(task_description, context)
@@ -143,7 +139,7 @@ class LLMAgent(BaseAIAgent):
 
             # Extract result
             output = response.content
-            
+
             # Store in conversation history if enabled
             if self._config.memory_enabled:
                 self._conversation_history.append(LLMMessage(role="user", content=task_description))
@@ -156,7 +152,7 @@ class LLMAgent(BaseAIAgent):
             self.update_metrics(
                 execution_time=execution_time,
                 success=True,
-                tokens_used=getattr(response, 'total_tokens', None),
+                tokens_used=getattr(response, "total_tokens", None),
             )
 
             # Transition back to active
@@ -169,14 +165,14 @@ class LLMAgent(BaseAIAgent):
                 "output": output,
                 "provider": response.provider,
                 "model": response.model,
-                "tokens_used": getattr(response, 'total_tokens', None),
+                "tokens_used": getattr(response, "total_tokens", None),
                 "execution_time": execution_time,
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
         except Exception as e:
             logger.error(f"Task execution failed for {self.agent_id}: {e}")
-            
+
             # Update metrics for failure
             execution_time = (datetime.utcnow() - start_time).total_seconds()
             self.update_metrics(execution_time=execution_time, success=False)
@@ -188,13 +184,11 @@ class LLMAgent(BaseAIAgent):
             raise TaskExecutionError(
                 f"Task execution failed: {str(e)}",
                 agent_id=self.agent_id,
-                task_id=task.get('task_id')
+                task_id=task.get("task_id"),
             )
 
     async def process_message(
-        self,
-        message: str,
-        sender_id: Optional[str] = None
+        self, message: str, sender_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Process an incoming message.
@@ -212,10 +206,10 @@ class LLMAgent(BaseAIAgent):
                 "description": message,
                 "task_id": f"msg_{datetime.utcnow().timestamp()}",
             }
-            
+
             # Execute as task
             result = await self.execute_task(task, {"sender_id": sender_id})
-            
+
             return {
                 "response": result.get("output"),
                 "tokens_used": result.get("tokens_used"),
@@ -226,11 +220,7 @@ class LLMAgent(BaseAIAgent):
             logger.error(f"Message processing failed for {self.agent_id}: {e}")
             raise
 
-    def _build_messages(
-        self,
-        user_message: str,
-        context: Dict[str, Any]
-    ) -> List[LLMMessage]:
+    def _build_messages(self, user_message: str, context: Dict[str, Any]) -> List[LLMMessage]:
         """
         Build LLM messages from task and context.
 
@@ -257,7 +247,12 @@ class LLMAgent(BaseAIAgent):
         if context:
             context_str = self._format_context(context)
             if context_str:
-                messages.append(LLMMessage(role="system", content=f"Additional Context:\n{context_str}"))
+                messages.append(
+                    LLMMessage(
+                        role="system",
+                        content=f"Additional Context:\n{context_str}",
+                    )
+                )
 
         # Add user message
         messages.append(LLMMessage(role="user", content=user_message))
@@ -267,12 +262,12 @@ class LLMAgent(BaseAIAgent):
     def _format_context(self, context: Dict[str, Any]) -> str:
         """Format context dictionary as string."""
         relevant_fields = []
-        
+
         # Filter out internal fields
         for key, value in context.items():
-            if not key.startswith('_') and value is not None:
+            if not key.startswith("_") and value is not None:
                 relevant_fields.append(f"{key}: {value}")
-        
+
         return "\n".join(relevant_fields) if relevant_fields else ""
 
     def clear_conversation_history(self) -> None:
@@ -282,10 +277,7 @@ class LLMAgent(BaseAIAgent):
 
     def get_conversation_history(self) -> List[Dict[str, str]]:
         """Get conversation history."""
-        return [
-            {"role": msg.role, "content": msg.content}
-            for msg in self._conversation_history
-        ]
+        return [{"role": msg.role, "content": msg.content} for msg in self._conversation_history]
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "LLMAgent":
@@ -306,4 +298,3 @@ class LLMAgent(BaseAIAgent):
             "LLMAgent.from_dict requires LLM client to be provided separately. "
             "Use constructor instead."
         )
-

@@ -10,7 +10,6 @@ from .community_models import (
     GovernanceType,
     DecisionStatus,
     ResourceType,
-    
     # Models
     CommunityMember,
     CommunityResource,
@@ -25,7 +24,6 @@ __all__ = [
     "GovernanceType",
     "DecisionStatus",
     "ResourceType",
-    
     # Models
     "CommunityMember",
     "CommunityResource",
@@ -33,4 +31,3 @@ __all__ = [
     "AgentCommunity",
     "CollaborationSession",
 ]
-

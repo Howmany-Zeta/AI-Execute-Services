@@ -15,8 +15,7 @@ Enhanced with:
 import logging
 import time
 from abc import ABC, abstractmethod
-from collections import deque
-from datetime import datetime, timedelta
+from datetime import datetime
 from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -50,21 +49,23 @@ def expose_operation(operation_name: str, description: str):
         def get_series_observations(self, series_id: str, ...):
             pass
     """
+
     def decorator(func):
         func._exposed_operation = True
         func._operation_name = operation_name
         func._operation_description = description
         return func
+
     return decorator
 
 
 class RateLimiter:
     """Token bucket rate limiter for API requests"""
-    
+
     def __init__(self, tokens_per_second: float = 1.0, max_tokens: int = 10):
         """
         Initialize rate limiter with token bucket algorithm.
-        
+
         Args:
             tokens_per_second: Rate at which tokens are added to the bucket
             max_tokens: Maximum number of tokens the bucket can hold
@@ -74,41 +75,38 @@ class RateLimiter:
         self.tokens = max_tokens
         self.last_update = time.time()
         self.lock = Lock()
-    
+
     def acquire(self, tokens: int = 1) -> bool:
         """
         Acquire tokens from the bucket.
-        
+
         Args:
             tokens: Number of tokens to acquire
-            
+
         Returns:
             True if tokens were acquired, False otherwise
         """
         with self.lock:
             now = time.time()
             elapsed = now - self.last_update
-            
+
             # Add new tokens based on elapsed time
-            self.tokens = min(
-                self.max_tokens,
-                self.tokens + elapsed * self.tokens_per_second
-            )
+            self.tokens = min(self.max_tokens, self.tokens + elapsed * self.tokens_per_second)
             self.last_update = now
-            
+
             if self.tokens >= tokens:
                 self.tokens -= tokens
                 return True
             return False
-    
+
     def wait(self, tokens: int = 1, timeout: float = 30.0) -> bool:
         """
         Wait until tokens are available.
-        
+
         Args:
             tokens: Number of tokens to acquire
             timeout: Maximum time to wait in seconds
-            
+
         Returns:
             True if tokens were acquired, False if timeout
         """
@@ -123,7 +121,7 @@ class RateLimiter:
 class BaseAPIProvider(ABC):
     """
     Abstract base class for all API data source providers.
-    
+
     Provides:
     - Rate limiting with token bucket algorithm
     - Standardized error handling
@@ -131,121 +129,113 @@ class BaseAPIProvider(ABC):
     - Parameter validation
     - Response formatting
     """
-    
+
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         Initialize the API provider.
-        
+
         Args:
             config: Configuration dictionary with API keys, rate limits, etc.
         """
         self.config = config or {}
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
-        
+
         # Initialize rate limiter
-        rate_limit = self.config.get('rate_limit', 10)  # requests per second
-        max_burst = self.config.get('max_burst', 20)
-        self.rate_limiter = RateLimiter(
-            tokens_per_second=rate_limit,
-            max_tokens=max_burst
-        )
-        
+        rate_limit = self.config.get("rate_limit", 10)  # requests per second
+        max_burst = self.config.get("max_burst", 20)
+        self.rate_limiter = RateLimiter(tokens_per_second=rate_limit, max_tokens=max_burst)
+
         # Initialize detailed metrics
         self.metrics = DetailedMetrics(max_response_times=100)
-        
+
         # Initialize smart error handler
         self.error_handler = SmartErrorHandler(
-            max_retries=self.config.get('max_retries', 3),
-            backoff_factor=self.config.get('backoff_factor', 2.0),
-            initial_delay=self.config.get('initial_delay', 1.0),
-            max_delay=self.config.get('max_delay', 30.0)
+            max_retries=self.config.get("max_retries", 3),
+            backoff_factor=self.config.get("backoff_factor", 2.0),
+            initial_delay=self.config.get("initial_delay", 1.0),
+            max_delay=self.config.get("max_delay", 30.0),
         )
-        
+
         # Initialize data validator
         self.validator = DataValidator()
-        
+
         # Legacy stats for backwards compatibility
         self.stats = {
-            'total_requests': 0,
-            'successful_requests': 0,
-            'failed_requests': 0,
-            'last_request_time': None
+            "total_requests": 0,
+            "successful_requests": 0,
+            "failed_requests": 0,
+            "last_request_time": None,
         }
         self.stats_lock = Lock()
-    
+
     @property
     @abstractmethod
     def name(self) -> str:
         """Provider name (e.g., 'fred', 'worldbank')"""
-        pass
-    
+
     @property
     @abstractmethod
     def description(self) -> str:
         """Human-readable description of the provider"""
-        pass
-    
+
     @property
     @abstractmethod
     def supported_operations(self) -> List[str]:
         """List of supported operation names"""
-        pass
-    
+
     @abstractmethod
     def validate_params(self, operation: str, params: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
         """
         Validate parameters for a specific operation.
-        
+
         Args:
             operation: Operation name
             params: Parameters to validate
-            
+
         Returns:
             Tuple of (is_valid, error_message)
         """
-        pass
-    
+
     @abstractmethod
     def fetch(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Fetch data from the API.
-        
+
         Args:
             operation: Operation to perform
             params: Operation parameters
-            
+
         Returns:
             Response data in standardized format
-            
+
         Raises:
             ValueError: If operation is not supported
             Exception: If API request fails
         """
-        pass
-    
+
     def get_metadata(self) -> Dict[str, Any]:
         """
         Get provider metadata including health status and detailed metrics.
-        
+
         Returns:
             Dictionary with comprehensive provider information
         """
         return {
-            'name': self.name,
-            'description': self.description,
-            'operations': self.supported_operations,
-            'stats': self.metrics.get_summary(),  # Use detailed metrics
-            'health': {
-                'score': self.metrics.get_health_score(),
-                'status': 'healthy' if self.metrics.get_health_score() > 0.7 else 'degraded'
+            "name": self.name,
+            "description": self.description,
+            "operations": self.supported_operations,
+            "stats": self.metrics.get_summary(),  # Use detailed metrics
+            "health": {
+                "score": self.metrics.get_health_score(),
+                "status": ("healthy" if self.metrics.get_health_score() > 0.7 else "degraded"),
             },
-            'config': {
-                'rate_limit': self.config.get('rate_limit', 10),
-                'timeout': self.config.get('timeout', 30),
-                'max_retries': self.config.get('max_retries', 3)
-            }
+            "config": {
+                "rate_limit": self.config.get("rate_limit", 10),
+                "timeout": self.config.get("timeout", 30),
+                "max_retries": self.config.get("max_retries", 3),
+            },
         }
-    
+
     def get_operation_schema(self, operation: str) -> Optional[Dict[str, Any]]:
         """
         Get schema for a specific operation.
@@ -295,7 +285,7 @@ class BaseAPIProvider(ABC):
             # Try to get schema without instantiation first
             for attr_name in dir(cls):
                 # Skip private and special methods
-                if attr_name.startswith('_'):
+                if attr_name.startswith("_"):
                     continue
 
                 try:
@@ -304,48 +294,50 @@ class BaseAPIProvider(ABC):
                     continue
 
                 # Check if this is an exposed operation
-                if callable(attr) and hasattr(attr, '_exposed_operation'):
+                if callable(attr) and hasattr(attr, "_exposed_operation"):
                     operation_name = attr._operation_name
                     operation_description = attr._operation_description
 
                     # Try to get schema - this might require instantiation
                     schema = None
-                    if hasattr(cls, 'get_operation_schema'):
+                    if hasattr(cls, "get_operation_schema"):
                         try:
                             # Try calling as class method first
                             schema = cls.get_operation_schema(cls, operation_name)
                         except (TypeError, AttributeError):
                             # If that fails, we'll need to handle it at runtime
-                            logger.debug(f"Could not get schema for {operation_name} at class level")
+                            logger.debug(
+                                f"Could not get schema for {operation_name} at class level"
+                            )
 
-                    operations.append({
-                        'name': operation_name,
-                        'description': operation_description,
-                        'schema': schema,
-                        'method_name': attr_name
-                    })
+                    operations.append(
+                        {
+                            "name": operation_name,
+                            "description": operation_description,
+                            "schema": schema,
+                            "method_name": attr_name,
+                        }
+                    )
 
-                    logger.debug(f"Discovered exposed operation: {operation_name} from {cls.__name__}")
+                    logger.debug(
+                        f"Discovered exposed operation: {operation_name} from {cls.__name__}"
+                    )
 
         except Exception as e:
             logger.warning(f"Error discovering exposed operations for {cls.__name__}: {e}")
 
         return operations
-    
-    def validate_and_clean_data(
-        self,
-        operation: str,
-        raw_data: Any
-    ) -> Dict[str, Any]:
+
+    def validate_and_clean_data(self, operation: str, raw_data: Any) -> Dict[str, Any]:
         """
         Validate and clean data (optional, override in subclass).
-        
+
         Providers can implement custom validation logic for their specific data formats.
-        
+
         Args:
             operation: Operation that produced the data
             raw_data: Raw data from API
-        
+
         Returns:
             Dictionary with:
                 - data: Cleaned data
@@ -353,214 +345,206 @@ class BaseAPIProvider(ABC):
                 - statistics: Data quality statistics
         """
         # Default implementation: no validation
-        return {
-            'data': raw_data,
-            'validation_warnings': [],
-            'statistics': {}
-        }
-    
+        return {"data": raw_data, "validation_warnings": [], "statistics": {}}
+
     def calculate_data_quality(
-        self,
-        operation: str,
-        data: Any,
-        response_time_ms: float
+        self, operation: str, data: Any, response_time_ms: float
     ) -> Dict[str, Any]:
         """
         Calculate quality metadata for the response.
-        
+
         Can be overridden by providers for custom quality assessment.
-        
+
         Args:
             operation: Operation performed
             data: Response data
             response_time_ms: Response time in milliseconds
-        
+
         Returns:
             Quality metadata dictionary
         """
         quality = {
-            'score': 0.7,  # Default quality score
-            'completeness': 1.0,  # Assume complete unless validated otherwise
-            'freshness_hours': None,  # Unknown freshness
-            'confidence': 0.8,  # Default confidence
-            'authority_level': 'verified'  # Provider is verified
+            "score": 0.7,  # Default quality score
+            "completeness": 1.0,  # Assume complete unless validated otherwise
+            "freshness_hours": None,  # Unknown freshness
+            "confidence": 0.8,  # Default confidence
+            "authority_level": "verified",  # Provider is verified
         }
-        
+
         # Adjust score based on response time
         if response_time_ms < 500:
-            quality['score'] = min(quality['score'] + 0.1, 1.0)
+            quality["score"] = min(quality["score"] + 0.1, 1.0)
         elif response_time_ms > 5000:
-            quality['score'] = max(quality['score'] - 0.1, 0.0)
-        
+            quality["score"] = max(quality["score"] - 0.1, 0.0)
+
         # Check if data is empty
         if data is None:
-            quality['completeness'] = 0.0
-            quality['score'] = 0.0
+            quality["completeness"] = 0.0
+            quality["score"] = 0.0
         elif isinstance(data, list) and len(data) == 0:
-            quality['completeness'] = 0.0
-            quality['score'] = max(quality['score'] - 0.3, 0.0)
-        
+            quality["completeness"] = 0.0
+            quality["score"] = max(quality["score"] - 0.3, 0.0)
+
         return quality
-    
+
     def _update_stats(self, success: bool):
         """Update request statistics"""
         with self.stats_lock:
-            self.stats['total_requests'] += 1
+            self.stats["total_requests"] += 1
             if success:
-                self.stats['successful_requests'] += 1
+                self.stats["successful_requests"] += 1
             else:
-                self.stats['failed_requests'] += 1
-            self.stats['last_request_time'] = datetime.utcnow().isoformat()
-    
+                self.stats["failed_requests"] += 1
+            self.stats["last_request_time"] = datetime.utcnow().isoformat()
+
     def _format_response(
-        self, 
-        operation: str, 
-        data: Any, 
+        self,
+        operation: str,
+        data: Any,
         source: Optional[str] = None,
         response_time_ms: Optional[float] = None,
-        validation_result: Optional[Dict[str, Any]] = None
+        validation_result: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Format response in standardized format with enhanced metadata.
-        
+
         Args:
             operation: Operation that was performed
             data: Response data
             source: Data source URL or identifier
             response_time_ms: Response time in milliseconds
             validation_result: Optional validation result from validate_and_clean_data
-            
+
         Returns:
             Standardized response dictionary with comprehensive metadata
         """
         # Calculate quality metadata
         quality = self.calculate_data_quality(operation, data, response_time_ms or 0)
-        
+
         # Calculate coverage information
         coverage = self._calculate_coverage(data)
-        
+
         # Build metadata
         metadata = {
-            'timestamp': datetime.utcnow().isoformat(),
-            'source': source or f'{self.name} API',
-            'quality': quality,
-            'coverage': coverage
+            "timestamp": datetime.utcnow().isoformat(),
+            "source": source or f"{self.name} API",
+            "quality": quality,
+            "coverage": coverage,
         }
-        
+
         # Add API info if response time provided
         if response_time_ms is not None:
-            metadata['api_info'] = {
-                'response_time_ms': round(response_time_ms, 2),
-                'provider': self.name
+            metadata["api_info"] = {
+                "response_time_ms": round(response_time_ms, 2),
+                "provider": self.name,
             }
-        
+
         # Add validation warnings if present
-        if validation_result and validation_result.get('validation_warnings'):
-            metadata['validation_warnings'] = validation_result['validation_warnings']
-        
+        if validation_result and validation_result.get("validation_warnings"):
+            metadata["validation_warnings"] = validation_result["validation_warnings"]
+
         # Add statistics if present
-        if validation_result and validation_result.get('statistics'):
-            metadata['statistics'] = validation_result['statistics']
-        
+        if validation_result and validation_result.get("statistics"):
+            metadata["statistics"] = validation_result["statistics"]
+
         return {
-            'provider': self.name,
-            'operation': operation,
-            'data': data,
-            'metadata': metadata
+            "provider": self.name,
+            "operation": operation,
+            "data": data,
+            "metadata": metadata,
         }
-    
+
     def _calculate_coverage(self, data: Any) -> Dict[str, Any]:
         """
         Calculate data coverage information.
-        
+
         Args:
             data: Response data
-        
+
         Returns:
             Coverage information dictionary
         """
         coverage = {}
-        
+
         # Calculate record count
         if isinstance(data, list):
-            coverage['total_records'] = len(data)
-            
+            coverage["total_records"] = len(data)
+
             # Try to extract date range from time series data
             if len(data) > 0 and isinstance(data[0], dict):
-                date_fields = ['date', 'observation_date', 'timestamp']
+                date_fields = ["date", "observation_date", "timestamp"]
                 for date_field in date_fields:
                     if date_field in data[0]:
                         dates = [
-                            item.get(date_field) for item in data
+                            item.get(date_field)
+                            for item in data
                             if date_field in item and item.get(date_field)
                         ]
                         if dates:
                             try:
                                 # Sort to get earliest and latest
                                 dates_sorted = sorted(dates)
-                                coverage['start_date'] = dates_sorted[0]
-                                coverage['end_date'] = dates_sorted[-1]
-                                
+                                coverage["start_date"] = dates_sorted[0]
+                                coverage["end_date"] = dates_sorted[-1]
+
                                 # Try to infer frequency
-                                frequency = self.validator.infer_data_frequency(
-                                    data, date_field
-                                )
+                                frequency = self.validator.infer_data_frequency(data, date_field)
                                 if frequency:
-                                    coverage['frequency'] = frequency
+                                    coverage["frequency"] = frequency
                             except Exception:
                                 pass
                         break
         elif isinstance(data, dict):
             # For dict responses
-            if 'articles' in data:
-                coverage['total_records'] = len(data['articles'])
-            elif 'total_results' in data:
-                coverage['total_results'] = data['total_results']
+            if "articles" in data:
+                coverage["total_records"] = len(data["articles"])
+            elif "total_results" in data:
+                coverage["total_results"] = data["total_results"]
             else:
-                coverage['total_records'] = 1
+                coverage["total_records"] = 1
         else:
-            coverage['total_records'] = 1 if data is not None else 0
-        
+            coverage["total_records"] = 1 if data is not None else 0
+
         return coverage
-    
+
     def _get_api_key(self, key_name: Optional[str] = None) -> Optional[str]:
         """
         Get API key from config or environment.
-        
+
         Args:
             key_name: Specific key name to retrieve
-            
+
         Returns:
             API key or None if not found
         """
         import os
-        
+
         # Try config first
-        if 'api_key' in self.config:
-            return self.config['api_key']
-        
+        if "api_key" in self.config:
+            return self.config["api_key"]
+
         # Try environment variable
-        env_var = key_name or f'{self.name.upper()}_API_KEY'
+        env_var = key_name or f"{self.name.upper()}_API_KEY"
         return os.getenv(env_var)
-    
+
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute an operation with rate limiting, error handling, and metrics tracking.
-        
+
         Args:
             operation: Operation to perform
             params: Operation parameters
-            
+
         Returns:
             Response data with enhanced metadata
-            
+
         Raises:
             ValueError: If operation is invalid or parameters are invalid
             Exception: If API request fails after all retries
         """
         # Validate operation
         if operation not in self.supported_operations:
-            available_ops = ', '.join(self.supported_operations)
+            available_ops = ", ".join(self.supported_operations)
             schema = self.get_operation_schema(operation)
             error_msg = (
                 f"Operation '{operation}' not supported by {self.name}.\n"
@@ -569,47 +553,44 @@ class BaseAPIProvider(ABC):
             if schema:
                 error_msg += f"\nSee get_operation_schema('{operation}') for details"
             raise ValueError(error_msg)
-        
+
         # Validate parameters with enhanced error messages
         is_valid, error_msg = self.validate_params(operation, params)
         if not is_valid:
             schema = self.get_operation_schema(operation)
             enhanced_error = f"Invalid parameters for {self.name}.{operation}: {error_msg}"
-            
-            if schema and 'parameters' in schema:
+
+            if schema and "parameters" in schema:
                 # Add helpful parameter information
                 required_params = [
-                    name for name, info in schema['parameters'].items()
-                    if info.get('required', False)
+                    name
+                    for name, info in schema["parameters"].items()
+                    if info.get("required", False)
                 ]
                 if required_params:
                     enhanced_error += f"\nRequired parameters: {', '.join(required_params)}"
-                
+
                 # Add examples if available
-                if 'examples' in schema and schema['examples']:
-                    example = schema['examples'][0]
+                if "examples" in schema and schema["examples"]:
+                    example = schema["examples"][0]
                     enhanced_error += f"\nExample: {example.get('params', {})}"
-            
+
             raise ValueError(enhanced_error)
-        
+
         # Apply rate limiting
         wait_start = time.time()
         if not self.rate_limiter.wait(tokens=1, timeout=30):
-            self.metrics.record_request(
-                success=False,
-                response_time_ms=0,
-                error_type='rate_limit'
-            )
+            self.metrics.record_request(success=False, response_time_ms=0, error_type="rate_limit")
             raise Exception(
                 f"Rate limit exceeded for {self.name}. "
                 "Please try again later or increase rate limits in config."
             )
-        
+
         # Track rate limit wait time
         wait_time_ms = (time.time() - wait_start) * 1000
         if wait_time_ms > 100:  # Only record significant waits
             self.metrics.record_rate_limit_wait(wait_time_ms)
-        
+
         # Execute with smart retry logic
         def fetch_operation():
             """Wrapper for fetch with timing"""
@@ -617,68 +598,67 @@ class BaseAPIProvider(ABC):
             result = self.fetch(operation, params)
             response_time_ms = (time.time() - start_time) * 1000
             return result, response_time_ms
-        
+
         # Use error handler for retries
         execution_result = self.error_handler.execute_with_retry(
             operation_func=fetch_operation,
             operation_name=operation,
-            provider_name=self.name
+            provider_name=self.name,
         )
-        
-        if execution_result['success']:
-            result, response_time_ms = execution_result['data']
-            
+
+        if execution_result["success"]:
+            result, response_time_ms = execution_result["data"]
+
             # Calculate data size for metrics
-            data = result.get('data') if isinstance(result, dict) else result
+            data = result.get("data") if isinstance(result, dict) else result
             record_count = len(data) if isinstance(data, list) else (1 if data else 0)
-            
+
             # Record success metrics
             self.metrics.record_request(
                 success=True,
                 response_time_ms=response_time_ms,
                 record_count=record_count,
-                cached=False
+                cached=False,
             )
-            
+
             # Update legacy stats
             self._update_stats(success=True)
-            
+
             self.logger.info(
                 f"Successfully executed {self.name}.{operation} "
                 f"in {response_time_ms:.0f}ms ({record_count} records)"
             )
-            
+
             return result
         else:
             # All retries failed
-            error_info = execution_result['error']
-            retry_info = execution_result['retry_info']
-            
+            error_info = execution_result["error"]
+            retry_info = execution_result["retry_info"]
+
             # Record failure metrics
             self.metrics.record_request(
                 success=False,
                 response_time_ms=0,
-                error_type=error_info.get('type', 'unknown'),
-                error_message=error_info.get('message')
+                error_type=error_info.get("type", "unknown"),
+                error_message=error_info.get("message"),
             )
-            
+
             # Update legacy stats
             self._update_stats(success=False)
-            
+
             # Build comprehensive error message
             error_msg = (
                 f"Failed to execute {self.name}.{operation} after "
                 f"{retry_info['attempts']} attempts.\n"
                 f"Error: {error_info['message']}"
             )
-            
-            # Add recovery suggestions
-            if retry_info.get('recovery_suggestions'):
-                error_msg += "\n\nSuggestions:"
-                for suggestion in retry_info['recovery_suggestions'][:3]:
-                    error_msg += f"\n  - {suggestion}"
-            
-            self.logger.error(error_msg)
-            
-            raise Exception(error_msg)
 
+            # Add recovery suggestions
+            if retry_info.get("recovery_suggestions"):
+                error_msg += "\n\nSuggestions:"
+                for suggestion in retry_info["recovery_suggestions"][:3]:
+                    error_msg += f"\n  - {suggestion}"
+
+            self.logger.error(error_msg)
+
+            raise Exception(error_msg)

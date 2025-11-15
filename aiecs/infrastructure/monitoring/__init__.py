@@ -15,7 +15,7 @@ from .global_metrics_manager import (
     record_duration,
     record_operation_success,
     record_operation_failure,
-    record_retry
+    record_retry,
 )
 
 __all__ = [

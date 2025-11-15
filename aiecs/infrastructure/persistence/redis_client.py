@@ -5,6 +5,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
+
 class RedisClient:
     """Redis client singleton for sharing across different caching strategies"""
 
@@ -16,10 +17,10 @@ class RedisClient:
         """Initialize Redis client"""
         try:
             # Get Redis configuration from environment variables
-            redis_host = os.getenv('REDIS_HOST', 'localhost')
-            redis_port = int(os.getenv('REDIS_PORT', 6379))
-            redis_db = int(os.getenv('REDIS_DB', 0))
-            redis_password = os.getenv('REDIS_PASSWORD')
+            redis_host = os.getenv("REDIS_HOST", "localhost")
+            redis_port = int(os.getenv("REDIS_PORT", 6379))
+            redis_db = int(os.getenv("REDIS_DB", 0))
+            redis_password = os.getenv("REDIS_PASSWORD")
 
             # Create connection pool
             self._connection_pool = redis.ConnectionPool(
@@ -29,7 +30,7 @@ class RedisClient:
                 password=redis_password,
                 decode_responses=True,
                 max_connections=20,
-                retry_on_timeout=True
+                retry_on_timeout=True,
             )
 
             # Create Redis client
@@ -37,7 +38,9 @@ class RedisClient:
 
             # Test connection
             await self._client.ping()
-            logger.info(f"Redis client initialized successfully: {redis_host}:{redis_port}/{redis_db}")
+            logger.info(
+                f"Redis client initialized successfully: {redis_host}:{redis_port}/{redis_db}"
+            )
 
         except Exception as e:
             logger.error(f"Failed to initialize Redis client: {e}")
@@ -75,43 +78,43 @@ class RedisClient:
         return await client.hgetall(name)
 
     async def hset(
-        self, 
-        name: str, 
+        self,
+        name: str,
         key: Optional[str] = None,
         value: Optional[str] = None,
-        mapping: Optional[dict] = None
+        mapping: Optional[dict] = None,
     ) -> int:
         """Set hash fields
-        
+
         Supports two calling patterns:
         1. hset(name, key, value) - Set single field (positional)
         2. hset(name, key=key, value=value) - Set single field (keyword)
         3. hset(name, mapping={...}) - Set multiple fields
-        
+
         Args:
             name: Redis hash key name
             key: Field name (for single field set)
             value: Field value (for single field set)
             mapping: Dictionary of field-value pairs (for multiple fields)
-        
+
         Returns:
             Number of fields that were added
-            
+
         Raises:
             ValueError: If neither (key, value) nor mapping is provided
-        
+
         Examples:
             # Single field with positional args
             await redis_client.hset("myhash", "field1", "value1")
-            
+
             # Single field with keyword args
             await redis_client.hset("myhash", key="field1", value="value1")
-            
+
             # Multiple fields with mapping
             await redis_client.hset("myhash", mapping={"field1": "value1", "field2": "value2"})
         """
         client = await self.get_client()
-        
+
         if mapping is not None:
             # Multiple fields mode
             return await client.hset(name, mapping=mapping)
@@ -180,12 +183,16 @@ class RedisClient:
             logger.error(f"Redis get failed for key {key}: {e}")
             return None
 
+
 # ✅ Key changes:
 # 1. No longer create instance immediately.
-# 2. Define a global variable with initial value None. This variable will be populated by lifespan.
+# 2. Define a global variable with initial value None. This variable will
+# be populated by lifespan.
 redis_client: Optional[RedisClient] = None
 
 # 3. Provide an initialization function for lifespan to call
+
+
 async def initialize_redis_client():
     """Create and initialize global Redis client instance at application startup."""
     global redis_client
@@ -193,13 +200,19 @@ async def initialize_redis_client():
         redis_client = RedisClient()
         await redis_client.initialize()
 
+
 # 4. Provide a close function for lifespan to call
+
+
 async def close_redis_client():
     """Close global Redis client instance at application shutdown."""
     if redis_client:
         await redis_client.close()
 
+
 # For backward compatibility, keep get_redis_client function
+
+
 async def get_redis_client() -> RedisClient:
     """Get global Redis client instance"""
     if redis_client is None:

@@ -5,12 +5,11 @@ Provides metrics collection and export for production monitoring,
 including query latency, cache hit rates, and resource usage.
 """
 
-import time
 import logging
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 from collections import defaultdict, deque
-from datetime import datetime, timedelta
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Metric:
     """Single metric value"""
+
     name: str
     value: float
     timestamp: Optional[datetime] = None
@@ -33,7 +33,7 @@ class Metric:
             "name": self.name,
             "value": self.value,
             "timestamp": self.timestamp.isoformat(),
-            "tags": self.tags
+            "tags": self.tags,
         }
 
 
@@ -67,9 +67,7 @@ class MetricsCollector:
         self.window_seconds = window_seconds
 
         # Latency metrics
-        self.latency_metrics: Dict[str, deque] = defaultdict(
-            lambda: deque(maxlen=1000)
-        )
+        self.latency_metrics: Dict[str, deque] = defaultdict(lambda: deque(maxlen=1000))
 
         # Counter metrics
         self.counters: Dict[str, int] = defaultdict(int)
@@ -82,11 +80,14 @@ class MetricsCollector:
         self.error_counts: Dict[str, int] = defaultdict(int)
 
         # Resource metrics
-        self.resource_metrics: Dict[str, deque] = defaultdict(
-            lambda: deque(maxlen=100)
-        )
+        self.resource_metrics: Dict[str, deque] = defaultdict(lambda: deque(maxlen=100))
 
-    def record_latency(self, operation: str, latency_ms: float, tags: Optional[Dict[str, str]] = None) -> None:
+    def record_latency(
+        self,
+        operation: str,
+        latency_ms: float,
+        tags: Optional[Dict[str, str]] = None,
+    ) -> None:
         """
         Record operation latency
 
@@ -95,11 +96,13 @@ class MetricsCollector:
             latency_ms: Latency in milliseconds
             tags: Optional tags for the metric
         """
-        self.latency_metrics[operation].append({
-            "value": latency_ms,
-            "timestamp": datetime.utcnow(),
-            "tags": tags or {}
-        })
+        self.latency_metrics[operation].append(
+            {
+                "value": latency_ms,
+                "timestamp": datetime.utcnow(),
+                "tags": tags or {},
+            }
+        )
 
     def record_cache_hit(self) -> None:
         """Record a cache hit"""
@@ -136,10 +139,7 @@ class MetricsCollector:
             name: Metric name
             value: Metric value
         """
-        self.resource_metrics[name].append({
-            "value": value,
-            "timestamp": datetime.utcnow()
-        })
+        self.resource_metrics[name].append({"value": value, "timestamp": datetime.utcnow()})
 
     def get_cache_hit_rate(self) -> float:
         """
@@ -172,7 +172,7 @@ class MetricsCollector:
                 "p50": 0.0,
                 "p95": 0.0,
                 "p99": 0.0,
-                "count": 0
+                "count": 0,
             }
 
         values = [m["value"] for m in latencies]
@@ -186,7 +186,7 @@ class MetricsCollector:
             "p50": sorted_values[int(count * 0.50)] if count > 0 else 0.0,
             "p95": sorted_values[int(count * 0.95)] if count > 0 else 0.0,
             "p99": sorted_values[int(count * 0.99)] if count > 0 else 0.0,
-            "count": count
+            "count": count,
         }
 
     def get_metrics(self) -> Dict[str, Any]:
@@ -207,7 +207,7 @@ class MetricsCollector:
             "hits": self.cache_hits,
             "misses": self.cache_misses,
             "total": cache_total,
-            "hit_rate": self.get_cache_hit_rate()
+            "hit_rate": self.get_cache_hit_rate(),
         }
 
         # Resource metrics (average over window)
@@ -215,7 +215,8 @@ class MetricsCollector:
         for name, values in self.resource_metrics.items():
             if values:
                 recent = [
-                    v["value"] for v in values
+                    v["value"]
+                    for v in values
                     if (datetime.utcnow() - v["timestamp"]).total_seconds() <= self.window_seconds
                 ]
                 if recent:
@@ -227,7 +228,7 @@ class MetricsCollector:
             "counters": dict(self.counters),
             "errors": dict(self.error_counts),
             "resources": resource_avgs,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
         }
 
     def reset(self) -> None:
@@ -280,33 +281,43 @@ class MetricsExporter:
 
         # Latency metrics
         for operation, stats in metrics["latency"].items():
-            lines.append(f'# TYPE graph_store_latency_seconds histogram')
-            lines.append(f'graph_store_latency_seconds{{operation="{operation}",quantile="0.5"}} {stats["p50"]/1000}')
-            lines.append(f'graph_store_latency_seconds{{operation="{operation}",quantile="0.95"}} {stats["p95"]/1000}')
-            lines.append(f'graph_store_latency_seconds{{operation="{operation}",quantile="0.99"}} {stats["p99"]/1000}')
-            lines.append(f'graph_store_latency_seconds_count{{operation="{operation}"}} {stats["count"]}')
-            lines.append(f'graph_store_latency_seconds_sum{{operation="{operation}"}} {stats["avg"] * stats["count"] / 1000}')
+            lines.append("# TYPE graph_store_latency_seconds histogram")
+            lines.append(
+                f'graph_store_latency_seconds{{operation="{operation}",quantile="0.5"}} {stats["p50"]/1000}'
+            )
+            lines.append(
+                f'graph_store_latency_seconds{{operation="{operation}",quantile="0.95"}} {stats["p95"]/1000}'
+            )
+            lines.append(
+                f'graph_store_latency_seconds{{operation="{operation}",quantile="0.99"}} {stats["p99"]/1000}'
+            )
+            lines.append(
+                f'graph_store_latency_seconds_count{{operation="{operation}"}} {stats["count"]}'
+            )
+            lines.append(
+                f'graph_store_latency_seconds_sum{{operation="{operation}"}} {stats["avg"] * stats["count"] / 1000}'
+            )
 
         # Cache metrics
         cache = metrics["cache"]
-        lines.append(f'# TYPE graph_store_cache_hits counter')
+        lines.append("# TYPE graph_store_cache_hits counter")
         lines.append(f'graph_store_cache_hits {cache["hits"]}')
-        lines.append(f'# TYPE graph_store_cache_misses counter')
+        lines.append("# TYPE graph_store_cache_misses counter")
         lines.append(f'graph_store_cache_misses {cache["misses"]}')
-        lines.append(f'# TYPE graph_store_cache_hit_rate gauge')
+        lines.append("# TYPE graph_store_cache_hit_rate gauge")
         lines.append(f'graph_store_cache_hit_rate {cache["hit_rate"]}')
 
         # Error metrics
         for error_type, count in metrics["errors"].items():
-            lines.append(f'# TYPE graph_store_errors counter')
+            lines.append("# TYPE graph_store_errors counter")
             lines.append(f'graph_store_errors{{type="{error_type}"}} {count}')
 
         # Counter metrics
         for name, value in metrics["counters"].items():
-            lines.append(f'# TYPE graph_store_counter counter')
+            lines.append("# TYPE graph_store_counter counter")
             lines.append(f'graph_store_counter{{name="{name}"}} {value}')
 
-        return '\n'.join(lines)
+        return "\n".join(lines)
 
     def to_statsd(self) -> List[str]:
         """
@@ -332,7 +343,7 @@ class MetricsExporter:
 
         # Error metrics
         for error_type, count in metrics["errors"].items():
-            lines.append(f'graph_store.errors.{error_type}:{count}|c')
+            lines.append(f"graph_store.errors.{error_type}:{count}|c")
 
         return lines
 
@@ -344,4 +355,3 @@ class MetricsExporter:
             Dictionary with all metrics
         """
         return self.collector.get_metrics()
-

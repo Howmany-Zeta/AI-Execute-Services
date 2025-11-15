@@ -10,14 +10,17 @@ while backends can optimize Tier 2 methods for better performance.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, Dict, Any, Set
+from typing import List, Optional, Set
 from collections import deque
-import numpy as np
 
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.relation import Relation
 from aiecs.domain.knowledge_graph.models.path import Path
-from aiecs.domain.knowledge_graph.models.query import GraphQuery, GraphResult, QueryType
+from aiecs.domain.knowledge_graph.models.query import (
+    GraphQuery,
+    GraphResult,
+    QueryType,
+)
 
 
 class GraphStore(ABC):
@@ -79,7 +82,6 @@ class GraphStore(ABC):
         - Initialize data structures
         - Create tables/indexes
         """
-        pass
 
     @abstractmethod
     async def close(self) -> None:
@@ -91,7 +93,6 @@ class GraphStore(ABC):
         - Flush pending writes
         - Cleanup resources
         """
-        pass
 
     @abstractmethod
     async def add_entity(self, entity: Entity) -> None:
@@ -104,7 +105,6 @@ class GraphStore(ABC):
         Raises:
             ValueError: If entity with same ID already exists
         """
-        pass
 
     @abstractmethod
     async def get_entity(self, entity_id: str) -> Optional[Entity]:
@@ -117,7 +117,6 @@ class GraphStore(ABC):
         Returns:
             Entity if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def add_relation(self, relation: Relation) -> None:
@@ -131,7 +130,6 @@ class GraphStore(ABC):
             ValueError: If relation with same ID already exists
             ValueError: If source or target entity doesn't exist
         """
-        pass
 
     @abstractmethod
     async def get_relation(self, relation_id: str) -> Optional[Relation]:
@@ -144,14 +142,13 @@ class GraphStore(ABC):
         Returns:
             Relation if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def get_neighbors(
         self,
         entity_id: str,
         relation_type: Optional[str] = None,
-        direction: str = "outgoing"
+        direction: str = "outgoing",
     ) -> List[Entity]:
         """
         Get neighboring entities connected by relations
@@ -164,7 +161,6 @@ class GraphStore(ABC):
         Returns:
             List of neighboring entities
         """
-        pass
 
     # =========================================================================
     # TIER 2: ADVANCED INTERFACE - HAS DEFAULTS (Template Method Pattern)
@@ -175,7 +171,7 @@ class GraphStore(ABC):
         start_entity_id: str,
         relation_type: Optional[str] = None,
         max_depth: int = 3,
-        max_results: int = 100
+        max_results: int = 100,
     ) -> List[Path]:
         """
         Traverse the graph starting from an entity (BFS traversal)
@@ -201,7 +197,7 @@ class GraphStore(ABC):
         source_entity_id: str,
         target_entity_id: str,
         max_depth: int = 5,
-        max_paths: int = 10
+        max_paths: int = 10,
     ) -> List[Path]:
         """
         Find paths between two entities
@@ -223,9 +219,7 @@ class GraphStore(ABC):
         )
 
     async def subgraph_query(
-        self,
-        entity_ids: List[str],
-        include_relations: bool = True
+        self, entity_ids: List[str], include_relations: bool = True
     ) -> tuple[List[Entity], List[Relation]]:
         """
         Extract a subgraph containing specified entities
@@ -247,7 +241,7 @@ class GraphStore(ABC):
         query_embedding: List[float],
         entity_type: Optional[str] = None,
         max_results: int = 10,
-        score_threshold: float = 0.0
+        score_threshold: float = 0.0,
     ) -> List[tuple[Entity, float]]:
         """
         Semantic vector search over entities
@@ -266,6 +260,34 @@ class GraphStore(ABC):
         """
         return await self._default_vector_search(
             query_embedding, entity_type, max_results, score_threshold
+        )
+
+    async def text_search(
+        self,
+        query_text: str,
+        entity_type: Optional[str] = None,
+        max_results: int = 10,
+        score_threshold: float = 0.0,
+        method: str = "bm25",
+    ) -> List[tuple[Entity, float]]:
+        """
+        Text-based search over entities using text similarity
+
+        **DEFAULT IMPLEMENTATION**: Uses text similarity utilities (BM25, Jaccard, etc.).
+        Override for better performance (e.g., full-text search indexes).
+
+        Args:
+            query_text: Query text string
+            entity_type: Optional filter by entity type
+            max_results: Maximum number of results
+            score_threshold: Minimum similarity score (0.0-1.0)
+            method: Similarity method ("bm25", "jaccard", "cosine", "levenshtein")
+
+        Returns:
+            List of (entity, score) tuples, sorted by score descending
+        """
+        return await self._default_text_search(
+            query_text, entity_type, max_results, score_threshold, method
         )
 
     async def execute_query(self, query: GraphQuery) -> GraphResult:
@@ -292,7 +314,7 @@ class GraphStore(ABC):
         start_entity_id: str,
         relation_type: Optional[str],
         max_depth: int,
-        max_results: int
+        max_results: int,
     ) -> List[Path]:
         """
         Default BFS traversal implementation using get_neighbors()
@@ -332,7 +354,7 @@ class GraphStore(ABC):
                 neighbors = await self.get_neighbors(
                     current_entity.id,
                     relation_type=relation_type,
-                    direction="outgoing"
+                    direction="outgoing",
                 )
 
                 for neighbor in neighbors:
@@ -344,7 +366,7 @@ class GraphStore(ABC):
                             id=f"rel_{current_entity.id}_{neighbor.id}",
                             relation_type=relation_type or "CONNECTED_TO",
                             source_id=current_entity.id,
-                            target_id=neighbor.id
+                            target_id=neighbor.id,
                         )
                         queue.append((neighbor, edges_path + [edge]))
 
@@ -355,7 +377,7 @@ class GraphStore(ABC):
         source_entity_id: str,
         target_entity_id: str,
         max_depth: int,
-        max_paths: int
+        max_paths: int,
     ) -> List[Path]:
         """
         Default path finding using BFS with target check
@@ -363,21 +385,16 @@ class GraphStore(ABC):
         all_paths = await self.traverse(
             source_entity_id,
             max_depth=max_depth,
-            max_results=max_paths * 10  # Get more, filter later
+            max_results=max_paths * 10,  # Get more, filter later
         )
 
         # Filter paths that end at target
-        target_paths = [
-            path for path in all_paths
-            if path.end_entity.id == target_entity_id
-        ]
+        target_paths = [path for path in all_paths if path.end_entity.id == target_entity_id]
 
         return target_paths[:max_paths]
 
     async def _default_subgraph_query(
-        self,
-        entity_ids: List[str],
-        include_relations: bool
+        self, entity_ids: List[str], include_relations: bool
     ) -> tuple[List[Entity], List[Relation]]:
         """
         Default subgraph extraction
@@ -398,12 +415,13 @@ class GraphStore(ABC):
                 neighbors = await self.get_neighbors(entity_id, direction="outgoing")
                 for neighbor in neighbors:
                     if neighbor.id in entity_id_set:
-                        # Fetch the relation (simplified - needs proper implementation)
+                        # Fetch the relation (simplified - needs proper
+                        # implementation)
                         rel = Relation(
                             id=f"rel_{entity_id}_{neighbor.id}",
                             relation_type="CONNECTED_TO",
                             source_id=entity_id,
-                            target_id=neighbor.id
+                            target_id=neighbor.id,
                         )
                         relations.append(rel)
 
@@ -414,7 +432,7 @@ class GraphStore(ABC):
         query_embedding: List[float],
         entity_type: Optional[str],
         max_results: int,
-        score_threshold: float
+        score_threshold: float,
     ) -> List[tuple[Entity, float]]:
         """
         Default brute-force vector search using cosine similarity
@@ -427,11 +445,95 @@ class GraphStore(ABC):
         # TODO: Implement when we have entity enumeration capability
         return []
 
+    async def _default_text_search(
+        self,
+        query_text: str,
+        entity_type: Optional[str],
+        max_results: int,
+        score_threshold: float,
+        method: str,
+    ) -> List[tuple[Entity, float]]:
+        """
+        Default text search using text similarity utilities
+
+        This implementation requires get_all_entities() or similar method.
+        Backends should override for better performance (e.g., full-text indexes).
+        """
+        # Try to get all entities - check if store has get_all_entities method
+        if hasattr(self, "get_all_entities"):
+            entities = await self.get_all_entities(entity_type=entity_type)
+        else:
+            # Fallback: return empty if no way to enumerate entities
+            return []
+
+        if not query_text:
+            return []
+
+        from aiecs.application.knowledge_graph.search.text_similarity import (
+            BM25Scorer,
+            jaccard_similarity_text,
+            cosine_similarity_text,
+            normalized_levenshtein_similarity,
+        )
+
+        scored_entities = []
+
+        # Extract text from entities (combine properties into searchable text)
+        entity_texts = []
+        for entity in entities:
+            # Combine all string properties into searchable text
+            text_parts = []
+            for key, value in entity.properties.items():
+                if isinstance(value, str):
+                    text_parts.append(value)
+                elif isinstance(value, (list, tuple)):
+                    text_parts.extend(str(v) for v in value if isinstance(v, str))
+            entity_text = " ".join(text_parts)
+            entity_texts.append((entity, entity_text))
+
+        if method == "bm25":
+            # Use BM25 scorer
+            corpus = [text for _, text in entity_texts]
+            scorer = BM25Scorer(corpus)
+            scores = scorer.score(query_text)
+
+            for (entity, _), score in zip(entity_texts, scores):
+                if score >= score_threshold:
+                    scored_entities.append((entity, float(score)))
+
+        elif method == "jaccard":
+            for entity, text in entity_texts:
+                score = jaccard_similarity_text(query_text, text)
+                if score >= score_threshold:
+                    scored_entities.append((entity, score))
+
+        elif method == "cosine":
+            for entity, text in entity_texts:
+                score = cosine_similarity_text(query_text, text)
+                if score >= score_threshold:
+                    scored_entities.append((entity, score))
+
+        elif method == "levenshtein":
+            for entity, text in entity_texts:
+                score = normalized_levenshtein_similarity(query_text, text)
+                if score >= score_threshold:
+                    scored_entities.append((entity, score))
+
+        else:
+            raise ValueError(
+                f"Unknown text search method: {method}. Use 'bm25', 'jaccard', 'cosine', or 'levenshtein'"
+            )
+
+        # Sort by score descending and return top results
+        scored_entities.sort(key=lambda x: x[1], reverse=True)
+        return scored_entities[:max_results]
+
     async def _default_execute_query(self, query: GraphQuery) -> GraphResult:
         """
         Default query execution router
         """
         import time
+
         start_time = time.time()
 
         if query.query_type == QueryType.ENTITY_LOOKUP:
@@ -444,7 +546,7 @@ class GraphStore(ABC):
                     query.embedding,
                     query.entity_type,
                     query.max_results,
-                    query.score_threshold
+                    query.score_threshold,
                 )
                 entities = [entity for entity, score in results]
             else:
@@ -456,7 +558,7 @@ class GraphStore(ABC):
                     query.entity_id,
                     query.relation_type,
                     query.max_depth,
-                    query.max_results
+                    query.max_results,
                 )
                 # Extract unique entities from paths
                 entity_ids_seen = set()
@@ -476,7 +578,7 @@ class GraphStore(ABC):
                     query.source_entity_id,
                     query.target_entity_id,
                     query.max_depth,
-                    query.max_results
+                    query.max_results,
                 )
                 entities = []
             else:
@@ -491,10 +593,9 @@ class GraphStore(ABC):
 
         return GraphResult(
             query=query,
-            entities=entities[:query.max_results],
-            paths=paths[:query.max_results] if 'paths' in locals() else [],
+            entities=entities[: query.max_results],
+            paths=paths[: query.max_results] if "paths" in locals() else [],
             scores=[],
             total_count=len(entities),
-            execution_time_ms=execution_time_ms
+            execution_time_ms=execution_time_ms,
         )
-

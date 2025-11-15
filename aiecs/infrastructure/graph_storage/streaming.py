@@ -6,9 +6,8 @@ enabling efficient handling of millions of entities and relations.
 """
 
 import json
-import asyncio
 import logging
-from typing import AsyncIterator, Optional, Dict, Any, TextIO
+from typing import AsyncIterator, Optional, Dict, Any
 from enum import Enum
 import gzip
 from pathlib import Path
@@ -22,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 class DateTimeEncoder(json.JSONEncoder):
     """Custom JSON encoder for datetime objects"""
+
     def default(self, obj):
         if isinstance(obj, datetime):
             return obj.isoformat()
@@ -30,6 +30,7 @@ class DateTimeEncoder(json.JSONEncoder):
 
 class StreamFormat(str, Enum):
     """Streaming export format"""
+
     JSONL = "jsonl"  # JSON Lines (one JSON object per line)
     JSON = "json"  # Standard JSON array
     CSV = "csv"  # CSV format
@@ -78,7 +79,7 @@ class GraphStreamExporter:
         compress: bool = False,
         batch_size: int = 1000,
         entity_type: Optional[str] = None,
-        include_relations: bool = True
+        include_relations: bool = True,
     ) -> Dict[str, int]:
         """
         Export entire graph to file
@@ -105,10 +106,10 @@ class GraphStreamExporter:
             print(f"Exported {stats['entity_count']} entities")
             ```
         """
-        path = Path(filepath)
+        Path(filepath)
 
         # Add .gz extension if compressing
-        if compress and not filepath.endswith('.gz'):
+        if compress and not filepath.endswith(".gz"):
             filepath = f"{filepath}.gz"
 
         entity_count = 0
@@ -117,9 +118,10 @@ class GraphStreamExporter:
         # Open file (with compression if requested)
         if compress:
             import gzip
-            file = gzip.open(filepath, 'wt', encoding='utf-8')
+
+            file = gzip.open(filepath, "wt", encoding="utf-8")
         else:
-            file = open(filepath, 'w', encoding='utf-8')
+            file = open(filepath, "w", encoding="utf-8")
 
         try:
             # Write header for JSON format
@@ -128,13 +130,19 @@ class GraphStreamExporter:
 
             # Stream entities
             first = True
-            async for entity in self.stream_entities(entity_type=entity_type, batch_size=batch_size):
+            async for entity in self.stream_entities(
+                entity_type=entity_type, batch_size=batch_size
+            ):
                 if format == StreamFormat.JSONL:
-                    json.dump({"type": "entity", "data": entity.model_dump()}, file, cls=DateTimeEncoder)
-                    file.write('\n')
+                    json.dump(
+                        {"type": "entity", "data": entity.model_dump()},
+                        file,
+                        cls=DateTimeEncoder,
+                    )
+                    file.write("\n")
                 elif format == StreamFormat.JSON:
                     if not first:
-                        file.write(',')
+                        file.write(",")
                     json.dump(entity.model_dump(), file, cls=DateTimeEncoder)
                     first = False
 
@@ -152,11 +160,18 @@ class GraphStreamExporter:
 
                 async for relation in self.stream_relations(batch_size=batch_size):
                     if format == StreamFormat.JSONL:
-                        json.dump({"type": "relation", "data": relation.model_dump()}, file, cls=DateTimeEncoder)
-                        file.write('\n')
+                        json.dump(
+                            {
+                                "type": "relation",
+                                "data": relation.model_dump(),
+                            },
+                            file,
+                            cls=DateTimeEncoder,
+                        )
+                        file.write("\n")
                     elif format == StreamFormat.JSON:
                         if not first:
-                            file.write(',')
+                            file.write(",")
                         json.dump(relation.model_dump(), file, cls=DateTimeEncoder)
                         first = False
 
@@ -167,7 +182,7 @@ class GraphStreamExporter:
 
             # Write footer for JSON format
             if format == StreamFormat.JSON:
-                file.write(']}')
+                file.write("]}")
 
         finally:
             file.close()
@@ -178,13 +193,11 @@ class GraphStreamExporter:
             "entity_count": entity_count,
             "relation_count": relation_count,
             "filepath": filepath,
-            "compressed": compress
+            "compressed": compress,
         }
 
     async def stream_entities(
-        self,
-        entity_type: Optional[str] = None,
-        batch_size: int = 1000
+        self, entity_type: Optional[str] = None, batch_size: int = 1000
     ) -> AsyncIterator[Entity]:
         """
         Stream entities in batches
@@ -197,13 +210,13 @@ class GraphStreamExporter:
             Entity instances
         """
         # Use pagination to stream efficiently
-        if hasattr(self.store, 'paginate_entities'):
+        if hasattr(self.store, "paginate_entities"):
             cursor = None
             while True:
                 page = await self.store.paginate_entities(
                     entity_type=entity_type,
                     page_size=batch_size,
-                    cursor=cursor
+                    cursor=cursor,
                 )
 
                 for entity in page.items:
@@ -220,9 +233,7 @@ class GraphStreamExporter:
                 yield entity
 
     async def stream_relations(
-        self,
-        relation_type: Optional[str] = None,
-        batch_size: int = 1000
+        self, relation_type: Optional[str] = None, batch_size: int = 1000
     ) -> AsyncIterator[Relation]:
         """
         Stream relations in batches
@@ -235,13 +246,13 @@ class GraphStreamExporter:
             Relation instances
         """
         # Use pagination if available
-        if hasattr(self.store, 'paginate_relations'):
+        if hasattr(self.store, "paginate_relations"):
             cursor = None
             while True:
                 page = await self.store.paginate_relations(
                     relation_type=relation_type,
                     page_size=batch_size,
-                    cursor=cursor
+                    cursor=cursor,
                 )
 
                 for relation in page.items:
@@ -263,7 +274,7 @@ class GraphStreamExporter:
         filepath: str,
         entity_type: Optional[str] = None,
         batch_size: int = 1000,
-        compress: bool = False
+        compress: bool = False,
     ) -> int:
         """
         Export only entities to file
@@ -278,15 +289,17 @@ class GraphStreamExporter:
             Number of entities exported
         """
         if compress:
-            file = gzip.open(filepath, 'wt', encoding='utf-8')
+            file = gzip.open(filepath, "wt", encoding="utf-8")
         else:
-            file = open(filepath, 'w', encoding='utf-8')
+            file = open(filepath, "w", encoding="utf-8")
 
         count = 0
         try:
-            async for entity in self.stream_entities(entity_type=entity_type, batch_size=batch_size):
+            async for entity in self.stream_entities(
+                entity_type=entity_type, batch_size=batch_size
+            ):
                 json.dump(entity.model_dump(), file, cls=DateTimeEncoder)
-                file.write('\n')
+                file.write("\n")
                 count += 1
         finally:
             file.close()
@@ -326,7 +339,7 @@ class GraphStreamImporter:
         self,
         filepath: str,
         batch_size: int = 1000,
-        format: StreamFormat = StreamFormat.JSONL
+        format: StreamFormat = StreamFormat.JSONL,
     ) -> Dict[str, int]:
         """
         Import graph from file
@@ -340,13 +353,13 @@ class GraphStreamImporter:
             Dictionary with import statistics
         """
         # Detect compression
-        compressed = filepath.endswith('.gz')
+        compressed = filepath.endswith(".gz")
 
         # Open file
         if compressed:
-            file = gzip.open(filepath, 'rt', encoding='utf-8')
+            file = gzip.open(filepath, "rt", encoding="utf-8")
         else:
-            file = open(filepath, 'r', encoding='utf-8')
+            file = open(filepath, "r", encoding="utf-8")
 
         entity_count = 0
         relation_count = 0
@@ -362,10 +375,10 @@ class GraphStreamImporter:
 
                     data = json.loads(line)
 
-                    if data.get('type') == 'entity':
-                        entity_batch.append(Entity(**data['data']))
-                    elif data.get('type') == 'relation':
-                        relation_batch.append(Relation(**data['data']))
+                    if data.get("type") == "entity":
+                        entity_batch.append(Entity(**data["data"]))
+                    elif data.get("type") == "relation":
+                        relation_batch.append(Relation(**data["data"]))
                     else:
                         # Assume entity if no type specified
                         entity_batch.append(Entity(**data))
@@ -397,14 +410,11 @@ class GraphStreamImporter:
 
         logger.info(f"Import complete: {entity_count} entities, {relation_count} relations")
 
-        return {
-            "entity_count": entity_count,
-            "relation_count": relation_count
-        }
+        return {"entity_count": entity_count, "relation_count": relation_count}
 
     async def _import_entity_batch(self, entities: list[Entity]) -> None:
         """Import a batch of entities"""
-        if hasattr(self.store, 'batch_add_entities'):
+        if hasattr(self.store, "batch_add_entities"):
             await self.store.batch_add_entities(entities)
         else:
             for entity in entities:
@@ -412,7 +422,7 @@ class GraphStreamImporter:
 
     async def _import_relation_batch(self, relations: list[Relation]) -> None:
         """Import a batch of relations"""
-        if hasattr(self.store, 'batch_add_relations'):
+        if hasattr(self.store, "batch_add_relations"):
             await self.store.batch_add_relations(relations)
         else:
             for relation in relations:
@@ -423,7 +433,7 @@ async def stream_subgraph(
     store: Any,
     entity_ids: list[str],
     max_depth: int = 2,
-    batch_size: int = 100
+    batch_size: int = 100,
 ) -> AsyncIterator[tuple[Entity, list[Relation]]]:
     """
     Stream a subgraph around specific entities
@@ -452,7 +462,7 @@ async def stream_subgraph(
     while current_level and depth <= max_depth:
         # Process current level in batches
         for i in range(0, len(current_level), batch_size):
-            batch = current_level[i:i + batch_size]
+            batch = current_level[i : i + batch_size]
             next_level_batch = []
 
             for entity_id in batch:
@@ -468,7 +478,8 @@ async def stream_subgraph(
 
                 # Get relations
                 neighbors = await store.get_neighbors(entity_id, direction="both")
-                # For now, return empty relations list - would need to fetch actual relations
+                # For now, return empty relations list - would need to fetch
+                # actual relations
                 relations = []
 
                 # Collect next level
@@ -482,4 +493,3 @@ async def stream_subgraph(
             current_level.extend(next_level_batch)
 
         depth += 1
-

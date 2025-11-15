@@ -4,7 +4,7 @@ import os
 from typing import Dict, Any, Optional
 import jaeger_client
 import jaeger_client.config
-from opentracing import tracer, Span
+from opentracing import Span
 
 logger = logging.getLogger(__name__)
 
@@ -14,15 +14,23 @@ class TracingManager:
     Specialized handler for distributed tracing and link tracking
     """
 
-    def __init__(self, service_name: str = "service_executor",
-                 jaeger_host: Optional[str] = None,
-                 jaeger_port: Optional[int] = None,
-                 enable_tracing: Optional[bool] = None):
+    def __init__(
+        self,
+        service_name: str = "service_executor",
+        jaeger_host: Optional[str] = None,
+        jaeger_port: Optional[int] = None,
+        enable_tracing: Optional[bool] = None,
+    ):
         self.service_name = service_name
-        # Get configuration from environment variables, use defaults if not available
+        # Get configuration from environment variables, use defaults if not
+        # available
         self.jaeger_host = jaeger_host or os.getenv("JAEGER_AGENT_HOST", "jaeger")
         self.jaeger_port = jaeger_port or int(os.getenv("JAEGER_AGENT_PORT", "6831"))
-        self.enable_tracing = enable_tracing if enable_tracing is not None else os.getenv("JAEGER_ENABLE_TRACING", "true").lower() == "true"
+        self.enable_tracing = (
+            enable_tracing
+            if enable_tracing is not None
+            else os.getenv("JAEGER_ENABLE_TRACING", "true").lower() == "true"
+        )
         self.tracer = None
 
         if self.enable_tracing:
@@ -33,28 +41,34 @@ class TracingManager:
         try:
             config = jaeger_client.config.Config(
                 config={
-                    'sampler': {
-                        'type': 'const',
-                        'param': 1,
+                    "sampler": {
+                        "type": "const",
+                        "param": 1,
                     },
-                    'local_agent': {
-                        'reporting_host': self.jaeger_host,
-                        'reporting_port': self.jaeger_port,
+                    "local_agent": {
+                        "reporting_host": self.jaeger_host,
+                        "reporting_port": self.jaeger_port,
                     },
-                    'logging': True,
+                    "logging": True,
                 },
                 service_name=self.service_name,
-                validate=True
+                validate=True,
             )
             self.tracer = config.initialize_tracer()
-            logger.info(f"Jaeger tracer initialized for service '{self.service_name}' at {self.jaeger_host}:{self.jaeger_port}")
+            logger.info(
+                f"Jaeger tracer initialized for service '{self.service_name}' at {self.jaeger_host}:{self.jaeger_port}"
+            )
         except Exception as e:
             logger.warning(f"Failed to initialize Jaeger tracer: {e}")
             self.tracer = None
             self.enable_tracing = False
 
-    def start_span(self, operation_name: str, parent_span: Optional[Span] = None,
-                   tags: Optional[Dict[str, Any]] = None) -> Optional[Span]:
+    def start_span(
+        self,
+        operation_name: str,
+        parent_span: Optional[Span] = None,
+        tags: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Span]:
         """
         Start a tracing span
 
@@ -70,10 +84,7 @@ class TracingManager:
             return None
 
         try:
-            span = self.tracer.start_span(
-                operation_name=operation_name,
-                child_of=parent_span
-            )
+            span = self.tracer.start_span(operation_name=operation_name, child_of=parent_span)
 
             # Set initial tags
             if tags:
@@ -89,8 +100,13 @@ class TracingManager:
             logger.error(f"Error starting span '{operation_name}': {e}")
             return None
 
-    def finish_span(self, span: Optional[Span], tags: Optional[Dict[str, Any]] = None,
-                    logs: Optional[Dict[str, Any]] = None, error: Optional[Exception] = None):
+    def finish_span(
+        self,
+        span: Optional[Span],
+        tags: Optional[Dict[str, Any]] = None,
+        logs: Optional[Dict[str, Any]] = None,
+        error: Optional[Exception] = None,
+    ):
         """
         Finish tracing span
 
@@ -132,6 +148,7 @@ class TracingManager:
             operation_name: Operation name
             tags: Initial tags
         """
+
         def decorator(func):
             @functools.wraps(func)
             async def async_wrapper(*args, **kwargs):
@@ -185,6 +202,7 @@ class TracingManager:
 
             # Return appropriate wrapper based on function type
             import asyncio
+
             if asyncio.iscoroutinefunction(func):
                 return async_wrapper
             else:
@@ -202,29 +220,31 @@ class TracingManager:
             for i, arg in enumerate(args):
                 if isinstance(arg, (str, int, float, bool)):
                     span.set_tag(f"arg_{i}", arg)
-                elif hasattr(arg, '__class__'):
+                elif hasattr(arg, "__class__"):
                     span.set_tag(f"arg_{i}_type", arg.__class__.__name__)
 
             # Add keyword arguments
             for key, value in kwargs.items():
                 if isinstance(value, (str, int, float, bool)):
                     span.set_tag(key, value)
-                elif isinstance(value, dict) and len(str(value)) < 1000:  # Avoid overly large dictionaries
+                # Avoid overly large dictionaries
+                elif isinstance(value, dict) and len(str(value)) < 1000:
                     span.set_tag(f"{key}_json", str(value))
-                elif hasattr(value, '__class__'):
+                elif hasattr(value, "__class__"):
                     span.set_tag(f"{key}_type", value.__class__.__name__)
         except Exception as e:
             logger.debug(f"Error adding function args to span: {e}")
 
     def trace_database_operation(self, operation: str, table: str = None, query: str = None):
         """Database operation tracing decorator"""
+
         def decorator(func):
             @functools.wraps(func)
             async def wrapper(*args, **kwargs):
                 tags = {
                     "component": "database",
                     "db.type": "postgresql",
-                    "db.statement.type": operation
+                    "db.statement.type": operation,
                 }
 
                 if table:
@@ -237,7 +257,10 @@ class TracingManager:
                 try:
                     result = await func(*args, **kwargs)
                     if span:
-                        span.set_tag("db.rows_affected", len(result) if isinstance(result, list) else 1)
+                        span.set_tag(
+                            "db.rows_affected",
+                            len(result) if isinstance(result, list) else 1,
+                        )
                     return result
                 except Exception as e:
                     self.finish_span(span, error=e)
@@ -247,17 +270,19 @@ class TracingManager:
                         self.finish_span(span)
 
             return wrapper
+
         return decorator
 
     def trace_external_call(self, service_name: str, endpoint: str = None):
         """External service call tracing decorator"""
+
         def decorator(func):
             @functools.wraps(func)
             async def wrapper(*args, **kwargs):
                 tags = {
                     "component": "http",
                     "span.kind": "client",
-                    "peer.service": service_name
+                    "peer.service": service_name,
                 }
 
                 if endpoint:
@@ -280,17 +305,19 @@ class TracingManager:
                         self.finish_span(span)
 
             return wrapper
+
         return decorator
 
     def trace_tool_execution(self, tool_name: str, operation: str):
         """Tool execution tracing decorator"""
+
         def decorator(func):
             @functools.wraps(func)
             async def wrapper(*args, **kwargs):
                 tags = {
                     "component": "tool",
                     "tool.name": tool_name,
-                    "tool.operation": operation
+                    "tool.operation": operation,
                 }
 
                 span = self.start_span(f"tool.{tool_name}.{operation}", tags=tags)
@@ -299,7 +326,7 @@ class TracingManager:
                     result = await func(*args, **kwargs)
                     if span:
                         span.set_tag("tool.success", True)
-                        if hasattr(result, '__len__'):
+                        if hasattr(result, "__len__"):
                             span.set_tag("tool.result_size", len(result))
                     return result
                 except Exception as e:
@@ -312,10 +339,15 @@ class TracingManager:
                         self.finish_span(span)
 
             return wrapper
+
         return decorator
 
-    def create_child_span(self, parent_span: Optional[Span], operation_name: str,
-                         tags: Optional[Dict[str, Any]] = None) -> Optional[Span]:
+    def create_child_span(
+        self,
+        parent_span: Optional[Span],
+        operation_name: str,
+        tags: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Span]:
         """Create child span"""
         if not self.enable_tracing or not parent_span:
             return None
@@ -329,6 +361,7 @@ class TracingManager:
 
         try:
             from opentracing.propagation import Format
+
             self.tracer.inject(span.context, Format.TEXT_MAP, carrier)
         except Exception as e:
             logger.error(f"Error injecting span context: {e}")
@@ -340,6 +373,7 @@ class TracingManager:
 
         try:
             from opentracing.propagation import Format
+
             return self.tracer.extract(Format.TEXT_MAP, carrier)
         except Exception as e:
             logger.error(f"Error extracting span context: {e}")
@@ -372,5 +406,5 @@ class TracingManager:
             "service_name": self.service_name,
             "jaeger_host": self.jaeger_host,
             "jaeger_port": self.jaeger_port,
-            "tracer_initialized": self.tracer is not None
+            "tracer_initialized": self.tracer is not None,
         }

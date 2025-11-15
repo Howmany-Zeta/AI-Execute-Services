@@ -2,10 +2,11 @@ import asyncio
 import logging
 import time
 import uuid
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from celery import Celery
 from celery.exceptions import TimeoutError as CeleryTimeoutError
 from asyncio import TimeoutError as AsyncioTimeoutError
+
 # Removed direct import to avoid circular dependency
 # Tasks are referenced by string names instead
 from aiecs.domain.execution.model import TaskStatus, ErrorCode
@@ -27,26 +28,35 @@ class CeleryTaskManager:
         """Initialize Celery application"""
         try:
             self.celery_app = Celery(
-                'service_executor',
-                broker=self.config.get('broker_url', 'redis://redis:6379/0'),
-                backend=self.config.get('backend_url', 'redis://redis:6379/0')
+                "service_executor",
+                broker=self.config.get("broker_url", "redis://redis:6379/0"),
+                backend=self.config.get("backend_url", "redis://redis:6379/0"),
             )
 
             # Configure Celery
             self.celery_app.conf.update(
-                task_serializer=self.config.get('task_serializer', 'json'),
-                accept_content=self.config.get('accept_content', ['json']),
-                result_serializer=self.config.get('result_serializer', 'json'),
-                timezone=self.config.get('timezone', 'UTC'),
-                enable_utc=self.config.get('enable_utc', True),
-                task_queues=self.config.get('task_queues', {
-                    'fast_tasks': {'exchange': 'fast_tasks', 'routing_key': 'fast_tasks'},
-                    'heavy_tasks': {'exchange': 'heavy_tasks', 'routing_key': 'heavy_tasks'}
-                }),
-                worker_concurrency=self.config.get('worker_concurrency', {
-                    'fast_worker': 10,
-                    'heavy_worker': 2
-                })
+                task_serializer=self.config.get("task_serializer", "json"),
+                accept_content=self.config.get("accept_content", ["json"]),
+                result_serializer=self.config.get("result_serializer", "json"),
+                timezone=self.config.get("timezone", "UTC"),
+                enable_utc=self.config.get("enable_utc", True),
+                task_queues=self.config.get(
+                    "task_queues",
+                    {
+                        "fast_tasks": {
+                            "exchange": "fast_tasks",
+                            "routing_key": "fast_tasks",
+                        },
+                        "heavy_tasks": {
+                            "exchange": "heavy_tasks",
+                            "routing_key": "heavy_tasks",
+                        },
+                    },
+                ),
+                worker_concurrency=self.config.get(
+                    "worker_concurrency",
+                    {"fast_worker": 10, "heavy_worker": 2},
+                ),
             )
 
             logger.info("Celery application initialized successfully")
@@ -54,8 +64,18 @@ class CeleryTaskManager:
             logger.error(f"Failed to initialize Celery: {e}")
             raise
 
-    def execute_celery_task(self, task_name: str, queue: str, user_id: str, task_id: str, step: int,
-                           mode: str, service: str, input_data: Dict[str, Any], context: Dict[str, Any]):
+    def execute_celery_task(
+        self,
+        task_name: str,
+        queue: str,
+        user_id: str,
+        task_id: str,
+        step: int,
+        mode: str,
+        service: str,
+        input_data: Dict[str, Any],
+        context: Dict[str, Any],
+    ):
         """
         Execute Celery task
 
@@ -73,7 +93,9 @@ class CeleryTaskManager:
         Returns:
             Celery AsyncResult object
         """
-        logger.info(f"Queueing task {task_name} to {queue} for user {user_id}, task {task_id}, step {step}")
+        logger.info(
+            f"Queueing task {task_name} to {queue} for user {user_id}, task {task_id}, step {step}"
+        )
 
         # Determine Celery task to use based on queue
         celery_task_name = "aiecs.tasks.worker.execute_task"
@@ -91,12 +113,17 @@ class CeleryTaskManager:
                 "mode": mode,
                 "service": service,
                 "input_data": input_data,
-                "context": context
+                "context": context,
             },
-            queue=queue
+            queue=queue,
         )
 
-    async def execute_task(self, task_name: str, input_data: Dict[str, Any], context: Dict[str, Any]) -> Any:
+    async def execute_task(
+        self,
+        task_name: str,
+        input_data: Dict[str, Any],
+        context: Dict[str, Any],
+    ) -> Any:
         """
         Execute a single task using Celery for asynchronous processing
         """
@@ -106,12 +133,12 @@ class CeleryTaskManager:
         mode = input_data.get("mode", "default")
         service = input_data.get("service", "default")
         queue = input_data.get("queue", "fast_tasks")
-        timeout = self.config.get('task_timeout_seconds', 300)
+        timeout = self.config.get("task_timeout_seconds", 300)
 
         try:
             # Use string-based task names to avoid circular imports
             celery_task_name = "aiecs.tasks.worker.execute_task"
-            if queue == 'heavy_tasks':
+            if queue == "heavy_tasks":
                 celery_task_name = "aiecs.tasks.worker.execute_heavy_task"
 
             result = self.celery_app.send_task(
@@ -124,9 +151,9 @@ class CeleryTaskManager:
                     "mode": mode,
                     "service": service,
                     "input_data": input_data,
-                    "context": context
+                    "context": context,
                 },
-                queue=queue
+                queue=queue,
             )
 
             return result.get(timeout=timeout)
@@ -136,14 +163,14 @@ class CeleryTaskManager:
             return {
                 "status": TaskStatus.TIMED_OUT,
                 "error_code": ErrorCode.TIMEOUT_ERROR,
-                "error_message": str(e)
+                "error_message": str(e),
             }
         except Exception as e:
             logger.error(f"Error executing Celery task {task_name}: {e}", exc_info=True)
             return {
                 "status": TaskStatus.FAILED,
                 "error_code": ErrorCode.EXECUTION_ERROR,
-                "error_message": str(e)
+                "error_message": str(e),
             }
 
     async def execute_heavy_task(self, task_name: str, input_data: Dict, context: Dict) -> Any:
@@ -153,7 +180,9 @@ class CeleryTaskManager:
         input_data["queue"] = "heavy_tasks"
         return await self.execute_task(task_name, input_data, context)
 
-    async def execute_dsl_task_step(self, step: Dict, input_data: Dict, context: Dict) -> Dict[str, Any]:
+    async def execute_dsl_task_step(
+        self, step: Dict, input_data: Dict, context: Dict
+    ) -> Dict[str, Any]:
         """
         Execute DSL task step
         """
@@ -168,7 +197,7 @@ class CeleryTaskManager:
                 "message": "Invalid DSL step: missing task name",
                 "status": TaskStatus.FAILED,
                 "error_code": ErrorCode.VALIDATION_ERROR,
-                "error_message": "Task name is required"
+                "error_message": "Task name is required",
             }
 
         # Determine task type
@@ -181,7 +210,11 @@ class CeleryTaskManager:
             logger.warning(f"Could not determine task type for {task_name}, defaulting to 'fast'")
 
         queue = "heavy_tasks" if task_type == "heavy" else "fast_tasks"
-        celery_task_name = "aiecs.tasks.worker.execute_heavy_task" if task_type == "heavy" else "aiecs.tasks.worker.execute_task"
+        celery_task_name = (
+            "aiecs.tasks.worker.execute_heavy_task"
+            if task_type == "heavy"
+            else "aiecs.tasks.worker.execute_task"
+        )
 
         user_id = context.get("user_id", str(uuid.uuid4()))
         task_id = context.get("task_id", str(uuid.uuid4()))
@@ -198,19 +231,21 @@ class CeleryTaskManager:
                 "mode": context.get("mode", "multi_task"),
                 "service": context.get("service", "summarizer"),
                 "input_data": input_data,
-                "context": context
+                "context": context,
             },
-            queue=queue
+            queue=queue,
         )
 
         try:
-            timeout_seconds = self.config.get('task_timeout_seconds', 300)
+            timeout_seconds = self.config.get("task_timeout_seconds", 300)
             start_time = time.time()
 
             # Wait for task completion
             while not celery_task.ready():
                 if time.time() - start_time > timeout_seconds:
-                    raise AsyncioTimeoutError(f"Task {task_name} timed out after {timeout_seconds} seconds")
+                    raise AsyncioTimeoutError(
+                        f"Task {task_name} timed out after {timeout_seconds} seconds"
+                    )
                 await asyncio.sleep(0.5)
 
             if celery_task.successful():
@@ -223,12 +258,20 @@ class CeleryTaskManager:
                         "result": result,
                         "completed": True,
                         "message": f"Completed task {task_name}",
-                        "status": TaskStatus.COMPLETED
+                        "status": TaskStatus.COMPLETED,
                     }
             else:
                 error = celery_task.get(propagate=False)
-                status = TaskStatus.TIMED_OUT if isinstance(error, CeleryTimeoutError) else TaskStatus.FAILED
-                error_code = ErrorCode.TIMEOUT_ERROR if isinstance(error, CeleryTimeoutError) else ErrorCode.EXECUTION_ERROR
+                status = (
+                    TaskStatus.TIMED_OUT
+                    if isinstance(error, CeleryTimeoutError)
+                    else TaskStatus.FAILED
+                )
+                error_code = (
+                    ErrorCode.TIMEOUT_ERROR
+                    if isinstance(error, CeleryTimeoutError)
+                    else ErrorCode.EXECUTION_ERROR
+                )
 
                 return {
                     "step": f"{category}/{task_name}",
@@ -237,7 +280,7 @@ class CeleryTaskManager:
                     "message": f"Failed to execute task: {error}",
                     "status": status,
                     "error_code": error_code,
-                    "error_message": str(error)
+                    "error_message": str(error),
                 }
 
         except AsyncioTimeoutError as e:
@@ -248,7 +291,7 @@ class CeleryTaskManager:
                 "message": "Task execution timed out",
                 "status": TaskStatus.TIMED_OUT,
                 "error_code": ErrorCode.TIMEOUT_ERROR,
-                "error_message": str(e)
+                "error_message": str(e),
             }
         except Exception as e:
             return {
@@ -258,7 +301,7 @@ class CeleryTaskManager:
                 "message": f"Failed to execute {category}/{task_name}",
                 "status": TaskStatus.FAILED,
                 "error_code": ErrorCode.EXECUTION_ERROR,
-                "error_message": str(e)
+                "error_message": str(e),
             }
 
     def get_task_result(self, task_id: str):
@@ -270,15 +313,11 @@ class CeleryTaskManager:
                 "status": result.status,
                 "result": result.result if result.ready() else None,
                 "successful": result.successful() if result.ready() else None,
-                "failed": result.failed() if result.ready() else None
+                "failed": result.failed() if result.ready() else None,
             }
         except Exception as e:
             logger.error(f"Error getting task result for {task_id}: {e}")
-            return {
-                "task_id": task_id,
-                "status": "ERROR",
-                "error": str(e)
-            }
+            return {"task_id": task_id, "status": "ERROR", "error": str(e)}
 
     def cancel_task(self, task_id: str):
         """Cancel task"""
@@ -295,18 +334,21 @@ class CeleryTaskManager:
         Batch execute tasks
         """
         results = []
-        batch_size = self.config.get('batch_size', 10)
-        rate_limit = self.config.get('rate_limit_requests_per_second', 5)
+        batch_size = self.config.get("batch_size", 10)
+        rate_limit = self.config.get("rate_limit_requests_per_second", 5)
 
         for i in range(0, len(tasks), batch_size):
-            batch = tasks[i:i + batch_size]
+            batch = tasks[i : i + batch_size]
             batch_results = await asyncio.gather(
-                *[self.execute_task(
-                    task["task_name"],
-                    task.get("input_data", {}),
-                    task.get("context", {})
-                ) for task in batch],
-                return_exceptions=True
+                *[
+                    self.execute_task(
+                        task["task_name"],
+                        task.get("input_data", {}),
+                        task.get("context", {}),
+                    )
+                    for task in batch
+                ],
+                return_exceptions=True,
             )
             results.extend(batch_results)
             await asyncio.sleep(1.0 / rate_limit)
@@ -324,7 +366,7 @@ class CeleryTaskManager:
             return {
                 "active_tasks": active_tasks,
                 "scheduled_tasks": scheduled_tasks,
-                "reserved_tasks": reserved_tasks
+                "reserved_tasks": reserved_tasks,
             }
         except Exception as e:
             logger.error(f"Error getting queue info: {e}")

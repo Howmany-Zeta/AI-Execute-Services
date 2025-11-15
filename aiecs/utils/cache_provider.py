@@ -14,7 +14,7 @@ Usage:
     # Use default LRU cache
     from aiecs.utils.cache_provider import LRUCacheProvider
     cache = LRUCacheProvider(execution_utils)
-    
+
     # Use dual-layer cache
     from aiecs.utils.cache_provider import DualLayerCacheProvider
     cache = DualLayerCacheProvider(l1_provider, l2_provider)
@@ -69,7 +69,6 @@ class ICacheProvider(ABC):
         Returns:
             缓存的值，如果不存在或已过期则返回 None
         """
-        pass
 
     @abstractmethod
     def set(self, key: str, value: Any, ttl: Optional[int] = None):
@@ -81,7 +80,6 @@ class ICacheProvider(ABC):
             value: 要缓存的值
             ttl: 过期时间（秒），None 表示使用默认 TTL
         """
-        pass
 
     @abstractmethod
     def invalidate(self, key: str):
@@ -91,7 +89,6 @@ class ICacheProvider(ABC):
         Args:
             key: 缓存键
         """
-        pass
 
     @abstractmethod
     def get_stats(self) -> Dict[str, Any]:
@@ -105,7 +102,6 @@ class ICacheProvider(ABC):
             - misses: 未命中次数（可选）
             - hit_rate: 命中率（可选）
         """
-        pass
 
     def clear(self):
         """
@@ -113,7 +109,6 @@ class ICacheProvider(ABC):
 
         默认实现为空操作，子类可以根据需要覆盖。
         """
-        pass
 
     # Async interface (optional, with default implementations)
     async def get_async(self, key: str) -> Optional[Any]:
@@ -158,39 +153,39 @@ class ICacheProvider(ABC):
 class LRUCacheProvider(ICacheProvider):
     """
     基于 ExecutionUtils 的 LRU 缓存提供者
-    
+
     这是默认的缓存实现，包装了现有的 ExecutionUtils 缓存逻辑。
     使用 LRU (Least Recently Used) 淘汰策略和 TTL 过期机制。
-    
+
     Features:
         - LRU 淘汰策略
         - TTL 过期机制
         - 线程安全
         - 内存缓存
-    
+
     Example:
         from aiecs.utils.execution_utils import ExecutionUtils
         from aiecs.utils.cache_provider import LRUCacheProvider
-        
+
         execution_utils = ExecutionUtils(cache_size=100, cache_ttl=3600)
         cache = LRUCacheProvider(execution_utils)
-        
+
         # 使用缓存
         cache.set("key1", "value1", ttl=300)
         value = cache.get("key1")
     """
-    
+
     def __init__(self, execution_utils):
         """
         初始化 LRU 缓存提供者
-        
+
         Args:
             execution_utils: ExecutionUtils 实例
         """
         self.execution_utils = execution_utils
         self._hits = 0
         self._misses = 0
-    
+
     def get(self, key: str) -> Optional[Any]:
         """从 ExecutionUtils 缓存获取值"""
         result = self.execution_utils.get_from_cache(key)
@@ -201,49 +196,49 @@ class LRUCacheProvider(ICacheProvider):
             self._misses += 1
             logger.debug(f"Cache miss: {key}")
         return result
-    
+
     def set(self, key: str, value: Any, ttl: Optional[int] = None):
         """设置值到 ExecutionUtils 缓存"""
         self.execution_utils.add_to_cache(key, value, ttl)
         logger.debug(f"Cache set: {key} (ttl={ttl})")
-    
+
     def invalidate(self, key: str):
         """
         使缓存失效
-        
+
         ExecutionUtils 没有直接的 invalidate 方法，
         通过直接删除缓存条目来实现。
         """
-        if hasattr(self.execution_utils, '_cache') and self.execution_utils._cache:
+        if hasattr(self.execution_utils, "_cache") and self.execution_utils._cache:
             with self.execution_utils._cache_lock:
                 if key in self.execution_utils._cache:
                     del self.execution_utils._cache[key]
                     logger.debug(f"Cache invalidated: {key}")
                 if key in self.execution_utils._cache_ttl_dict:
                     del self.execution_utils._cache_ttl_dict[key]
-    
+
     def get_stats(self) -> Dict[str, Any]:
         """获取缓存统计"""
         cache_size = 0
-        if hasattr(self.execution_utils, '_cache') and self.execution_utils._cache:
+        if hasattr(self.execution_utils, "_cache") and self.execution_utils._cache:
             cache_size = len(self.execution_utils._cache)
-        
+
         total_requests = self._hits + self._misses
         hit_rate = self._hits / total_requests if total_requests > 0 else 0.0
-        
+
         return {
-            'type': 'lru',
-            'backend': 'memory',
-            'size': cache_size,
-            'max_size': self.execution_utils.cache_size,
-            'hits': self._hits,
-            'misses': self._misses,
-            'hit_rate': hit_rate
+            "type": "lru",
+            "backend": "memory",
+            "size": cache_size,
+            "max_size": self.execution_utils.cache_size,
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": hit_rate,
         }
-    
+
     def clear(self):
         """清空所有缓存"""
-        if hasattr(self.execution_utils, '_cache') and self.execution_utils._cache:
+        if hasattr(self.execution_utils, "_cache") and self.execution_utils._cache:
             with self.execution_utils._cache_lock:
                 self.execution_utils._cache.clear()
                 self.execution_utils._cache_ttl_dict.clear()
@@ -253,44 +248,44 @@ class LRUCacheProvider(ICacheProvider):
 class DualLayerCacheProvider(ICacheProvider):
     """
     双层缓存提供者
-    
+
     实现两层缓存架构：
     - L1: 快速内存缓存（通常是 LRUCacheProvider）
     - L2: 智能缓存（如 Redis + Intent-aware TTL）
-    
+
     缓存策略：
     1. 读取时先查 L1，命中则直接返回
     2. L1 未命中则查 L2，命中则回填 L1
     3. 写入时同时写入 L1 和 L2
-    
+
     这是为 SearchTool 等需要高级缓存策略的工具设计的。
-    
+
     Example:
         from aiecs.utils.cache_provider import DualLayerCacheProvider, LRUCacheProvider
-        
+
         l1_cache = LRUCacheProvider(execution_utils)
         l2_cache = IntelligentCacheProvider(redis_client)
-        
+
         dual_cache = DualLayerCacheProvider(
             l1_provider=l1_cache,
             l2_provider=l2_cache,
             l1_ttl=300  # L1 缓存 5 分钟
         )
-        
+
         # 使用双层缓存
         dual_cache.set("key1", "value1")  # 写入 L1 和 L2
         value = dual_cache.get("key1")    # 先查 L1，再查 L2
     """
-    
+
     def __init__(
-        self, 
-        l1_provider: ICacheProvider, 
-        l2_provider: ICacheProvider, 
-        l1_ttl: int = 300
+        self,
+        l1_provider: ICacheProvider,
+        l2_provider: ICacheProvider,
+        l1_ttl: int = 300,
     ):
         """
         初始化双层缓存
-        
+
         Args:
             l1_provider: L1 缓存提供者（通常是 LRUCacheProvider）
             l2_provider: L2 缓存提供者（如 IntelligentCacheProvider）
@@ -302,11 +297,11 @@ class DualLayerCacheProvider(ICacheProvider):
         self._l1_hits = 0
         self._l2_hits = 0
         self._misses = 0
-    
+
     def get(self, key: str) -> Optional[Any]:
         """
         双层缓存获取
-        
+
         1. 先查 L1 缓存
         2. L1 未命中则查 L2 缓存
         3. L2 命中则回填 L1
@@ -317,7 +312,7 @@ class DualLayerCacheProvider(ICacheProvider):
             self._l1_hits += 1
             logger.debug(f"L1 cache hit: {key}")
             return result
-        
+
         # 尝试 L2
         result = self.l2.get(key)
         if result is not None:
@@ -326,15 +321,15 @@ class DualLayerCacheProvider(ICacheProvider):
             # 回填 L1（使用较短的 TTL）
             self.l1.set(key, result, ttl=self.l1_ttl)
             return result
-        
+
         self._misses += 1
         logger.debug(f"Cache miss (L1 + L2): {key}")
         return None
-    
+
     def set(self, key: str, value: Any, ttl: Optional[int] = None):
         """
         双层缓存设置
-        
+
         同时写入 L1 和 L2：
         - L2 使用传入的 TTL（可能是智能计算的）
         - L1 使用固定的短 TTL
@@ -342,38 +337,38 @@ class DualLayerCacheProvider(ICacheProvider):
         # 写入 L2（使用智能 TTL）
         self.l2.set(key, value, ttl)
         logger.debug(f"L2 cache set: {key} (ttl={ttl})")
-        
+
         # 写入 L1（使用短 TTL）
         self.l1.set(key, value, ttl=self.l1_ttl)
         logger.debug(f"L1 cache set: {key} (ttl={self.l1_ttl})")
-    
+
     def invalidate(self, key: str):
         """使两层缓存都失效"""
         self.l1.invalidate(key)
         self.l2.invalidate(key)
         logger.debug(f"Cache invalidated (L1 + L2): {key}")
-    
+
     def get_stats(self) -> Dict[str, Any]:
         """获取双层缓存统计"""
         l1_stats = self.l1.get_stats()
         l2_stats = self.l2.get_stats()
-        
+
         total_hits = self._l1_hits + self._l2_hits
         total_requests = total_hits + self._misses
-        
+
         return {
-            'type': 'dual_layer',
-            'l1': l1_stats,
-            'l2': l2_stats,
-            'l1_hits': self._l1_hits,
-            'l2_hits': self._l2_hits,
-            'misses': self._misses,
-            'total_requests': total_requests,
-            'hit_rate': total_hits / total_requests if total_requests > 0 else 0.0,
-            'l1_hit_rate': self._l1_hits / total_requests if total_requests > 0 else 0.0,
-            'l2_hit_rate': self._l2_hits / total_requests if total_requests > 0 else 0.0
+            "type": "dual_layer",
+            "l1": l1_stats,
+            "l2": l2_stats,
+            "l1_hits": self._l1_hits,
+            "l2_hits": self._l2_hits,
+            "misses": self._misses,
+            "total_requests": total_requests,
+            "hit_rate": (total_hits / total_requests if total_requests > 0 else 0.0),
+            "l1_hit_rate": (self._l1_hits / total_requests if total_requests > 0 else 0.0),
+            "l2_hit_rate": (self._l2_hits / total_requests if total_requests > 0 else 0.0),
         }
-    
+
     def clear(self):
         """清空两层缓存"""
         self.l1.clear()
@@ -434,7 +429,7 @@ class DualLayerCacheProvider(ICacheProvider):
     async def clear_async(self):
         """异步清空两层缓存"""
         self.l1.clear()
-        if hasattr(self.l2, 'clear_async'):
+        if hasattr(self.l2, "clear_async"):
             await self.l2.clear_async()
         else:
             self.l2.clear()
@@ -472,7 +467,7 @@ class RedisCacheProvider(ICacheProvider):
         - 提供同步接口（使用内存回退）和异步接口（使用 Redis）
     """
 
-    _instance: Optional['RedisCacheProvider'] = None
+    _instance: Optional["RedisCacheProvider"] = None
     _lock = threading.Lock()
 
     def __init__(self, redis_client, prefix: str = "", default_ttl: int = 3600):
@@ -496,8 +491,8 @@ class RedisCacheProvider(ICacheProvider):
         cls,
         prefix: str = "",
         default_ttl: int = 3600,
-        use_singleton: bool = True
-    ) -> 'RedisCacheProvider':
+        use_singleton: bool = True,
+    ) -> "RedisCacheProvider":
         """
         创建 RedisCacheProvider 实例
 
@@ -517,6 +512,7 @@ class RedisCacheProvider(ICacheProvider):
 
         try:
             from aiecs.infrastructure.persistence import get_redis_client
+
             redis_client = await get_redis_client()
 
             instance = cls(redis_client, prefix, default_ttl)
@@ -585,6 +581,7 @@ class RedisCacheProvider(ICacheProvider):
                 # 尝试反序列化 JSON
                 try:
                     import json
+
                     return json.loads(value)
                 except (json.JSONDecodeError, TypeError):
                     return value
@@ -614,6 +611,7 @@ class RedisCacheProvider(ICacheProvider):
 
             # 序列化为 JSON
             import json
+
             try:
                 serialized_value = json.dumps(value)
             except (TypeError, ValueError):
@@ -651,14 +649,14 @@ class RedisCacheProvider(ICacheProvider):
         hit_rate = self._hits / total_requests if total_requests > 0 else 0.0
 
         return {
-            'type': 'redis',
-            'backend': 'redis',
-            'prefix': self.prefix,
-            'default_ttl': self.default_ttl,
-            'hits': self._hits,
-            'misses': self._misses,
-            'hit_rate': hit_rate,
-            'sync_cache_size': len(self._sync_cache)
+            "type": "redis",
+            "backend": "redis",
+            "prefix": self.prefix,
+            "default_ttl": self.default_ttl,
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": hit_rate,
+            "sync_cache_size": len(self._sync_cache),
         }
 
     def clear(self):
@@ -690,9 +688,8 @@ class RedisCacheProvider(ICacheProvider):
 
 # 导出接口和实现
 __all__ = [
-    'ICacheProvider',
-    'LRUCacheProvider',
-    'DualLayerCacheProvider',
-    'RedisCacheProvider'
+    "ICacheProvider",
+    "LRUCacheProvider",
+    "DualLayerCacheProvider",
+    "RedisCacheProvider",
 ]
-

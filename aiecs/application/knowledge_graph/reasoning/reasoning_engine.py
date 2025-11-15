@@ -8,19 +8,21 @@ import uuid
 import time
 from typing import List, Optional, Dict, Any, Tuple
 from aiecs.infrastructure.graph_storage.base import GraphStore
-from aiecs.domain.knowledge_graph.models.entity import Entity
-from aiecs.domain.knowledge_graph.models.relation import Relation
 from aiecs.domain.knowledge_graph.models.path import Path
 from aiecs.domain.knowledge_graph.models.evidence import (
     Evidence,
     EvidenceType,
-    ReasoningResult
+    ReasoningResult,
 )
 from aiecs.domain.knowledge_graph.models.query_plan import QueryPlan, QueryStep
-from aiecs.domain.knowledge_graph.models.query import GraphQuery, QueryType
-from aiecs.application.knowledge_graph.traversal.enhanced_traversal import EnhancedTraversal
+from aiecs.domain.knowledge_graph.models.query import QueryType
+from aiecs.application.knowledge_graph.traversal.enhanced_traversal import (
+    EnhancedTraversal,
+)
 from aiecs.application.knowledge_graph.traversal.path_scorer import PathScorer
-from aiecs.application.knowledge_graph.reasoning.query_planner import QueryPlanner
+from aiecs.application.knowledge_graph.reasoning.query_planner import (
+    QueryPlanner,
+)
 
 
 class ReasoningEngine:
@@ -56,7 +58,7 @@ class ReasoningEngine:
     def __init__(
         self,
         graph_store: GraphStore,
-        query_planner: Optional[QueryPlanner] = None
+        query_planner: Optional[QueryPlanner] = None,
     ):
         """
         Initialize reasoning engine
@@ -75,7 +77,7 @@ class ReasoningEngine:
         query: str,
         context: Optional[Dict[str, Any]] = None,
         max_hops: int = 3,
-        max_evidence: int = 20
+        max_evidence: int = 20,
     ) -> ReasoningResult:
         """
         Perform multi-hop reasoning on a query
@@ -102,6 +104,54 @@ class ReasoningEngine:
         trace.append("Executing query plan...")
         evidence = await self._execute_plan_with_evidence(plan, trace)
 
+        # Fallback: If no evidence found but start_entity_id is provided, try
+        # direct traversal
+        if not evidence and context.get("start_entity_id"):
+            import logging
+
+            logger = logging.getLogger(__name__)
+
+            trace.append(
+                f"WARNING: Query plan returned no evidence. Plan had {len(plan.steps)} steps."
+            )
+            trace.append(f"Plan steps: {[s.step_id + ':' + s.operation.value for s in plan.steps]}")
+            logger.warning(
+                f"Query plan returned no evidence. "
+                f"Plan ID: {plan.plan_id}, Steps: {len(plan.steps)}, "
+                f"Query: {query}, Context: {context}"
+            )
+
+            trace.append(f"FALLBACK: Trying direct traversal from {context['start_entity_id']}")
+            start_id = context["start_entity_id"]
+            target_id = context.get("target_entity_id")
+
+            try:
+                paths = await self.find_multi_hop_paths(
+                    start_entity_id=start_id,
+                    target_entity_id=target_id,
+                    max_hops=max_hops,
+                    relation_types=context.get("relation_types"),
+                    max_paths=max_evidence,
+                )
+
+                if paths:
+                    path_evidence = await self.collect_evidence_from_paths(
+                        paths, source="direct_traversal_fallback"
+                    )
+                    evidence.extend(path_evidence)
+                    trace.append(
+                        f"FALLBACK SUCCESS: Found {len(path_evidence)} evidence pieces from direct traversal"
+                    )
+                    logger.info(
+                        f"Fallback traversal succeeded: {len(path_evidence)} evidence pieces from {start_id}"
+                    )
+                else:
+                    trace.append(f"FALLBACK FAILED: No paths found from {start_id}")
+                    logger.warning(f"Fallback traversal found no paths from {start_id}")
+            except Exception as e:
+                trace.append(f"FALLBACK ERROR: {str(e)}")
+                logger.error(f"Fallback traversal failed: {str(e)}", exc_info=True)
+
         # Step 3: Rank and filter evidence
         trace.append(f"Collected {len(evidence)} pieces of evidence")
         evidence = self._rank_and_filter_evidence(evidence, max_evidence)
@@ -120,7 +170,7 @@ class ReasoningEngine:
             confidence=confidence,
             reasoning_trace=trace,
             execution_time_ms=execution_time,
-            metadata={"plan_id": plan.plan_id, "num_steps": len(plan.steps)}
+            metadata={"plan_id": plan.plan_id, "num_steps": len(plan.steps)},
         )
 
     async def find_multi_hop_paths(
@@ -129,7 +179,7 @@ class ReasoningEngine:
         target_entity_id: Optional[str] = None,
         max_hops: int = 3,
         relation_types: Optional[List[str]] = None,
-        max_paths: int = 10
+        max_paths: int = 10,
     ) -> List[Path]:
         """
         Find multi-hop paths between entities
@@ -149,32 +199,25 @@ class ReasoningEngine:
             start_entity_id=start_entity_id,
             relation_type=None,  # Will filter later if needed
             max_depth=max_hops,
-            max_results=max_paths * 2  # Get more, then filter
+            max_results=max_paths * 2,  # Get more, then filter
         )
 
         # Filter by target if specified
         if target_entity_id:
-            paths = [
-                path for path in paths
-                if path.nodes[-1].id == target_entity_id
-            ]
+            paths = [path for path in paths if path.nodes[-1].id == target_entity_id]
 
         # Filter by relation types if specified
         if relation_types:
             paths = [
-                path for path in paths
-                if all(
-                    rel.relation_type in relation_types
-                    for rel in path.edges
-                )
+                path
+                for path in paths
+                if all(rel.relation_type in relation_types for rel in path.edges)
             ]
 
         return paths[:max_paths]
 
     async def collect_evidence_from_paths(
-        self,
-        paths: List[Path],
-        source: str = "path_finding"
+        self, paths: List[Path], source: str = "path_finding"
     ) -> List[Evidence]:
         """
         Collect evidence from paths
@@ -208,7 +251,7 @@ class ReasoningEngine:
                 relevance_score=relevance,
                 explanation=explanation,
                 source=source,
-                metadata={"path_index": i, "path_length": len(path.nodes)}
+                metadata={"path_index": i, "path_length": len(path.nodes)},
             )
 
             evidence_list.append(evidence)
@@ -216,9 +259,7 @@ class ReasoningEngine:
         return evidence_list
 
     def rank_evidence(
-        self,
-        evidence: List[Evidence],
-        ranking_method: str = "combined_score"
+        self, evidence: List[Evidence], ranking_method: str = "combined_score"
     ) -> List[Evidence]:
         """
         Rank evidence by relevance
@@ -234,23 +275,11 @@ class ReasoningEngine:
             Ranked evidence list
         """
         if ranking_method == "combined_score":
-            return sorted(
-                evidence,
-                key=lambda e: e.combined_score,
-                reverse=True
-            )
+            return sorted(evidence, key=lambda e: e.combined_score, reverse=True)
         elif ranking_method == "confidence":
-            return sorted(
-                evidence,
-                key=lambda e: e.confidence,
-                reverse=True
-            )
+            return sorted(evidence, key=lambda e: e.confidence, reverse=True)
         elif ranking_method == "relevance":
-            return sorted(
-                evidence,
-                key=lambda e: e.relevance_score,
-                reverse=True
-            )
+            return sorted(evidence, key=lambda e: e.relevance_score, reverse=True)
         else:
             return evidence
 
@@ -274,7 +303,7 @@ class ReasoningEngine:
 
         parts = []
         for i, entity in enumerate(path.nodes):
-            entity_name = entity.properties.get('name', entity.id)
+            entity_name = entity.properties.get("name", entity.id)
             entity_type = entity.entity_type
             parts.append(f"{entity_name} ({entity_type})")
 
@@ -285,41 +314,61 @@ class ReasoningEngine:
         return "".join(parts)
 
     async def _execute_plan_with_evidence(
-        self,
-        plan: QueryPlan,
-        trace: List[str]
+        self, plan: QueryPlan, trace: List[str]
     ) -> List[Evidence]:
         """Execute query plan and collect evidence"""
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         all_evidence = []
         completed_steps = set()
         step_results: Dict[str, Any] = {}
 
         # Get execution order
         execution_order = plan.get_execution_order()
+        trace.append(f"Plan has {len(plan.steps)} steps, execution order: {execution_order}")
 
         for level, step_ids in enumerate(execution_order):
             trace.append(f"Executing level {level}: {step_ids}")
 
             # Execute steps in this level (could be parallelized)
             for step_id in step_ids:
-                step = next(s for s in plan.steps if s.step_id == step_id)
+                try:
+                    step = next(s for s in plan.steps if s.step_id == step_id)
+                    trace.append(
+                        f"  Executing {step_id}: {step.operation.value} - {step.description}"
+                    )
 
-                # Execute step
-                step_evidence = await self._execute_step(step, step_results)
-                all_evidence.extend(step_evidence)
+                    # Execute step
+                    step_evidence = await self._execute_step(step, step_results)
+                    all_evidence.extend(step_evidence)
 
-                # Store results for dependent steps
-                step_results[step_id] = step_evidence
-                completed_steps.add(step_id)
+                    # Store results for dependent steps
+                    step_results[step_id] = step_evidence
+                    completed_steps.add(step_id)
 
-                trace.append(f"  {step_id}: Collected {len(step_evidence)} evidence")
+                    trace.append(f"  {step_id}: Collected {len(step_evidence)} evidence")
+                    logger.debug(f"Step {step_id} completed: {len(step_evidence)} evidence pieces")
+
+                    if len(step_evidence) == 0:
+                        trace.append(f"  WARNING: {step_id} returned no evidence")
+                        logger.warning(
+                            f"Step {step_id} ({step.operation.value}) returned no evidence. "
+                            f"Query: {step.query.query_type}, "
+                            f"Entity ID: {getattr(step.query, 'entity_id', None)}, "
+                            f"Source: {getattr(step.query, 'source_entity_id', None)}"
+                        )
+                except Exception as e:
+                    error_msg = f"Error executing step {step_id}: {str(e)}"
+                    trace.append(f"  ERROR: {error_msg}")
+                    logger.error(error_msg, exc_info=True)
+                    # Continue with other steps even if one fails
 
         return all_evidence
 
     async def _execute_step(
-        self,
-        step: QueryStep,
-        previous_results: Dict[str, Any]
+        self, step: QueryStep, previous_results: Dict[str, Any]
     ) -> List[Evidence]:
         """Execute a single query step"""
         query = step.query
@@ -330,15 +379,17 @@ class ReasoningEngine:
             if query.entity_id:
                 entity = await self.graph_store.get_entity(query.entity_id)
                 if entity:
-                    evidence.append(Evidence(
-                        evidence_id=f"ev_{uuid.uuid4().hex[:8]}",
-                        evidence_type=EvidenceType.ENTITY,
-                        entities=[entity],
-                        confidence=1.0,
-                        relevance_score=1.0,
-                        explanation=f"Found entity: {entity.id}",
-                        source=step.step_id
-                    ))
+                    evidence.append(
+                        Evidence(
+                            evidence_id=f"ev_{uuid.uuid4().hex[:8]}",
+                            evidence_type=EvidenceType.ENTITY,
+                            entities=[entity],
+                            confidence=1.0,
+                            relevance_score=1.0,
+                            explanation=f"Found entity: {entity.id}",
+                            source=step.step_id,
+                        )
+                    )
 
         # Vector search
         elif query.query_type == QueryType.VECTOR_SEARCH:
@@ -347,51 +398,83 @@ class ReasoningEngine:
                     query_embedding=query.embedding,
                     entity_type=query.entity_type,
                     max_results=query.max_results,
-                    score_threshold=query.score_threshold
+                    score_threshold=query.score_threshold,
                 )
 
                 for entity, score in results:
-                    evidence.append(Evidence(
-                        evidence_id=f"ev_{uuid.uuid4().hex[:8]}",
-                        evidence_type=EvidenceType.ENTITY,
-                        entities=[entity],
-                        confidence=score,
-                        relevance_score=score,
-                        explanation=f"Similar entity: {entity.id} (score: {score:.2f})",
-                        source=step.step_id
-                    ))
+                    evidence.append(
+                        Evidence(
+                            evidence_id=f"ev_{uuid.uuid4().hex[:8]}",
+                            evidence_type=EvidenceType.ENTITY,
+                            entities=[entity],
+                            confidence=score,
+                            relevance_score=score,
+                            explanation=f"Similar entity: {entity.id} (score: {score:.2f})",
+                            source=step.step_id,
+                        )
+                    )
 
         # Traversal
         elif query.query_type == QueryType.TRAVERSAL:
+            import logging
+
+            logger = logging.getLogger(__name__)
+
             # Get starting entities from previous steps or query
             start_ids = []
             if query.entity_id:
                 start_ids = [query.entity_id]
+                logger.debug(f"TRAVERSAL: Using entity_id from query: {query.entity_id}")
             elif step.depends_on:
                 # Get entities from dependent steps
                 for dep_id in step.depends_on:
                     if dep_id in previous_results:
                         dep_evidence = previous_results[dep_id]
-                        start_ids.extend([
-                            e.id for ev in dep_evidence
-                            for e in ev.entities
-                        ])
+                        extracted_ids = [e.id for ev in dep_evidence for e in ev.entities]
+                        start_ids.extend(extracted_ids)
+                        logger.debug(
+                            f"TRAVERSAL: Extracted {len(extracted_ids)} entity IDs from step {dep_id}"
+                        )
+                    else:
+                        logger.warning(
+                            f"TRAVERSAL: Dependent step {dep_id} not found in previous_results"
+                        )
+            else:
+                logger.warning("TRAVERSAL: No entity_id and no dependencies. Cannot traverse.")
 
-            # Traverse from each starting entity
-            for start_id in start_ids[:query.max_results]:  # Limit starting points
-                paths = await self.graph_store.traverse(
-                    start_entity_id=start_id,
-                    relation_type=query.relation_type,
-                    max_depth=query.max_depth,
-                    max_results=query.max_results
+            if not start_ids:
+                logger.warning(
+                    f"TRAVERSAL step {step.step_id} has no starting entities. "
+                    f"Query entity_id: {getattr(query, 'entity_id', None)}, "
+                    f"Dependencies: {step.depends_on}, "
+                    f"Previous results keys: {list(previous_results.keys())}"
                 )
+            else:
+                # Traverse from each starting entity
+                # Limit starting points
+                for start_id in start_ids[: query.max_results]:
+                    try:
+                        paths = await self.graph_store.traverse(
+                            start_entity_id=start_id,
+                            relation_type=query.relation_type,
+                            max_depth=query.max_depth,
+                            max_results=query.max_results,
+                        )
+                        logger.debug(f"TRAVERSAL: Found {len(paths)} paths from {start_id}")
 
-                # Convert paths to evidence
-                path_evidence = await self.collect_evidence_from_paths(
-                    paths,
-                    source=step.step_id
-                )
-                evidence.extend(path_evidence)
+                        # Convert paths to evidence
+                        path_evidence = await self.collect_evidence_from_paths(
+                            paths, source=step.step_id
+                        )
+                        evidence.extend(path_evidence)
+                        logger.debug(
+                            f"TRAVERSAL: Collected {len(path_evidence)} evidence from {start_id}"
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"TRAVERSAL: Error traversing from {start_id}: {str(e)}",
+                            exc_info=True,
+                        )
 
         # Path finding
         elif query.query_type == QueryType.PATH_FINDING:
@@ -400,21 +483,16 @@ class ReasoningEngine:
                     start_entity_id=query.source_entity_id,
                     target_entity_id=query.target_entity_id,
                     max_hops=query.max_depth,
-                    max_paths=query.max_results
+                    max_paths=query.max_results,
                 )
 
-                path_evidence = await self.collect_evidence_from_paths(
-                    paths,
-                    source=step.step_id
-                )
+                path_evidence = await self.collect_evidence_from_paths(paths, source=step.step_id)
                 evidence.extend(path_evidence)
 
         return evidence
 
     def _rank_and_filter_evidence(
-        self,
-        evidence: List[Evidence],
-        max_evidence: int
+        self, evidence: List[Evidence], max_evidence: int
     ) -> List[Evidence]:
         """Rank and filter evidence to top N"""
         # Rank by combined score
@@ -423,11 +501,7 @@ class ReasoningEngine:
         # Filter to top N
         return ranked[:max_evidence]
 
-    def _generate_answer(
-        self,
-        query: str,
-        evidence: List[Evidence]
-    ) -> Tuple[str, float]:
+    def _generate_answer(self, query: str, evidence: List[Evidence]) -> Tuple[str, float]:
         """
         Generate answer from evidence
 
@@ -458,7 +532,7 @@ class ReasoningEngine:
             for entity in ev.entities:
                 if entity.id not in entity_ids:
                     entity_ids.add(entity.id)
-                    name = entity.properties.get('name', entity.id)
+                    name = entity.properties.get("name", entity.id)
                     entity_type = entity.entity_type
                     entity_names.append(f"{name} ({entity_type})")
 
@@ -478,4 +552,3 @@ class ReasoningEngine:
             answer += f" (through {path_count} connection{'s' if path_count != 1 else ''})"
 
         return answer, confidence
-

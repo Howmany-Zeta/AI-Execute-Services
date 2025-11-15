@@ -1,23 +1,24 @@
 import time
 import logging
 import json
-import os
-from typing import Dict, Any, Optional, AsyncGenerator, List, Tuple
+from typing import Dict, Any, Optional, AsyncGenerator, List
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
-import asyncio
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class ContextUpdate:
     """Represents a single update to the context (e.g., message, metadata, or resource)."""
+
     timestamp: float
     update_type: str  # e.g., "message", "metadata", "resource"
     data: Any  # Content of the update (e.g., message text, metadata dict)
-    metadata: Dict[str, Any]  # Additional metadata (e.g., file paths, model info)
+    # Additional metadata (e.g., file paths, model info)
+    metadata: Dict[str, Any]
+
 
 class TaskContext:
     """
@@ -30,6 +31,7 @@ class TaskContext:
     - Metadata toggles
     - Enhanced error handling
     """
+
     def __init__(self, data: dict, task_dir: str = "./tasks"):
         self.user_id = data.get("user_id", "anonymous")
         self.chat_id = data.get("chat_id", "none")
@@ -41,7 +43,8 @@ class TaskContext:
         self.start_time: Optional[float] = None
         self.resources: Dict[str, Any] = {}
         self.context_history: List[ContextUpdate] = []
-        self.file_tracker: Dict[str, Dict[str, Any]] = {}  # Tracks file operations
+        # Tracks file operations
+        self.file_tracker: Dict[str, Dict[str, Any]] = {}
         self.model_tracker: List[Dict[str, Any]] = []  # Tracks model usage
         self.metadata_toggles: Dict[str, bool] = data.get("metadata_toggles", {})
         self._initialize_persistence()
@@ -59,7 +62,7 @@ class TaskContext:
                             timestamp=entry["timestamp"],
                             update_type=entry["update_type"],
                             data=entry["data"],
-                            metadata=entry["metadata"]
+                            metadata=entry["metadata"],
                         )
                         for entry in raw_history
                     ]
@@ -76,7 +79,7 @@ class TaskContext:
                     "timestamp": update.timestamp,
                     "update_type": update.update_type,
                     "data": update.data,
-                    "metadata": update.metadata
+                    "metadata": update.metadata,
                 }
                 for update in self.context_history
             ]
@@ -92,7 +95,7 @@ class TaskContext:
             timestamp=time.time(),
             update_type=update_type,
             data=data,
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
         self.context_history.append(update)
         logger.debug(f"Added context update: {update_type}")
@@ -109,9 +112,13 @@ class TaskContext:
             "operation": operation,
             "source": source,
             "timestamp": time.time(),
-            "state": "active"
+            "state": "active",
         }
-        self.add_context_update("file_operation", {"path": file_path, "operation": operation}, {"source": source})
+        self.add_context_update(
+            "file_operation",
+            {"path": file_path, "operation": operation},
+            {"source": source},
+        )
         logger.debug(f"Tracked file operation: {operation} on {file_path}")
 
     def track_model_usage(self, model_id: str, provider_id: str, mode: str):
@@ -120,7 +127,7 @@ class TaskContext:
             "model_id": model_id,
             "provider_id": provider_id,
             "mode": mode,
-            "timestamp": time.time()
+            "timestamp": time.time(),
         }
         # Avoid duplicates
         if not self.model_tracker or self.model_tracker[-1] != model_entry:
@@ -145,14 +152,18 @@ class TaskContext:
 
         self.context_history = list(reversed(optimized_history))
         if len(deduplicated) < len(self.context_history):
-            logger.debug(f"Optimized context: removed {len(self.context_history) - len(deduplicated)} duplicates")
+            logger.debug(
+                f"Optimized context: removed {len(self.context_history) - len(deduplicated)} duplicates"
+            )
             return True
         return False
 
     async def truncate_context_history(self, timestamp: float):
         """Truncate context history after a given timestamp."""
         original_len = len(self.context_history)
-        self.context_history = [update for update in self.context_history if update.timestamp <= timestamp]
+        self.context_history = [
+            update for update in self.context_history if update.timestamp <= timestamp
+        ]
         if len(self.context_history) < original_len:
             await self._save_context_history()
             logger.debug(f"Truncated context history at timestamp {timestamp}")
@@ -176,12 +187,12 @@ class TaskContext:
                     "timestamp": update.timestamp,
                     "update_type": update.update_type,
                     "data": update.data,
-                    "metadata": update.metadata
+                    "metadata": update.metadata,
                 }
                 for update in self.context_history
             ],
             "file_tracker": self.file_tracker,
-            "model_tracker": self.model_tracker
+            "model_tracker": self.model_tracker,
         }
 
     def __enter__(self):
@@ -196,7 +207,7 @@ class TaskContext:
         logger.debug(f"Completed task context in {duration:.2f}s for user {self.user_id}")
         for resource_name, resource in self.resources.items():
             try:
-                if hasattr(resource, 'close'):
+                if hasattr(resource, "close"):
                     resource.close()
                 logger.debug(f"Cleaned up resource: {resource_name}")
             except Exception as e:
@@ -217,9 +228,9 @@ class TaskContext:
         logger.debug(f"Completed async task context in {duration:.2f}s for user {self.user_id}")
         for resource_name, resource in self.resources.items():
             try:
-                if hasattr(resource, 'close'):
-                    if callable(getattr(resource, 'close')):
-                        if hasattr(resource.close, '__await__'):
+                if hasattr(resource, "close"):
+                    if callable(getattr(resource, "close")):
+                        if hasattr(resource.close, "__await__"):
                             await resource.close()
                         else:
                             resource.close()

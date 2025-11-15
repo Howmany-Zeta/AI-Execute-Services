@@ -5,7 +5,6 @@ Extracts entities using spaCy's Named Entity Recognition.
 Fast, offline, and cost-free alternative to LLM extraction.
 """
 
-import uuid
 from typing import List, Optional
 import spacy
 from spacy.language import Language
@@ -81,7 +80,7 @@ class NEREntityExtractor(EntityExtractor):
     def __init__(
         self,
         model: str = "en_core_web_sm",
-        disable_components: Optional[List[str]] = None
+        disable_components: Optional[List[str]] = None,
     ):
         """
         Initialize NER entity extractor
@@ -101,12 +100,15 @@ class NEREntityExtractor(EntityExtractor):
             # Load spaCy model
             if disable_components is None:
                 # Disable everything except NER for speed
-                disable_components = ["tok2vec", "tagger", "parser", "attribute_ruler", "lemmatizer"]
+                disable_components = [
+                    "tok2vec",
+                    "tagger",
+                    "parser",
+                    "attribute_ruler",
+                    "lemmatizer",
+                ]
 
-            self.nlp: Language = spacy.load(
-                model,
-                disable=disable_components
-            )
+            self.nlp: Language = spacy.load(model, disable=disable_components)
         except OSError as e:
             raise RuntimeError(
                 f"spaCy model '{model}' not found. "
@@ -114,10 +116,7 @@ class NEREntityExtractor(EntityExtractor):
             ) from e
 
     async def extract_entities(
-        self,
-        text: str,
-        entity_types: Optional[List[str]] = None,
-        **kwargs
+        self, text: str, entity_types: Optional[List[str]] = None, **kwargs
     ) -> List[Entity]:
         """
         Extract entities from text using spaCy NER
@@ -168,8 +167,8 @@ class NEREntityExtractor(EntityExtractor):
                     "label": ent.label_,  # Original spaCy label
                     "start_char": ent.start_char,
                     "end_char": ent.end_char,
-                    "_extraction_confidence": self._estimate_confidence(ent)
-                }
+                    "_extraction_confidence": self._estimate_confidence(ent),
+                },
             )
 
             entities.append(entity)
@@ -191,6 +190,7 @@ class NEREntityExtractor(EntityExtractor):
         normalized = f"{entity_type}_{text}".lower().replace(" ", "_")
         # Add short hash for uniqueness
         import hashlib
+
         hash_suffix = hashlib.md5(normalized.encode()).hexdigest()[:8]
         return f"{normalized}_{hash_suffix}"
 
@@ -242,4 +242,3 @@ class NEREntityExtractor(EntityExtractor):
             List of spaCy NER labels
         """
         return self.nlp.get_pipe("ner").labels
-

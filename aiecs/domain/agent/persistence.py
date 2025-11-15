@@ -7,7 +7,6 @@ Interfaces and implementations for saving/loading agent state.
 import logging
 import json
 from typing import Dict, Any, Optional, Protocol
-from abc import ABC, abstractmethod
 from datetime import datetime
 
 from .base_agent import BaseAIAgent
@@ -87,7 +86,6 @@ class InMemoryPersistence:
 
     def _serialize_datetimes(self, obj: Any) -> Any:
         """Recursively serialize datetime objects to ISO strings."""
-        import json
         if isinstance(obj, dict):
             return {k: self._serialize_datetimes(v) for k, v in obj.items()}
         elif isinstance(obj, list):
@@ -101,7 +99,7 @@ class InMemoryPersistence:
         """Load agent state from memory."""
         if agent_id not in self._storage:
             raise KeyError(f"Agent {agent_id} not found in storage")
-        
+
         data = self._storage[agent_id]
         logger.debug(f"Agent {agent_id} loaded from memory")
         return data["state"]
@@ -133,7 +131,7 @@ class FilePersistence:
             base_path: Base directory for agent states
         """
         import os
-        
+
         self.base_path = base_path
         os.makedirs(base_path, exist_ok=True)
         logger.info(f"FilePersistence initialized with base_path: {base_path}")
@@ -141,6 +139,7 @@ class FilePersistence:
     def _get_file_path(self, agent_id: str) -> str:
         """Get file path for agent."""
         import os
+
         # Sanitize agent_id for filesystem
         safe_id = agent_id.replace("/", "_").replace("\\", "_")
         return os.path.join(self.base_path, f"{safe_id}.json")
@@ -149,18 +148,20 @@ class FilePersistence:
         """Save agent state to file."""
         try:
             state = agent.to_dict()
-            # Convert any remaining datetime objects to ISO strings for JSON serialization
+            # Convert any remaining datetime objects to ISO strings for JSON
+            # serialization
             state = self._serialize_datetimes(state)
             file_path = self._get_file_path(agent.agent_id)
-            
+
             data = {
                 "state": state,
                 "saved_at": datetime.utcnow().isoformat(),
             }
-            
-            with open(file_path, 'w') as f:
-                json.dump(data, f, indent=2, default=str)  # default=str handles any remaining non-serializable objects
-            
+
+            with open(file_path, "w") as f:
+                # default=str handles any remaining non-serializable objects
+                json.dump(data, f, indent=2, default=str)
+
             logger.debug(f"Agent {agent.agent_id} saved to {file_path}")
         except Exception as e:
             logger.error(f"Failed to save agent {agent.agent_id}: {e}")
@@ -180,11 +181,11 @@ class FilePersistence:
     async def load(self, agent_id: str) -> Dict[str, Any]:
         """Load agent state from file."""
         file_path = self._get_file_path(agent_id)
-        
+
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path, "r") as f:
                 data = json.load(f)
-            
+
             logger.debug(f"Agent {agent_id} loaded from {file_path}")
             return data["state"]
         except FileNotFoundError:
@@ -196,14 +197,16 @@ class FilePersistence:
     async def exists(self, agent_id: str) -> bool:
         """Check if agent file exists."""
         import os
+
         file_path = self._get_file_path(agent_id)
         return os.path.exists(file_path)
 
     async def delete(self, agent_id: str) -> None:
         """Delete agent file."""
         import os
+
         file_path = self._get_file_path(agent_id)
-        
+
         try:
             if os.path.exists(file_path):
                 os.remove(file_path)
@@ -216,7 +219,7 @@ class FilePersistence:
 class AgentStateSerializer:
     """
     Helper class for serializing/deserializing agent state.
-    
+
     Handles complex types that need special serialization.
     """
 
@@ -243,7 +246,7 @@ class AgentStateSerializer:
 
         Returns:
             Deserialized state dictionary
-        
+
         Note: This returns a state dictionary, not an agent instance.
         Agent reconstruction requires the appropriate agent class.
         """
@@ -284,4 +287,3 @@ def reset_global_persistence() -> None:
     """Reset global persistence (primarily for testing)."""
     global _global_persistence
     _global_persistence = None
-

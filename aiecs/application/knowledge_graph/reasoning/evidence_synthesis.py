@@ -5,10 +5,9 @@ Combine and synthesize evidence from multiple sources for robust reasoning.
 """
 
 import uuid
-from typing import List, Optional, Dict, Any, Set
+from typing import List, Optional, Dict, Any
 from collections import defaultdict
-from aiecs.domain.knowledge_graph.models.evidence import Evidence, EvidenceType
-from aiecs.domain.knowledge_graph.models.entity import Entity
+from aiecs.domain.knowledge_graph.models.evidence import Evidence
 
 
 class EvidenceSynthesizer:
@@ -38,7 +37,7 @@ class EvidenceSynthesizer:
     def __init__(
         self,
         confidence_threshold: float = 0.5,
-        contradiction_threshold: float = 0.3
+        contradiction_threshold: float = 0.3,
     ):
         """
         Initialize evidence synthesizer
@@ -51,9 +50,7 @@ class EvidenceSynthesizer:
         self.contradiction_threshold = contradiction_threshold
 
     def synthesize_evidence(
-        self,
-        evidence_list: List[Evidence],
-        method: str = "weighted_average"
+        self, evidence_list: List[Evidence], method: str = "weighted_average"
     ) -> List[Evidence]:
         """
         Synthesize evidence from multiple sources
@@ -82,10 +79,7 @@ class EvidenceSynthesizer:
 
         return synthesized
 
-    def _group_overlapping_evidence(
-        self,
-        evidence_list: List[Evidence]
-    ) -> List[List[Evidence]]:
+    def _group_overlapping_evidence(self, evidence_list: List[Evidence]) -> List[List[Evidence]]:
         """
         Group evidence that refers to overlapping entities
 
@@ -123,11 +117,7 @@ class EvidenceSynthesizer:
 
         return groups
 
-    def _combine_evidence_group(
-        self,
-        group: List[Evidence],
-        method: str
-    ) -> Evidence:
+    def _combine_evidence_group(self, group: List[Evidence], method: str) -> Evidence:
         """
         Combine a group of overlapping evidence
 
@@ -195,7 +185,9 @@ class EvidenceSynthesizer:
         sources = list(set(ev.source for ev in group if ev.source))
         explanation = f"Combined from {len(group)} sources: {', '.join(sources[:3])}"
         if len(group) > 1:
-            explanation += f"\nAgreement across {len(group)} pieces of evidence increases confidence"
+            explanation += (
+                f"\nAgreement across {len(group)} pieces of evidence increases confidence"
+            )
 
         # Create synthesized evidence
         combined = Evidence(
@@ -211,16 +203,14 @@ class EvidenceSynthesizer:
             metadata={
                 "source_count": len(group),
                 "source_evidence_ids": [ev.evidence_id for ev in group],
-                "synthesis_method": method
-            }
+                "synthesis_method": method,
+            },
         )
 
         return combined
 
     def filter_by_confidence(
-        self,
-        evidence_list: List[Evidence],
-        threshold: Optional[float] = None
+        self, evidence_list: List[Evidence], threshold: Optional[float] = None
     ) -> List[Evidence]:
         """
         Filter evidence by confidence threshold
@@ -235,10 +225,7 @@ class EvidenceSynthesizer:
         threshold = threshold if threshold is not None else self.confidence_threshold
         return [ev for ev in evidence_list if ev.confidence >= threshold]
 
-    def detect_contradictions(
-        self,
-        evidence_list: List[Evidence]
-    ) -> List[Dict[str, Any]]:
+    def detect_contradictions(self, evidence_list: List[Evidence]) -> List[Dict[str, Any]]:
         """
         Detect contradictions in evidence
 
@@ -261,22 +248,25 @@ class EvidenceSynthesizer:
             if len(evidence_group) < 2:
                 continue
 
-            # Look for low confidence with high relevance (potential contradiction)
+            # Look for low confidence with high relevance (potential
+            # contradiction)
             confidences = [ev.confidence for ev in evidence_group]
             if max(confidences) - min(confidences) > self.contradiction_threshold:
-                contradictions.append({
-                    "entity_id": entity_id,
-                    "evidence_ids": [ev.evidence_id for ev in evidence_group],
-                    "confidence_range": (min(confidences), max(confidences)),
-                    "description": f"Conflicting confidence scores for entity {entity_id}"
-                })
+                contradictions.append(
+                    {
+                        "entity_id": entity_id,
+                        "evidence_ids": [ev.evidence_id for ev in evidence_group],
+                        "confidence_range": (
+                            min(confidences),
+                            max(confidences),
+                        ),
+                        "description": f"Conflicting confidence scores for entity {entity_id}",
+                    }
+                )
 
         return contradictions
 
-    def estimate_overall_confidence(
-        self,
-        evidence_list: List[Evidence]
-    ) -> float:
+    def estimate_overall_confidence(self, evidence_list: List[Evidence]) -> float:
         """
         Estimate overall confidence from evidence list
 
@@ -318,10 +308,7 @@ class EvidenceSynthesizer:
         overall = base_confidence + diversity_bonus + agreement_bonus
         return min(1.0, overall)
 
-    def rank_by_reliability(
-        self,
-        evidence_list: List[Evidence]
-    ) -> List[Evidence]:
+    def rank_by_reliability(self, evidence_list: List[Evidence]) -> List[Evidence]:
         """
         Rank evidence by reliability
 
@@ -358,4 +345,3 @@ class EvidenceSynthesizer:
         scored.sort(key=lambda x: x[1], reverse=True)
 
         return [ev for ev, score in scored]
-

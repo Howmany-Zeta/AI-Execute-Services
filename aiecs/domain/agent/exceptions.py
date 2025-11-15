@@ -55,7 +55,12 @@ class InvalidStateTransitionError(AgentException):
 class ConfigurationError(AgentException):
     """Raised when agent configuration is invalid."""
 
-    def __init__(self, message: str, agent_id: Optional[str] = None, field: Optional[str] = None):
+    def __init__(
+        self,
+        message: str,
+        agent_id: Optional[str] = None,
+        field: Optional[str] = None,
+    ):
         super().__init__(message, agent_id)
         self.field = field
 
@@ -96,4 +101,3 @@ class AgentInitializationError(AgentException):
 
     def __init__(self, message: str, agent_id: Optional[str] = None):
         super().__init__(message, agent_id)
-

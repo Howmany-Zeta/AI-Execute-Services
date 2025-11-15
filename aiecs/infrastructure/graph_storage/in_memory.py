@@ -149,7 +149,7 @@ class InMemoryGraphStore(GraphStore):
             relation.source_id,
             relation.target_id,
             key=relation.id,
-            relation=relation
+            relation=relation,
         )
 
         # Add to relation index
@@ -174,7 +174,7 @@ class InMemoryGraphStore(GraphStore):
         self,
         entity_id: str,
         relation_type: Optional[str] = None,
-        direction: str = "outgoing"
+        direction: str = "outgoing",
     ) -> List[Entity]:
         """
         Get neighboring entities
@@ -199,7 +199,7 @@ class InMemoryGraphStore(GraphStore):
                 if relation_type:
                     edge_data = self.graph.get_edge_data(entity_id, target_id)
                     if edge_data:
-                        relation = edge_data.get('relation')
+                        relation = edge_data.get("relation")
                         if relation and relation.relation_type == relation_type:
                             if target_id in self.entities:
                                 neighbors.append(self.entities[target_id])
@@ -214,7 +214,7 @@ class InMemoryGraphStore(GraphStore):
                 if relation_type:
                     edge_data = self.graph.get_edge_data(source_id, entity_id)
                     if edge_data:
-                        relation = edge_data.get('relation')
+                        relation = edge_data.get("relation")
                         if relation and relation.relation_type == relation_type:
                             if source_id in self.entities:
                                 neighbors.append(self.entities[source_id])
@@ -223,6 +223,34 @@ class InMemoryGraphStore(GraphStore):
                         neighbors.append(self.entities[source_id])
 
         return neighbors
+
+    async def get_all_entities(
+        self, entity_type: Optional[str] = None, limit: Optional[int] = None
+    ) -> List[Entity]:
+        """
+        Get all entities, optionally filtered by type
+
+        Args:
+            entity_type: Optional filter by entity type
+            limit: Optional limit on number of entities
+
+        Returns:
+            List of entities
+        """
+        if not self._initialized:
+            return []
+
+        entities = list(self.entities.values())
+
+        # Filter by entity type if specified
+        if entity_type:
+            entities = [e for e in entities if e.entity_type == entity_type]
+
+        # Apply limit if specified
+        if limit:
+            entities = entities[:limit]
+
+        return entities
 
     # =========================================================================
     # TIER 2 METHODS - Inherited from base class
@@ -239,7 +267,7 @@ class InMemoryGraphStore(GraphStore):
         query_embedding: List[float],
         entity_type: Optional[str] = None,
         max_results: int = 10,
-        score_threshold: float = 0.0
+        score_threshold: float = 0.0,
     ) -> List[tuple]:
         """
         Optimized vector search for in-memory store
@@ -300,12 +328,109 @@ class InMemoryGraphStore(GraphStore):
         scored_entities.sort(key=lambda x: x[1], reverse=True)
         return scored_entities[:max_results]
 
+    async def text_search(
+        self,
+        query_text: str,
+        entity_type: Optional[str] = None,
+        max_results: int = 10,
+        score_threshold: float = 0.0,
+        method: str = "bm25",
+    ) -> List[tuple]:
+        """
+        Optimized text search for in-memory store
+
+        Performs text similarity search over entity properties using BM25, Jaccard,
+        cosine similarity, or Levenshtein distance.
+
+        Args:
+            query_text: Query text string
+            entity_type: Optional filter by entity type
+            max_results: Maximum number of results
+            score_threshold: Minimum similarity score (0.0-1.0)
+            method: Similarity method ("bm25", "jaccard", "cosine", "levenshtein")
+
+        Returns:
+            List of (entity, similarity_score) tuples, sorted descending
+        """
+        if not self._initialized:
+            return []
+
+        if not query_text:
+            return []
+
+        from aiecs.application.knowledge_graph.search.text_similarity import (
+            BM25Scorer,
+            jaccard_similarity_text,
+            cosine_similarity_text,
+            normalized_levenshtein_similarity,
+        )
+
+        # Get candidate entities
+        entities = list(self.entities.values())
+        if entity_type:
+            entities = [e for e in entities if e.entity_type == entity_type]
+
+        if not entities:
+            return []
+
+        scored_entities = []
+
+        # Extract text from entities (combine properties into searchable text)
+        entity_texts = []
+        for entity in entities:
+            # Combine all string properties into searchable text
+            text_parts = []
+            for key, value in entity.properties.items():
+                if isinstance(value, str):
+                    text_parts.append(value)
+                elif isinstance(value, (list, tuple)):
+                    text_parts.extend(str(v) for v in value if isinstance(v, str))
+            entity_text = " ".join(text_parts)
+            entity_texts.append((entity, entity_text))
+
+        if method == "bm25":
+            # Use BM25 scorer
+            corpus = [text for _, text in entity_texts]
+            scorer = BM25Scorer(corpus)
+            scores = scorer.score(query_text)
+
+            for (entity, _), score in zip(entity_texts, scores):
+                if score >= score_threshold:
+                    scored_entities.append((entity, float(score)))
+
+        elif method == "jaccard":
+            for entity, text in entity_texts:
+                score = jaccard_similarity_text(query_text, text)
+                if score >= score_threshold:
+                    scored_entities.append((entity, score))
+
+        elif method == "cosine":
+            for entity, text in entity_texts:
+                score = cosine_similarity_text(query_text, text)
+                if score >= score_threshold:
+                    scored_entities.append((entity, score))
+
+        elif method == "levenshtein":
+            for entity, text in entity_texts:
+                score = normalized_levenshtein_similarity(query_text, text)
+                if score >= score_threshold:
+                    scored_entities.append((entity, score))
+
+        else:
+            raise ValueError(
+                f"Unknown text search method: {method}. Use 'bm25', 'jaccard', 'cosine', or 'levenshtein'"
+            )
+
+        # Sort by score descending and return top results
+        scored_entities.sort(key=lambda x: x[1], reverse=True)
+        return scored_entities[:max_results]
+
     async def find_paths(
         self,
         source_entity_id: str,
         target_entity_id: str,
         max_depth: int = 5,
-        max_paths: int = 10
+        max_paths: int = 10,
     ) -> List:
         """
         Optimized path finding using networkx algorithms
@@ -328,17 +453,19 @@ class InMemoryGraphStore(GraphStore):
                 self.graph,
                 source_entity_id,
                 target_entity_id,
-                cutoff=max_depth
+                cutoff=max_depth,
             ):
                 # Convert node IDs to Entity and Relation objects
-                entities = [self.entities[node_id] for node_id in node_path if node_id in self.entities]
+                entities = [
+                    self.entities[node_id] for node_id in node_path if node_id in self.entities
+                ]
 
                 # Get relations between consecutive nodes
                 edges = []
                 for i in range(len(node_path) - 1):
-                    edge_data = self.graph.get_edge_data(node_path[i], node_path[i+1])
-                    if edge_data and 'relation' in edge_data:
-                        edges.append(edge_data['relation'])
+                    edge_data = self.graph.get_edge_data(node_path[i], node_path[i + 1])
+                    if edge_data and "relation" in edge_data:
+                        edges.append(edge_data["relation"])
 
                 if len(entities) == len(node_path):
                     paths.append(Path(nodes=entities, edges=edges))
@@ -385,4 +512,3 @@ class InMemoryGraphStore(GraphStore):
 
     def __repr__(self) -> str:
         return self.__str__()
-

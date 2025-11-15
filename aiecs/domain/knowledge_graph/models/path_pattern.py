@@ -11,6 +11,7 @@ from enum import Enum
 
 class TraversalDirection(str, Enum):
     """Direction for graph traversal"""
+
     OUTGOING = "outgoing"
     INCOMING = "incoming"
     BOTH = "both"
@@ -45,45 +46,40 @@ class PathPattern(BaseModel):
 
     relation_types: Optional[List[str]] = Field(
         default=None,
-        description="Optional list of allowed relation types (None = all types allowed)"
+        description="Optional list of allowed relation types (None = all types allowed)",
     )
 
     entity_types: Optional[List[str]] = Field(
         default=None,
-        description="Optional list of allowed entity types (None = all types allowed)"
+        description="Optional list of allowed entity types (None = all types allowed)",
     )
 
     direction: TraversalDirection = Field(
         default=TraversalDirection.OUTGOING,
-        description="Direction for traversal"
+        description="Direction for traversal",
     )
 
     max_depth: int = Field(
         default=3,
         ge=1,
         le=10,
-        description="Maximum path length (number of hops)"
+        description="Maximum path length (number of hops)",
     )
 
     allow_cycles: bool = Field(
-        default=False,
-        description="Whether to allow revisiting nodes (cycles)"
+        default=False, description="Whether to allow revisiting nodes (cycles)"
     )
 
     required_relation_sequence: Optional[List[str]] = Field(
         default=None,
-        description="Optional sequence of relation types that must be followed in order"
+        description="Optional sequence of relation types that must be followed in order",
     )
 
-    min_path_length: int = Field(
-        default=1,
-        ge=1,
-        description="Minimum path length to return"
-    )
+    min_path_length: int = Field(default=1, ge=1, description="Minimum path length to return")
 
     excluded_entity_ids: Set[str] = Field(
         default_factory=set,
-        description="Set of entity IDs to exclude from traversal"
+        description="Set of entity IDs to exclude from traversal",
     )
 
     def is_relation_allowed(self, relation_type: str, depth: int = 0) -> bool:
@@ -175,4 +171,3 @@ class PathPattern(BaseModel):
             parts.append("allow_cycles")
 
         return f"PathPattern({', '.join(parts)})"
-

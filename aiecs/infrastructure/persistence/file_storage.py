@@ -8,12 +8,10 @@ with support for local fallback and caching.
 import os
 import json
 import logging
-import asyncio
 import aiofiles
-from typing import Dict, List, Any, Optional, Union, BinaryIO
-from datetime import datetime, timedelta
+from typing import Dict, List, Any, Optional, Union
+from datetime import datetime
 from pathlib import Path
-import hashlib
 import gzip
 import pickle
 
@@ -21,6 +19,7 @@ try:
     from google.cloud import storage
     from google.cloud.exceptions import NotFound, GoogleCloudError
     from google.auth.exceptions import DefaultCredentialsError
+
     GCS_AVAILABLE = True
 except ImportError:
     GCS_AVAILABLE = False
@@ -36,7 +35,6 @@ logger = logging.getLogger(__name__)
 
 class FileStorageError(Exception):
     """Base exception for file storage operations."""
-    pass
 
 
 class FileStorageConfig:
@@ -44,32 +42,32 @@ class FileStorageConfig:
 
     def __init__(self, config: Dict[str, Any]):
         # Google Cloud Storage settings
-        self.gcs_bucket_name = config.get('gcs_bucket_name', 'multi-task-storage')
-        self.gcs_project_id = config.get('gcs_project_id')
-        self.gcs_credentials_path = config.get('gcs_credentials_path')
-        self.gcs_location = config.get('gcs_location', 'US')
+        self.gcs_bucket_name = config.get("gcs_bucket_name", "multi-task-storage")
+        self.gcs_project_id = config.get("gcs_project_id")
+        self.gcs_credentials_path = config.get("gcs_credentials_path")
+        self.gcs_location = config.get("gcs_location", "US")
 
         # Local storage fallback
-        self.local_storage_path = config.get('local_storage_path', './storage')
-        self.enable_local_fallback = config.get('enable_local_fallback', True)
+        self.local_storage_path = config.get("local_storage_path", "./storage")
+        self.enable_local_fallback = config.get("enable_local_fallback", True)
 
         # Cache settings
-        self.enable_cache = config.get('enable_cache', True)
-        self.cache_ttl_seconds = config.get('cache_ttl_seconds', 3600)
-        self.max_cache_size_mb = config.get('max_cache_size_mb', 100)
+        self.enable_cache = config.get("enable_cache", True)
+        self.cache_ttl_seconds = config.get("cache_ttl_seconds", 3600)
+        self.max_cache_size_mb = config.get("max_cache_size_mb", 100)
 
         # Performance settings
-        self.chunk_size = config.get('chunk_size', 8192)
-        self.max_retries = config.get('max_retries', 3)
-        self.timeout_seconds = config.get('timeout_seconds', 30)
+        self.chunk_size = config.get("chunk_size", 8192)
+        self.max_retries = config.get("max_retries", 3)
+        self.timeout_seconds = config.get("timeout_seconds", 30)
 
         # Compression settings
-        self.enable_compression = config.get('enable_compression', True)
-        self.compression_threshold_bytes = config.get('compression_threshold_bytes', 1024)
+        self.enable_compression = config.get("enable_compression", True)
+        self.compression_threshold_bytes = config.get("compression_threshold_bytes", 1024)
 
         # Security settings
-        self.enable_encryption = config.get('enable_encryption', False)
-        self.encryption_key = config.get('encryption_key')
+        self.enable_encryption = config.get("enable_encryption", False)
+        self.encryption_key = config.get("encryption_key")
 
 
 class FileStorage:
@@ -131,16 +129,19 @@ class FileStorage:
         try:
             # Set credentials if provided
             if self.config.gcs_credentials_path:
-                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = self.config.gcs_credentials_path
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = self.config.gcs_credentials_path
 
             # Create client - project is required for bucket creation
             # If project_id is None, client will use default project from credentials
             # but we need it for bucket creation API calls
             if not self.config.gcs_project_id:
                 logger.warning("GCS project ID not provided. Bucket creation will be disabled.")
-                logger.warning("Bucket must exist and be accessible. Falling back to local storage if bucket not found.")
-            
-            # Create client with project ID (can be None, but bucket creation will fail)
+                logger.warning(
+                    "Bucket must exist and be accessible. Falling back to local storage if bucket not found."
+                )
+
+            # Create client with project ID (can be None, but bucket creation
+            # will fail)
             self._gcs_client = storage.Client(project=self.config.gcs_project_id)
 
             # Get or create bucket
@@ -158,11 +159,15 @@ class FileStorage:
                         self._gcs_bucket = self._gcs_client.create_bucket(
                             self.config.gcs_bucket_name,
                             project=self.config.gcs_project_id,  # Explicitly pass project parameter
-                            location=self.config.gcs_location
+                            location=self.config.gcs_location,
                         )
-                        logger.info(f"Created GCS bucket: {self.config.gcs_bucket_name} in project {self.config.gcs_project_id}")
+                        logger.info(
+                            f"Created GCS bucket: {self.config.gcs_bucket_name} in project {self.config.gcs_project_id}"
+                        )
                     except Exception as create_error:
-                        logger.error(f"Failed to create GCS bucket {self.config.gcs_bucket_name}: {create_error}")
+                        logger.error(
+                            f"Failed to create GCS bucket {self.config.gcs_bucket_name}: {create_error}"
+                        )
                         logger.warning("Bucket creation failed. Will use local storage fallback.")
                         self._gcs_bucket = None
                 else:
@@ -170,7 +175,9 @@ class FileStorage:
                         f"GCS bucket '{self.config.gcs_bucket_name}' not found and "
                         "project ID is not provided. Cannot create bucket without project parameter."
                     )
-                    logger.warning("Please ensure the bucket exists or provide DOC_PARSER_GCS_PROJECT_ID in configuration.")
+                    logger.warning(
+                        "Please ensure the bucket exists or provide DOC_PARSER_GCS_PROJECT_ID in configuration."
+                    )
                     logger.warning("Falling back to local storage only.")
                     self._gcs_bucket = None
 
@@ -184,8 +191,12 @@ class FileStorage:
             self._gcs_client = None
             self._gcs_bucket = None
 
-    async def store(self, key: str, data: Union[str, bytes, Dict[str, Any]],
-                   metadata: Optional[Dict[str, Any]] = None) -> bool:
+    async def store(
+        self,
+        key: str,
+        data: Union[str, bytes, Dict[str, Any]],
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> bool:
         """
         Store data with the given key.
 
@@ -207,8 +218,10 @@ class FileStorage:
             serialized_data = await self._serialize_data(data)
 
             # Compress if enabled and data is large enough
-            if (self.config.enable_compression and
-                len(serialized_data) > self.config.compression_threshold_bytes):
+            if (
+                self.config.enable_compression
+                and len(serialized_data) > self.config.compression_threshold_bytes
+            ):
                 serialized_data = gzip.compress(serialized_data)
                 compressed = True
             else:
@@ -217,9 +230,9 @@ class FileStorage:
             # Store in cache
             if self.config.enable_cache:
                 self._cache[key] = {
-                    'data': data,
-                    'metadata': metadata,
-                    'compressed': compressed
+                    "data": data,
+                    "metadata": metadata,
+                    "compressed": compressed,
                 }
                 self._cache_timestamps[key] = datetime.utcnow()
                 await self._cleanup_cache()
@@ -229,9 +242,9 @@ class FileStorage:
                 success = await self._store_gcs(key, serialized_data, metadata, compressed)
                 if success:
                     if self.metrics:
-                        self.metrics.record_operation('gcs_store_success', 1)
+                        self.metrics.record_operation("gcs_store_success", 1)
                         duration = (datetime.utcnow() - start_time).total_seconds()
-                        self.metrics.record_duration('gcs_store_duration', duration)
+                        self.metrics.record_duration("gcs_store_duration", duration)
                     return True
 
             # Fallback to local storage
@@ -239,19 +252,19 @@ class FileStorage:
                 success = await self._store_local(key, serialized_data, metadata, compressed)
                 if success:
                     if self.metrics:
-                        self.metrics.record_operation('local_store_success', 1)
+                        self.metrics.record_operation("local_store_success", 1)
                         duration = (datetime.utcnow() - start_time).total_seconds()
-                        self.metrics.record_duration('local_store_duration', duration)
+                        self.metrics.record_duration("local_store_duration", duration)
                     return True
 
             if self.metrics:
-                self.metrics.record_operation('store_failure', 1)
+                self.metrics.record_operation("store_failure", 1)
             return False
 
         except Exception as e:
             logger.error(f"Failed to store data for key {key}: {e}")
             if self.metrics:
-                self.metrics.record_operation('store_error', 1)
+                self.metrics.record_operation("store_error", 1)
             raise FileStorageError(f"Storage failed: {e}")
 
     async def retrieve(self, key: str) -> Optional[Union[str, bytes, Dict[str, Any]]]:
@@ -273,10 +286,14 @@ class FileStorage:
             # Check cache first
             if self.config.enable_cache and key in self._cache:
                 cache_time = self._cache_timestamps.get(key)
-                if cache_time and (datetime.utcnow() - cache_time).total_seconds() < self.config.cache_ttl_seconds:
+                if (
+                    cache_time
+                    and (datetime.utcnow() - cache_time).total_seconds()
+                    < self.config.cache_ttl_seconds
+                ):
                     if self.metrics:
-                        self.metrics.record_operation('cache_hit', 1)
-                    return self._cache[key]['data']
+                        self.metrics.record_operation("cache_hit", 1)
+                    return self._cache[key]["data"]
                 else:
                     # Remove expired cache entry
                     self._cache.pop(key, None)
@@ -287,13 +304,13 @@ class FileStorage:
                 data = await self._retrieve_gcs(key)
                 if data is not None:
                     if self.metrics:
-                        self.metrics.record_operation('gcs_retrieve_success', 1)
+                        self.metrics.record_operation("gcs_retrieve_success", 1)
                         duration = (datetime.utcnow() - start_time).total_seconds()
-                        self.metrics.record_duration('gcs_retrieve_duration', duration)
+                        self.metrics.record_duration("gcs_retrieve_duration", duration)
 
                     # Update cache
                     if self.config.enable_cache:
-                        self._cache[key] = {'data': data, 'metadata': {}}
+                        self._cache[key] = {"data": data, "metadata": {}}
                         self._cache_timestamps[key] = datetime.utcnow()
 
                     return data
@@ -303,25 +320,25 @@ class FileStorage:
                 data = await self._retrieve_local(key)
                 if data is not None:
                     if self.metrics:
-                        self.metrics.record_operation('local_retrieve_success', 1)
+                        self.metrics.record_operation("local_retrieve_success", 1)
                         duration = (datetime.utcnow() - start_time).total_seconds()
-                        self.metrics.record_duration('local_retrieve_duration', duration)
+                        self.metrics.record_duration("local_retrieve_duration", duration)
 
                     # Update cache
                     if self.config.enable_cache:
-                        self._cache[key] = {'data': data, 'metadata': {}}
+                        self._cache[key] = {"data": data, "metadata": {}}
                         self._cache_timestamps[key] = datetime.utcnow()
 
                     return data
 
             if self.metrics:
-                self.metrics.record_operation('retrieve_not_found', 1)
+                self.metrics.record_operation("retrieve_not_found", 1)
             return None
 
         except Exception as e:
             logger.error(f"Failed to retrieve data for key {key}: {e}")
             if self.metrics:
-                self.metrics.record_operation('retrieve_error', 1)
+                self.metrics.record_operation("retrieve_error", 1)
             raise FileStorageError(f"Retrieval failed: {e}")
 
     async def delete(self, key: str) -> bool:
@@ -350,7 +367,7 @@ class FileStorage:
                 gcs_success = await self._delete_gcs(key)
                 if gcs_success:
                     if self.metrics:
-                        self.metrics.record_operation('gcs_delete_success', 1)
+                        self.metrics.record_operation("gcs_delete_success", 1)
                 else:
                     success = False
 
@@ -359,22 +376,22 @@ class FileStorage:
                 local_success = await self._delete_local(key)
                 if local_success:
                     if self.metrics:
-                        self.metrics.record_operation('local_delete_success', 1)
+                        self.metrics.record_operation("local_delete_success", 1)
                 else:
                     success = False
 
             if self.metrics:
                 if success:
-                    self.metrics.record_operation('delete_success', 1)
+                    self.metrics.record_operation("delete_success", 1)
                 else:
-                    self.metrics.record_operation('delete_failure', 1)
+                    self.metrics.record_operation("delete_failure", 1)
 
             return success
 
         except Exception as e:
             logger.error(f"Failed to delete data for key {key}: {e}")
             if self.metrics:
-                self.metrics.record_operation('delete_error', 1)
+                self.metrics.record_operation("delete_error", 1)
             raise FileStorageError(f"Deletion failed: {e}")
 
     async def exists(self, key: str) -> bool:
@@ -394,7 +411,11 @@ class FileStorage:
             # Check cache first
             if self.config.enable_cache and key in self._cache:
                 cache_time = self._cache_timestamps.get(key)
-                if cache_time and (datetime.utcnow() - cache_time).total_seconds() < self.config.cache_ttl_seconds:
+                if (
+                    cache_time
+                    and (datetime.utcnow() - cache_time).total_seconds()
+                    < self.config.cache_ttl_seconds
+                ):
                     return True
 
             # Check GCS
@@ -412,7 +433,9 @@ class FileStorage:
             logger.error(f"Failed to check existence for key {key}: {e}")
             raise FileStorageError(f"Existence check failed: {e}")
 
-    async def list_keys(self, prefix: Optional[str] = None, limit: Optional[int] = None) -> List[str]:
+    async def list_keys(
+        self, prefix: Optional[str] = None, limit: Optional[int] = None
+    ) -> List[str]:
         """
         List storage keys with optional prefix filtering.
 
@@ -452,7 +475,13 @@ class FileStorage:
 
     # GCS implementation methods
 
-    async def _store_gcs(self, key: str, data: bytes, metadata: Optional[Dict[str, Any]], compressed: bool) -> bool:
+    async def _store_gcs(
+        self,
+        key: str,
+        data: bytes,
+        metadata: Optional[Dict[str, Any]],
+        compressed: bool,
+    ) -> bool:
         """Store data in Google Cloud Storage."""
         try:
             blob = self._gcs_bucket.blob(key)
@@ -461,7 +490,7 @@ class FileStorage:
             if metadata:
                 blob.metadata = metadata
             if compressed:
-                blob.content_encoding = 'gzip'
+                blob.content_encoding = "gzip"
 
             # Upload data
             blob.upload_from_string(data)
@@ -483,7 +512,7 @@ class FileStorage:
             data = blob.download_as_bytes()
 
             # Decompress if needed
-            if blob.content_encoding == 'gzip':
+            if blob.content_encoding == "gzip":
                 data = gzip.decompress(data)
 
             # Deserialize data
@@ -530,20 +559,29 @@ class FileStorage:
 
     # Local storage implementation methods
 
-    async def _store_local(self, key: str, data: bytes, metadata: Optional[Dict[str, Any]], compressed: bool) -> bool:
+    async def _store_local(
+        self,
+        key: str,
+        data: bytes,
+        metadata: Optional[Dict[str, Any]],
+        compressed: bool,
+    ) -> bool:
         """Store data in local filesystem."""
         try:
             file_path = Path(self.config.local_storage_path) / key
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
-            async with aiofiles.open(file_path, 'wb') as f:
+            async with aiofiles.open(file_path, "wb") as f:
                 await f.write(data)
 
             # Store metadata separately
             if metadata:
-                metadata_path = file_path.with_suffix('.metadata')
-                metadata_with_compression = {**metadata, 'compressed': compressed}
-                async with aiofiles.open(metadata_path, 'w') as f:
+                metadata_path = file_path.with_suffix(".metadata")
+                metadata_with_compression = {
+                    **metadata,
+                    "compressed": compressed,
+                }
+                async with aiofiles.open(metadata_path, "w") as f:
                     await f.write(json.dumps(metadata_with_compression))
 
             return True
@@ -560,16 +598,16 @@ class FileStorage:
             if not file_path.exists():
                 return None
 
-            async with aiofiles.open(file_path, 'rb') as f:
+            async with aiofiles.open(file_path, "rb") as f:
                 data = await f.read()
 
             # Check for compression metadata
-            metadata_path = file_path.with_suffix('.metadata')
+            metadata_path = file_path.with_suffix(".metadata")
             compressed = False
             if metadata_path.exists():
-                async with aiofiles.open(metadata_path, 'r') as f:
+                async with aiofiles.open(metadata_path, "r") as f:
                     metadata = json.loads(await f.read())
-                    compressed = metadata.get('compressed', False)
+                    compressed = metadata.get("compressed", False)
 
             # Decompress if needed
             if compressed:
@@ -586,7 +624,7 @@ class FileStorage:
         """Delete data from local filesystem."""
         try:
             file_path = Path(self.config.local_storage_path) / key
-            metadata_path = file_path.with_suffix('.metadata')
+            metadata_path = file_path.with_suffix(".metadata")
 
             success = True
             if file_path.exists():
@@ -619,8 +657,8 @@ class FileStorage:
                 return []
 
             keys = []
-            for file_path in storage_path.rglob('*'):
-                if file_path.is_file() and not file_path.name.endswith('.metadata'):
+            for file_path in storage_path.rglob("*"):
+                if file_path.is_file() and not file_path.name.endswith(".metadata"):
                     key = str(file_path.relative_to(storage_path))
                     if not prefix or key.startswith(prefix):
                         keys.append(key)
@@ -640,7 +678,7 @@ class FileStorage:
         if isinstance(data, bytes):
             return data
         elif isinstance(data, str):
-            return data.encode('utf-8')
+            return data.encode("utf-8")
         else:
             # Use pickle for complex objects
             return pickle.dumps(data)
@@ -650,13 +688,13 @@ class FileStorage:
         try:
             # Try to deserialize as pickle first
             return pickle.loads(data)
-        except:
+        except Exception:
             try:
                 # Try as JSON
-                return json.loads(data.decode('utf-8'))
-            except:
+                return json.loads(data.decode("utf-8"))
+            except Exception:
                 # Return as string
-                return data.decode('utf-8')
+                return data.decode("utf-8")
 
     async def _cleanup_cache(self):
         """Clean up expired cache entries."""
@@ -677,17 +715,22 @@ class FileStorage:
     def get_stats(self) -> Dict[str, Any]:
         """Get storage statistics."""
         return {
-            'initialized': self._initialized,
-            'gcs_available': self._gcs_bucket is not None,
-            'local_fallback_enabled': self.config.enable_local_fallback,
-            'cache_enabled': self.config.enable_cache,
-            'cache_size': len(self._cache),
-            'metrics': self.metrics.get_metrics_summary() if self.metrics and hasattr(self.metrics, 'get_metrics_summary') else {}
+            "initialized": self._initialized,
+            "gcs_available": self._gcs_bucket is not None,
+            "local_fallback_enabled": self.config.enable_local_fallback,
+            "cache_enabled": self.config.enable_cache,
+            "cache_size": len(self._cache),
+            "metrics": (
+                self.metrics.get_metrics_summary()
+                if self.metrics and hasattr(self.metrics, "get_metrics_summary")
+                else {}
+            ),
         }
 
 
 # Global instance
 _file_storage_instance = None
+
 
 def get_file_storage(config: Optional[Dict[str, Any]] = None) -> FileStorage:
     """Get the global file storage instance."""
@@ -695,12 +738,16 @@ def get_file_storage(config: Optional[Dict[str, Any]] = None) -> FileStorage:
     if _file_storage_instance is None:
         if config is None:
             from aiecs.config.config import get_settings
+
             settings = get_settings()
             config = settings.file_storage_config
         _file_storage_instance = FileStorage(config)
     return _file_storage_instance
 
-async def initialize_file_storage(config: Optional[Dict[str, Any]] = None) -> FileStorage:
+
+async def initialize_file_storage(
+    config: Optional[Dict[str, Any]] = None,
+) -> FileStorage:
     """Initialize and return the file storage instance."""
     storage = get_file_storage(config)
     await storage.initialize()

@@ -2915,6 +2915,23 @@ build = ["build", "twine"]
 test = ["pytest", "pytest-cov"]
 
 [[package]]
+name = "lark-parser"
+version = "0.12.0"
+description = "a modern parsing library"
+optional = false
+python-versions = "*"
+groups = ["dev"]
+files = [
+    {file = "lark-parser-0.12.0.tar.gz", hash = "sha256:15967db1f1214013dca65b1180745047b9be457d73da224fcda3d9dd4e96a138"},
+    {file = "lark_parser-0.12.0-py2.py3-none-any.whl", hash = "sha256:0eaf30cb5ba787fe404d73a7d6e61df97b21d5a63ac26c5008c78a494373c675"},
+]
+
+[package.extras]
+atomic-cache = ["atomicwrites"]
+nearley = ["js2py"]
+regex = ["regex"]
+
+[[package]]
 name = "libcst"
 version = "1.8.5"
 description = "A concrete syntax tree with AST-like properties for Python 3.0 through 3.13 programs."
@@ -7761,4 +7778,4 @@ dev = ["black", "bump-pydantic", "flake8", "mypy", "pytest", "pytest-asyncio", "
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.13"
-content-hash = "905d4f113e66a1a0db0006f33b5db1687db1e951b5c03620eb138115fe99106d"
+content-hash = "fefa626922c63a378a538b2d8e1df68f6bcf0dc99d45045f05d75149a9ab94c6"

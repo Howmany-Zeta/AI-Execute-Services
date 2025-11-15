@@ -25,14 +25,31 @@ class ExecutorMetrics:
             start_http_server(self.metrics_port)
             self.metrics = {
                 "intent_latency": Histogram("intent_latency_seconds", "Latency of intent parsing"),
-                "intent_success": Counter("intent_success_total", "Number of successful intent parsings"),
-                "intent_retries": Counter("intent_retries_total", "Number of intent parsing retries"),
+                "intent_success": Counter(
+                    "intent_success_total",
+                    "Number of successful intent parsings",
+                ),
+                "intent_retries": Counter(
+                    "intent_retries_total", "Number of intent parsing retries"
+                ),
                 "plan_latency": Histogram("plan_latency_seconds", "Latency of task planning"),
                 "plan_success": Counter("plan_success_total", "Number of successful plans"),
                 "plan_retries": Counter("plan_retries_total", "Number of plan retries"),
-                "execute_latency": Histogram("execute_latency_seconds", "Latency of task execution", ["task_type"]),
-                "execute_success": Counter("execute_success_total", "Number of successful executions", ["task_type"]),
-                "execute_retries": Counter("execute_retries_total", "Number of execution retries", ["task_type"]),
+                "execute_latency": Histogram(
+                    "execute_latency_seconds",
+                    "Latency of task execution",
+                    ["task_type"],
+                ),
+                "execute_success": Counter(
+                    "execute_success_total",
+                    "Number of successful executions",
+                    ["task_type"],
+                ),
+                "execute_retries": Counter(
+                    "execute_retries_total",
+                    "Number of execution retries",
+                    ["task_type"],
+                ),
             }
             logger.info(f"Prometheus metrics server started on port {self.metrics_port}")
         except Exception as e:
@@ -54,7 +71,12 @@ class ExecutorMetrics:
             metric = metric.labels(**labels)
         metric.inc()
 
-    def record_operation_failure(self, operation: str, error_type: str, labels: Optional[Dict[str, str]] = None):
+    def record_operation_failure(
+        self,
+        operation: str,
+        error_type: str,
+        labels: Optional[Dict[str, str]] = None,
+    ):
         """Record operation failure"""
         if not self.enable_metrics:
             return
@@ -70,6 +92,7 @@ class ExecutorMetrics:
 
     def with_metrics(self, metric_name: str, labels: Optional[Dict[str, str]] = None):
         """Monitoring decorator"""
+
         def decorator(func):
             @functools.wraps(func)
             async def wrapper(*args, **kwargs):
@@ -93,7 +116,9 @@ class ExecutorMetrics:
                     except Exception as e:
                         logger.error(f"Error in {func.__name__}: {e}")
                         raise
+
             return wrapper
+
         return decorator
 
     def get_metrics_summary(self) -> Dict[str, Any]:
@@ -104,10 +129,16 @@ class ExecutorMetrics:
         return {
             "metrics_enabled": True,
             "metrics_port": self.metrics_port,
-            "available_metrics": list(self.metrics.keys())
+            "available_metrics": list(self.metrics.keys()),
         }
 
-    def record_operation(self, operation_type: str, success: bool = True, duration: Optional[float] = None, **kwargs):
+    def record_operation(
+        self,
+        operation_type: str,
+        success: bool = True,
+        duration: Optional[float] = None,
+        **kwargs,
+    ):
         """Record a general operation for metrics tracking"""
         if not self.enable_metrics:
             return
@@ -115,10 +146,10 @@ class ExecutorMetrics:
         try:
             # Record operation success/failure
             if success:
-                self.record_operation_success(operation_type, kwargs.get('labels'))
+                self.record_operation_success(operation_type, kwargs.get("labels"))
             else:
-                error_type = kwargs.get('error_type', 'unknown')
-                self.record_operation_failure(operation_type, error_type, kwargs.get('labels'))
+                error_type = kwargs.get("error_type", "unknown")
+                self.record_operation_failure(operation_type, error_type, kwargs.get("labels"))
 
             # Record operation latency if provided
             if duration is not None:
@@ -127,7 +158,12 @@ class ExecutorMetrics:
         except Exception as e:
             logger.warning(f"Failed to record operation metrics: {e}")
 
-    def record_duration(self, operation: str, duration: float, labels: Optional[Dict[str, str]] = None):
+    def record_duration(
+        self,
+        operation: str,
+        duration: float,
+        labels: Optional[Dict[str, str]] = None,
+    ):
         """Record operation duration for metrics tracking"""
         if not self.enable_metrics:
             return

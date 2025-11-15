@@ -20,41 +20,41 @@ logger = logging.getLogger(__name__)
 class GraphMemoryMixin:
     """
     Mixin to add graph memory capabilities to ContextEngine.
-    
+
     This mixin extends ContextEngine with methods to:
     - Store knowledge entities and relations
     - Retrieve knowledge based on context
     - Link conversation to knowledge graph
     - Maintain graph-based conversation context
-    
+
     Usage:
         class ContextEngineWithGraph(ContextEngine, GraphMemoryMixin):
             def __init__(self, graph_store: GraphStore, ...):
                 super().__init__(...)
                 self.graph_store = graph_store
     """
-    
+
     # Note: This assumes the class has self.graph_store: Optional[GraphStore]
-    
+
     async def store_knowledge(
         self,
         session_id: str,
         entity: Entity,
         relations: Optional[List[Relation]] = None,
-        link_to_session: bool = True
+        link_to_session: bool = True,
     ) -> bool:
         """
         Store knowledge entity (and optional relations) to the graph.
-        
+
         Args:
             session_id: Session identifier
             entity: Entity to store
             relations: Optional list of relations involving this entity
             link_to_session: Whether to create a relation linking entity to session
-            
+
         Returns:
             True if stored successfully, False otherwise
-            
+
         Example:
             # Store a new person entity from conversation
             person = Entity(
@@ -62,32 +62,32 @@ class GraphMemoryMixin:
                 entity_type="Person",
                 properties={"name": "Alice", "role": "Engineer"}
             )
-            
+
             await context_engine.store_knowledge(
                 session_id="session_1",
                 entity=person,
                 link_to_session=True
             )
         """
-        if not hasattr(self, 'graph_store') or self.graph_store is None:
+        if not hasattr(self, "graph_store") or self.graph_store is None:
             logger.warning("GraphStore not available, cannot store knowledge")
             return False
-        
+
         try:
             # Store entity
             await self.graph_store.add_entity(entity)
             logger.debug(f"Stored entity {entity.id} to graph")
-            
+
             # Store relations if provided
             if relations:
                 for relation in relations:
                     await self.graph_store.add_relation(relation)
                 logger.debug(f"Stored {len(relations)} relations to graph")
-            
+
             # Link entity to session if requested
             if link_to_session:
                 session_entity_id = f"session_{session_id}"
-                
+
                 # Create session entity if it doesn't exist
                 session_entity = await self.graph_store.get_entity(session_entity_id)
                 if not session_entity:
@@ -96,49 +96,49 @@ class GraphMemoryMixin:
                         entity_type="Session",
                         properties={
                             "session_id": session_id,
-                            "created_at": datetime.utcnow().isoformat()
-                        }
+                            "created_at": datetime.utcnow().isoformat(),
+                        },
                     )
                     await self.graph_store.add_entity(session_entity)
-                
+
                 # Create MENTIONED_IN relation
                 relation = Relation(
                     id=f"mention_{entity.id}_{session_id}_{datetime.utcnow().timestamp()}",
                     source_id=entity.id,
                     target_id=session_entity_id,
                     relation_type="MENTIONED_IN",
-                    properties={"timestamp": datetime.utcnow().isoformat()}
+                    properties={"timestamp": datetime.utcnow().isoformat()},
                 )
                 await self.graph_store.add_relation(relation)
                 logger.debug(f"Linked entity {entity.id} to session {session_id}")
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to store knowledge: {e}")
             return False
-    
+
     async def retrieve_knowledge(
         self,
         session_id: str,
         query: Optional[str] = None,
         entity_types: Optional[List[str]] = None,
         limit: int = 10,
-        include_session_context: bool = True
+        include_session_context: bool = True,
     ) -> List[Entity]:
         """
         Retrieve knowledge entities relevant to the session and/or query.
-        
+
         Args:
             session_id: Session identifier
             query: Optional search query (uses embedding if available)
             entity_types: Optional filter by entity types
             limit: Maximum number of entities to retrieve
             include_session_context: Whether to include entities mentioned in this session
-            
+
         Returns:
             List of relevant entities
-            
+
         Example:
             # Retrieve people mentioned in this session
             people = await context_engine.retrieve_knowledge(
@@ -147,35 +147,38 @@ class GraphMemoryMixin:
                 limit=5
             )
         """
-        if not hasattr(self, 'graph_store') or self.graph_store is None:
+        if not hasattr(self, "graph_store") or self.graph_store is None:
             logger.warning("GraphStore not available, cannot retrieve knowledge")
             return []
-        
+
         try:
             entities = []
-            
+
             # 1. Get session-specific entities if requested
             if include_session_context:
                 session_entities = await self._get_session_entities(session_id)
                 entities.extend(session_entities[:limit])
-            
+
             # 2. If query provided, use vector search (if available)
             if query and len(entities) < limit:
                 # Note: This assumes entities have embeddings
                 # In a real implementation, you'd generate query embedding
                 try:
-                    from aiecs.infrastructure.graph_storage.in_memory import InMemoryGraphStore
+                    from aiecs.infrastructure.graph_storage.in_memory import (
+                        InMemoryGraphStore,
+                    )
+
                     if isinstance(self.graph_store, InMemoryGraphStore):
                         # For now, just use basic search
                         # TODO: Implement embedding-based search
                         pass
                 except ImportError:
                     pass
-            
+
             # 3. Filter by entity types if specified
             if entity_types:
                 entities = [e for e in entities if e.entity_type in entity_types]
-            
+
             # Remove duplicates
             seen = set()
             unique_entities = []
@@ -183,65 +186,66 @@ class GraphMemoryMixin:
                 if entity.id not in seen:
                     seen.add(entity.id)
                     unique_entities.append(entity)
-            
+
             return unique_entities[:limit]
-            
+
         except Exception as e:
             logger.error(f"Failed to retrieve knowledge: {e}")
             return []
-    
+
     async def _get_session_entities(self, session_id: str) -> List[Entity]:
         """Get all entities mentioned in this session."""
         try:
             session_entity_id = f"session_{session_id}"
-            
+
             # Get session entity
             session_entity = await self.graph_store.get_entity(session_entity_id)
             if not session_entity:
                 return []
-            
+
             # Get all entities with MENTIONED_IN relation to this session
             # Note: We need to traverse backwards from session to entities
             # get_neighbors only accepts single relation_type, not a list
-            neighbors = await self.graph_store.get_neighbors(
-                session_entity_id,
-                relation_type="MENTIONED_IN",
-                direction="incoming"  # Get entities that point TO the session
-            )
-            
+            # neighbors = await self.graph_store.get_neighbors(
+            #     session_entity_id,
+            #     relation_type="MENTIONED_IN",
+            #     direction="incoming"  # Get entities that point TO the session
+            # )  # Reserved for future use
+
             # Neighbors are entities that have MENTIONED_IN relation to session
             # We need to get entities that point TO the session
-            # This requires iterating through all entities (not ideal, but functional)
-            
+            # This requires iterating through all entities (not ideal, but
+            # functional)
+
             # For now, return empty - proper implementation would require
             # inverse index or traversal from session
             # This is a simplified implementation
             return []
-            
+
         except Exception as e:
             logger.error(f"Failed to get session entities: {e}")
             return []
-    
+
     async def add_graph_conversation_context(
         self,
         session_id: str,
         entity_ids: List[str],
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
         Add graph-based context to conversation.
-        
+
         Links specific entities to the current conversation session,
         providing additional context for the agent.
-        
+
         Args:
             session_id: Session identifier
             entity_ids: List of entity IDs to link to session
             metadata: Optional metadata about the context
-            
+
         Returns:
             True if successful, False otherwise
-            
+
         Example:
             # Add context entities to conversation
             await context_engine.add_graph_conversation_context(
@@ -250,13 +254,13 @@ class GraphMemoryMixin:
                 metadata={"context_type": "background_knowledge"}
             )
         """
-        if not hasattr(self, 'graph_store') or self.graph_store is None:
+        if not hasattr(self, "graph_store") or self.graph_store is None:
             logger.warning("GraphStore not available, cannot add graph context")
             return False
-        
+
         try:
             session_entity_id = f"session_{session_id}"
-            
+
             # Ensure session entity exists
             session_entity = await self.graph_store.get_entity(session_entity_id)
             if not session_entity:
@@ -265,11 +269,11 @@ class GraphMemoryMixin:
                     entity_type="Session",
                     properties={
                         "session_id": session_id,
-                        "created_at": datetime.utcnow().isoformat()
-                    }
+                        "created_at": datetime.utcnow().isoformat(),
+                    },
                 )
                 await self.graph_store.add_entity(session_entity)
-            
+
             # Link each entity to session
             for entity_id in entity_ids:
                 # Verify entity exists
@@ -277,7 +281,7 @@ class GraphMemoryMixin:
                 if not entity:
                     logger.warning(f"Entity {entity_id} not found, skipping")
                     continue
-                
+
                 # Create CONTEXT_FOR relation
                 relation = Relation(
                     id=f"context_{entity_id}_{session_id}_{datetime.utcnow().timestamp()}",
@@ -286,36 +290,34 @@ class GraphMemoryMixin:
                     relation_type="CONTEXT_FOR",
                     properties={
                         "timestamp": datetime.utcnow().isoformat(),
-                        "metadata": metadata or {}
-                    }
+                        "metadata": metadata or {},
+                    },
                 )
                 await self.graph_store.add_relation(relation)
-            
+
             logger.info(f"Added {len(entity_ids)} entities as context for session {session_id}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to add graph conversation context: {e}")
             return False
-    
+
     async def get_session_knowledge_graph(
-        self,
-        session_id: str,
-        max_depth: int = 2
+        self, session_id: str, max_depth: int = 2
     ) -> Dict[str, Any]:
         """
         Get a subgraph of knowledge relevant to this session.
-        
+
         Returns entities and relations mentioned or used as context
         in this session, up to a specified depth.
-        
+
         Args:
             session_id: Session identifier
             max_depth: Maximum depth for graph traversal
-            
+
         Returns:
             Dictionary with 'entities' and 'relations' lists
-            
+
         Example:
             # Get knowledge graph for session
             subgraph = await context_engine.get_session_knowledge_graph(
@@ -325,90 +327,89 @@ class GraphMemoryMixin:
             print(f"Entities: {len(subgraph['entities'])}")
             print(f"Relations: {len(subgraph['relations'])}")
         """
-        if not hasattr(self, 'graph_store') or self.graph_store is None:
+        if not hasattr(self, "graph_store") or self.graph_store is None:
             logger.warning("GraphStore not available")
             return {"entities": [], "relations": []}
-        
+
         try:
             session_entity_id = f"session_{session_id}"
-            
+
             # Get session entity
             session_entity = await self.graph_store.get_entity(session_entity_id)
             if not session_entity:
                 return {"entities": [], "relations": []}
-            
+
             entities = [session_entity]
             relations = []
             visited = {session_entity_id}
-            
+
             # Traverse from session entity
             current_level = [session_entity_id]
-            
+
             for depth in range(max_depth):
                 next_level = []
-                
+
                 for entity_id in current_level:
                     # Get neighbors (check both relation types separately)
                     neighbors_mentioned = await self.graph_store.get_neighbors(
                         entity_id,
                         relation_type="MENTIONED_IN",
-                        direction="both"
+                        direction="both",
                     )
                     neighbors_context = await self.graph_store.get_neighbors(
                         entity_id,
                         relation_type="CONTEXT_FOR",
-                        direction="both"
+                        direction="both",
                     )
                     # Combine and deduplicate
-                    neighbors = list({n.id: n for n in neighbors_mentioned + neighbors_context}.values())
-                    
+                    neighbors = list(
+                        {n.id: n for n in neighbors_mentioned + neighbors_context}.values()
+                    )
+
                     for neighbor in neighbors:
                         if neighbor.id not in visited:
                             visited.add(neighbor.id)
                             entities.append(neighbor)
                             next_level.append(neighbor.id)
-                    
+
                     # Note: In a complete implementation, we'd also collect
                     # the relations between entities here
-                
+
                 current_level = next_level
                 if not current_level:
                     break
-            
+
             return {
                 "entities": [e.model_dump() for e in entities],
-                "relations": relations  # Would be populated in full implementation
+                "relations": relations,  # Would be populated in full implementation
             }
-            
+
         except Exception as e:
             logger.error(f"Failed to get session knowledge graph: {e}")
             return {"entities": [], "relations": []}
-    
-    async def clear_session_knowledge(
-        self,
-        session_id: str,
-        remove_entities: bool = False
-    ) -> bool:
+
+    async def clear_session_knowledge(self, session_id: str, remove_entities: bool = False) -> bool:
         """
         Clear knowledge graph associations for a session.
-        
+
         Args:
             session_id: Session identifier
             remove_entities: If True, also remove the session entity itself
-            
+
         Returns:
             True if successful, False otherwise
         """
-        if not hasattr(self, 'graph_store') or self.graph_store is None:
+        if not hasattr(self, "graph_store") or self.graph_store is None:
             logger.warning("GraphStore not available")
             return False
-        
+
         try:
             session_entity_id = f"session_{session_id}"
-            
+
             if remove_entities:
-                # Check if delete_entity method exists (SQLite has it, InMemory might not)
-                if hasattr(self.graph_store, 'delete_entity'):
+                # Check if delete_entity method exists (SQLite has it, InMemory
+                # might not)
+                if hasattr(self.graph_store, "delete_entity"):
                     await self.graph_store.delete_entity(session_entity_id)
                     logger.info(f"Removed session entity {session_entity_id}")
                 else:
@@ -418,9 +419,9 @@ class GraphMemoryMixin:
                         f"delete_entity not available for {type(self.graph_store).__name__}, "
                         f"session entity {session_entity_id} not removed"
                     )
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to clear session knowledge: {e}")
             return False
@@ -429,33 +430,33 @@ class GraphMemoryMixin:
 class ContextEngineWithGraph(GraphMemoryMixin):
     """
     ContextEngine extended with graph memory capabilities.
-    
+
     This class can be used as a standalone context engine with graph support,
     or as a mixin to extend existing ContextEngine instances.
-    
+
     Example:
         from aiecs.domain.context import ContextEngine
         from aiecs.domain.context.graph_memory import ContextEngineWithGraph
         from aiecs.infrastructure.graph_storage import InMemoryGraphStore
-        
+
         # Create graph store
         graph_store = InMemoryGraphStore()
         await graph_store.initialize()
-        
+
         # Create context engine with graph support
         # Note: Actual usage would involve proper inheritance or composition
         context_engine = ContextEngine()
         context_engine.graph_store = graph_store
         await context_engine.initialize()
-        
+
         # Now you can use graph memory methods
         await context_engine.store_knowledge(session_id, entity)
     """
-    
+
     def __init__(self, graph_store: Optional[GraphStore] = None):
         """
         Initialize with optional graph store.
-        
+
         Args:
             graph_store: Optional knowledge graph store
         """
@@ -464,4 +465,3 @@ class ContextEngineWithGraph(GraphMemoryMixin):
             f"ContextEngineWithGraph initialized with graph_store="
             f"{'enabled' if graph_store else 'disabled'}"
         )
-

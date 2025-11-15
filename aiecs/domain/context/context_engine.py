@@ -13,14 +13,17 @@ Key Features:
 6. Integration with BaseServiceCheckpointer
 """
 
+from aiecs.core.interface.storage_interface import (
+    IStorageBackend,
+    ICheckpointerBackend,
+)
+from aiecs.domain.task.task_context import TaskContext, ContextUpdate
 import json
 import logging
-import time
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, List, AsyncGenerator, Union
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, asdict
-from contextlib import asynccontextmanager
 
 
 class DateTimeEncoder(json.JSONEncoder):
@@ -31,16 +34,16 @@ class DateTimeEncoder(json.JSONEncoder):
             return obj.isoformat()
         return super().default(obj)
 
+
 # Import TaskContext for base functionality
-from aiecs.domain.task.task_context import TaskContext, ContextUpdate
 
 # Import core storage interfaces
-from aiecs.core.interface.storage_interface import IStorageBackend, ICheckpointerBackend
 
 # Redis client import - use existing infrastructure
 try:
     import redis.asyncio as redis
     from aiecs.infrastructure.persistence.redis_client import get_redis_client
+
     REDIS_AVAILABLE = True
 except ImportError:
     redis = None
@@ -53,6 +56,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SessionMetrics:
     """Session-level performance metrics."""
+
     session_id: str
     user_id: str
     created_at: datetime
@@ -66,11 +70,11 @@ class SessionMetrics:
         return {
             **asdict(self),
             "created_at": self.created_at.isoformat(),
-            "last_activity": self.last_activity.isoformat()
+            "last_activity": self.last_activity.isoformat(),
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'SessionMetrics':
+    def from_dict(cls, data: Dict[str, Any]) -> "SessionMetrics":
         data = data.copy()
         data["created_at"] = datetime.fromisoformat(data["created_at"])
         data["last_activity"] = datetime.fromisoformat(data["last_activity"])
@@ -80,6 +84,7 @@ class SessionMetrics:
 @dataclass
 class ConversationMessage:
     """Structured conversation message."""
+
     role: str  # user, assistant, system
     content: str
     timestamp: datetime
@@ -90,11 +95,11 @@ class ConversationMessage:
             "role": self.role,
             "content": self.content,
             "timestamp": self.timestamp.isoformat(),
-            "metadata": self.metadata or {}
+            "metadata": self.metadata or {},
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'ConversationMessage':
+    def from_dict(cls, data: Dict[str, Any]) -> "ConversationMessage":
         data = data.copy()
         data["timestamp"] = datetime.fromisoformat(data["timestamp"])
         return cls(**data)
@@ -139,7 +144,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             "total_sessions": 0,
             "active_sessions": 0,
             "total_messages": 0,
-            "total_checkpoints": 0
+            "total_checkpoints": 0,
         }
 
         logger.info("ContextEngine initialized")
@@ -152,7 +157,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         try:
             # ✅ 修复方案：在当前事件循环中创建新的 RedisClient 实例
-            # 
+            #
             # 问题根源：
             # - 全局 RedisClient 单例在应用启动的事件循环A中创建
             # - ContextEngine 可能在不同的事件循环B中被初始化（例如在请求处理中）
@@ -163,19 +168,23 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             # - 为每个 ContextEngine 实例创建独立的 RedisClient
             # - 使用 RedisClient 包装器保持架构一致性
             # - 在当前事件循环中初始化，确保事件循环匹配
-            
-            from aiecs.infrastructure.persistence.redis_client import RedisClient
-            
+
+            from aiecs.infrastructure.persistence.redis_client import (
+                RedisClient,
+            )
+
             # 创建专属的 RedisClient 实例（在当前事件循环中）
             self._redis_client_wrapper = RedisClient()
             await self._redis_client_wrapper.initialize()
-            
+
             # 获取底层 redis.Redis 客户端用于现有代码
             self.redis_client = await self._redis_client_wrapper.get_client()
 
             # Test connection
             await self.redis_client.ping()
-            logger.info("ContextEngine connected to Redis successfully using RedisClient wrapper in current event loop")
+            logger.info(
+                "ContextEngine connected to Redis successfully using RedisClient wrapper in current event loop"
+            )
             return True
 
         except Exception as e:
@@ -187,7 +196,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
     async def close(self):
         """Close Redis connection."""
-        if hasattr(self, '_redis_client_wrapper') and self._redis_client_wrapper:
+        if hasattr(self, "_redis_client_wrapper") and self._redis_client_wrapper:
             # 使用 RedisClient 包装器的 close 方法
             await self._redis_client_wrapper.close()
             self._redis_client_wrapper = None
@@ -200,10 +209,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
     # ==================== Session Management ====================
 
     async def create_session(
-        self,
-        session_id: str,
-        user_id: str,
-        metadata: Dict[str, Any] = None
+        self, session_id: str, user_id: str, metadata: Dict[str, Any] = None
     ) -> SessionMetrics:
         """Create a new session."""
         now = datetime.utcnow()
@@ -211,18 +217,20 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             session_id=session_id,
             user_id=user_id,
             created_at=now,
-            last_activity=now
+            last_activity=now,
         )
 
         # Store session
         await self._store_session(session)
 
         # Create associated TaskContext
-        task_context = TaskContext({
-            "user_id": user_id,
-            "chat_id": session_id,
-            "metadata": metadata or {}
-        })
+        task_context = TaskContext(
+            {
+                "user_id": user_id,
+                "chat_id": session_id,
+                "metadata": metadata or {},
+            }
+        )
         await self._store_task_context(session_id, task_context)
 
         # Update metrics
@@ -251,7 +259,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         updates: Dict[str, Any] = None,
         increment_requests: bool = False,
         add_processing_time: float = 0.0,
-        mark_error: bool = False
+        mark_error: bool = False,
     ) -> bool:
         """Update session with activity and metrics."""
         session = await self.get_session(session_id)
@@ -292,7 +300,9 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         await self._store_session(session)
 
         # Update global metrics
-        self._global_metrics["active_sessions"] = max(0, self._global_metrics["active_sessions"] - 1)
+        self._global_metrics["active_sessions"] = max(
+            0, self._global_metrics["active_sessions"] - 1
+        )
 
         logger.info(f"Ended session {session_id} with status: {status}")
         return True
@@ -304,9 +314,9 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 await self.redis_client.hset(
                     "sessions",
                     session.session_id,
-                    json.dumps(session.to_dict(), cls=DateTimeEncoder)
+                    json.dumps(session.to_dict(), cls=DateTimeEncoder),
                 )
-                await self.redis_client.expire(f"sessions", self.session_ttl)
+                await self.redis_client.expire("sessions", self.session_ttl)
                 return
             except Exception as e:
                 logger.error(f"Failed to store session to Redis: {e}")
@@ -321,14 +331,14 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         session_id: str,
         role: str,
         content: str,
-        metadata: Dict[str, Any] = None
+        metadata: Dict[str, Any] = None,
     ) -> bool:
         """Add message to conversation history."""
         message = ConversationMessage(
             role=role,
             content=content,
             timestamp=datetime.utcnow(),
-            metadata=metadata
+            metadata=metadata,
         )
 
         # Store message
@@ -343,19 +353,16 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         return True
 
     async def get_conversation_history(
-        self,
-        session_id: str,
-        limit: int = 50
+        self, session_id: str, limit: int = 50
     ) -> List[ConversationMessage]:
         """Get conversation history for a session."""
         if self.redis_client:
             try:
                 messages_data = await self.redis_client.lrange(
-                    f"conversation:{session_id}",
-                    -limit,
-                    -1
+                    f"conversation:{session_id}", -limit, -1
                 )
-                # Since lpush adds to the beginning, we need to reverse to get chronological order
+                # Since lpush adds to the beginning, we need to reverse to get
+                # chronological order
                 messages = [
                     ConversationMessage.from_dict(json.loads(msg))
                     for msg in reversed(messages_data)
@@ -375,19 +382,14 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 # Add to list
                 await self.redis_client.lpush(
                     f"conversation:{session_id}",
-                    json.dumps(message.to_dict(), cls=DateTimeEncoder)
+                    json.dumps(message.to_dict(), cls=DateTimeEncoder),
                 )
                 # Trim to limit
                 await self.redis_client.ltrim(
-                    f"conversation:{session_id}",
-                    -self.conversation_limit,
-                    -1
+                    f"conversation:{session_id}", -self.conversation_limit, -1
                 )
                 # Set TTL
-                await self.redis_client.expire(
-                    f"conversation:{session_id}",
-                    self.session_ttl
-                )
+                await self.redis_client.expire(f"conversation:{session_id}", self.session_ttl)
                 return
             except Exception as e:
                 logger.error(f"Failed to store message to Redis: {e}")
@@ -400,7 +402,9 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         # Trim to limit
         if len(self._memory_conversations[session_id]) > self.conversation_limit:
-            self._memory_conversations[session_id] = self._memory_conversations[session_id][-self.conversation_limit:]
+            self._memory_conversations[session_id] = self._memory_conversations[session_id][
+                -self.conversation_limit :
+            ]
 
     # ==================== TaskContext Integration ====================
 
@@ -426,7 +430,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 await self.redis_client.hset(
                     "task_contexts",
                     session_id,
-                    json.dumps(context.to_dict(), cls=DateTimeEncoder)
+                    json.dumps(context.to_dict(), cls=DateTimeEncoder),
                 )
                 await self.redis_client.expire("task_contexts", self.session_ttl)
                 return
@@ -448,21 +452,21 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                     timestamp=entry["timestamp"],
                     update_type=entry["update_type"],
                     data=entry["data"],
-                    metadata=entry["metadata"]
+                    metadata=entry["metadata"],
                 )
                 for entry in data["context_history"]
             ]
 
         return context
 
-    # ==================== Checkpoint Management (for BaseServiceCheckpointer) ====================
+    # ==================== Checkpoint Management (for BaseServiceCheckpointer)
 
     async def store_checkpoint(
         self,
         thread_id: str,
         checkpoint_id: str,
         checkpoint_data: Dict[str, Any],
-        metadata: Dict[str, Any] = None
+        metadata: Dict[str, Any] = None,
     ) -> bool:
         """Store checkpoint data for LangGraph workflows."""
         checkpoint = {
@@ -470,7 +474,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             "thread_id": thread_id,
             "data": checkpoint_data,
             "metadata": metadata or {},
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.utcnow().isoformat(),
         }
 
         if self.redis_client:
@@ -479,13 +483,10 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 await self.redis_client.hset(
                     f"checkpoints:{thread_id}",
                     checkpoint_id,
-                    json.dumps(checkpoint, cls=DateTimeEncoder)
+                    json.dumps(checkpoint, cls=DateTimeEncoder),
                 )
                 # Set TTL
-                await self.redis_client.expire(
-                    f"checkpoints:{thread_id}",
-                    self.checkpoint_ttl
-                )
+                await self.redis_client.expire(f"checkpoints:{thread_id}", self.checkpoint_ttl)
 
                 # Update global metrics
                 self._global_metrics["total_checkpoints"] += 1
@@ -500,9 +501,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         return True
 
     async def get_checkpoint(
-        self,
-        thread_id: str,
-        checkpoint_id: str = None
+        self, thread_id: str, checkpoint_id: str = None
     ) -> Optional[Dict[str, Any]]:
         """Get checkpoint data. If checkpoint_id is None, get the latest."""
         if self.redis_client:
@@ -519,7 +518,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                         # Sort by creation time and get latest
                         latest = max(
                             checkpoints.values(),
-                            key=lambda x: json.loads(x)["created_at"]
+                            key=lambda x: json.loads(x)["created_at"],
                         )
                         return json.loads(latest)
             except Exception as e:
@@ -532,23 +531,18 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         else:
             # Get latest from memory
             thread_checkpoints = {
-                k: v for k, v in self._memory_checkpoints.items()
-                if k.startswith(f"{thread_id}:")
+                k: v for k, v in self._memory_checkpoints.items() if k.startswith(f"{thread_id}:")
             }
             if thread_checkpoints:
                 latest_key = max(
                     thread_checkpoints.keys(),
-                    key=lambda k: thread_checkpoints[k]["created_at"]
+                    key=lambda k: thread_checkpoints[k]["created_at"],
                 )
                 return thread_checkpoints[latest_key]
 
         return None
 
-    async def list_checkpoints(
-        self,
-        thread_id: str,
-        limit: int = 10
-    ) -> List[Dict[str, Any]]:
+    async def list_checkpoints(self, thread_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         """List checkpoints for a thread, ordered by creation time (newest first)."""
         if self.redis_client:
             try:
@@ -562,8 +556,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         # Fallback to memory
         thread_checkpoints = [
-            v for k, v in self._memory_checkpoints.items()
-            if k.startswith(f"{thread_id}:")
+            v for k, v in self._memory_checkpoints.items() if k.startswith(f"{thread_id}:")
         ]
         thread_checkpoints.sort(key=lambda x: x["created_at"], reverse=True)
         return thread_checkpoints[:limit]
@@ -596,7 +589,8 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         else:
             # Memory cleanup
             expired_sessions = [
-                session_id for session_id, session in self._memory_sessions.items()
+                session_id
+                for session_id, session in self._memory_sessions.items()
                 if session.last_activity < cutoff_time
             ]
 
@@ -631,8 +625,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
             # Remove checkpoints
             checkpoint_keys = [
-                k for k in self._memory_checkpoints.keys()
-                if k.startswith(f"{session_id}:")
+                k for k in self._memory_checkpoints.keys() if k.startswith(f"{session_id}:")
             ]
             for key in checkpoint_keys:
                 self._memory_checkpoints.pop(key, None)
@@ -646,24 +639,22 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         if self.redis_client:
             try:
                 sessions_data = await self.redis_client.hgetall("sessions")
-                active_sessions_count = len([
-                    s for s in sessions_data.values()
-                    if json.loads(s)["status"] == "active"
-                ])
+                active_sessions_count = len(
+                    [s for s in sessions_data.values() if json.loads(s)["status"] == "active"]
+                )
             except Exception as e:
                 logger.error(f"Failed to get metrics from Redis: {e}")
         else:
-            active_sessions_count = len([
-                s for s in self._memory_sessions.values()
-                if s.status == "active"
-            ])
+            active_sessions_count = len(
+                [s for s in self._memory_sessions.values() if s.status == "active"]
+            )
 
         return {
             **self._global_metrics,
             "active_sessions": active_sessions_count,
             "storage_backend": "redis" if self.redis_client else "memory",
             "redis_connected": self.redis_client is not None,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
         }
 
     async def health_check(self) -> Dict[str, Any]:
@@ -672,7 +663,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             "status": "healthy",
             "storage_backend": "redis" if self.redis_client else "memory",
             "redis_connected": False,
-            "issues": []
+            "issues": [],
         }
 
         # Check Redis connection
@@ -687,10 +678,10 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         # Check memory usage (basic check)
         if not self.redis_client:
             total_memory_items = (
-                len(self._memory_sessions) +
-                len(self._memory_conversations) +
-                len(self._memory_contexts) +
-                len(self._memory_checkpoints)
+                len(self._memory_sessions)
+                + len(self._memory_conversations)
+                + len(self._memory_contexts)
+                + len(self._memory_checkpoints)
             )
             if total_memory_items > 10000:  # Arbitrary threshold
                 health["issues"].append(f"High memory usage: {total_memory_items} items")
@@ -698,14 +689,14 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         return health
 
-    # ==================== ICheckpointerBackend Implementation ====================
+    # ==================== ICheckpointerBackend Implementation ===============
 
     async def put_checkpoint(
         self,
         thread_id: str,
         checkpoint_id: str,
         checkpoint_data: Dict[str, Any],
-        metadata: Dict[str, Any] = None
+        metadata: Dict[str, Any] = None,
     ) -> bool:
         """Store a checkpoint for LangGraph workflows (ICheckpointerBackend interface)."""
         return await self.store_checkpoint(thread_id, checkpoint_id, checkpoint_data, metadata)
@@ -715,7 +706,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         thread_id: str,
         checkpoint_id: str,
         task_id: str,
-        writes_data: List[tuple]
+        writes_data: List[tuple],
     ) -> bool:
         """Store intermediate writes for a checkpoint (ICheckpointerBackend interface)."""
         writes_key = f"writes:{thread_id}:{checkpoint_id}:{task_id}"
@@ -724,7 +715,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             "checkpoint_id": checkpoint_id,
             "task_id": task_id,
             "writes": writes_data,
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.utcnow().isoformat(),
         }
 
         if self.redis_client:
@@ -732,11 +723,10 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 await self.redis_client.hset(
                     f"checkpoint_writes:{thread_id}",
                     f"{checkpoint_id}:{task_id}",
-                    json.dumps(writes_payload, cls=DateTimeEncoder)
+                    json.dumps(writes_payload, cls=DateTimeEncoder),
                 )
                 await self.redis_client.expire(
-                    f"checkpoint_writes:{thread_id}",
-                    self.checkpoint_ttl
+                    f"checkpoint_writes:{thread_id}", self.checkpoint_ttl
                 )
                 return True
             except Exception as e:
@@ -746,11 +736,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         self._memory_checkpoints[writes_key] = writes_payload
         return True
 
-    async def get_writes(
-        self,
-        thread_id: str,
-        checkpoint_id: str
-    ) -> List[tuple]:
+    async def get_writes(self, thread_id: str, checkpoint_id: str) -> List[tuple]:
         """Get intermediate writes for a checkpoint (ICheckpointerBackend interface)."""
         if self.redis_client:
             try:
@@ -772,20 +758,20 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 writes.extend(payload.get("writes", []))
         return writes
 
-    # ==================== ITaskContextStorage Implementation ====================
+    # ==================== ITaskContextStorage Implementation ================
 
     async def store_task_context(self, session_id: str, context: Any) -> bool:
         """Store TaskContext for a session (ITaskContextStorage interface)."""
         return await self._store_task_context(session_id, context)
 
-    # ==================== Agent Communication and Conversation Isolation ====================
+    # ==================== Agent Communication and Conversation Isolation ====
 
     async def create_conversation_session(
         self,
         session_id: str,
         participants: List[Dict[str, Any]],
         session_type: str,
-        metadata: Dict[str, Any] = None
+        metadata: Dict[str, Any] = None,
     ) -> str:
         """
         Create an isolated conversation session between participants.
@@ -799,15 +785,18 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         Returns:
             Generated session key for conversation isolation
         """
-        from .conversation_models import ConversationSession, ConversationParticipant
+        from .conversation_models import (
+            ConversationSession,
+            ConversationParticipant,
+        )
 
         # Create participant objects
         participant_objects = [
             ConversationParticipant(
-                participant_id=p.get('id'),
-                participant_type=p.get('type'),
-                participant_role=p.get('role'),
-                metadata=p.get('metadata', {})
+                participant_id=p.get("id"),
+                participant_type=p.get("type"),
+                participant_role=p.get("role"),
+                metadata=p.get("metadata", {}),
             )
             for p in participants
         ]
@@ -819,7 +808,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             session_type=session_type,
             created_at=datetime.utcnow(),
             last_activity=datetime.utcnow(),
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
 
         # Generate unique session key
@@ -842,7 +831,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         recipient_role: Optional[str],
         content: str,
         message_type: str = "communication",
-        metadata: Dict[str, Any] = None
+        metadata: Dict[str, Any] = None,
     ) -> bool:
         """
         Add a message to an agent communication session.
@@ -877,7 +866,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             content=content,
             message_type=message_type,
             timestamp=datetime.utcnow(),
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
 
         # Convert to conversation message format and store
@@ -888,7 +877,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             session_id=session_key,
             role=conv_message_dict["role"],
             content=conv_message_dict["content"],
-            metadata=conv_message_dict["metadata"]
+            metadata=conv_message_dict["metadata"],
         )
 
         # Update session activity
@@ -901,7 +890,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         self,
         session_key: str,
         limit: int = 50,
-        message_types: Optional[List[str]] = None
+        message_types: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Get conversation history for an agent communication session.
@@ -921,13 +910,13 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         if message_types:
             filtered_messages = []
             for msg in messages:
-                if hasattr(msg, 'to_dict'):
+                if hasattr(msg, "to_dict"):
                     msg_dict = msg.to_dict()
                 else:
                     msg_dict = msg
 
-                msg_metadata = msg_dict.get('metadata', {})
-                msg_type = msg_metadata.get('message_type', 'communication')
+                msg_metadata = msg_dict.get("metadata", {})
+                msg_type = msg_metadata.get("message_type", "communication")
 
                 if msg_type in message_types:
                     filtered_messages.append(msg_dict)
@@ -935,7 +924,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             return filtered_messages
 
         # Convert messages to dict format
-        return [msg.to_dict() if hasattr(msg, 'to_dict') else msg for msg in messages]
+        return [msg.to_dict() if hasattr(msg, "to_dict") else msg for msg in messages]
 
     async def _store_conversation_session(self, session_key: str, conversation_session) -> None:
         """Store conversation session metadata."""
@@ -946,14 +935,14 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                     "participant_id": p.participant_id,
                     "participant_type": p.participant_type,
                     "participant_role": p.participant_role,
-                    "metadata": p.metadata
+                    "metadata": p.metadata,
                 }
                 for p in conversation_session.participants
             ],
             "session_type": conversation_session.session_type,
             "created_at": conversation_session.created_at.isoformat(),
             "last_activity": conversation_session.last_activity.isoformat(),
-            "metadata": conversation_session.metadata
+            "metadata": conversation_session.metadata,
         }
 
         if self.redis_client:
@@ -961,7 +950,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 await self.redis_client.hset(
                     "conversation_sessions",
                     session_key,
-                    json.dumps(session_data, cls=DateTimeEncoder)
+                    json.dumps(session_data, cls=DateTimeEncoder),
                 )
                 await self.redis_client.expire("conversation_sessions", self.session_ttl)
                 return
@@ -969,7 +958,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 logger.error(f"Failed to store conversation session to Redis: {e}")
 
         # Fallback to memory (extend memory storage)
-        if not hasattr(self, '_memory_conversation_sessions'):
+        if not hasattr(self, "_memory_conversation_sessions"):
             self._memory_conversation_sessions = {}
         self._memory_conversation_sessions[session_key] = session_data
 
@@ -984,12 +973,17 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                     await self.redis_client.hset(
                         "conversation_sessions",
                         session_key,
-                        json.dumps(session_dict, cls=DateTimeEncoder)
+                        json.dumps(session_dict, cls=DateTimeEncoder),
                     )
                 return
             except Exception as e:
                 logger.error(f"Failed to update conversation session activity in Redis: {e}")
 
         # Fallback to memory
-        if hasattr(self, '_memory_conversation_sessions') and session_key in self._memory_conversation_sessions:
-            self._memory_conversation_sessions[session_key]["last_activity"] = datetime.utcnow().isoformat()
+        if (
+            hasattr(self, "_memory_conversation_sessions")
+            and session_key in self._memory_conversation_sessions
+        ):
+            self._memory_conversation_sessions[session_key][
+                "last_activity"
+            ] = datetime.utcnow().isoformat()

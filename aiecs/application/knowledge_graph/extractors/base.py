@@ -29,10 +29,7 @@ class EntityExtractor(ABC):
 
     @abstractmethod
     async def extract_entities(
-        self,
-        text: str,
-        entity_types: Optional[List[str]] = None,
-        **kwargs
+        self, text: str, entity_types: Optional[List[str]] = None, **kwargs
     ) -> List[Entity]:
         """
         Extract entities from text
@@ -50,7 +47,6 @@ class EntityExtractor(ABC):
             ValueError: If text is empty or invalid
             RuntimeError: If extraction fails
         """
-        pass
 
 
 class RelationExtractor(ABC):
@@ -83,7 +79,7 @@ class RelationExtractor(ABC):
         text: str,
         entities: List[Entity],
         relation_types: Optional[List[str]] = None,
-        **kwargs
+        **kwargs,
     ) -> List[Relation]:
         """
         Extract relations from text given known entities
@@ -102,5 +98,3 @@ class RelationExtractor(ABC):
             ValueError: If text is empty or entities list is empty
             RuntimeError: If extraction fails
         """
-        pass
-

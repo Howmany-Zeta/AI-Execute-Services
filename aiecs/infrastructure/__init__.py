@@ -15,11 +15,9 @@ __all__ = [
     "CeleryTaskManager",
     "WebSocketManager",
     "UserConfirmation",
-
     # Persistence
     "DatabaseManager",
     "RedisClient",
-
     # Monitoring
     "ExecutorMetrics",
     "TracingManager",

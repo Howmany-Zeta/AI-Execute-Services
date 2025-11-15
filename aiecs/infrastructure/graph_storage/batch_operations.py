@@ -8,7 +8,7 @@ Uses PostgreSQL COPY and multi-row INSERT for optimal performance.
 import asyncpg
 import logging
 import io
-from typing import List, Dict, Any, Optional
+from typing import List
 import json
 
 from aiecs.domain.knowledge_graph.models.entity import Entity
@@ -38,7 +38,7 @@ class BatchOperationsMixin:
         self,
         entities: List[Entity],
         batch_size: int = 1000,
-        use_copy: bool = True
+        use_copy: bool = True,
     ) -> int:
         """
         Add multiple entities efficiently
@@ -64,7 +64,7 @@ class BatchOperationsMixin:
         if not entities:
             return 0
 
-        if not hasattr(self, 'pool') or not self.pool:
+        if not hasattr(self, "pool") or not self.pool:
             raise RuntimeError("GraphStore not initialized")
 
         total_added = 0
@@ -75,7 +75,7 @@ class BatchOperationsMixin:
         else:
             # Use multi-row INSERT
             for i in range(0, len(entities), batch_size):
-                batch = entities[i:i + batch_size]
+                batch = entities[i : i + batch_size]
                 added = await self._batch_add_entities_insert(batch)
                 total_added += added
 
@@ -100,12 +100,18 @@ class BatchOperationsMixin:
         for entity in entities:
             # Serialize data
             properties_json = json.dumps(entity.properties)
-            embedding_bytes = self._serialize_embedding(entity.embedding) if hasattr(entity, 'embedding') and entity.embedding else None
+            embedding_bytes = (
+                self._serialize_embedding(entity.embedding)
+                if hasattr(entity, "embedding") and entity.embedding
+                else None
+            )
 
             # Write tab-separated values
             # Format: id \t entity_type \t properties \t embedding
-            embedding_hex = embedding_bytes.hex() if embedding_bytes else '\\N'
-            copy_data.write(f"{entity.id}\t{entity.entity_type}\t{properties_json}\t{embedding_hex}\n")
+            embedding_hex = embedding_bytes.hex() if embedding_bytes else "\\N"
+            copy_data.write(
+                f"{entity.id}\t{entity.entity_type}\t{properties_json}\t{embedding_hex}\n"
+            )
 
         copy_data.seek(0)
 
@@ -113,14 +119,14 @@ class BatchOperationsMixin:
         async with self.pool.acquire() as conn:
             try:
                 result = await conn.copy_to_table(
-                    'graph_entities',
+                    "graph_entities",
                     source=copy_data,
-                    columns=['id', 'entity_type', 'properties', 'embedding'],
-                    format='text'
+                    columns=["id", "entity_type", "properties", "embedding"],
+                    format="text",
                 )
                 # Parse result to get row count
                 # Result format: "COPY n" where n is number of rows
-                if result and result.startswith('COPY'):
+                if result and result.startswith("COPY"):
                     return int(result.split()[1])
                 return len(entities)
             except asyncpg.UniqueViolationError as e:
@@ -151,17 +157,25 @@ class BatchOperationsMixin:
 
         for i, entity in enumerate(entities):
             base_idx = i * 4
-            values_placeholders.append(f"(${base_idx+1}, ${base_idx+2}, ${base_idx+3}::jsonb, ${base_idx+4})")
+            values_placeholders.append(
+                f"(${base_idx+1}, ${base_idx+2}, ${base_idx+3}::jsonb, ${base_idx+4})"
+            )
 
             properties_json = json.dumps(entity.properties)
-            embedding_blob = self._serialize_embedding(entity.embedding) if hasattr(entity, 'embedding') and entity.embedding else None
+            embedding_blob = (
+                self._serialize_embedding(entity.embedding)
+                if hasattr(entity, "embedding") and entity.embedding
+                else None
+            )
 
-            values.extend([
-                entity.id,
-                entity.entity_type,
-                properties_json,
-                embedding_blob
-            ])
+            values.extend(
+                [
+                    entity.id,
+                    entity.entity_type,
+                    properties_json,
+                    embedding_blob,
+                ]
+            )
 
         query = f"""
             INSERT INTO graph_entities (id, entity_type, properties, embedding)
@@ -185,7 +199,7 @@ class BatchOperationsMixin:
         self,
         relations: List[Relation],
         batch_size: int = 1000,
-        use_copy: bool = True
+        use_copy: bool = True,
     ) -> int:
         """
         Add multiple relations efficiently
@@ -211,7 +225,7 @@ class BatchOperationsMixin:
         if not relations:
             return 0
 
-        if not hasattr(self, 'pool') or not self.pool:
+        if not hasattr(self, "pool") or not self.pool:
             raise RuntimeError("GraphStore not initialized")
 
         total_added = 0
@@ -222,7 +236,7 @@ class BatchOperationsMixin:
         else:
             # Use multi-row INSERT
             for i in range(0, len(relations), batch_size):
-                batch = relations[i:i + batch_size]
+                batch = relations[i : i + batch_size]
                 added = await self._batch_add_relations_insert(batch)
                 total_added += added
 
@@ -248,7 +262,8 @@ class BatchOperationsMixin:
             properties_json = json.dumps(relation.properties)
 
             # Write tab-separated values
-            # Format: id \t relation_type \t source_id \t target_id \t properties \t weight
+            # Format: id \t relation_type \t source_id \t target_id \t
+            # properties \t weight
             copy_data.write(
                 f"{relation.id}\t{relation.relation_type}\t{relation.source_id}\t"
                 f"{relation.target_id}\t{properties_json}\t{relation.weight}\n"
@@ -260,12 +275,19 @@ class BatchOperationsMixin:
         async with self.pool.acquire() as conn:
             try:
                 result = await conn.copy_to_table(
-                    'graph_relations',
+                    "graph_relations",
                     source=copy_data,
-                    columns=['id', 'relation_type', 'source_id', 'target_id', 'properties', 'weight'],
-                    format='text'
+                    columns=[
+                        "id",
+                        "relation_type",
+                        "source_id",
+                        "target_id",
+                        "properties",
+                        "weight",
+                    ],
+                    format="text",
                 )
-                if result and result.startswith('COPY'):
+                if result and result.startswith("COPY"):
                     return int(result.split()[1])
                 return len(relations)
             except asyncpg.UniqueViolationError as e:
@@ -304,14 +326,16 @@ class BatchOperationsMixin:
 
             properties_json = json.dumps(relation.properties)
 
-            values.extend([
-                relation.id,
-                relation.relation_type,
-                relation.source_id,
-                relation.target_id,
-                properties_json,
-                relation.weight
-            ])
+            values.extend(
+                [
+                    relation.id,
+                    relation.relation_type,
+                    relation.source_id,
+                    relation.target_id,
+                    properties_json,
+                    relation.weight,
+                ]
+            )
 
         query = f"""
             INSERT INTO graph_relations (id, relation_type, source_id, target_id, properties, weight)
@@ -333,11 +357,7 @@ class BatchOperationsMixin:
                 logger.error(f"Batch insert failed: {e}")
                 raise
 
-    async def batch_delete_entities(
-        self,
-        entity_ids: List[str],
-        batch_size: int = 1000
-    ) -> int:
+    async def batch_delete_entities(self, entity_ids: List[str], batch_size: int = 1000) -> int:
         """
         Delete multiple entities efficiently
 
@@ -351,13 +371,13 @@ class BatchOperationsMixin:
         if not entity_ids:
             return 0
 
-        if not hasattr(self, 'pool') or not self.pool:
+        if not hasattr(self, "pool") or not self.pool:
             raise RuntimeError("GraphStore not initialized")
 
         total_deleted = 0
 
         for i in range(0, len(entity_ids), batch_size):
-            batch = entity_ids[i:i + batch_size]
+            batch = entity_ids[i : i + batch_size]
 
             # Use ANY() for efficient batch delete
             query = "DELETE FROM graph_entities WHERE id = ANY($1)"
@@ -365,17 +385,13 @@ class BatchOperationsMixin:
             async with self.pool.acquire() as conn:
                 result = await conn.execute(query, batch)
                 # Parse result: "DELETE n"
-                if result and result.startswith('DELETE'):
+                if result and result.startswith("DELETE"):
                     total_deleted += int(result.split()[1])
 
         logger.info(f"Batch deleted {total_deleted} entities")
         return total_deleted
 
-    async def batch_delete_relations(
-        self,
-        relation_ids: List[str],
-        batch_size: int = 1000
-    ) -> int:
+    async def batch_delete_relations(self, relation_ids: List[str], batch_size: int = 1000) -> int:
         """
         Delete multiple relations efficiently
 
@@ -389,13 +405,13 @@ class BatchOperationsMixin:
         if not relation_ids:
             return 0
 
-        if not hasattr(self, 'pool') or not self.pool:
+        if not hasattr(self, "pool") or not self.pool:
             raise RuntimeError("GraphStore not initialized")
 
         total_deleted = 0
 
         for i in range(0, len(relation_ids), batch_size):
-            batch = relation_ids[i:i + batch_size]
+            batch = relation_ids[i : i + batch_size]
 
             # Use ANY() for efficient batch delete
             query = "DELETE FROM graph_relations WHERE id = ANY($1)"
@@ -403,17 +419,14 @@ class BatchOperationsMixin:
             async with self.pool.acquire() as conn:
                 result = await conn.execute(query, batch)
                 # Parse result: "DELETE n"
-                if result and result.startswith('DELETE'):
+                if result and result.startswith("DELETE"):
                     total_deleted += int(result.split()[1])
 
         logger.info(f"Batch deleted {total_deleted} relations")
         return total_deleted
 
 
-def estimate_batch_size(
-    avg_item_size_bytes: int,
-    target_batch_size_mb: int = 10
-) -> int:
+def estimate_batch_size(avg_item_size_bytes: int, target_batch_size_mb: int = 10) -> int:
     """
     Estimate optimal batch size based on item size
 
@@ -434,4 +447,3 @@ def estimate_batch_size(
     target_bytes = target_batch_size_mb * 1024 * 1024
     batch_size = max(100, target_bytes // avg_item_size_bytes)
     return batch_size
-

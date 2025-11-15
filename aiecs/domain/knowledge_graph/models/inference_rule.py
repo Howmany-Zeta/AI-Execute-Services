@@ -4,15 +4,15 @@ Inference Rule Domain Models
 Models for representing logical inference rules.
 """
 
-from typing import List, Optional, Dict, Any, Callable
+from typing import List, Dict, Any
 from enum import Enum
 from pydantic import BaseModel, Field
 from aiecs.domain.knowledge_graph.models.relation import Relation
-from aiecs.domain.knowledge_graph.models.entity import Entity
 
 
 class RuleType(str, Enum):
     """Types of inference rules"""
+
     TRANSITIVE = "transitive"  # A->B, B->C => A->C
     SYMMETRIC = "symmetric"  # A->B => B->A
     REFLEXIVE = "reflexive"  # A => A->A
@@ -46,42 +46,24 @@ class InferenceRule(BaseModel):
         ```
     """
 
-    rule_id: str = Field(
-        ...,
-        description="Unique identifier for this rule"
-    )
+    rule_id: str = Field(..., description="Unique identifier for this rule")
 
-    rule_type: RuleType = Field(
-        ...,
-        description="Type of inference rule"
-    )
+    rule_type: RuleType = Field(..., description="Type of inference rule")
 
-    relation_type: str = Field(
-        ...,
-        description="Relation type this rule applies to"
-    )
+    relation_type: str = Field(..., description="Relation type this rule applies to")
 
-    description: str = Field(
-        default="",
-        description="Human-readable description of the rule"
-    )
+    description: str = Field(default="", description="Human-readable description of the rule")
 
-    enabled: bool = Field(
-        default=True,
-        description="Whether this rule is enabled"
-    )
+    enabled: bool = Field(default=True, description="Whether this rule is enabled")
 
     confidence_decay: float = Field(
         default=0.1,
         ge=0.0,
         le=1.0,
-        description="Confidence decay per inference step (0-1)"
+        description="Confidence decay per inference step (0-1)",
     )
 
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Additional metadata"
-    )
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
     def can_apply(self, relation: Relation) -> bool:
         """
@@ -126,42 +108,19 @@ class InferenceStep(BaseModel):
         ```
     """
 
-    step_id: str = Field(
-        ...,
-        description="Unique identifier for this step"
-    )
+    step_id: str = Field(..., description="Unique identifier for this step")
 
-    inferred_relation: Relation = Field(
-        ...,
-        description="The relation that was inferred"
-    )
+    inferred_relation: Relation = Field(..., description="The relation that was inferred")
 
-    source_relations: List[Relation] = Field(
-        ...,
-        description="Relations used to infer this one"
-    )
+    source_relations: List[Relation] = Field(..., description="Relations used to infer this one")
 
-    rule: InferenceRule = Field(
-        ...,
-        description="The rule that was applied"
-    )
+    rule: InferenceRule = Field(..., description="The rule that was applied")
 
-    confidence: float = Field(
-        ...,
-        ge=0.0,
-        le=1.0,
-        description="Confidence in this inference (0-1)"
-    )
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence in this inference (0-1)")
 
-    explanation: str = Field(
-        default="",
-        description="Human-readable explanation of the inference"
-    )
+    explanation: str = Field(default="", description="Human-readable explanation of the inference")
 
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Additional metadata"
-    )
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
 
 class InferenceResult(BaseModel):
@@ -191,36 +150,25 @@ class InferenceResult(BaseModel):
 
     inferred_relations: List[Relation] = Field(
         default_factory=list,
-        description="List of relations that were inferred"
+        description="List of relations that were inferred",
     )
 
     inference_steps: List[InferenceStep] = Field(
-        default_factory=list,
-        description="List of inference steps taken"
+        default_factory=list, description="List of inference steps taken"
     )
 
-    total_steps: int = Field(
-        default=0,
-        ge=0,
-        description="Total number of inference steps"
-    )
+    total_steps: int = Field(default=0, ge=0, description="Total number of inference steps")
 
     confidence: float = Field(
         default=1.0,
         ge=0.0,
         le=1.0,
-        description="Overall confidence in the results"
+        description="Overall confidence in the results",
     )
 
-    explanation: str = Field(
-        default="",
-        description="Human-readable explanation"
-    )
+    explanation: str = Field(default="", description="Human-readable explanation")
 
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Additional metadata"
-    )
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
     @property
     def has_results(self) -> bool:
@@ -236,4 +184,3 @@ class InferenceResult(BaseModel):
     def get_step_explanations(self) -> List[str]:
         """Get explanations for each step"""
         return [step.explanation for step in self.inference_steps]
-

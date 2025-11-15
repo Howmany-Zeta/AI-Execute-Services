@@ -1,21 +1,33 @@
-import json
-import asyncio
+from openai import AsyncOpenAI
+from aiecs.config.config import get_settings
+from aiecs.llm.clients.base_client import (
+    BaseLLMClient,
+    LLMMessage,
+    LLMResponse,
+    ProviderNotAvailableError,
+    RateLimitError,
+)
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 import logging
-from typing import Dict, Any, Optional, List, AsyncGenerator
+from typing import Dict, Optional, List, AsyncGenerator
 
 # Lazy import to avoid circular dependency
+
+
 def _get_config_loader():
     """Lazy import of config loader to avoid circular dependency"""
     from aiecs.llm.config import get_llm_config_loader
+
     return get_llm_config_loader()
 
-from openai import AsyncOpenAI
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-
-from aiecs.llm.clients.base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
-from aiecs.config.config import get_settings
 
 logger = logging.getLogger(__name__)
+
 
 class XAIClient(BaseLLMClient):
     """xAI (Grok) provider client"""
@@ -33,18 +45,20 @@ class XAIClient(BaseLLMClient):
             self._openai_client = AsyncOpenAI(
                 api_key=api_key,
                 base_url="https://api.x.ai/v1",
-                timeout=360.0  # Override default timeout with longer timeout for reasoning models
+                timeout=360.0,  # Override default timeout with longer timeout for reasoning models
             )
         return self._openai_client
 
     def _get_api_key(self) -> str:
         """Get API key with backward compatibility"""
         # Support both xai_api_key and grok_api_key for backward compatibility
-        api_key = getattr(self.settings, 'xai_api_key', None) or getattr(self.settings, 'grok_api_key', None)
+        api_key = getattr(self.settings, "xai_api_key", None) or getattr(
+            self.settings, "grok_api_key", None
+        )
         if not api_key:
             raise ProviderNotAvailableError("xAI API key not configured")
         return api_key
-    
+
     def _get_model_map(self) -> Dict[str, str]:
         """Get model mappings from configuration"""
         if self._model_map is None:
@@ -63,7 +77,7 @@ class XAIClient(BaseLLMClient):
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type((Exception, RateLimitError))
+        retry=retry_if_exception_type((Exception, RateLimitError)),
     )
     async def generate_text(
         self,
@@ -71,7 +85,7 @@ class XAIClient(BaseLLMClient):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ) -> LLMResponse:
         """Generate text using xAI API via OpenAI library (supports all Grok models)"""
         # Check API key availability
@@ -83,7 +97,7 @@ class XAIClient(BaseLLMClient):
 
         # Get model name from config if not provided
         selected_model = model or self._get_default_model() or "grok-4"
-        
+
         # Get model mappings from config
         model_map = self._get_model_map()
         api_model = model_map.get(selected_model, selected_model)
@@ -97,7 +111,7 @@ class XAIClient(BaseLLMClient):
                 messages=openai_messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                **kwargs
+                **kwargs,
             )
 
             content = completion.choices[0].message.content
@@ -108,7 +122,7 @@ class XAIClient(BaseLLMClient):
                 provider=self.provider_name,
                 model=selected_model,
                 tokens_used=tokens_used,
-                cost_estimate=0.0  # xAI pricing not available yet
+                cost_estimate=0.0,  # xAI pricing not available yet
             )
 
         except Exception as e:
@@ -123,7 +137,7 @@ class XAIClient(BaseLLMClient):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ) -> AsyncGenerator[str, None]:
         """Stream text using xAI API via OpenAI library (supports all Grok models)"""
         # Check API key availability
@@ -135,7 +149,7 @@ class XAIClient(BaseLLMClient):
 
         # Get model name from config if not provided
         selected_model = model or self._get_default_model() or "grok-4"
-        
+
         # Get model mappings from config
         model_map = self._get_model_map()
         api_model = model_map.get(selected_model, selected_model)
@@ -150,7 +164,7 @@ class XAIClient(BaseLLMClient):
                 temperature=temperature,
                 max_tokens=max_tokens,
                 stream=True,
-                **kwargs
+                **kwargs,
             )
 
             async for chunk in stream:

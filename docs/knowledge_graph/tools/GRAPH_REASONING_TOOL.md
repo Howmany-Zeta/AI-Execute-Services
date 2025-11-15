@@ -14,6 +14,7 @@ The `GraphReasoningTool` provides advanced reasoning capabilities over knowledge
 - **Multi-Hop Reasoning**: Find and reason over paths in the graph
 - **Logical Inference**: Apply inference rules (transitive, symmetric)
 - **Evidence Synthesis**: Combine evidence from multiple sources
+- **Logical Query Parsing**: Convert natural language to structured logical queries
 - **Full Reasoning Pipeline**: End-to-end reasoning with all components
 
 ## Tool Registration
@@ -32,7 +33,7 @@ from aiecs.tools.knowledge_graph import GraphReasoningTool
 
 ```python
 {
-    "mode": str,  # Required: "query_plan", "multi_hop", "inference", "evidence_synthesis", "full_reasoning"
+    "mode": str,  # Required: "query_plan", "multi_hop", "inference", "evidence_synthesis", "logical_query", "full_reasoning"
     "query": str,  # Required: Natural language query
     "start_entity_id": str,  # Optional: Starting entity for multi-hop reasoning
     "target_entity_id": str,  # Optional: Target entity for path finding
@@ -202,7 +203,84 @@ result = await tool.run(
 }
 ```
 
-### 5. Full Reasoning Mode
+### 5. Logical Query Mode
+
+**Mode**: `"logical_query"`
+
+Parses natural language queries into structured logical forms that can be executed against the knowledge graph.
+
+**Example**:
+```python
+result = await tool.run(
+    op="graph_reasoning",
+    mode="logical_query",
+    query="Find all people who work for companies in San Francisco"
+)
+```
+
+**Response**:
+```python
+{
+    "mode": "logical_query",
+    "query": "Find all people who work for companies in San Francisco",
+    "logical_form": {
+        "query_type": "SELECT",
+        "variables": ["?person", "?company"],
+        "predicates": [
+            {
+                "name": "type",
+                "arguments": ["?person", "Person"]
+            },
+            {
+                "name": "type",
+                "arguments": ["?company", "Company"]
+            },
+            {
+                "name": "WORKS_FOR",
+                "arguments": ["?person", "?company"]
+            },
+            {
+                "name": "LOCATED_IN",
+                "arguments": ["?company", "San Francisco"]
+            }
+        ],
+        "constraints": [
+            {
+                "type": "property_equals",
+                "variable": "?company",
+                "value": "San Francisco"
+            }
+        ]
+    },
+    "query_type": "SELECT",
+    "variables": ["?person", "?company"],
+    "predicates": [
+        {
+            "name": "WORKS_FOR",
+            "arguments": ["?person", "?company"]
+        },
+        {
+            "name": "LOCATED_IN",
+            "arguments": ["?company", "San Francisco"]
+        }
+    ],
+    "constraints": [
+        {
+            "type": "property_equals",
+            "variable": "?company",
+            "value": "San Francisco"
+        }
+    ]
+}
+```
+
+**Use Cases:**
+- Converting natural language to structured queries
+- Query validation and optimization
+- Building query interfaces
+- Debugging complex queries
+
+### 6. Full Reasoning Mode
 
 **Mode**: `"full_reasoning"`
 

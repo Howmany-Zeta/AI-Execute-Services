@@ -38,54 +38,37 @@ class Relation(BaseModel):
         ```
     """
 
-    id: str = Field(
-        ...,
-        description="Unique identifier for the relation"
-    )
+    id: str = Field(..., description="Unique identifier for the relation")
 
-    relation_type: str = Field(
-        ...,
-        description="Type of the relation (e.g., 'WORKS_FOR', 'KNOWS')"
-    )
+    relation_type: str = Field(..., description="Type of the relation (e.g., 'WORKS_FOR', 'KNOWS')")
 
-    source_id: str = Field(
-        ...,
-        description="ID of the source entity"
-    )
+    source_id: str = Field(..., description="ID of the source entity")
 
-    target_id: str = Field(
-        ...,
-        description="ID of the target entity"
-    )
+    target_id: str = Field(..., description="ID of the target entity")
 
     properties: dict[str, Any] = Field(
         default_factory=dict,
-        description="Additional properties of the relation"
+        description="Additional properties of the relation",
     )
 
     weight: float = Field(
         default=1.0,
         ge=0.0,
         le=1.0,
-        description="Weight/strength of the relation (0.0-1.0)"
+        description="Weight/strength of the relation (0.0-1.0)",
     )
 
     created_at: datetime = Field(
         default_factory=datetime.utcnow,
-        description="Timestamp when relation was created"
+        description="Timestamp when relation was created",
     )
 
-    source: Optional[str] = Field(
-        default=None,
-        description="Source of the relation data"
-    )
+    source: Optional[str] = Field(default=None, description="Source of the relation data")
 
     class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+        json_encoders = {datetime: lambda v: v.isoformat()}
 
-    @field_validator('source_id', 'target_id')
+    @field_validator("source_id", "target_id")
     @classmethod
     def validate_entity_ids(cls, v: str) -> str:
         """Validate entity IDs are non-empty"""
@@ -93,7 +76,7 @@ class Relation(BaseModel):
             raise ValueError("Entity IDs must be non-empty strings")
         return v
 
-    @field_validator('source_id')
+    @field_validator("source_id")
     @classmethod
     def validate_no_self_loop(cls, v: str, info) -> str:
         """Prevent self-loops (optional validation)"""
@@ -140,7 +123,7 @@ class Relation(BaseModel):
             properties=self.properties.copy(),
             weight=self.weight,
             created_at=self.created_at,
-            source=self.source
+            source=self.source,
         )
 
     def __str__(self) -> str:
@@ -151,4 +134,3 @@ class Relation(BaseModel):
             f"Relation(id='{self.id}', type='{self.relation_type}', "
             f"source='{self.source_id}', target='{self.target_id}', weight={self.weight})"
         )
-

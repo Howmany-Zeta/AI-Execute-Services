@@ -4,7 +4,7 @@ Entity Deduplicator
 Identifies and merges duplicate entities based on similarity matching.
 """
 
-from typing import List, Dict, Tuple, Set, Optional
+from typing import List, Dict, Tuple, Set
 from difflib import SequenceMatcher
 from aiecs.domain.knowledge_graph.models.entity import Entity
 
@@ -49,7 +49,7 @@ class EntityDeduplicator:
         self,
         similarity_threshold: float = 0.85,
         use_embeddings: bool = True,
-        embedding_threshold: float = 0.90
+        embedding_threshold: float = 0.90,
     ):
         """
         Initialize entity deduplicator
@@ -176,10 +176,10 @@ class EntityDeduplicator:
     def _get_entity_name(self, entity: Entity) -> str:
         """Extract entity name from properties"""
         return (
-            entity.properties.get("name") or
-            entity.properties.get("title") or
-            entity.properties.get("text") or
-            ""
+            entity.properties.get("name")
+            or entity.properties.get("title")
+            or entity.properties.get("text")
+            or ""
         )
 
     def _string_similarity(self, str1: str, str2: str) -> float:
@@ -369,10 +369,7 @@ class EntityDeduplicator:
             merged_properties["_aliases"] = list(aliases)
 
         # Take highest confidence
-        confidences = [
-            e.properties.get("_extraction_confidence", 0.5)
-            for e in entities
-        ]
+        confidences = [e.properties.get("_extraction_confidence", 0.5) for e in entities]
         merged_properties["_extraction_confidence"] = max(confidences)
 
         # Track merge count
@@ -384,8 +381,7 @@ class EntityDeduplicator:
             entity_type=canonical.entity_type,
             properties=merged_properties,
             embedding=canonical.embedding,
-            source=canonical.source
+            source=canonical.source,
         )
 
         return merged_entity
-

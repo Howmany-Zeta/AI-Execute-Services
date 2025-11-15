@@ -11,7 +11,7 @@ Provides production-grade graph storage using PostgreSQL with:
 import json
 import asyncpg
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Set
+from typing import Any, Dict, List, Optional
 from contextlib import asynccontextmanager
 import numpy as np
 
@@ -121,7 +121,7 @@ class PostgresGraphStore(GraphStore):
         enable_pgvector: bool = False,
         pool: Optional[asyncpg.Pool] = None,
         database_manager: Optional[Any] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Initialize PostgreSQL graph store
@@ -147,7 +147,7 @@ class PostgresGraphStore(GraphStore):
 
         # Option 2: Reuse DatabaseManager's pool
         if database_manager is not None:
-            self._external_pool = getattr(database_manager, 'connection_pool', None)
+            self._external_pool = getattr(database_manager, "connection_pool", None)
             if self._external_pool:
                 logger.info("Reusing DatabaseManager's connection pool")
                 self._owns_pool = False
@@ -159,7 +159,8 @@ class PostgresGraphStore(GraphStore):
             settings = get_settings()
             db_config = settings.database_config
 
-            # Check if connection string (dsn) is provided (for cloud databases)
+            # Check if connection string (dsn) is provided (for cloud
+            # databases)
             if "dsn" in db_config:
                 self.dsn = db_config["dsn"]
                 # Still set defaults for logging/display purposes
@@ -202,9 +203,11 @@ class PostgresGraphStore(GraphStore):
                         dsn=self.dsn,
                         min_size=self.min_pool_size,
                         max_size=self.max_pool_size,
-                        **self.conn_kwargs
+                        **self.conn_kwargs,
                     )
-                    logger.info("PostgreSQL connection pool created using connection string (cloud/local)")
+                    logger.info(
+                        "PostgreSQL connection pool created using connection string (cloud/local)"
+                    )
                 else:
                     self.pool = await asyncpg.create_pool(
                         host=self.host,
@@ -214,13 +217,15 @@ class PostgresGraphStore(GraphStore):
                         database=self.database,
                         min_size=self.min_pool_size,
                         max_size=self.max_pool_size,
-                        **self.conn_kwargs
+                        **self.conn_kwargs,
                     )
                     logger.info(
                         f"PostgreSQL connection pool created: {self.host}:{self.port}/{self.database}"
                     )
             else:
-                logger.info("Using external PostgreSQL connection pool (shared with AIECS DatabaseManager)")
+                logger.info(
+                    "Using external PostgreSQL connection pool (shared with AIECS DatabaseManager)"
+                )
 
             # Create schema
             async with self.pool.acquire() as conn:
@@ -230,7 +235,9 @@ class PostgresGraphStore(GraphStore):
                         await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
                         logger.info("pgvector extension enabled")
                     except Exception as e:
-                        logger.warning(f"Failed to enable pgvector: {e}. Continuing without vector support.")
+                        logger.warning(
+                            f"Failed to enable pgvector: {e}. Continuing without vector support."
+                        )
                         self.enable_pgvector = False
 
                 # Execute schema creation
@@ -240,37 +247,46 @@ class PostgresGraphStore(GraphStore):
                 if self.enable_pgvector:
                     try:
                         # Check if vector column exists
-                        column_exists = await conn.fetchval("""
+                        column_exists = await conn.fetchval(
+                            """
                             SELECT EXISTS (
                                 SELECT 1 FROM information_schema.columns
                                 WHERE table_name = 'graph_entities'
                                 AND column_name = 'embedding_vector'
                             )
-                        """)
+                        """
+                        )
 
                         if not column_exists:
-                            # Add vector column (default dimension 1536, can be adjusted)
-                            await conn.execute("""
+                            # Add vector column (default dimension 1536, can be
+                            # adjusted)
+                            await conn.execute(
+                                """
                                 ALTER TABLE graph_entities
                                 ADD COLUMN embedding_vector vector(1536)
-                            """)
+                            """
+                            )
                             logger.info("Added embedding_vector column")
 
                         # Create index if it doesn't exist
-                        index_exists = await conn.fetchval("""
+                        index_exists = await conn.fetchval(
+                            """
                             SELECT EXISTS (
                                 SELECT 1 FROM pg_indexes
                                 WHERE tablename = 'graph_entities'
                                 AND indexname = 'idx_graph_entities_embedding'
                             )
-                        """)
+                        """
+                        )
 
                         if not index_exists:
-                            await conn.execute("""
+                            await conn.execute(
+                                """
                                 CREATE INDEX idx_graph_entities_embedding
                                 ON graph_entities USING ivfflat (embedding_vector vector_cosine_ops)
                                 WITH (lists = 100)
-                            """)
+                            """
+                            )
                             logger.info("Created vector similarity index")
                     except Exception as e:
                         logger.warning(f"Failed to set up pgvector column/index: {e}")
@@ -351,7 +367,10 @@ class PostgresGraphStore(GraphStore):
                     embedding = EXCLUDED.embedding,
                     updated_at = CURRENT_TIMESTAMP
                 """,
-                entity.id, entity.entity_type, properties_json, embedding_blob
+                entity.id,
+                entity.entity_type,
+                properties_json,
+                embedding_blob,
             )
         else:
             async with self.pool.acquire() as conn:
@@ -365,7 +384,10 @@ class PostgresGraphStore(GraphStore):
                         embedding = EXCLUDED.embedding,
                         updated_at = CURRENT_TIMESTAMP
                     """,
-                    entity.id, entity.entity_type, properties_json, embedding_blob
+                    entity.id,
+                    entity.entity_type,
+                    properties_json,
+                    embedding_blob,
                 )
 
     async def get_entity(self, entity_id: str) -> Optional[Entity]:
@@ -381,7 +403,7 @@ class PostgresGraphStore(GraphStore):
                 FROM graph_entities
                 WHERE id = $1
                 """,
-                entity_id
+                entity_id,
             )
         else:
             async with self.pool.acquire() as conn:
@@ -391,21 +413,25 @@ class PostgresGraphStore(GraphStore):
                     FROM graph_entities
                     WHERE id = $1
                     """,
-                    entity_id
+                    entity_id,
                 )
 
         if not row:
             return None
 
         # Deserialize
-        properties = json.loads(row['properties']) if isinstance(row['properties'], str) else row['properties']
-        embedding = self._deserialize_embedding(row['embedding']) if row['embedding'] else None
+        properties = (
+            json.loads(row["properties"])
+            if isinstance(row["properties"], str)
+            else row["properties"]
+        )
+        embedding = self._deserialize_embedding(row["embedding"]) if row["embedding"] else None
 
         return Entity(
-            id=row['id'],
-            entity_type=row['entity_type'],
+            id=row["id"],
+            entity_type=row["entity_type"],
             properties=properties,
-            embedding=embedding
+            embedding=embedding,
         )
 
     async def update_entity(self, entity: Entity) -> None:
@@ -424,7 +450,10 @@ class PostgresGraphStore(GraphStore):
                 SET entity_type = $2, properties = $3::jsonb, embedding = $4, updated_at = CURRENT_TIMESTAMP
                 WHERE id = $1
                 """,
-                entity.id, entity.entity_type, properties_json, embedding_blob
+                entity.id,
+                entity.entity_type,
+                properties_json,
+                embedding_blob,
             )
         else:
             async with self.pool.acquire() as conn:
@@ -434,7 +463,10 @@ class PostgresGraphStore(GraphStore):
                     SET entity_type = $2, properties = $3::jsonb, embedding = $4, updated_at = CURRENT_TIMESTAMP
                     WHERE id = $1
                     """,
-                    entity.id, entity.entity_type, properties_json, embedding_blob
+                    entity.id,
+                    entity.entity_type,
+                    properties_json,
+                    embedding_blob,
                 )
 
         if result == "UPDATE 0":
@@ -447,16 +479,10 @@ class PostgresGraphStore(GraphStore):
 
         if self._transaction_conn:
             conn = self._transaction_conn
-            result = await conn.execute(
-                "DELETE FROM graph_entities WHERE id = $1",
-                entity_id
-            )
+            result = await conn.execute("DELETE FROM graph_entities WHERE id = $1", entity_id)
         else:
             async with self.pool.acquire() as conn:
-                result = await conn.execute(
-                    "DELETE FROM graph_entities WHERE id = $1",
-                    entity_id
-                )
+                result = await conn.execute("DELETE FROM graph_entities WHERE id = $1", entity_id)
 
         if result == "DELETE 0":
             raise ValueError(f"Entity with ID '{entity_id}' not found")
@@ -482,8 +508,12 @@ class PostgresGraphStore(GraphStore):
                     weight = EXCLUDED.weight,
                     updated_at = CURRENT_TIMESTAMP
                 """,
-                relation.id, relation.relation_type, relation.source_id,
-                relation.target_id, properties_json, relation.weight
+                relation.id,
+                relation.relation_type,
+                relation.source_id,
+                relation.target_id,
+                properties_json,
+                relation.weight,
             )
         else:
             async with self.pool.acquire() as conn:
@@ -499,8 +529,12 @@ class PostgresGraphStore(GraphStore):
                         weight = EXCLUDED.weight,
                         updated_at = CURRENT_TIMESTAMP
                     """,
-                    relation.id, relation.relation_type, relation.source_id,
-                    relation.target_id, properties_json, relation.weight
+                    relation.id,
+                    relation.relation_type,
+                    relation.source_id,
+                    relation.target_id,
+                    properties_json,
+                    relation.weight,
                 )
 
     async def get_relation(self, relation_id: str) -> Optional[Relation]:
@@ -516,7 +550,7 @@ class PostgresGraphStore(GraphStore):
                 FROM graph_relations
                 WHERE id = $1
                 """,
-                relation_id
+                relation_id,
             )
         else:
             async with self.pool.acquire() as conn:
@@ -526,21 +560,25 @@ class PostgresGraphStore(GraphStore):
                     FROM graph_relations
                     WHERE id = $1
                     """,
-                    relation_id
+                    relation_id,
                 )
 
         if not row:
             return None
 
-        properties = json.loads(row['properties']) if isinstance(row['properties'], str) else row['properties']
+        properties = (
+            json.loads(row["properties"])
+            if isinstance(row["properties"], str)
+            else row["properties"]
+        )
 
         return Relation(
-            id=row['id'],
-            relation_type=row['relation_type'],
-            source_id=row['source_id'],
-            target_id=row['target_id'],
+            id=row["id"],
+            relation_type=row["relation_type"],
+            source_id=row["source_id"],
+            target_id=row["target_id"],
             properties=properties,
-            weight=float(row['weight']) if row['weight'] else 1.0
+            weight=float(row["weight"]) if row["weight"] else 1.0,
         )
 
     async def delete_relation(self, relation_id: str) -> None:
@@ -550,15 +588,11 @@ class PostgresGraphStore(GraphStore):
 
         if self._transaction_conn:
             conn = self._transaction_conn
-            result = await conn.execute(
-                "DELETE FROM graph_relations WHERE id = $1",
-                relation_id
-            )
+            result = await conn.execute("DELETE FROM graph_relations WHERE id = $1", relation_id)
         else:
             async with self.pool.acquire() as conn:
                 result = await conn.execute(
-                    "DELETE FROM graph_relations WHERE id = $1",
-                    relation_id
+                    "DELETE FROM graph_relations WHERE id = $1", relation_id
                 )
 
         if result == "DELETE 0":
@@ -567,8 +601,8 @@ class PostgresGraphStore(GraphStore):
     async def get_neighbors(
         self,
         entity_id: str,
-        direction: str = "both",
-        relation_types: Optional[List[str]] = None
+        relation_type: Optional[str] = None,
+        direction: str = "outgoing",
     ) -> List[Entity]:
         """Get neighboring entities (optimized with SQL)"""
         if not self._is_initialized:
@@ -602,19 +636,19 @@ class PostgresGraphStore(GraphStore):
 
         # Add relation type filter if specified
         params = [entity_id]
-        if relation_types:
+        if relation_type:
             if direction == "both":
                 query = query.replace(
                     "SELECT target_id FROM graph_relations WHERE source_id = $1",
-                    "SELECT target_id FROM graph_relations WHERE source_id = $1 AND relation_type = ANY($2)"
+                    "SELECT target_id FROM graph_relations WHERE source_id = $1 AND relation_type = $2",
                 )
                 query = query.replace(
                     "SELECT source_id FROM graph_relations WHERE target_id = $1",
-                    "SELECT source_id FROM graph_relations WHERE target_id = $1 AND relation_type = ANY($2)"
+                    "SELECT source_id FROM graph_relations WHERE target_id = $1 AND relation_type = $2",
                 )
             else:
-                query += " AND r.relation_type = ANY($2)"
-            params.append(relation_types)
+                query += " AND r.relation_type = $2"
+            params.append(relation_type)
 
         if self._transaction_conn:
             conn = self._transaction_conn
@@ -625,21 +659,25 @@ class PostgresGraphStore(GraphStore):
 
         entities = []
         for row in rows:
-            properties = json.loads(row['properties']) if isinstance(row['properties'], str) else row['properties']
-            embedding = self._deserialize_embedding(row['embedding']) if row['embedding'] else None
-            entities.append(Entity(
-                id=row['id'],
-                entity_type=row['entity_type'],
-                properties=properties,
-                embedding=embedding
-            ))
+            properties = (
+                json.loads(row["properties"])
+                if isinstance(row["properties"], str)
+                else row["properties"]
+            )
+            embedding = self._deserialize_embedding(row["embedding"]) if row["embedding"] else None
+            entities.append(
+                Entity(
+                    id=row["id"],
+                    entity_type=row["entity_type"],
+                    properties=properties,
+                    embedding=embedding,
+                )
+            )
 
         return entities
 
     async def get_all_entities(
-        self,
-        entity_type: Optional[str] = None,
-        limit: Optional[int] = None
+        self, entity_type: Optional[str] = None, limit: Optional[int] = None
     ) -> List[Entity]:
         """Get all entities, optionally filtered by type"""
         if not self._is_initialized:
@@ -665,14 +703,20 @@ class PostgresGraphStore(GraphStore):
 
         entities = []
         for row in rows:
-            properties = json.loads(row['properties']) if isinstance(row['properties'], str) else row['properties']
-            embedding = self._deserialize_embedding(row['embedding']) if row['embedding'] else None
-            entities.append(Entity(
-                id=row['id'],
-                entity_type=row['entity_type'],
-                properties=properties,
-                embedding=embedding
-            ))
+            properties = (
+                json.loads(row["properties"])
+                if isinstance(row["properties"], str)
+                else row["properties"]
+            )
+            embedding = self._deserialize_embedding(row["embedding"]) if row["embedding"] else None
+            entities.append(
+                Entity(
+                    id=row["id"],
+                    entity_type=row["entity_type"],
+                    properties=properties,
+                    embedding=embedding,
+                )
+            )
 
         return entities
 
@@ -705,10 +749,10 @@ class PostgresGraphStore(GraphStore):
         return {
             "entity_count": entity_count,
             "relation_count": relation_count,
-            "entity_types": {row['entity_type']: row['count'] for row in entity_types},
-            "relation_types": {row['relation_type']: row['count'] for row in relation_types},
+            "entity_types": {row["entity_type"]: row["count"] for row in entity_types},
+            "relation_types": {row["relation_type"]: row["count"] for row in relation_types},
             "backend": "postgresql",
-            "pool_size": f"{self.pool.get_size()}/{self.max_pool_size}" if self.pool else "0/0"
+            "pool_size": (f"{self.pool.get_size()}/{self.max_pool_size}" if self.pool else "0/0"),
         }
 
     # =========================================================================
@@ -720,7 +764,7 @@ class PostgresGraphStore(GraphStore):
         source_id: str,
         target_id: str,
         max_depth: int = 3,
-        limit: Optional[int] = 10
+        limit: Optional[int] = 10,
     ) -> List[Path]:
         """
         Find paths using WITH RECURSIVE CTE (PostgreSQL-optimized)
@@ -779,8 +823,8 @@ class PostgresGraphStore(GraphStore):
 
         paths = []
         for row in rows:
-            node_ids = row['nodes']
-            relation_ids = row['relations']
+            node_ids = row["nodes"]
+            relation_ids = row["relations"]
 
             # Fetch entities and relations
             entities = []
@@ -825,4 +869,3 @@ class PostgresGraphStore(GraphStore):
         if not data:
             return None
         return np.frombuffer(data, dtype=np.float32)
-

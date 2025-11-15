@@ -162,10 +162,7 @@ class SQLiteGraphStore(GraphStore):
             raise RuntimeError("GraphStore not initialized")
 
         # Check if entity already exists
-        cursor = await self.conn.execute(
-            "SELECT id FROM entities WHERE id = ?",
-            (entity.id,)
-        )
+        cursor = await self.conn.execute("SELECT id FROM entities WHERE id = ?", (entity.id,))
         existing = await cursor.fetchone()
         if existing:
             raise ValueError(f"Entity with ID '{entity.id}' already exists")
@@ -180,7 +177,7 @@ class SQLiteGraphStore(GraphStore):
             INSERT INTO entities (id, entity_type, properties, embedding)
             VALUES (?, ?, ?, ?)
             """,
-            (entity.id, entity.entity_type, properties_json, embedding_blob)
+            (entity.id, entity.entity_type, properties_json, embedding_blob),
         )
         if not self._in_transaction:
             await self.conn.commit()
@@ -196,7 +193,7 @@ class SQLiteGraphStore(GraphStore):
             FROM entities
             WHERE id = ?
             """,
-            (entity_id,)
+            (entity_id,),
         )
         row = await cursor.fetchone()
 
@@ -226,7 +223,7 @@ class SQLiteGraphStore(GraphStore):
             SET entity_type = ?, properties = ?, embedding = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
-            (entity.entity_type, properties_json, embedding_blob, entity.id)
+            (entity.entity_type, properties_json, embedding_blob, entity.id),
         )
         if not self._in_transaction:
             await self.conn.commit()
@@ -249,10 +246,7 @@ class SQLiteGraphStore(GraphStore):
             raise RuntimeError("GraphStore not initialized")
 
         # Check if relation already exists
-        cursor = await self.conn.execute(
-            "SELECT id FROM relations WHERE id = ?",
-            (relation.id,)
-        )
+        cursor = await self.conn.execute("SELECT id FROM relations WHERE id = ?", (relation.id,))
         existing = await cursor.fetchone()
         if existing:
             raise ValueError(f"Relation with ID '{relation.id}' already exists")
@@ -274,8 +268,14 @@ class SQLiteGraphStore(GraphStore):
             INSERT INTO relations (id, relation_type, source_id, target_id, properties, weight)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (relation.id, relation.relation_type, relation.source_id, relation.target_id,
-             properties_json, relation.weight)
+            (
+                relation.id,
+                relation.relation_type,
+                relation.source_id,
+                relation.target_id,
+                properties_json,
+                relation.weight,
+            ),
         )
         if not self._in_transaction:
             await self.conn.commit()
@@ -291,7 +291,7 @@ class SQLiteGraphStore(GraphStore):
             FROM relations
             WHERE id = ?
             """,
-            (relation_id,)
+            (relation_id,),
         )
         row = await cursor.fetchone()
 
@@ -321,8 +321,14 @@ class SQLiteGraphStore(GraphStore):
                 weight = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
-            (relation.relation_type, relation.source_id, relation.target_id, properties_json,
-             relation.weight, relation.id)
+            (
+                relation.relation_type,
+                relation.source_id,
+                relation.target_id,
+                properties_json,
+                relation.weight,
+                relation.id,
+            ),
         )
         if not self._in_transaction:
             await self.conn.commit()
@@ -342,7 +348,7 @@ class SQLiteGraphStore(GraphStore):
         self,
         entity_id: str,
         relation_type: Optional[str] = None,
-        direction: str = "outgoing"
+        direction: str = "outgoing",
     ) -> List[Entity]:
         """
         Get neighboring entities connected by relations
@@ -416,7 +422,7 @@ class SQLiteGraphStore(GraphStore):
         query_embedding: List[float],
         entity_type: Optional[str] = None,
         max_results: int = 10,
-        score_threshold: float = 0.0
+        score_threshold: float = 0.0,
     ) -> List[Tuple[Entity, float]]:
         """
         SQL-optimized vector similarity search
@@ -482,7 +488,7 @@ class SQLiteGraphStore(GraphStore):
         start_entity_id: str,
         relation_type: Optional[str] = None,
         max_depth: int = 3,
-        max_results: int = 100
+        max_results: int = 100,
     ) -> List[Path]:
         """
         SQL-optimized traversal using recursive CTE
@@ -517,7 +523,7 @@ class SQLiteGraphStore(GraphStore):
             id=entity_id,
             entity_type=entity_type,
             properties=properties,
-            embedding=embedding
+            embedding=embedding,
         )
 
     def _row_to_relation(self, row: tuple) -> Relation:
@@ -532,19 +538,21 @@ class SQLiteGraphStore(GraphStore):
             source_id=source_id,
             target_id=target_id,
             properties=properties,
-            weight=weight
+            weight=weight,
         )
 
     def _serialize_embedding(self, embedding: List[float]) -> bytes:
         """Serialize embedding vector to bytes"""
         import struct
-        return struct.pack(f'{len(embedding)}f', *embedding)
+
+        return struct.pack(f"{len(embedding)}f", *embedding)
 
     def _deserialize_embedding(self, blob: bytes) -> List[float]:
         """Deserialize embedding vector from bytes"""
         import struct
+
         count = len(blob) // 4  # 4 bytes per float
-        return list(struct.unpack(f'{count}f', blob))
+        return list(struct.unpack(f"{count}f", blob))
 
     def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
         """
@@ -601,7 +609,7 @@ class SQLiteGraphStore(GraphStore):
             "storage_type": "sqlite",
             "db_path": self.db_path,
             "db_size_bytes": file_size,
-            "is_initialized": self._is_initialized
+            "is_initialized": self._is_initialized,
         }
 
     async def clear(self):
@@ -613,4 +621,3 @@ class SQLiteGraphStore(GraphStore):
         await self.conn.execute("DELETE FROM entities")
         if not self._in_transaction:
             await self.conn.commit()
-

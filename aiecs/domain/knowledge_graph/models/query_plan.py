@@ -4,7 +4,7 @@ Query Plan Domain Models
 Models for query planning, decomposition, and optimization.
 """
 
-from typing import Any, List, Optional, Dict, Set
+from typing import Any, List, Dict, Set
 from enum import Enum
 from pydantic import BaseModel, Field
 from aiecs.domain.knowledge_graph.models.query import GraphQuery
@@ -12,6 +12,7 @@ from aiecs.domain.knowledge_graph.models.query import GraphQuery
 
 class QueryOperation(str, Enum):
     """Types of query operations"""
+
     ENTITY_LOOKUP = "entity_lookup"
     VECTOR_SEARCH = "vector_search"
     TRAVERSAL = "traversal"
@@ -50,41 +51,28 @@ class QueryStep(BaseModel):
         ```
     """
 
-    step_id: str = Field(
-        ...,
-        description="Unique identifier for this step"
-    )
+    step_id: str = Field(..., description="Unique identifier for this step")
 
-    operation: QueryOperation = Field(
-        ...,
-        description="Type of operation to perform"
-    )
+    operation: QueryOperation = Field(..., description="Type of operation to perform")
 
-    query: GraphQuery = Field(
-        ...,
-        description="Graph query specification for this step"
-    )
+    query: GraphQuery = Field(..., description="Graph query specification for this step")
 
     depends_on: List[str] = Field(
         default_factory=list,
-        description="List of step IDs that must complete before this step"
+        description="List of step IDs that must complete before this step",
     )
 
-    description: str = Field(
-        ...,
-        description="Human-readable description of what this step does"
-    )
+    description: str = Field(..., description="Human-readable description of what this step does")
 
     estimated_cost: float = Field(
         default=0.5,
         ge=0.0,
         le=1.0,
-        description="Estimated computational cost (0-1, higher = more expensive)"
+        description="Estimated computational cost (0-1, higher = more expensive)",
     )
 
     metadata: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Additional metadata for this step"
+        default_factory=dict, description="Additional metadata for this step"
     )
 
 
@@ -117,39 +105,22 @@ class QueryPlan(BaseModel):
         ```
     """
 
-    plan_id: str = Field(
-        ...,
-        description="Unique identifier for this plan"
-    )
+    plan_id: str = Field(..., description="Unique identifier for this plan")
 
-    original_query: str = Field(
-        ...,
-        description="The original natural language or complex query"
-    )
+    original_query: str = Field(..., description="The original natural language or complex query")
 
-    steps: List[QueryStep] = Field(
-        ...,
-        description="List of query steps to execute in order"
-    )
+    steps: List[QueryStep] = Field(..., description="List of query steps to execute in order")
 
     total_estimated_cost: float = Field(
-        default=0.0,
-        description="Total estimated cost of executing this plan"
+        default=0.0, description="Total estimated cost of executing this plan"
     )
 
-    optimized: bool = Field(
-        default=False,
-        description="Whether this plan has been optimized"
-    )
+    optimized: bool = Field(default=False, description="Whether this plan has been optimized")
 
-    explanation: str = Field(
-        default="",
-        description="Human-readable explanation of the plan"
-    )
+    explanation: str = Field(default="", description="Human-readable explanation of the plan")
 
     metadata: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Additional metadata for this plan"
+        default_factory=dict, description="Additional metadata for this plan"
     )
 
     def calculate_total_cost(self) -> float:
@@ -210,7 +181,7 @@ class QueryPlan(BaseModel):
 
 class OptimizationStrategy(str, Enum):
     """Query optimization strategies"""
+
     MINIMIZE_COST = "minimize_cost"  # Reorder to minimize total cost
     MINIMIZE_LATENCY = "minimize_latency"  # Maximize parallelization
     BALANCED = "balanced"  # Balance cost and latency
-

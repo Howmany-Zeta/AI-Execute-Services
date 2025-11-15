@@ -7,82 +7,142 @@ from .execution.model import TaskStepResult, TaskStatus, ErrorCode
 from .task.model import TaskContext, DSLStep
 from .task.dsl_processor import DSLProcessor
 from .context import (
-    ContextEngine, SessionMetrics, ConversationMessage,
-    ConversationParticipant, ConversationSession, AgentCommunicationMessage,
-    create_session_key, validate_conversation_isolation_pattern
+    ContextEngine,
+    SessionMetrics,
+    ConversationMessage,
+    ConversationParticipant,
+    ConversationSession,
+    AgentCommunicationMessage,
+    create_session_key,
+    validate_conversation_isolation_pattern,
 )
 from .community import (
     # Core managers
-    CommunityManager, CommunityIntegration, DecisionEngine, ResourceManager,
-    CollaborativeWorkflowEngine, CommunityAnalytics, MemberLifecycleHooks,
-    
+    CommunityManager,
+    CommunityIntegration,
+    DecisionEngine,
+    ResourceManager,
+    CollaborativeWorkflowEngine,
+    CommunityAnalytics,
+    MemberLifecycleHooks,
     # Communication and context
-    CommunicationHub, Message, Event, MessageType, EventType,
-    SharedContextManager, SharedContext, ContextScope, ContextConflictStrategy,
-    
+    CommunicationHub,
+    Message,
+    Event,
+    MessageType,
+    EventType,
+    SharedContextManager,
+    SharedContext,
+    ContextScope,
+    ContextConflictStrategy,
     # Agent adapters
-    AgentAdapter, StandardLLMAdapter, CustomAgentAdapter, AgentAdapterRegistry, AgentCapability,
-    
+    AgentAdapter,
+    StandardLLMAdapter,
+    CustomAgentAdapter,
+    AgentAdapterRegistry,
+    AgentCapability,
     # Builder
-    CommunityBuilder, builder,
-    
+    CommunityBuilder,
+    builder,
     # Enums
-    CommunityRole, GovernanceType, DecisionStatus, ResourceType,
-    ConsensusAlgorithm, ConflictResolutionStrategy,
-    
+    CommunityRole,
+    GovernanceType,
+    DecisionStatus,
+    ResourceType,
+    ConsensusAlgorithm,
+    ConflictResolutionStrategy,
     # Models
-    CommunityMember, CommunityResource, CommunityDecision, AgentCommunity, CollaborationSession,
-    
+    CommunityMember,
+    CommunityResource,
+    CommunityDecision,
+    AgentCommunity,
+    CollaborationSession,
     # Exceptions
-    CommunityException, CommunityNotFoundError, MemberNotFoundError, ResourceNotFoundError,
-    DecisionNotFoundError, AccessDeniedError, MembershipError, VotingError, GovernanceError,
-    CollaborationError, CommunityInitializationError, CommunityValidationError,
-    QuorumNotMetError, ConflictResolutionError, CommunityCapacityError,
-    AgentAdapterError, CommunicationError, ContextError,
+    CommunityException,
+    CommunityNotFoundError,
+    MemberNotFoundError,
+    ResourceNotFoundError,
+    DecisionNotFoundError,
+    AccessDeniedError,
+    MembershipError,
+    VotingError,
+    GovernanceError,
+    CollaborationError,
+    CommunityInitializationError,
+    CommunityValidationError,
+    QuorumNotMetError,
+    ConflictResolutionError,
+    CommunityCapacityError,
+    AgentAdapterError,
+    CommunicationError,
+    ContextError,
 )
 
 from .agent import (
     # Exceptions
-    AgentException, AgentNotFoundError, AgentAlreadyRegisteredError,
-    InvalidStateTransitionError, ConfigurationError, TaskExecutionError,
-    ToolAccessDeniedError, SerializationError, AgentInitializationError,
-    
+    AgentException,
+    AgentNotFoundError,
+    AgentAlreadyRegisteredError,
+    InvalidStateTransitionError,
+    ConfigurationError,
+    TaskExecutionError,
+    ToolAccessDeniedError,
+    SerializationError,
+    AgentInitializationError,
     # Enums
-    AgentState, AgentType, GoalStatus, GoalPriority, CapabilityLevel, MemoryType,
-    
+    AgentState,
+    AgentType,
+    GoalStatus,
+    GoalPriority,
+    CapabilityLevel,
+    MemoryType,
     # Models
-    RetryPolicy, AgentConfiguration, AgentGoal, AgentCapabilityDeclaration,
-    AgentMetrics, AgentInteraction, AgentMemory,
-    
+    RetryPolicy,
+    AgentConfiguration,
+    AgentGoal,
+    AgentCapabilityDeclaration,
+    AgentMetrics,
+    AgentInteraction,
+    AgentMemory,
     # Base and Concrete Agents
-    BaseAIAgent, LLMAgent, ToolAgent, HybridAgent,
-    
+    BaseAIAgent,
+    LLMAgent,
+    ToolAgent,
+    HybridAgent,
     # Lifecycle Management
-    AgentRegistry, AgentLifecycleManager,
-    get_global_registry, get_global_lifecycle_manager,
-    
+    AgentRegistry,
+    AgentLifecycleManager,
+    get_global_registry,
+    get_global_lifecycle_manager,
     # Persistence
-    InMemoryPersistence, FilePersistence,
-    get_global_persistence, set_global_persistence,
-    
+    InMemoryPersistence,
+    FilePersistence,
+    get_global_persistence,
+    set_global_persistence,
     # Observability
-    AgentController, LoggingObserver, MetricsObserver,
-    
+    AgentController,
+    LoggingObserver,
+    MetricsObserver,
     # Prompts
-    PromptTemplate, ChatPromptTemplate, MessageBuilder,
-    
+    PromptTemplate,
+    ChatPromptTemplate,
+    MessageBuilder,
     # Tools
-    ToolSchemaGenerator, generate_tool_schema,
-    
+    ToolSchemaGenerator,
+    generate_tool_schema,
     # Memory
-    ConversationMemory, Session,
-    
+    ConversationMemory,
+    Session,
     # Integration
-    ContextEngineAdapter, EnhancedRetryPolicy, RoleConfiguration,
-    ContextCompressor, compress_messages,
-    
+    ContextEngineAdapter,
+    EnhancedRetryPolicy,
+    RoleConfiguration,
+    ContextCompressor,
+    compress_messages,
     # Migration
-    LegacyAgentWrapper, convert_langchain_prompt, convert_legacy_config,
+    LegacyAgentWrapper,
+    convert_langchain_prompt,
+    convert_legacy_config,
 )
 
 __all__ = [
@@ -90,12 +150,10 @@ __all__ = [
     "TaskStepResult",
     "TaskStatus",
     "ErrorCode",
-
     # Task domain
     "TaskContext",
     "DSLStep",
     "DSLProcessor",
-
     # Context domain
     "ContextEngine",
     "SessionMetrics",
@@ -105,7 +163,6 @@ __all__ = [
     "AgentCommunicationMessage",
     "create_session_key",
     "validate_conversation_isolation_pattern",
-
     # Community domain - Core managers
     "CommunityManager",
     "CommunityIntegration",
@@ -114,7 +171,6 @@ __all__ = [
     "CollaborativeWorkflowEngine",
     "CommunityAnalytics",
     "MemberLifecycleHooks",
-
     # Community domain - Communication and context
     "CommunicationHub",
     "Message",
@@ -125,18 +181,15 @@ __all__ = [
     "SharedContext",
     "ContextScope",
     "ContextConflictStrategy",
-
     # Community domain - Agent adapters
     "AgentAdapter",
     "StandardLLMAdapter",
     "CustomAgentAdapter",
     "AgentAdapterRegistry",
     "AgentCapability",
-
     # Community domain - Builder
     "CommunityBuilder",
     "builder",
-
     # Community domain - Enums
     "CommunityRole",
     "GovernanceType",
@@ -144,14 +197,12 @@ __all__ = [
     "ResourceType",
     "ConsensusAlgorithm",
     "ConflictResolutionStrategy",
-
     # Community domain - Models
     "CommunityMember",
     "CommunityResource",
     "CommunityDecision",
     "AgentCommunity",
     "CollaborationSession",
-
     # Community domain - Exceptions
     "CommunityException",
     "CommunityNotFoundError",
@@ -171,7 +222,6 @@ __all__ = [
     "AgentAdapterError",
     "CommunicationError",
     "ContextError",
-
     # Agent domain - Exceptions
     "AgentException",
     "AgentNotFoundError",
@@ -182,7 +232,6 @@ __all__ = [
     "ToolAccessDeniedError",
     "SerializationError",
     "AgentInitializationError",
-
     # Agent domain - Enums
     "AgentState",
     "AgentType",
@@ -190,7 +239,6 @@ __all__ = [
     "GoalPriority",
     "CapabilityLevel",
     "MemoryType",
-
     # Agent domain - Models
     "RetryPolicy",
     "AgentConfiguration",
@@ -199,50 +247,41 @@ __all__ = [
     "AgentMetrics",
     "AgentInteraction",
     "AgentMemory",
-    
     # Agent domain - Base and Concrete Agents
     "BaseAIAgent",
     "LLMAgent",
     "ToolAgent",
     "HybridAgent",
-    
     # Agent domain - Lifecycle Management
     "AgentRegistry",
     "AgentLifecycleManager",
     "get_global_registry",
     "get_global_lifecycle_manager",
-    
     # Agent domain - Persistence
     "InMemoryPersistence",
     "FilePersistence",
     "get_global_persistence",
     "set_global_persistence",
-    
     # Agent domain - Observability
     "AgentController",
     "LoggingObserver",
     "MetricsObserver",
-    
     # Agent domain - Prompts
     "PromptTemplate",
     "ChatPromptTemplate",
     "MessageBuilder",
-    
     # Agent domain - Tools
     "ToolSchemaGenerator",
     "generate_tool_schema",
-    
     # Agent domain - Memory
     "ConversationMemory",
     "Session",
-    
     # Agent domain - Integration
     "ContextEngineAdapter",
     "EnhancedRetryPolicy",
     "RoleConfiguration",
     "ContextCompressor",
     "compress_messages",
-    
     # Agent domain - Migration
     "LegacyAgentWrapper",
     "convert_langchain_prompt",

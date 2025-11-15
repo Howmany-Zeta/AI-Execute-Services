@@ -6,7 +6,6 @@ Central registry for tracking and managing active agents.
 
 import logging
 from typing import Dict, List, Optional, Set
-from datetime import datetime
 
 from .base_agent import BaseAIAgent
 from .models import AgentState, AgentType
@@ -27,7 +26,7 @@ class AgentRegistry:
         self._agents: Dict[str, BaseAIAgent] = {}
         self._agents_by_type: Dict[AgentType, Set[str]] = {}
         self._agents_by_state: Dict[AgentState, Set[str]] = {}
-        
+
         logger.info("AgentRegistry initialized")
 
     def register(self, agent: BaseAIAgent) -> None:
@@ -69,11 +68,11 @@ class AgentRegistry:
             AgentNotFoundError: If agent not found
         """
         agent = self.get(agent_id)
-        
+
         # Remove from indexes
         if agent.agent_type in self._agents_by_type:
             self._agents_by_type[agent.agent_type].discard(agent_id)
-        
+
         if agent.state in self._agents_by_state:
             self._agents_by_state[agent.state].discard(agent_id)
 
@@ -97,7 +96,7 @@ class AgentRegistry:
         """
         if agent_id not in self._agents:
             raise AgentNotFoundError(agent_id)
-        
+
         return self._agents[agent_id]
 
     def get_optional(self, agent_id: str) -> Optional[BaseAIAgent]:
@@ -159,7 +158,9 @@ class AgentRegistry:
         agent_ids = self._agents_by_state.get(state, set())
         return [self._agents[aid] for aid in agent_ids if aid in self._agents]
 
-    def update_state_index(self, agent_id: str, old_state: AgentState, new_state: AgentState) -> None:
+    def update_state_index(
+        self, agent_id: str, old_state: AgentState, new_state: AgentState
+    ) -> None:
         """
         Update state index when agent state changes.
 
@@ -224,8 +225,7 @@ class AgentRegistry:
                 for agent_type, agent_ids in self._agents_by_type.items()
             },
             "by_state": {
-                state.value: len(agent_ids)
-                for state, agent_ids in self._agents_by_state.items()
+                state.value: len(agent_ids) for state, agent_ids in self._agents_by_state.items()
             },
         }
 
@@ -258,4 +258,3 @@ def reset_global_registry() -> None:
     """Reset global registry (primarily for testing)."""
     global _global_registry
     _global_registry = None
-

@@ -25,7 +25,6 @@ class CustomAsyncCallbackHandler(ABC):
             messages: List of message dictionaries, each containing 'role' and 'content' keys
             **kwargs: Additional parameters such as provider, model, etc.
         """
-        pass
 
     @abstractmethod
     async def on_llm_end(self, response: dict, **kwargs: Any) -> None:
@@ -36,7 +35,6 @@ class CustomAsyncCallbackHandler(ABC):
             response: Response dictionary containing 'content', 'tokens_used', 'model', etc.
             **kwargs: Additional parameters such as provider, model, etc.
         """
-        pass
 
     @abstractmethod
     async def on_llm_error(self, error: Exception, **kwargs: Any) -> None:
@@ -47,4 +45,3 @@ class CustomAsyncCallbackHandler(ABC):
             error: The exception that occurred during the LLM call
             **kwargs: Additional parameters such as provider, model, etc.
         """
-        pass

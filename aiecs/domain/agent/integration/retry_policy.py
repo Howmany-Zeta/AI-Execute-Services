@@ -7,8 +7,7 @@ Sophisticated retry logic with exponential backoff and error classification.
 import asyncio
 import random
 import logging
-from typing import Optional, Callable, Any
-from datetime import datetime
+from typing import Callable, Any
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -16,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 class ErrorType(Enum):
     """Error types for classification."""
+
     RATE_LIMIT = "rate_limit"
     TIMEOUT = "timeout"
     SERVER_ERROR = "server_error"
@@ -128,10 +128,7 @@ class EnhancedRetryPolicy:
             Delay in seconds
         """
         # Base exponential backoff
-        delay = min(
-            self.base_delay * (self.exponential_base ** attempt),
-            self.max_delay
-        )
+        delay = min(self.base_delay * (self.exponential_base**attempt), self.max_delay)
 
         # Adjust for error type
         if error_type == ErrorType.RATE_LIMIT:
@@ -140,16 +137,11 @@ class EnhancedRetryPolicy:
 
         # Add jitter to prevent thundering herd
         if self.jitter:
-            delay *= (0.5 + random.random())
+            delay *= 0.5 + random.random()
 
         return delay
 
-    async def execute_with_retry(
-        self,
-        func: Callable,
-        *args,
-        **kwargs
-    ) -> Any:
+    async def execute_with_retry(self, func: Callable, *args, **kwargs) -> Any:
         """
         Execute function with retry logic.
 
@@ -169,19 +161,19 @@ class EnhancedRetryPolicy:
         for attempt in range(self.max_retries + 1):
             try:
                 result = await func(*args, **kwargs)
-                
+
                 # Log success after retries
                 if attempt > 0:
                     logger.info(f"Succeeded after {attempt} retries")
-                
+
                 return result
 
             except Exception as e:
                 last_error = e
-                
+
                 # Classify error
                 error_type = ErrorClassifier.classify(e)
-                
+
                 # Check if we should retry
                 if attempt >= self.max_retries:
                     logger.error(f"Max retries ({self.max_retries}) exhausted")
@@ -208,7 +200,7 @@ async def with_retry(
     max_retries: int = 3,
     base_delay: float = 1.0,
     *args,
-    **kwargs
+    **kwargs,
 ) -> Any:
     """
     Convenience function for executing with retry.
@@ -225,4 +217,3 @@ async def with_retry(
     """
     policy = EnhancedRetryPolicy(max_retries=max_retries, base_delay=base_delay)
     return await policy.execute_with_retry(func, *args, **kwargs)
-

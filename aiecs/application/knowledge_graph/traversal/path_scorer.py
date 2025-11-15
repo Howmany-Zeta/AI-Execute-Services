@@ -41,7 +41,7 @@ class PathScorer:
         self,
         paths: List[Path],
         prefer_shorter: bool = True,
-        normalize: bool = True
+        normalize: bool = True,
     ) -> List[Path]:
         """
         Score paths by their length
@@ -81,20 +81,12 @@ class PathScorer:
                     score = path.length / (max_len + 1)
 
             # Create new path with score
-            scored_path = Path(
-                nodes=path.nodes,
-                edges=path.edges,
-                score=score
-            )
+            scored_path = Path(nodes=path.nodes, edges=path.edges, score=score)
             scored_paths.append(scored_path)
 
         return scored_paths
 
-    def score_by_weights(
-        self,
-        paths: List[Path],
-        aggregation: str = "mean"
-    ) -> List[Path]:
+    def score_by_weights(self, paths: List[Path], aggregation: str = "mean") -> List[Path]:
         """
         Score paths by relation weights
 
@@ -124,11 +116,7 @@ class PathScorer:
                 else:
                     score = sum(weights) / len(weights)  # Default to mean
 
-            scored_path = Path(
-                nodes=path.nodes,
-                edges=path.edges,
-                score=score
-            )
+            scored_path = Path(nodes=path.nodes, edges=path.edges, score=score)
             scored_paths.append(scored_path)
 
         return scored_paths
@@ -137,7 +125,7 @@ class PathScorer:
         self,
         paths: List[Path],
         preferred_types: List[str],
-        penalty: float = 0.5
+        penalty: float = 0.5,
     ) -> List[Path]:
         """
         Score paths by preferred relation types
@@ -166,20 +154,12 @@ class PathScorer:
 
                 score = sum(type_scores) / len(type_scores)
 
-            scored_path = Path(
-                nodes=path.nodes,
-                edges=path.edges,
-                score=score
-            )
+            scored_path = Path(nodes=path.nodes, edges=path.edges, score=score)
             scored_paths.append(scored_path)
 
         return scored_paths
 
-    def score_custom(
-        self,
-        paths: List[Path],
-        scoring_fn: Callable[[Path], float]
-    ) -> List[Path]:
+    def score_custom(self, paths: List[Path], scoring_fn: Callable[[Path], float]) -> List[Path]:
         """
         Score paths using a custom scoring function
 
@@ -197,11 +177,7 @@ class PathScorer:
             # Clamp score to valid range
             score = max(0.0, min(1.0, score))
 
-            scored_path = Path(
-                nodes=path.nodes,
-                edges=path.edges,
-                score=score
-            )
+            scored_path = Path(nodes=path.nodes, edges=path.edges, score=score)
             scored_paths.append(scored_path)
 
         return scored_paths
@@ -209,7 +185,7 @@ class PathScorer:
     def combine_scores(
         self,
         paths_lists: List[List[Path]],
-        weights: Optional[List[float]] = None
+        weights: Optional[List[float]] = None,
     ) -> List[Path]:
         """
         Combine scores from multiple scoring methods
@@ -240,22 +216,19 @@ class PathScorer:
                 path_key = tuple(p.id for p in path.nodes)
 
                 if path_key not in path_scores:
-                    path_scores[path_key] = {
-                        'path': path,
-                        'score': 0.0
-                    }
+                    path_scores[path_key] = {"path": path, "score": 0.0}
 
                 # Add weighted score
                 if path.score is not None:
-                    path_scores[path_key]['score'] += path.score * weight
+                    path_scores[path_key]["score"] += path.score * weight
 
         # Create scored paths
         combined_paths = []
         for data in path_scores.values():
             scored_path = Path(
-                nodes=data['path'].nodes,
-                edges=data['path'].edges,
-                score=data['score']
+                nodes=data["path"].nodes,
+                edges=data["path"].edges,
+                score=data["score"],
             )
             combined_paths.append(scored_path)
 
@@ -265,7 +238,7 @@ class PathScorer:
         self,
         paths: List[Path],
         top_k: Optional[int] = None,
-        min_score: Optional[float] = None
+        min_score: Optional[float] = None,
     ) -> List[Path]:
         """
         Rank paths by score and return top results
@@ -286,7 +259,7 @@ class PathScorer:
         sorted_paths = sorted(
             paths,
             key=lambda p: p.score if p.score is not None else 0.0,
-            reverse=True
+            reverse=True,
         )
 
         # Return top k if specified
@@ -294,4 +267,3 @@ class PathScorer:
             return sorted_paths[:top_k]
 
         return sorted_paths
-

@@ -47,10 +47,7 @@ class RelationValidator:
         self.strict = strict
 
     def validate_relation(
-        self,
-        relation: Relation,
-        source_entity: Entity,
-        target_entity: Entity
+        self, relation: Relation, source_entity: Entity, target_entity: Entity
     ) -> Tuple[bool, List[str]]:
         """
         Validate a relation against schema
@@ -87,19 +84,13 @@ class RelationValidator:
 
         # Schema-based validation (if schema provided)
         if self.schema:
-            schema_errors = self._validate_against_schema(
-                relation,
-                source_entity,
-                target_entity
-            )
+            schema_errors = self._validate_against_schema(relation, source_entity, target_entity)
             errors.extend(schema_errors)
 
         return (len(errors) == 0, errors)
 
     def validate_relations(
-        self,
-        relations: List[Relation],
-        entities: List[Entity]
+        self, relations: List[Relation], entities: List[Entity]
     ) -> List[Tuple[Relation, bool, List[str]]]:
         """
         Validate multiple relations
@@ -121,9 +112,7 @@ class RelationValidator:
 
             if not source or not target:
                 is_valid = False
-                errors = [
-                    f"Source or target entity not found for relation {relation.id}"
-                ]
+                errors = [f"Source or target entity not found for relation {relation.id}"]
             else:
                 is_valid, errors = self.validate_relation(relation, source, target)
 
@@ -132,9 +121,7 @@ class RelationValidator:
         return results
 
     def filter_valid_relations(
-        self,
-        relations: List[Relation],
-        entities: List[Entity]
+        self, relations: List[Relation], entities: List[Entity]
     ) -> List[Relation]:
         """
         Filter relations to only valid ones
@@ -147,17 +134,10 @@ class RelationValidator:
             List of valid relations
         """
         validation_results = self.validate_relations(relations, entities)
-        return [
-            relation
-            for relation, is_valid, errors in validation_results
-            if is_valid
-        ]
+        return [relation for relation, is_valid, errors in validation_results if is_valid]
 
     def _validate_against_schema(
-        self,
-        relation: Relation,
-        source_entity: Entity,
-        target_entity: Entity
+        self, relation: Relation, source_entity: Entity, target_entity: Entity
     ) -> List[str]:
         """
         Validate relation against schema rules
@@ -175,9 +155,7 @@ class RelationValidator:
         # Check if relation type exists in schema
         if not self.schema.has_relation_type(relation.relation_type):
             if self.strict:
-                errors.append(
-                    f"Relation type '{relation.relation_type}' not found in schema"
-                )
+                errors.append(f"Relation type '{relation.relation_type}' not found in schema")
             # In non-strict mode, allow unknown relation types
             return errors
 
@@ -209,4 +187,3 @@ class RelationValidator:
         # - Values are within allowed ranges/values
 
         return errors
-

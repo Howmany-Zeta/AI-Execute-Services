@@ -10,12 +10,15 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
+
 @dataclass
 class ConversationParticipant:
     """Represents a participant in a conversation."""
+
     participant_id: str
     participant_type: str  # 'user', 'master_controller', 'agent'
-    participant_role: Optional[str] = None  # For agents: 'writer', 'researcher', etc.
+    # For agents: 'writer', 'researcher', etc.
+    participant_role: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
@@ -26,18 +29,19 @@ class ConversationParticipant:
             raise ValueError("participant_type cannot be empty")
 
         # Validate participant types
-        valid_types = {'user', 'master_controller', 'agent'}
+        valid_types = {"user", "master_controller", "agent"}
         if self.participant_type not in valid_types:
             raise ValueError(f"participant_type must be one of {valid_types}")
 
         # For agents, role should be specified
-        if self.participant_type == 'agent' and not self.participant_role:
+        if self.participant_type == "agent" and not self.participant_role:
             raise ValueError("participant_role is required for agent participants")
 
 
 @dataclass
 class ConversationSession:
     """Represents an isolated conversation session between participants."""
+
     session_id: str
     participants: List[ConversationParticipant]
     session_type: str  # 'user_to_mc', 'mc_to_agent', 'agent_to_agent', 'user_to_agent'
@@ -53,7 +57,12 @@ class ConversationSession:
             raise ValueError("participants list cannot be empty")
 
         # Validate session types
-        valid_session_types = {'user_to_mc', 'mc_to_agent', 'agent_to_agent', 'user_to_agent'}
+        valid_session_types = {
+            "user_to_mc",
+            "mc_to_agent",
+            "agent_to_agent",
+            "user_to_agent",
+        }
         if self.session_type not in valid_session_types:
             raise ValueError(f"session_type must be one of {valid_session_types}")
 
@@ -64,45 +73,59 @@ class ConversationSession:
         """Validate that participants match the session type."""
         participant_types = [p.participant_type for p in self.participants]
 
-        if self.session_type == 'user_to_mc':
-            expected_types = {'user', 'master_controller'}
+        if self.session_type == "user_to_mc":
+            expected_types = {"user", "master_controller"}
             if not expected_types.issubset(set(participant_types)):
-                raise ValueError(f"user_to_mc session requires user and master_controller participants")
+                raise ValueError(
+                    "user_to_mc session requires user and master_controller participants"
+                )
 
-        elif self.session_type == 'mc_to_agent':
-            expected_types = {'master_controller', 'agent'}
+        elif self.session_type == "mc_to_agent":
+            expected_types = {"master_controller", "agent"}
             if not expected_types.issubset(set(participant_types)):
-                raise ValueError(f"mc_to_agent session requires master_controller and agent participants")
+                raise ValueError(
+                    "mc_to_agent session requires master_controller and agent participants"
+                )
 
-        elif self.session_type == 'agent_to_agent':
-            agent_count = sum(1 for p in self.participants if p.participant_type == 'agent')
+        elif self.session_type == "agent_to_agent":
+            agent_count = sum(1 for p in self.participants if p.participant_type == "agent")
             if agent_count < 2:
-                raise ValueError(f"agent_to_agent session requires at least 2 agent participants")
+                raise ValueError("agent_to_agent session requires at least 2 agent participants")
 
-        elif self.session_type == 'user_to_agent':
-            expected_types = {'user', 'agent'}
+        elif self.session_type == "user_to_agent":
+            expected_types = {"user", "agent"}
             if not expected_types.issubset(set(participant_types)):
-                raise ValueError(f"user_to_agent session requires user and agent participants")
+                raise ValueError("user_to_agent session requires user and agent participants")
 
     def generate_session_key(self) -> str:
         """Generate a unique session key for conversation isolation."""
-        if self.session_type == 'user_to_mc':
+        if self.session_type == "user_to_mc":
             return self.session_id
-        elif self.session_type == 'mc_to_agent':
-            agent_role = next((p.participant_role for p in self.participants if p.participant_type == 'agent'), 'unknown')
+        elif self.session_type == "mc_to_agent":
+            agent_role = next(
+                (p.participant_role for p in self.participants if p.participant_type == "agent"),
+                "unknown",
+            )
             return f"{self.session_id}_mc_to_{agent_role}"
-        elif self.session_type == 'agent_to_agent':
-            agent_roles = [p.participant_role for p in self.participants if p.participant_type == 'agent']
+        elif self.session_type == "agent_to_agent":
+            agent_roles = [
+                p.participant_role for p in self.participants if p.participant_type == "agent"
+            ]
             if len(agent_roles) >= 2:
                 return f"{self.session_id}_{agent_roles[0]}_to_{agent_roles[1]}"
             return f"{self.session_id}_agent_to_agent"
-        elif self.session_type == 'user_to_agent':
-            agent_role = next((p.participant_role for p in self.participants if p.participant_type == 'agent'), 'unknown')
+        elif self.session_type == "user_to_agent":
+            agent_role = next(
+                (p.participant_role for p in self.participants if p.participant_type == "agent"),
+                "unknown",
+            )
             return f"{self.session_id}_user_to_{agent_role}"
         else:
             return self.session_id
 
-    def get_participant_by_type_and_role(self, participant_type: str, participant_role: Optional[str] = None) -> Optional[ConversationParticipant]:
+    def get_participant_by_type_and_role(
+        self, participant_type: str, participant_role: Optional[str] = None
+    ) -> Optional[ConversationParticipant]:
         """Get a participant by type and optionally by role."""
         for participant in self.participants:
             if participant.participant_type == participant_type:
@@ -123,25 +146,25 @@ class ConversationSession:
                     "participant_id": p.participant_id,
                     "participant_type": p.participant_type,
                     "participant_role": p.participant_role,
-                    "metadata": p.metadata
+                    "metadata": p.metadata,
                 }
                 for p in self.participants
             ],
             "session_type": self.session_type,
             "created_at": self.created_at.isoformat(),
             "last_activity": self.last_activity.isoformat(),
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'ConversationSession':
+    def from_dict(cls, data: Dict[str, Any]) -> "ConversationSession":
         """Create from dictionary."""
         participants = [
             ConversationParticipant(
                 participant_id=p["participant_id"],
                 participant_type=p["participant_type"],
                 participant_role=p.get("participant_role"),
-                metadata=p.get("metadata", {})
+                metadata=p.get("metadata", {}),
             )
             for p in data["participants"]
         ]
@@ -152,13 +175,14 @@ class ConversationSession:
             session_type=data["session_type"],
             created_at=datetime.fromisoformat(data["created_at"]),
             last_activity=datetime.fromisoformat(data["last_activity"]),
-            metadata=data.get("metadata", {})
+            metadata=data.get("metadata", {}),
         )
 
 
 @dataclass
 class AgentCommunicationMessage:
     """Message for agent-to-agent or controller-to-agent communication."""
+
     message_id: str
     session_key: str
     sender_id: str
@@ -168,7 +192,8 @@ class AgentCommunicationMessage:
     recipient_type: str  # 'agent', 'master_controller', 'user'
     recipient_role: Optional[str]  # For agents
     content: str
-    message_type: str  # 'task_assignment', 'result_report', 'collaboration_request', 'feedback', 'communication'
+    # 'task_assignment', 'result_report', 'collaboration_request', 'feedback', 'communication'
+    message_type: str
     timestamp: datetime
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -187,9 +212,16 @@ class AgentCommunicationMessage:
 
         # Validate message types
         valid_message_types = {
-            'task_assignment', 'result_report', 'collaboration_request',
-            'feedback', 'communication', 'status_update', 'error_report',
-            'task_completion', 'progress_update', 'clarification_request'
+            "task_assignment",
+            "result_report",
+            "collaboration_request",
+            "feedback",
+            "communication",
+            "status_update",
+            "error_report",
+            "task_completion",
+            "progress_update",
+            "clarification_request",
         }
         if self.message_type not in valid_message_types:
             raise ValueError(f"message_type must be one of {valid_message_types}")
@@ -210,8 +242,8 @@ class AgentCommunicationMessage:
                 "recipient_id": self.recipient_id,
                 "recipient_type": self.recipient_type,
                 "recipient_role": self.recipient_role,
-                "message_type": self.message_type
-            }
+                "message_type": self.message_type,
+            },
         }
 
     def to_dict(self) -> Dict[str, Any]:
@@ -228,11 +260,11 @@ class AgentCommunicationMessage:
             "content": self.content,
             "message_type": self.message_type,
             "timestamp": self.timestamp.isoformat(),
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'AgentCommunicationMessage':
+    def from_dict(cls, data: Dict[str, Any]) -> "AgentCommunicationMessage":
         """Create from dictionary."""
         return cls(
             message_id=data["message_id"],
@@ -246,13 +278,18 @@ class AgentCommunicationMessage:
             content=data["content"],
             message_type=data["message_type"],
             timestamp=datetime.fromisoformat(data["timestamp"]),
-            metadata=data.get("metadata", {})
+            metadata=data.get("metadata", {}),
         )
 
 
 # Conversation isolation utility functions
 
-def create_session_key(session_id: str, session_type: str, participants: List[ConversationParticipant]) -> str:
+
+def create_session_key(
+    session_id: str,
+    session_type: str,
+    participants: List[ConversationParticipant],
+) -> str:
     """
     Utility function to create session keys for conversation isolation.
 
@@ -264,18 +301,24 @@ def create_session_key(session_id: str, session_type: str, participants: List[Co
     Returns:
         Generated session key
     """
-    if session_type == 'user_to_mc':
+    if session_type == "user_to_mc":
         return session_id
-    elif session_type == 'mc_to_agent':
-        agent_role = next((p.participant_role for p in participants if p.participant_type == 'agent'), 'unknown')
+    elif session_type == "mc_to_agent":
+        agent_role = next(
+            (p.participant_role for p in participants if p.participant_type == "agent"),
+            "unknown",
+        )
         return f"{session_id}_mc_to_{agent_role}"
-    elif session_type == 'agent_to_agent':
-        agent_roles = [p.participant_role for p in participants if p.participant_type == 'agent']
+    elif session_type == "agent_to_agent":
+        agent_roles = [p.participant_role for p in participants if p.participant_type == "agent"]
         if len(agent_roles) >= 2:
             return f"{session_id}_{agent_roles[0]}_to_{agent_roles[1]}"
         return f"{session_id}_agent_to_agent"
-    elif session_type == 'user_to_agent':
-        agent_role = next((p.participant_role for p in participants if p.participant_type == 'agent'), 'unknown')
+    elif session_type == "user_to_agent":
+        agent_role = next(
+            (p.participant_role for p in participants if p.participant_type == "agent"),
+            "unknown",
+        )
         return f"{session_id}_user_to_{agent_role}"
     else:
         return session_id
@@ -292,14 +335,20 @@ def validate_conversation_isolation_pattern(session_key: str, expected_pattern: 
     Returns:
         True if the pattern matches, False otherwise
     """
-    if expected_pattern == 'user_to_mc':
+    if expected_pattern == "user_to_mc":
         # Should be just the base session_id
-        return '_' not in session_key or not any(x in session_key for x in ['_mc_to_', '_to_', '_user_to_'])
-    elif expected_pattern == 'mc_to_agent':
-        return '_mc_to_' in session_key
-    elif expected_pattern == 'agent_to_agent':
-        return '_to_' in session_key and '_mc_to_' not in session_key and '_user_to_' not in session_key
-    elif expected_pattern == 'user_to_agent':
-        return '_user_to_' in session_key
+        return "_" not in session_key or not any(
+            x in session_key for x in ["_mc_to_", "_to_", "_user_to_"]
+        )
+    elif expected_pattern == "mc_to_agent":
+        return "_mc_to_" in session_key
+    elif expected_pattern == "agent_to_agent":
+        return (
+            "_to_" in session_key
+            and "_mc_to_" not in session_key
+            and "_user_to_" not in session_key
+        )
+    elif expected_pattern == "user_to_agent":
+        return "_user_to_" in session_key
     else:
         return False

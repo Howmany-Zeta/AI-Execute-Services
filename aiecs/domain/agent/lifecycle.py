@@ -6,15 +6,12 @@ Manages agent lifecycle transitions and state management.
 
 import logging
 from typing import Dict, Any, Optional, List
-from datetime import datetime
 
 from .base_agent import BaseAIAgent
 from .models import AgentState
 from .registry import AgentRegistry, get_global_registry
 from .exceptions import (
-    InvalidStateTransitionError,
     AgentInitializationError,
-    AgentNotFoundError,
 )
 
 logger = logging.getLogger(__name__)
@@ -63,7 +60,7 @@ class AgentLifecycleManager:
 
         except Exception as e:
             logger.error(f"Failed to create and initialize agent {agent.agent_id}: {e}")
-            
+
             # Cleanup on failure
             try:
                 if self.registry.exists(agent.agent_id):
@@ -73,7 +70,7 @@ class AgentLifecycleManager:
 
             raise AgentInitializationError(
                 f"Agent initialization failed: {str(e)}",
-                agent_id=agent.agent_id
+                agent_id=agent.agent_id,
             )
 
     async def activate(self, agent_id: str) -> None:
@@ -88,7 +85,7 @@ class AgentLifecycleManager:
             InvalidStateTransitionError: If activation not allowed
         """
         agent = self.registry.get(agent_id)
-        
+
         try:
             await agent.activate()
             logger.info(f"Agent {agent_id} activated")
@@ -108,7 +105,7 @@ class AgentLifecycleManager:
             InvalidStateTransitionError: If deactivation not allowed
         """
         agent = self.registry.get(agent_id)
-        
+
         try:
             await agent.deactivate()
             logger.info(f"Agent {agent_id} deactivated")
@@ -128,7 +125,7 @@ class AgentLifecycleManager:
             AgentNotFoundError: If agent not found
         """
         agent = self.registry.get(agent_id)
-        
+
         try:
             await agent.shutdown()
             logger.info(f"Agent {agent_id} shut down")
@@ -152,7 +149,7 @@ class AgentLifecycleManager:
             AgentNotFoundError: If agent not found
         """
         agent = self.registry.get(agent_id)
-        
+
         try:
             # Deactivate
             if agent.state in [AgentState.ACTIVE, AgentState.BUSY]:
@@ -184,17 +181,19 @@ class AgentLifecycleManager:
         }
 
         agents = self.registry.list_all()
-        
+
         for agent in agents:
             try:
                 await self.shutdown(agent.agent_id, unregister=True)
                 results["success"].append(agent.agent_id)
             except Exception as e:
                 logger.error(f"Failed to shutdown agent {agent.agent_id}: {e}")
-                results["failed"].append({
-                    "agent_id": agent.agent_id,
-                    "error": str(e),
-                })
+                results["failed"].append(
+                    {
+                        "agent_id": agent.agent_id,
+                        "error": str(e),
+                    }
+                )
 
         logger.info(
             f"Shutdown all agents: {len(results['success'])} succeeded, "
@@ -217,15 +216,15 @@ class AgentLifecycleManager:
             AgentNotFoundError: If agent not found
         """
         agent = self.registry.get(agent_id)
-        
+
         return {
             "agent_id": agent.agent_id,
             "name": agent.name,
             "type": agent.agent_type.value,
             "state": agent.state.value,
             "version": agent.version,
-            "created_at": agent.created_at.isoformat() if agent.created_at else None,
-            "last_active_at": agent.last_active_at.isoformat() if agent.last_active_at else None,
+            "created_at": (agent.created_at.isoformat() if agent.created_at else None),
+            "last_active_at": (agent.last_active_at.isoformat() if agent.last_active_at else None),
             "current_task_id": agent._current_task_id,
             "metrics": {
                 "total_tasks_executed": agent.get_metrics().total_tasks_executed,
@@ -237,9 +236,7 @@ class AgentLifecycleManager:
         }
 
     def list_agent_statuses(
-        self,
-        agent_type: Optional[str] = None,
-        state: Optional[str] = None
+        self, agent_type: Optional[str] = None, state: Optional[str] = None
     ) -> "List[Dict[str, Any]]":
         """
         List agent statuses with optional filtering.
@@ -256,6 +253,7 @@ class AgentLifecycleManager:
         # Filter by type
         if agent_type:
             from .models import AgentType
+
             try:
                 type_enum = AgentType(agent_type)
                 agents = [a for a in agents if a.agent_type == type_enum]
@@ -265,6 +263,7 @@ class AgentLifecycleManager:
         # Filter by state
         if state:
             from .models import AgentState
+
             try:
                 state_enum = AgentState(state)
                 agents = [a for a in agents if a.state == state_enum]
@@ -295,4 +294,3 @@ def reset_global_lifecycle_manager() -> None:
     """Reset global lifecycle manager (primarily for testing)."""
     global _global_lifecycle_manager
     _global_lifecycle_manager = None
-

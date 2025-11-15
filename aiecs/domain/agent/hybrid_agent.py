@@ -9,7 +9,7 @@ import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
-from aiecs.llm import BaseLLMClient, LLMMessage, LLMResponse
+from aiecs.llm import BaseLLMClient, LLMMessage
 from aiecs.tools import get_tool, BaseTool
 
 from .base_agent import BaseAIAgent
@@ -58,7 +58,7 @@ class HybridAgent(BaseAIAgent):
             description=description or "Hybrid agent with LLM reasoning and tool execution",
             version=version,
         )
-        
+
         self.llm_client = llm_client
         self._available_tools = tools
         self._max_iterations = max_iterations
@@ -75,7 +75,7 @@ class HybridAgent(BaseAIAgent):
         """Initialize Hybrid agent - build system prompt and load tools."""
         # Build system prompt
         self._system_prompt = self._build_system_prompt()
-        
+
         # Load tool instances
         for tool_name in self._available_tools:
             try:
@@ -92,10 +92,10 @@ class HybridAgent(BaseAIAgent):
         """Shutdown Hybrid agent."""
         self._conversation_history.clear()
         self._tool_instances.clear()
-        
-        if hasattr(self.llm_client, 'close'):
+
+        if hasattr(self.llm_client, "close"):
             await self.llm_client.close()
-        
+
         logger.info(f"HybridAgent {self.agent_id} shut down")
 
     def _build_system_prompt(self) -> str:
@@ -133,11 +133,7 @@ class HybridAgent(BaseAIAgent):
 
         return "\n\n".join(parts)
 
-    async def execute_task(
-        self,
-        task: Dict[str, Any],
-        context: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def execute_task(self, task: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute a task using ReAct loop.
 
@@ -155,16 +151,16 @@ class HybridAgent(BaseAIAgent):
 
         try:
             # Extract task description
-            task_description = task.get('description') or task.get('prompt') or task.get('task')
+            task_description = task.get("description") or task.get("prompt") or task.get("task")
             if not task_description:
                 raise TaskExecutionError(
                     "Task must contain 'description', 'prompt', or 'task' field",
-                    agent_id=self.agent_id
+                    agent_id=self.agent_id,
                 )
 
             # Transition to busy state
             self._transition_state(self.state.__class__.BUSY)
-            self._current_task_id = task.get('task_id')
+            self._current_task_id = task.get("task_id")
 
             # Execute ReAct loop
             result = await self._react_loop(task_description, context)
@@ -176,8 +172,8 @@ class HybridAgent(BaseAIAgent):
             self.update_metrics(
                 execution_time=execution_time,
                 success=True,
-                tokens_used=result.get('total_tokens'),
-                tool_calls=result.get('tool_calls_count', 0),
+                tokens_used=result.get("total_tokens"),
+                tool_calls=result.get("tool_calls_count", 0),
             )
 
             # Transition back to active
@@ -187,17 +183,17 @@ class HybridAgent(BaseAIAgent):
 
             return {
                 "success": True,
-                "output": result.get('final_answer'),
-                "reasoning_steps": result.get('steps'),
-                "tool_calls_count": result.get('tool_calls_count'),
-                "iterations": result.get('iterations'),
+                "output": result.get("final_answer"),
+                "reasoning_steps": result.get("steps"),
+                "tool_calls_count": result.get("tool_calls_count"),
+                "iterations": result.get("iterations"),
                 "execution_time": execution_time,
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
         except Exception as e:
             logger.error(f"Task execution failed for {self.agent_id}: {e}")
-            
+
             # Update metrics for failure
             execution_time = (datetime.utcnow() - start_time).total_seconds()
             self.update_metrics(execution_time=execution_time, success=False)
@@ -209,13 +205,11 @@ class HybridAgent(BaseAIAgent):
             raise TaskExecutionError(
                 f"Task execution failed: {str(e)}",
                 agent_id=self.agent_id,
-                task_id=task.get('task_id')
+                task_id=task.get("task_id"),
             )
 
     async def process_message(
-        self,
-        message: str,
-        sender_id: Optional[str] = None
+        self, message: str, sender_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Process an incoming message using ReAct loop.
@@ -233,10 +227,10 @@ class HybridAgent(BaseAIAgent):
                 "description": message,
                 "task_id": f"msg_{datetime.utcnow().timestamp()}",
             }
-            
+
             # Execute as task
             result = await self.execute_task(task, {"sender_id": sender_id})
-            
+
             return {
                 "response": result.get("output"),
                 "reasoning_steps": result.get("reasoning_steps"),
@@ -247,11 +241,7 @@ class HybridAgent(BaseAIAgent):
             logger.error(f"Message processing failed for {self.agent_id}: {e}")
             raise
 
-    async def _react_loop(
-        self,
-        task: str,
-        context: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def _react_loop(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute ReAct loop: Reason → Act → Observe.
 
@@ -281,13 +271,15 @@ class HybridAgent(BaseAIAgent):
             )
 
             thought = response.content
-            total_tokens += getattr(response, 'total_tokens', 0)
+            total_tokens += getattr(response, "total_tokens", 0)
 
-            steps.append({
-                "type": "thought",
-                "content": thought,
-                "iteration": iteration + 1,
-            })
+            steps.append(
+                {
+                    "type": "thought",
+                    "content": thought,
+                    "iteration": iteration + 1,
+                }
+            )
 
             # Check if final answer
             if "FINAL ANSWER:" in thought:
@@ -306,27 +298,31 @@ class HybridAgent(BaseAIAgent):
                 try:
                     tool_info = self._parse_tool_call(thought)
                     tool_result = await self._execute_tool(
-                        tool_info['tool'],
-                        tool_info.get('operation'),
-                        tool_info.get('parameters', {})
+                        tool_info["tool"],
+                        tool_info.get("operation"),
+                        tool_info.get("parameters", {}),
                     )
                     tool_calls_count += 1
 
-                    steps.append({
-                        "type": "action",
-                        "tool": tool_info['tool'],
-                        "operation": tool_info.get('operation'),
-                        "parameters": tool_info.get('parameters'),
-                        "iteration": iteration + 1,
-                    })
+                    steps.append(
+                        {
+                            "type": "action",
+                            "tool": tool_info["tool"],
+                            "operation": tool_info.get("operation"),
+                            "parameters": tool_info.get("parameters"),
+                            "iteration": iteration + 1,
+                        }
+                    )
 
                     # OBSERVE: Add tool result to conversation
                     observation = f"OBSERVATION: Tool '{tool_info['tool']}' returned: {tool_result}"
-                    steps.append({
-                        "type": "observation",
-                        "content": observation,
-                        "iteration": iteration + 1,
-                    })
+                    steps.append(
+                        {
+                            "type": "observation",
+                            "content": observation,
+                            "iteration": iteration + 1,
+                        }
+                    )
 
                     # Add to messages for next iteration
                     messages.append(LLMMessage(role="assistant", content=thought))
@@ -334,12 +330,14 @@ class HybridAgent(BaseAIAgent):
 
                 except Exception as e:
                     error_msg = f"OBSERVATION: Tool execution failed: {str(e)}"
-                    steps.append({
-                        "type": "observation",
-                        "content": error_msg,
-                        "iteration": iteration + 1,
-                        "error": True,
-                    })
+                    steps.append(
+                        {
+                            "type": "observation",
+                            "content": error_msg,
+                            "iteration": iteration + 1,
+                            "error": True,
+                        }
+                    )
                     messages.append(LLMMessage(role="assistant", content=thought))
                     messages.append(LLMMessage(role="user", content=error_msg))
 
@@ -364,11 +362,7 @@ class HybridAgent(BaseAIAgent):
             "max_iterations_reached": True,
         }
 
-    def _build_initial_messages(
-        self,
-        task: str,
-        context: Dict[str, Any]
-    ) -> List[LLMMessage]:
+    def _build_initial_messages(self, task: str, context: Dict[str, Any]) -> List[LLMMessage]:
         """Build initial messages for ReAct loop."""
         messages = []
 
@@ -380,10 +374,12 @@ class HybridAgent(BaseAIAgent):
         if context:
             context_str = self._format_context(context)
             if context_str:
-                messages.append(LLMMessage(
-                    role="system",
-                    content=f"Additional Context:\n{context_str}"
-                ))
+                messages.append(
+                    LLMMessage(
+                        role="system",
+                        content=f"Additional Context:\n{context_str}",
+                    )
+                )
 
         # Add task
         messages.append(LLMMessage(role="user", content=f"Task: {task}"))
@@ -394,7 +390,7 @@ class HybridAgent(BaseAIAgent):
         """Format context dictionary as string."""
         relevant_fields = []
         for key, value in context.items():
-            if not key.startswith('_') and value is not None:
+            if not key.startswith("_") and value is not None:
                 relevant_fields.append(f"{key}: {value}")
         return "\n".join(relevant_fields) if relevant_fields else ""
 
@@ -420,28 +416,28 @@ class HybridAgent(BaseAIAgent):
             Dictionary with 'tool', 'operation', 'parameters'
         """
         import json
-        
+
         result = {}
-        
+
         # Extract tool
         if "TOOL:" in thought:
-            tool_line = [line for line in thought.split('\n') if line.startswith('TOOL:')][0]
-            result['tool'] = tool_line.split('TOOL:', 1)[1].strip()
+            tool_line = [line for line in thought.split("\n") if line.startswith("TOOL:")][0]
+            result["tool"] = tool_line.split("TOOL:", 1)[1].strip()
 
         # Extract operation (optional)
         if "OPERATION:" in thought:
-            op_line = [line for line in thought.split('\n') if line.startswith('OPERATION:')][0]
-            result['operation'] = op_line.split('OPERATION:', 1)[1].strip()
+            op_line = [line for line in thought.split("\n") if line.startswith("OPERATION:")][0]
+            result["operation"] = op_line.split("OPERATION:", 1)[1].strip()
 
         # Extract parameters (optional)
         if "PARAMETERS:" in thought:
-            param_line = [line for line in thought.split('\n') if line.startswith('PARAMETERS:')][0]
-            param_str = param_line.split('PARAMETERS:', 1)[1].strip()
+            param_line = [line for line in thought.split("\n") if line.startswith("PARAMETERS:")][0]
+            param_str = param_line.split("PARAMETERS:", 1)[1].strip()
             try:
-                result['parameters'] = json.loads(param_str)
+                result["parameters"] = json.loads(param_str)
             except json.JSONDecodeError:
                 logger.warning(f"Failed to parse parameters: {param_str}")
-                result['parameters'] = {}
+                result["parameters"] = {}
 
         return result
 
@@ -449,7 +445,7 @@ class HybridAgent(BaseAIAgent):
         self,
         tool_name: str,
         operation: Optional[str],
-        parameters: Dict[str, Any]
+        parameters: Dict[str, Any],
     ) -> Any:
         """Execute a tool operation."""
         # Check access
@@ -464,7 +460,7 @@ class HybridAgent(BaseAIAgent):
         if operation:
             result = await tool.run_async(operation, **parameters)
         else:
-            if hasattr(tool, 'run_async'):
+            if hasattr(tool, "run_async"):
                 result = await tool.run_async(**parameters)
             else:
                 raise ValueError(f"Tool {tool_name} requires operation to be specified")
@@ -492,4 +488,3 @@ class HybridAgent(BaseAIAgent):
             "HybridAgent.from_dict requires LLM client to be provided separately. "
             "Use constructor instead."
         )
-

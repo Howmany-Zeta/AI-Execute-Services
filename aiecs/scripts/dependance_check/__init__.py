@@ -10,9 +10,8 @@ from .quick_dependency_check import main as quick_dependency_check_main
 from .download_nlp_data import main as download_nlp_data_main
 
 __all__ = [
-    'dependency_checker_main',
-    'dependency_fixer_main',
-    'quick_dependency_check_main',
-    'download_nlp_data_main',
+    "dependency_checker_main",
+    "dependency_fixer_main",
+    "quick_dependency_check_main",
+    "download_nlp_data_main",
 ]
-

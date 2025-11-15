@@ -10,15 +10,15 @@ from .context_engine_client import (
     get_context_engine,
     close_context_engine,
     is_context_engine_initialized,
-    reset_context_engine
+    reset_context_engine,
 )
 
 __all__ = [
     "DatabaseManager",
     "RedisClient",
     "initialize_context_engine",
-    "get_context_engine", 
+    "get_context_engine",
     "close_context_engine",
     "is_context_engine_initialized",
-    "reset_context_engine"
+    "reset_context_engine",
 ]

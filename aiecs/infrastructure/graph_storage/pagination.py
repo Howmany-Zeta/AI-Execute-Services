@@ -17,18 +17,21 @@ from aiecs.domain.knowledge_graph.models.relation import Relation
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class PaginationType(str, Enum):
     """Type of pagination strategy"""
+
     OFFSET = "offset"  # Traditional offset-based pagination
-    CURSOR = "cursor"  # Cursor-based pagination (more efficient for large datasets)
+    # Cursor-based pagination (more efficient for large datasets)
+    CURSOR = "cursor"
 
 
 @dataclass
 class PageInfo:
     """Metadata about pagination state"""
+
     has_next_page: bool
     has_previous_page: bool
     start_cursor: Optional[str] = None
@@ -44,7 +47,7 @@ class PageInfo:
             "start_cursor": self.start_cursor,
             "end_cursor": self.end_cursor,
             "total_count": self.total_count,
-            "page_size": self.page_size
+            "page_size": self.page_size,
         }
 
 
@@ -69,6 +72,7 @@ class Page(Generic[T]):
             )
         ```
     """
+
     items: List[T]
     page_info: PageInfo
 
@@ -83,8 +87,10 @@ class Page(Generic[T]):
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         return {
-            "items": [item.model_dump() if hasattr(item, 'model_dump') else item for item in self.items],
-            "page_info": self.page_info.to_dict()
+            "items": [
+                item.model_dump() if hasattr(item, "model_dump") else item for item in self.items
+            ],
+            "page_info": self.page_info.to_dict(),
         }
 
 
@@ -108,10 +114,7 @@ class PaginationCursor:
         Returns:
             Encoded cursor string
         """
-        cursor_data = {
-            "id": last_id,
-            "dir": direction
-        }
+        cursor_data = {"id": last_id, "dir": direction}
         json_str = json.dumps(cursor_data)
         encoded = base64.b64encode(json_str.encode()).decode()
         return encoded
@@ -134,12 +137,12 @@ class PaginationCursor:
             decoded = base64.b64decode(cursor.encode()).decode()
             cursor_data = json.loads(decoded)
 
-            if 'id' not in cursor_data:
+            if "id" not in cursor_data:
                 raise ValueError("Cursor missing 'id' field")
 
             return {
-                "id": cursor_data['id'],
-                "dir": cursor_data.get('dir', 'forward')
+                "id": cursor_data["id"],
+                "dir": cursor_data.get("dir", "forward"),
             }
         except Exception as e:
             raise ValueError(f"Invalid cursor: {e}")
@@ -175,7 +178,7 @@ class PaginationMixin:
         entity_type: Optional[str] = None,
         page_size: int = 100,
         cursor: Optional[str] = None,
-        order_by: str = "id"
+        order_by: str = "id",
     ) -> Page[Entity]:
         """
         Paginate entities using cursor-based pagination
@@ -207,7 +210,7 @@ class PaginationMixin:
         if cursor:
             try:
                 cursor_data = PaginationCursor.decode(cursor)
-                last_id = cursor_data['id']
+                last_id = cursor_data["id"]
             except ValueError as e:
                 logger.warning(f"Invalid cursor: {e}")
                 last_id = None
@@ -220,7 +223,7 @@ class PaginationMixin:
             entity_type=entity_type,
             last_id=last_id,
             limit=limit,
-            order_by=order_by
+            order_by=order_by,
         )
 
         # Check if there's a next page
@@ -238,7 +241,7 @@ class PaginationMixin:
             has_previous_page=cursor is not None,
             start_cursor=start_cursor,
             end_cursor=end_cursor,
-            page_size=page_size
+            page_size=page_size,
         )
 
         return Page(items=entities, page_info=page_info)
@@ -248,7 +251,7 @@ class PaginationMixin:
         entity_type: Optional[str],
         last_id: Optional[str],
         limit: int,
-        order_by: str
+        order_by: str,
     ) -> List[Entity]:
         """
         Fetch a page of entities (backend-specific implementation)
@@ -288,7 +291,7 @@ class PaginationMixin:
         entity_type: Optional[str] = None,
         page: int = 1,
         page_size: int = 100,
-        order_by: str = "id"
+        order_by: str = "id",
     ) -> Page[Entity]:
         """
         Paginate entities using offset-based pagination
@@ -330,7 +333,7 @@ class PaginationMixin:
 
         # Apply offset and limit
         total_count = len(all_entities)
-        entities = all_entities[offset:offset + page_size]
+        entities = all_entities[offset : offset + page_size]
 
         # Calculate pagination info
         has_next = offset + page_size < total_count
@@ -340,7 +343,7 @@ class PaginationMixin:
             has_next_page=has_next,
             has_previous_page=has_previous,
             total_count=total_count,
-            page_size=page_size
+            page_size=page_size,
         )
 
         return Page(items=entities, page_info=page_info)
@@ -352,7 +355,7 @@ class PaginationMixin:
         target_id: Optional[str] = None,
         page_size: int = 100,
         cursor: Optional[str] = None,
-        order_by: str = "id"
+        order_by: str = "id",
     ) -> Page[Relation]:
         """
         Paginate relations using cursor-based pagination
@@ -373,7 +376,7 @@ class PaginationMixin:
         if cursor:
             try:
                 cursor_data = PaginationCursor.decode(cursor)
-                last_id = cursor_data['id']
+                last_id = cursor_data["id"]
             except ValueError as e:
                 logger.warning(f"Invalid cursor: {e}")
 
@@ -385,7 +388,7 @@ class PaginationMixin:
             target_id=target_id,
             last_id=last_id,
             limit=limit,
-            order_by=order_by
+            order_by=order_by,
         )
 
         # Check for next page
@@ -402,7 +405,7 @@ class PaginationMixin:
             has_previous_page=cursor is not None,
             start_cursor=start_cursor,
             end_cursor=end_cursor,
-            page_size=page_size
+            page_size=page_size,
         )
 
         return Page(items=relations, page_info=page_info)
@@ -414,7 +417,7 @@ class PaginationMixin:
         target_id: Optional[str],
         last_id: Optional[str],
         limit: int,
-        order_by: str
+        order_by: str,
     ) -> List[Relation]:
         """
         Fetch a page of relations (backend-specific implementation)
@@ -430,11 +433,7 @@ class PaginationMixin:
         return relations
 
 
-def paginate_list(
-    items: List[T],
-    page: int = 1,
-    page_size: int = 100
-) -> Page[T]:
+def paginate_list(items: List[T], page: int = 1, page_size: int = 100) -> Page[T]:
     """
     Paginate an in-memory list
 
@@ -460,14 +459,13 @@ def paginate_list(
 
     offset = (page - 1) * page_size
     total_count = len(items)
-    page_items = items[offset:offset + page_size]
+    page_items = items[offset : offset + page_size]
 
     page_info = PageInfo(
         has_next_page=offset + page_size < total_count,
         has_previous_page=page > 1,
         total_count=total_count,
-        page_size=page_size
+        page_size=page_size,
     )
 
     return Page(items=page_items, page_info=page_info)
-

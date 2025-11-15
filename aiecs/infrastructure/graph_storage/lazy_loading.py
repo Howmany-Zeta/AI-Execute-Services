@@ -34,6 +34,7 @@ class LazyEntity:
         print(entity.properties["name"])  # DB query executed
         ```
     """
+
     id: str
     entity_type: Optional[str] = None
     _store: Any = None
@@ -97,6 +98,7 @@ class LazyRelation:
 
     Only loads full relation data when accessed.
     """
+
     id: str
     source_id: str
     target_id: str
@@ -170,9 +172,7 @@ class LazyLoadingMixin:
         return LazyEntity(id=entity_id, _store=self)
 
     async def get_lazy_entities(
-        self,
-        entity_type: Optional[str] = None,
-        limit: Optional[int] = None
+        self, entity_type: Optional[str] = None, limit: Optional[int] = None
     ) -> List[LazyEntity]:
         """
         Get lazy-loaded entity wrappers
@@ -189,15 +189,10 @@ class LazyLoadingMixin:
         # Get lightweight entity list (IDs only)
         entities = await self._get_entity_ids(entity_type=entity_type, limit=limit)
 
-        return [
-            LazyEntity(id=eid, entity_type=etype, _store=self)
-            for eid, etype in entities
-        ]
+        return [LazyEntity(id=eid, entity_type=etype, _store=self) for eid, etype in entities]
 
     async def _get_entity_ids(
-        self,
-        entity_type: Optional[str] = None,
-        limit: Optional[int] = None
+        self, entity_type: Optional[str] = None, limit: Optional[int] = None
     ) -> List[tuple[str, str]]:
         """
         Get entity IDs and types only (efficient query)
@@ -215,7 +210,7 @@ class LazyLoadingMixin:
         self,
         entity_id: str,
         relation_type: Optional[str] = None,
-        direction: str = "outgoing"
+        direction: str = "outgoing",
     ) -> List[LazyEntity]:
         """
         Get lazy-loaded neighbor entities
@@ -232,19 +227,16 @@ class LazyLoadingMixin:
         neighbor_ids = await self._get_neighbor_ids(
             entity_id=entity_id,
             relation_type=relation_type,
-            direction=direction
+            direction=direction,
         )
 
-        return [
-            LazyEntity(id=nid, _store=self)
-            for nid in neighbor_ids
-        ]
+        return [LazyEntity(id=nid, _store=self) for nid in neighbor_ids]
 
     async def _get_neighbor_ids(
         self,
         entity_id: str,
         relation_type: Optional[str] = None,
-        direction: str = "outgoing"
+        direction: str = "outgoing",
     ) -> List[str]:
         """
         Get neighbor entity IDs only (efficient query)
@@ -255,7 +247,7 @@ class LazyLoadingMixin:
         neighbors = await self.get_neighbors(
             entity_id=entity_id,
             relation_type=relation_type,
-            direction=direction
+            direction=direction,
         )
         return [n.id for n in neighbors]
 
@@ -363,10 +355,7 @@ class EntityBatchLoader:
 
 
 async def lazy_traverse(
-    store: Any,
-    start_entity_id: str,
-    max_depth: int = 3,
-    batch_size: int = 100
+    store: Any, start_entity_id: str, max_depth: int = 3, batch_size: int = 100
 ) -> AsyncIterator[LazyEntity]:
     """
     Lazy graph traversal with batch loading
@@ -391,7 +380,8 @@ async def lazy_traverse(
         ```
     """
     visited = set()
-    loader = EntityBatchLoader(store, batch_size=batch_size)
+    # loader = EntityBatchLoader(store, batch_size=batch_size)  # Reserved for
+    # future use
 
     # BFS traversal
     current_level = [start_entity_id]
@@ -418,4 +408,3 @@ async def lazy_traverse(
 
         current_level = next_level
         depth += 1
-

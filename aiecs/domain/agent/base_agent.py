@@ -4,7 +4,6 @@ Base AI Agent
 Abstract base class for all AI agents in the AIECS system.
 """
 
-import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Callable
@@ -17,7 +16,6 @@ from .models import (
     AgentGoal,
     AgentMetrics,
     AgentCapabilityDeclaration,
-    AgentMemory,
     GoalStatus,
     GoalPriority,
     MemoryType,
@@ -74,7 +72,8 @@ class BaseAIAgent(ABC):
         self._state = AgentState.CREATED
         self._previous_state: Optional[AgentState] = None
 
-        # Memory storage (in-memory dict, can be replaced with sophisticated storage)
+        # Memory storage (in-memory dict, can be replaced with sophisticated
+        # storage)
         self._memory: Dict[str, Any] = {}
         self._memory_metadata: Dict[str, Dict[str, Any]] = {}
 
@@ -122,7 +121,12 @@ class BaseAIAgent(ABC):
         valid_transitions = {
             AgentState.CREATED: {AgentState.INITIALIZING},
             AgentState.INITIALIZING: {AgentState.ACTIVE, AgentState.ERROR},
-            AgentState.ACTIVE: {AgentState.BUSY, AgentState.IDLE, AgentState.STOPPED, AgentState.ERROR},
+            AgentState.ACTIVE: {
+                AgentState.BUSY,
+                AgentState.IDLE,
+                AgentState.STOPPED,
+                AgentState.ERROR,
+            },
             AgentState.BUSY: {AgentState.ACTIVE, AgentState.ERROR},
             AgentState.IDLE: {AgentState.ACTIVE, AgentState.STOPPED},
             AgentState.ERROR: {AgentState.ACTIVE, AgentState.STOPPED},
@@ -140,7 +144,9 @@ class BaseAIAgent(ABC):
         self._state = new_state
         self.updated_at = datetime.utcnow()
 
-        logger.info(f"Agent {self.agent_id} state: {self._previous_state.value} → {new_state.value}")
+        logger.info(
+            f"Agent {self.agent_id} state: {self._previous_state.value} → {new_state.value}"
+        )
 
     # ==================== Lifecycle Methods ====================
 
@@ -181,7 +187,6 @@ class BaseAIAgent(ABC):
         Override this method in subclasses to implement
         custom initialization.
         """
-        pass
 
     async def activate(self) -> None:
         """Activate the agent."""
@@ -223,7 +228,6 @@ class BaseAIAgent(ABC):
         Override this method in subclasses to implement
         custom cleanup.
         """
-        pass
 
     # ==================== Abstract Execution Methods ====================
 
@@ -246,10 +250,11 @@ class BaseAIAgent(ABC):
             Subclasses can use `_execute_with_retry()` to wrap task execution
             with automatic retry logic based on agent configuration.
         """
-        pass
 
     @abstractmethod
-    async def process_message(self, message: str, sender_id: Optional[str] = None) -> Dict[str, Any]:
+    async def process_message(
+        self, message: str, sender_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Process an incoming message.
 
@@ -264,16 +269,10 @@ class BaseAIAgent(ABC):
             Subclasses can use `_execute_with_retry()` to wrap message processing
             with automatic retry logic based on agent configuration.
         """
-        pass
 
     # ==================== Retry Logic Integration ====================
 
-    async def _execute_with_retry(
-        self,
-        func: Callable,
-        *args,
-        **kwargs
-    ) -> Any:
+    async def _execute_with_retry(self, func: Callable, *args, **kwargs) -> Any:
         """
         Execute a function with retry logic using agent's retry policy.
 
@@ -310,14 +309,14 @@ class BaseAIAgent(ABC):
 
         # Get retry policy from configuration
         retry_config = self._config.retry_policy
-        
+
         # Create retry policy instance
         retry_policy = EnhancedRetryPolicy(
             max_retries=retry_config.max_retries,
             base_delay=retry_config.base_delay,
             max_delay=retry_config.max_delay,
             exponential_base=retry_config.exponential_factor,
-            jitter=retry_config.jitter_factor > 0
+            jitter=retry_config.jitter_factor > 0,
         )
 
         # Execute with retry
@@ -349,9 +348,7 @@ class BaseAIAgent(ABC):
         }
         logger.debug(f"Agent {self.agent_id} added memory: {key} ({memory_type.value})")
 
-    async def retrieve_memory(
-        self, key: str, default: Any = None
-    ) -> Any:
+    async def retrieve_memory(self, key: str, default: Any = None) -> Any:
         """
         Retrieve an item from memory.
 
@@ -377,9 +374,7 @@ class BaseAIAgent(ABC):
             logger.info(f"Agent {self.agent_id} cleared all memory")
         else:
             keys_to_remove = [
-                k
-                for k, v in self._memory_metadata.items()
-                if v.get("type") == memory_type.value
+                k for k, v in self._memory_metadata.items() if v.get("type") == memory_type.value
             ]
             for key in keys_to_remove:
                 del self._memory[key]
@@ -391,10 +386,14 @@ class BaseAIAgent(ABC):
         return {
             "total_items": len(self._memory),
             "short_term_count": sum(
-                1 for v in self._memory_metadata.values() if v.get("type") == MemoryType.SHORT_TERM.value
+                1
+                for v in self._memory_metadata.values()
+                if v.get("type") == MemoryType.SHORT_TERM.value
             ),
             "long_term_count": sum(
-                1 for v in self._memory_metadata.values() if v.get("type") == MemoryType.LONG_TERM.value
+                1
+                for v in self._memory_metadata.values()
+                if v.get("type") == MemoryType.LONG_TERM.value
             ),
         }
 
@@ -429,9 +428,7 @@ class BaseAIAgent(ABC):
         logger.info(f"Agent {self.agent_id} set goal: {goal.goal_id} ({priority.value})")
         return goal.goal_id
 
-    def get_goals(
-        self, status: Optional[GoalStatus] = None
-    ) -> List[AgentGoal]:
+    def get_goals(self, status: Optional[GoalStatus] = None) -> List[AgentGoal]:
         """
         Get agent goals.
 
@@ -593,9 +590,15 @@ class BaseAIAgent(ABC):
                 self._metrics.total_execution_time / self._metrics.total_tasks_executed
             )
 
-            if self._metrics.min_execution_time is None or execution_time < self._metrics.min_execution_time:
+            if (
+                self._metrics.min_execution_time is None
+                or execution_time < self._metrics.min_execution_time
+            ):
                 self._metrics.min_execution_time = execution_time
-            if self._metrics.max_execution_time is None or execution_time > self._metrics.max_execution_time:
+            if (
+                self._metrics.max_execution_time is None
+                or execution_time > self._metrics.max_execution_time
+            ):
                 self._metrics.max_execution_time = execution_time
 
         # Update quality score
@@ -607,7 +610,9 @@ class BaseAIAgent(ABC):
                 total_quality = self._metrics.average_quality_score * (
                     self._metrics.total_tasks_executed - 1
                 )
-                self._metrics.average_quality_score = (total_quality + quality_score) / self._metrics.total_tasks_executed
+                self._metrics.average_quality_score = (
+                    total_quality + quality_score
+                ) / self._metrics.total_tasks_executed
 
         # Update resource usage
         if tokens_used is not None:
@@ -644,7 +649,9 @@ class BaseAIAgent(ABC):
                 "memory_summary": self.get_memory_summary(),
                 "created_at": self.created_at.isoformat(),
                 "updated_at": self.updated_at.isoformat(),
-                "last_active_at": self.last_active_at.isoformat() if self.last_active_at else None,
+                "last_active_at": (
+                    self.last_active_at.isoformat() if self.last_active_at else None
+                ),
             }
         except Exception as e:
             raise SerializationError(
@@ -688,4 +695,3 @@ class BaseAIAgent(ABC):
             f"BaseAIAgent(agent_id='{self.agent_id}', name='{self.name}', "
             f"type='{self.agent_type.value}', state='{self._state.value}')"
         )
-

@@ -45,11 +45,7 @@ class WebSocketManager:
             return self.server
 
         try:
-            self.server = await serve(
-                self._handle_client_connection,
-                self.host,
-                self.port
-            )
+            self.server = await serve(self._handle_client_connection, self.host, self.port)
             self._running = True
             logger.info(f"WebSocket server started on {self.host}:{self.port}")
             return self.server
@@ -69,7 +65,7 @@ class WebSocketManager:
         if self.active_connections:
             await asyncio.gather(
                 *[conn.close() for conn in self.active_connections],
-                return_exceptions=True
+                return_exceptions=True,
             )
             self.active_connections.clear()
 
@@ -123,7 +119,7 @@ class WebSocketManager:
             callback = self.callback_registry[callback_id]
             confirmation = UserConfirmation(
                 proceed=data.get("proceed", False),
-                feedback=data.get("feedback")
+                feedback=data.get("feedback"),
             )
             try:
                 callback(confirmation)
@@ -141,14 +137,17 @@ class WebSocketManager:
 
         if user_id and task_id:
             # Task cancellation logic can be added here
-            # Since database manager access is needed, this functionality may need to be implemented through callbacks
+            # Since database manager access is needed, this functionality may
+            # need to be implemented through callbacks
             logger.info(f"Task cancellation requested: user={user_id}, task={task_id}")
-            await self.broadcast_message({
-                "type": "task_cancelled",
-                "user_id": user_id,
-                "task_id": task_id,
-                "timestamp": asyncio.get_event_loop().time()
-            })
+            await self.broadcast_message(
+                {
+                    "type": "task_cancelled",
+                    "user_id": user_id,
+                    "task_id": task_id,
+                    "timestamp": asyncio.get_event_loop().time(),
+                }
+            )
         else:
             logger.warning("Invalid cancellation request: missing user_id or task_id")
 
@@ -157,7 +156,7 @@ class WebSocketManager:
         pong_data = {
             "type": "pong",
             "timestamp": asyncio.get_event_loop().time(),
-            "original_data": data
+            "original_data": data,
         }
         await self._send_to_client(websocket, pong_data)
 
@@ -167,17 +166,17 @@ class WebSocketManager:
         if user_id:
             # User-specific subscription logic can be implemented here
             logger.info(f"User {user_id} subscribed to updates")
-            await self._send_to_client(websocket, {
-                "type": "subscription_confirmed",
-                "user_id": user_id
-            })
+            await self._send_to_client(
+                websocket,
+                {"type": "subscription_confirmed", "user_id": user_id},
+            )
 
     async def _send_error(self, websocket: ServerConnection, error_message: str):
         """Send error message to client"""
         error_data = {
             "type": "error",
             "message": error_message,
-            "timestamp": asyncio.get_event_loop().time()
+            "timestamp": asyncio.get_event_loop().time(),
         }
         await self._send_to_client(websocket, error_data)
 
@@ -189,13 +188,21 @@ class WebSocketManager:
         except Exception as e:
             logger.error(f"Failed to send message to client: {e}")
 
-    async def notify_user(self, step_result: TaskStepResult, user_id: str, task_id: str, step: int) -> UserConfirmation:
+    async def notify_user(
+        self,
+        step_result: TaskStepResult,
+        user_id: str,
+        task_id: str,
+        step: int,
+    ) -> UserConfirmation:
         """Notify user of task step result"""
         callback_id = str(uuid.uuid4())
         confirmation_future = asyncio.Future()
 
         # Register callback
-        self.callback_registry[callback_id] = lambda confirmation: confirmation_future.set_result(confirmation)
+        self.callback_registry[callback_id] = lambda confirmation: confirmation_future.set_result(
+            confirmation
+        )
 
         # Prepare notification data
         notification_data = {
@@ -209,16 +216,18 @@ class WebSocketManager:
             "error_message": step_result.error_message,
             "user_id": user_id,
             "task_id": task_id,
-            "timestamp": asyncio.get_event_loop().time()
+            "timestamp": asyncio.get_event_loop().time(),
         }
 
         try:
-            # Broadcast to all connected clients (can be optimized to send only to specific users)
+            # Broadcast to all connected clients (can be optimized to send only
+            # to specific users)
             await self.broadcast_message(notification_data)
 
             # Wait for user confirmation with timeout
             try:
-                return await asyncio.wait_for(confirmation_future, timeout=300)  # 5 minute timeout
+                # 5 minute timeout
+                return await asyncio.wait_for(confirmation_future, timeout=300)
             except asyncio.TimeoutError:
                 logger.warning(f"User confirmation timeout for callback {callback_id}")
                 # Clean up callback
@@ -239,7 +248,7 @@ class WebSocketManager:
             "message": "Task is still executing...",
             "user_id": user_id,
             "task_id": task_id,
-            "timestamp": asyncio.get_event_loop().time()
+            "timestamp": asyncio.get_event_loop().time(),
         }
 
         while self._running:
@@ -263,7 +272,7 @@ class WebSocketManager:
         if active_connections:
             await asyncio.gather(
                 *[self._send_to_client(conn, message) for conn in active_connections],
-                return_exceptions=True
+                return_exceptions=True,
             )
             logger.debug(f"Broadcasted message to {len(active_connections)} clients")
 
@@ -285,5 +294,5 @@ class WebSocketManager:
             "host": self.host,
             "port": self.port,
             "active_connections": self.get_connection_count(),
-            "pending_callbacks": len(self.callback_registry)
+            "pending_callbacks": len(self.callback_registry),
         }

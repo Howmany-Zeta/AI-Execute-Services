@@ -7,24 +7,27 @@ Core domain models for knowledge graph entities, relations, and queries.
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.relation import Relation
 from aiecs.domain.knowledge_graph.models.path import Path
-from aiecs.domain.knowledge_graph.models.path_pattern import PathPattern, TraversalDirection
+from aiecs.domain.knowledge_graph.models.path_pattern import (
+    PathPattern,
+    TraversalDirection,
+)
 from aiecs.domain.knowledge_graph.models.query import GraphQuery, GraphResult
 from aiecs.domain.knowledge_graph.models.query_plan import (
     QueryPlan,
     QueryStep,
     QueryOperation,
-    OptimizationStrategy
+    OptimizationStrategy,
 )
 from aiecs.domain.knowledge_graph.models.evidence import (
     Evidence,
     EvidenceType,
-    ReasoningResult
+    ReasoningResult,
 )
 from aiecs.domain.knowledge_graph.models.inference_rule import (
     InferenceRule,
     InferenceStep,
     InferenceResult,
-    RuleType
+    RuleType,
 )
 
 __all__ = [
@@ -47,4 +50,3 @@ __all__ = [
     "InferenceResult",
     "RuleType",
 ]
-
