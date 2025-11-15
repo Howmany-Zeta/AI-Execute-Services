@@ -5,17 +5,17 @@ Combines vector similarity search with graph structure traversal
 to provide enhanced search results.
 """
 
-from typing import List, Optional, Set, Dict, Tuple
+from typing import List, Optional, Dict, Tuple
 from enum import Enum
 from pydantic import BaseModel, Field
 from aiecs.domain.knowledge_graph.models.entity import Entity
-from aiecs.domain.knowledge_graph.models.relation import Relation
 from aiecs.domain.knowledge_graph.models.path import Path
 from aiecs.infrastructure.graph_storage.base import GraphStore
 
 
 class SearchMode(str, Enum):
     """Search mode for hybrid search"""
+
     VECTOR_ONLY = "vector_only"
     GRAPH_ONLY = "graph_only"
     HYBRID = "hybrid"
@@ -36,60 +36,49 @@ class HybridSearchConfig(BaseModel):
         min_combined_score: Minimum combined score threshold
     """
 
-    mode: SearchMode = Field(
-        default=SearchMode.HYBRID,
-        description="Search mode"
-    )
+    mode: SearchMode = Field(default=SearchMode.HYBRID, description="Search mode")
 
     vector_weight: float = Field(
         default=0.6,
         ge=0.0,
         le=1.0,
-        description="Weight for vector similarity scores"
+        description="Weight for vector similarity scores",
     )
 
     graph_weight: float = Field(
         default=0.4,
         ge=0.0,
         le=1.0,
-        description="Weight for graph structure scores"
+        description="Weight for graph structure scores",
     )
 
-    max_results: int = Field(
-        default=10,
-        ge=1,
-        description="Maximum number of results"
-    )
+    max_results: int = Field(default=10, ge=1, description="Maximum number of results")
 
     vector_threshold: float = Field(
         default=0.0,
         ge=0.0,
         le=1.0,
-        description="Minimum similarity threshold for vector search"
+        description="Minimum similarity threshold for vector search",
     )
 
     max_graph_depth: int = Field(
-        default=2,
-        ge=1,
-        le=5,
-        description="Maximum depth for graph traversal"
+        default=2, ge=1, le=5, description="Maximum depth for graph traversal"
     )
 
     expand_results: bool = Field(
         default=True,
-        description="Whether to expand vector results with graph neighbors"
+        description="Whether to expand vector results with graph neighbors",
     )
 
     min_combined_score: float = Field(
         default=0.0,
         ge=0.0,
         le=1.0,
-        description="Minimum combined score threshold"
+        description="Minimum combined score threshold",
     )
 
     entity_type_filter: Optional[str] = Field(
-        default=None,
-        description="Optional entity type filter"
+        default=None, description="Optional entity type filter"
     )
 
     class Config:
@@ -144,7 +133,7 @@ class HybridSearchStrategy:
         self,
         query_embedding: List[float],
         config: Optional[HybridSearchConfig] = None,
-        seed_entity_ids: Optional[List[str]] = None
+        seed_entity_ids: Optional[List[str]] = None,
     ) -> List[Tuple[Entity, float]]:
         """
         Perform hybrid search
@@ -165,25 +154,17 @@ class HybridSearchStrategy:
         elif config.mode == SearchMode.GRAPH_ONLY:
             if not seed_entity_ids:
                 # If no seeds provided, do vector search to find seeds
-                vector_results = await self._vector_search(
-                    query_embedding,
-                    config,
-                    max_results=5
-                )
+                vector_results = await self._vector_search(query_embedding, config, max_results=5)
                 seed_entity_ids = [entity.id for entity, _ in vector_results]
             return await self._graph_search(seed_entity_ids, config)
         else:  # HYBRID
-            return await self._hybrid_search(
-                query_embedding,
-                config,
-                seed_entity_ids
-            )
+            return await self._hybrid_search(query_embedding, config, seed_entity_ids)
 
     async def _vector_search(
         self,
         query_embedding: List[float],
         config: HybridSearchConfig,
-        max_results: Optional[int] = None
+        max_results: Optional[int] = None,
     ) -> List[Tuple[Entity, float]]:
         """
         Perform vector similarity search
@@ -200,15 +181,13 @@ class HybridSearchStrategy:
             query_embedding=query_embedding,
             entity_type=config.entity_type_filter,
             max_results=max_results or config.max_results,
-            score_threshold=config.vector_threshold
+            score_threshold=config.vector_threshold,
         )
 
         return results
 
     async def _graph_search(
-        self,
-        seed_entity_ids: List[str],
-        config: HybridSearchConfig
+        self, seed_entity_ids: List[str], config: HybridSearchConfig
     ) -> List[Tuple[Entity, float]]:
         """
         Perform graph structure search from seed entities
@@ -240,19 +219,16 @@ class HybridSearchStrategy:
                     # Score decreases with depth
                     depth_score = 1.0 / (depth + 1)
 
-                    # Update score (take max if entity seen from multiple paths)
+                    # Update score (take max if entity seen from multiple
+                    # paths)
                     if entity_id not in entity_scores:
                         entity_scores[entity_id] = depth_score
                     else:
-                        entity_scores[entity_id] = max(
-                            entity_scores[entity_id],
-                            depth_score
-                        )
+                        entity_scores[entity_id] = max(entity_scores[entity_id], depth_score)
 
                     # Get neighbors for next depth
                     neighbors = await self.graph_store.get_neighbors(
-                        entity_id,
-                        direction="outgoing"
+                        entity_id, direction="outgoing"
                     )
 
                     for neighbor in neighbors:
@@ -280,13 +256,13 @@ class HybridSearchStrategy:
         results.sort(key=lambda x: x[1], reverse=True)
 
         # Return top results
-        return results[:config.max_results]
+        return results[: config.max_results]
 
     async def _hybrid_search(
         self,
         query_embedding: List[float],
         config: HybridSearchConfig,
-        seed_entity_ids: Optional[List[str]] = None
+        seed_entity_ids: Optional[List[str]] = None,
     ) -> List[Tuple[Entity, float]]:
         """
         Perform hybrid search combining vector and graph
@@ -303,13 +279,11 @@ class HybridSearchStrategy:
         vector_results = await self._vector_search(
             query_embedding,
             config,
-            max_results=config.max_results * 2  # Get more for expansion
+            max_results=config.max_results * 2,  # Get more for expansion
         )
 
         # Create score dictionaries
-        vector_scores: Dict[str, float] = {
-            entity.id: score for entity, score in vector_results
-        }
+        vector_scores: Dict[str, float] = {entity.id: score for entity, score in vector_results}
 
         # Step 2: Graph expansion (if enabled)
         graph_scores: Dict[str, float] = {}
@@ -322,11 +296,7 @@ class HybridSearchStrategy:
             graph_scores = {entity.id: score for entity, score in graph_results}
 
         # Step 3: Combine scores
-        combined_scores = await self._combine_scores(
-            vector_scores,
-            graph_scores,
-            config
-        )
+        combined_scores = await self._combine_scores(vector_scores, graph_scores, config)
 
         # Step 4: Retrieve entities and create results
         results = []
@@ -343,13 +313,13 @@ class HybridSearchStrategy:
         results.sort(key=lambda x: x[1], reverse=True)
 
         # Return top results
-        return results[:config.max_results]
+        return results[: config.max_results]
 
     async def _combine_scores(
         self,
         vector_scores: Dict[str, float],
         graph_scores: Dict[str, float],
-        config: HybridSearchConfig
+        config: HybridSearchConfig,
     ) -> Dict[str, float]:
         """
         Combine vector and graph scores with weighted averaging
@@ -381,10 +351,7 @@ class HybridSearchStrategy:
             g_score = graph_scores.get(entity_id, 0.0)
 
             # Weighted combination
-            combined[entity_id] = (
-                v_score * norm_vector_weight +
-                g_score * norm_graph_weight
-            )
+            combined[entity_id] = v_score * norm_vector_weight + g_score * norm_graph_weight
 
         return combined
 
@@ -392,7 +359,7 @@ class HybridSearchStrategy:
         self,
         query_embedding: List[float],
         config: Optional[HybridSearchConfig] = None,
-        include_paths: bool = False
+        include_paths: bool = False,
     ) -> Tuple[List[Tuple[Entity, float]], Optional[List[Path]]]:
         """
         Search with result expansion and optional path tracking
@@ -419,9 +386,7 @@ class HybridSearchStrategy:
         return results, paths
 
     async def _find_result_paths(
-        self,
-        results: List[Tuple[Entity, float]],
-        config: HybridSearchConfig
+        self, results: List[Tuple[Entity, float]], config: HybridSearchConfig
     ) -> List[Path]:
         """
         Find paths between top results
@@ -450,10 +415,9 @@ class HybridSearchStrategy:
                     source_entity_id=source_id,
                     target_entity_id=target_id,
                     max_depth=config.max_graph_depth,
-                    max_paths=2
+                    max_paths=2,
                 )
 
                 paths.extend(found_paths)
 
         return paths
-

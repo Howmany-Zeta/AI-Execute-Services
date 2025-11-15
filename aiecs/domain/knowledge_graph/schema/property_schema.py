@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 class PropertyType(str, Enum):
     """Property data types"""
+
     STRING = "string"
     INTEGER = "integer"
     FLOAT = "float"
@@ -54,42 +55,34 @@ class PropertySchema(BaseModel):
 
     name: str = Field(
         ...,
-        description="Property name (must be unique within entity/relation type)"
+        description="Property name (must be unique within entity/relation type)",
     )
 
     property_type: PropertyType = Field(
-        default=PropertyType.STRING,
-        description="Data type of the property"
+        default=PropertyType.STRING, description="Data type of the property"
     )
 
-    required: bool = Field(
-        default=False,
-        description="Whether this property is required"
-    )
+    required: bool = Field(default=False, description="Whether this property is required")
 
     description: Optional[str] = Field(
-        default=None,
-        description="Human-readable description of the property"
+        default=None, description="Human-readable description of the property"
     )
 
     default: Optional[Any] = Field(
-        default=None,
-        description="Default value if property is not provided"
+        default=None, description="Default value if property is not provided"
     )
 
     allowed_values: Optional[List[Any]] = Field(
         default=None,
-        description="List of allowed values (for enum-like properties)"
+        description="List of allowed values (for enum-like properties)",
     )
 
     min_value: Optional[float] = Field(
-        default=None,
-        description="Minimum value (for numeric types)"
+        default=None, description="Minimum value (for numeric types)"
     )
 
     max_value: Optional[float] = Field(
-        default=None,
-        description="Maximum value (for numeric types)"
+        default=None, description="Maximum value (for numeric types)"
     )
 
     class Config:
@@ -148,13 +141,9 @@ class PropertySchema(BaseModel):
         # Range validation for numeric types
         if self.property_type in (PropertyType.INTEGER, PropertyType.FLOAT):
             if self.min_value is not None and value < self.min_value:
-                raise ValueError(
-                    f"Property '{self.name}' must be >= {self.min_value}, got {value}"
-                )
+                raise ValueError(f"Property '{self.name}' must be >= {self.min_value}, got {value}")
             if self.max_value is not None and value > self.max_value:
-                raise ValueError(
-                    f"Property '{self.name}' must be <= {self.max_value}, got {value}"
-                )
+                raise ValueError(f"Property '{self.name}' must be <= {self.max_value}, got {value}")
 
         return True
 
@@ -164,4 +153,3 @@ class PropertySchema(BaseModel):
 
     def __repr__(self) -> str:
         return self.__str__()
-

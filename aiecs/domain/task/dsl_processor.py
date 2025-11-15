@@ -1,8 +1,7 @@
 import re
 import json
 import logging
-import asyncio
-from typing import Dict, List, Any, Optional, Callable
+from typing import Dict, List, Any, Callable
 from aiecs.domain.execution.model import TaskStepResult, TaskStatus, ErrorCode
 
 logger = logging.getLogger(__name__)
@@ -20,21 +19,26 @@ class DSLProcessor:
             r"intent\.includes\('([^']+)'\)",
             r"context\.(\w+)\s*(==|!=|>|<|>=|<=)\s*(.+)",
             r"input\.(\w+)\s*(==|!=|>|<|>=|<=)\s*(.+)",
-            r"result\[(\d+)\]\.(\w+)\s*(==|!=|>|<|>=|<=)\s*(.+)"
+            r"result\[(\d+)\]\.(\w+)\s*(==|!=|>|<|>=|<=)\s*(.+)",
         ]
         # Condition check priority order
         self.condition_check_order = [
             "AND",  # Logical AND operation
-            "OR",   # Logical OR operation
+            "OR",  # Logical OR operation
             "intent.includes",  # Intent inclusion check
             "context",  # Context check
-            "input",    # Input check
-            "result"    # Result check
+            "input",  # Input check
+            "result",  # Result check
         ]
 
-    def evaluate_condition(self, condition: str, intent_categories: List[str],
-                          context: Dict[str, Any] = None, input_data: Dict[str, Any] = None,
-                          results: List[TaskStepResult] = None) -> bool:
+    def evaluate_condition(
+        self,
+        condition: str,
+        intent_categories: List[str],
+        context: Dict[str, Any] = None,
+        input_data: Dict[str, Any] = None,
+        results: List[TaskStepResult] = None,
+    ) -> bool:
         """
         Evaluate condition expression, supporting multiple condition types
         Following optimized check order: AND -> OR -> intent.includes -> context -> input -> result
@@ -43,12 +47,30 @@ class DSLProcessor:
             # 1. Compound condition: support AND (highest priority)
             if " AND " in condition:
                 parts = condition.split(" AND ")
-                return all(self.evaluate_condition(part.strip(), intent_categories, context, input_data, results) for part in parts)
+                return all(
+                    self.evaluate_condition(
+                        part.strip(),
+                        intent_categories,
+                        context,
+                        input_data,
+                        results,
+                    )
+                    for part in parts
+                )
 
             # 2. Compound condition: support OR (second priority)
             if " OR " in condition:
                 parts = condition.split(" OR ")
-                return any(self.evaluate_condition(part.strip(), intent_categories, context, input_data, results) for part in parts)
+                return any(
+                    self.evaluate_condition(
+                        part.strip(),
+                        intent_categories,
+                        context,
+                        input_data,
+                        results,
+                    )
+                    for part in parts
+                )
 
             # 3. Intent condition: intent.includes('category')
             match = re.fullmatch(r"intent\.includes\('([^']+)'\)", condition)
@@ -60,13 +82,17 @@ class DSLProcessor:
             match = re.fullmatch(r"context\.(\w+)\s*(==|!=|>|<|>=|<=)\s*(.+)", condition)
             if match and context:
                 field, operator, value = match.groups()
-                return self._evaluate_comparison(context.get(field), operator, self._parse_value(value))
+                return self._evaluate_comparison(
+                    context.get(field), operator, self._parse_value(value)
+                )
 
             # 5. Input condition: input.field == value
             match = re.fullmatch(r"input\.(\w+)\s*(==|!=|>|<|>=|<=)\s*(.+)", condition)
             if match and input_data:
                 field, operator, value = match.groups()
-                return self._evaluate_comparison(input_data.get(field), operator, self._parse_value(value))
+                return self._evaluate_comparison(
+                    input_data.get(field), operator, self._parse_value(value)
+                )
 
             # 6. Result condition: result[0].field == value
             match = re.fullmatch(r"result\[(\d+)\]\.(\w+)\s*(==|!=|>|<|>=|<=)\s*(.+)", condition)
@@ -74,8 +100,14 @@ class DSLProcessor:
                 index, field, operator, value = match.groups()
                 index = int(index)
                 if index < len(results) and results[index].result:
-                    result_value = results[index].result.get(field) if isinstance(results[index].result, dict) else None
-                    return self._evaluate_comparison(result_value, operator, self._parse_value(value))
+                    result_value = (
+                        results[index].result.get(field)
+                        if isinstance(results[index].result, dict)
+                        else None
+                    )
+                    return self._evaluate_comparison(
+                        result_value, operator, self._parse_value(value)
+                    )
 
             raise ValueError(f"Unsupported condition format: {condition}")
 
@@ -152,9 +184,16 @@ class DSLProcessor:
 
         return False
 
-    async def execute_dsl_step(self, step: Dict, intent_categories: List[str], input_data: Dict,
-                              context: Dict, execute_single_task: Callable, execute_batch_task: Callable,
-                              results: List[TaskStepResult] = None) -> TaskStepResult:
+    async def execute_dsl_step(
+        self,
+        step: Dict,
+        intent_categories: List[str],
+        input_data: Dict,
+        context: Dict,
+        execute_single_task: Callable,
+        execute_batch_task: Callable,
+        results: List[TaskStepResult] = None,
+    ) -> TaskStepResult:
         """
         Execute DSL step based on step type (if, parallel, task, sequence)
         """
@@ -164,18 +203,46 @@ class DSLProcessor:
 
         try:
             if "if" in step:
-                return await self._handle_if_step(step, intent_categories, input_data, context,
-                                                execute_single_task, execute_batch_task, span, results)
+                return await self._handle_if_step(
+                    step,
+                    intent_categories,
+                    input_data,
+                    context,
+                    execute_single_task,
+                    execute_batch_task,
+                    span,
+                    results,
+                )
             elif "parallel" in step:
-                return await self._handle_parallel_step(step, input_data, context, execute_batch_task, span)
+                return await self._handle_parallel_step(
+                    step, input_data, context, execute_batch_task, span
+                )
             elif "sequence" in step:
-                return await self._handle_sequence_step(step, intent_categories, input_data, context,
-                                                      execute_single_task, execute_batch_task, span, results)
+                return await self._handle_sequence_step(
+                    step,
+                    intent_categories,
+                    input_data,
+                    context,
+                    execute_single_task,
+                    execute_batch_task,
+                    span,
+                    results,
+                )
             elif "task" in step:
-                return await self._handle_task_step(step, input_data, context, execute_single_task, span)
+                return await self._handle_task_step(
+                    step, input_data, context, execute_single_task, span
+                )
             elif "loop" in step:
-                return await self._handle_loop_step(step, intent_categories, input_data, context,
-                                                  execute_single_task, execute_batch_task, span, results)
+                return await self._handle_loop_step(
+                    step,
+                    intent_categories,
+                    input_data,
+                    context,
+                    execute_single_task,
+                    execute_batch_task,
+                    span,
+                    results,
+                )
             else:
                 if span:
                     span.set_tag("error", True)
@@ -187,15 +254,23 @@ class DSLProcessor:
                     message="Invalid DSL step",
                     status=TaskStatus.FAILED.value,
                     error_code=ErrorCode.EXECUTION_ERROR.value,
-                    error_message="Unknown DSL step type"
+                    error_message="Unknown DSL step type",
                 )
         finally:
             if span:
                 span.finish()
 
-    async def _handle_if_step(self, step: Dict, intent_categories: List[str], input_data: Dict,
-                             context: Dict, execute_single_task: Callable, execute_batch_task: Callable,
-                             span=None, results: List[TaskStepResult] = None) -> TaskStepResult:
+    async def _handle_if_step(
+        self,
+        step: Dict,
+        intent_categories: List[str],
+        input_data: Dict,
+        context: Dict,
+        execute_single_task: Callable,
+        execute_batch_task: Callable,
+        span=None,
+        results: List[TaskStepResult] = None,
+    ) -> TaskStepResult:
         """Handle conditional 'if' step"""
         condition = step["if"]
         then_steps = step["then"]
@@ -205,7 +280,9 @@ class DSLProcessor:
             span.set_tag("condition", condition)
 
         try:
-            condition_result = self.evaluate_condition(condition, intent_categories, context, input_data, results)
+            condition_result = self.evaluate_condition(
+                condition, intent_categories, context, input_data, results
+            )
 
             if condition_result:
                 if span:
@@ -213,8 +290,15 @@ class DSLProcessor:
 
                 step_results = []
                 for sub_step in then_steps:
-                    result = await self.execute_dsl_step(sub_step, intent_categories, input_data, context,
-                                                       execute_single_task, execute_batch_task, results)
+                    result = await self.execute_dsl_step(
+                        sub_step,
+                        intent_categories,
+                        input_data,
+                        context,
+                        execute_single_task,
+                        execute_batch_task,
+                        results,
+                    )
                     step_results.append(result)
                     if results is not None:
                         results.append(result)
@@ -224,7 +308,11 @@ class DSLProcessor:
                     result=[r.dict() for r in step_results],
                     completed=all(r.completed for r in step_results),
                     message=f"Condition '{condition}' evaluated to true",
-                    status=TaskStatus.COMPLETED.value if all(r.status == TaskStatus.COMPLETED.value for r in step_results) else TaskStatus.FAILED.value
+                    status=(
+                        TaskStatus.COMPLETED.value
+                        if all(r.status == TaskStatus.COMPLETED.value for r in step_results)
+                        else TaskStatus.FAILED.value
+                    ),
                 )
             else:
                 if span:
@@ -233,8 +321,15 @@ class DSLProcessor:
                 if else_steps:
                     step_results = []
                     for sub_step in else_steps:
-                        result = await self.execute_dsl_step(sub_step, intent_categories, input_data, context,
-                                                           execute_single_task, execute_batch_task, results)
+                        result = await self.execute_dsl_step(
+                            sub_step,
+                            intent_categories,
+                            input_data,
+                            context,
+                            execute_single_task,
+                            execute_batch_task,
+                            results,
+                        )
                         step_results.append(result)
                         if results is not None:
                             results.append(result)
@@ -244,7 +339,11 @@ class DSLProcessor:
                         result=[r.dict() for r in step_results],
                         completed=all(r.completed for r in step_results),
                         message=f"Condition '{condition}' evaluated to false, executed else branch",
-                        status=TaskStatus.COMPLETED.value if all(r.status == TaskStatus.COMPLETED.value for r in step_results) else TaskStatus.FAILED.value
+                        status=(
+                            TaskStatus.COMPLETED.value
+                            if all(r.status == TaskStatus.COMPLETED.value for r in step_results)
+                            else TaskStatus.FAILED.value
+                        ),
                     )
                 else:
                     return TaskStepResult(
@@ -252,7 +351,7 @@ class DSLProcessor:
                         result=None,
                         completed=True,
                         message=f"Condition '{condition}' evaluated to false, skipping",
-                        status=TaskStatus.COMPLETED.value
+                        status=TaskStatus.COMPLETED.value,
                     )
         except Exception as e:
             if span:
@@ -265,11 +364,17 @@ class DSLProcessor:
                 message="Failed to evaluate condition",
                 status=TaskStatus.FAILED.value,
                 error_code=ErrorCode.DSL_EVALUATION_ERROR.value,
-                error_message=str(e)
+                error_message=str(e),
             )
 
-    async def _handle_parallel_step(self, step: Dict, input_data: Dict, context: Dict,
-                                   execute_batch_task: Callable, span=None) -> TaskStepResult:
+    async def _handle_parallel_step(
+        self,
+        step: Dict,
+        input_data: Dict,
+        context: Dict,
+        execute_batch_task: Callable,
+        span=None,
+    ) -> TaskStepResult:
         """Handle parallel task execution"""
         task_names = step["parallel"]
         if span:
@@ -283,12 +388,24 @@ class DSLProcessor:
             result=[r.dict() for r in batch_results],
             completed=all(r.completed for r in batch_results),
             message=f"Completed parallel execution of {len(task_names)} tasks",
-            status=TaskStatus.COMPLETED.value if all(r.status == TaskStatus.COMPLETED.value for r in batch_results) else TaskStatus.FAILED.value
+            status=(
+                TaskStatus.COMPLETED.value
+                if all(r.status == TaskStatus.COMPLETED.value for r in batch_results)
+                else TaskStatus.FAILED.value
+            ),
         )
 
-    async def _handle_sequence_step(self, step: Dict, intent_categories: List[str], input_data: Dict,
-                                   context: Dict, execute_single_task: Callable, execute_batch_task: Callable,
-                                   span=None, results: List[TaskStepResult] = None) -> TaskStepResult:
+    async def _handle_sequence_step(
+        self,
+        step: Dict,
+        intent_categories: List[str],
+        input_data: Dict,
+        context: Dict,
+        execute_single_task: Callable,
+        execute_batch_task: Callable,
+        span=None,
+        results: List[TaskStepResult] = None,
+    ) -> TaskStepResult:
         """Handle sequential execution steps"""
         sequence_steps = step["sequence"]
         if span:
@@ -296,8 +413,15 @@ class DSLProcessor:
 
         step_results = []
         for i, sub_step in enumerate(sequence_steps):
-            result = await self.execute_dsl_step(sub_step, intent_categories, input_data, context,
-                                               execute_single_task, execute_batch_task, results)
+            result = await self.execute_dsl_step(
+                sub_step,
+                intent_categories,
+                input_data,
+                context,
+                execute_single_task,
+                execute_batch_task,
+                results,
+            )
             step_results.append(result)
             if results is not None:
                 results.append(result)
@@ -311,11 +435,21 @@ class DSLProcessor:
             result=[r.dict() for r in step_results],
             completed=all(r.completed for r in step_results),
             message=f"Completed sequence execution of {len(step_results)} steps",
-            status=TaskStatus.COMPLETED.value if all(r.status == TaskStatus.COMPLETED.value for r in step_results) else TaskStatus.FAILED.value
+            status=(
+                TaskStatus.COMPLETED.value
+                if all(r.status == TaskStatus.COMPLETED.value for r in step_results)
+                else TaskStatus.FAILED.value
+            ),
         )
 
-    async def _handle_task_step(self, step: Dict, input_data: Dict, context: Dict,
-                               execute_single_task: Callable, span=None) -> TaskStepResult:
+    async def _handle_task_step(
+        self,
+        step: Dict,
+        input_data: Dict,
+        context: Dict,
+        execute_single_task: Callable,
+        span=None,
+    ) -> TaskStepResult:
         """Handle single task execution"""
         task_name = step["task"]
         task_params = step.get("params", {})
@@ -336,7 +470,7 @@ class DSLProcessor:
                     result=result,
                     completed=True,
                     message=f"Completed task {task_name}",
-                    status=TaskStatus.COMPLETED.value
+                    status=TaskStatus.COMPLETED.value,
                 )
         except Exception as e:
             if span:
@@ -349,12 +483,20 @@ class DSLProcessor:
                 message=f"Failed to execute task {task_name}",
                 status=TaskStatus.FAILED.value,
                 error_code=ErrorCode.EXECUTION_ERROR.value,
-                error_message=str(e)
+                error_message=str(e),
             )
 
-    async def _handle_loop_step(self, step: Dict, intent_categories: List[str], input_data: Dict,
-                               context: Dict, execute_single_task: Callable, execute_batch_task: Callable,
-                               span=None, results: List[TaskStepResult] = None) -> TaskStepResult:
+    async def _handle_loop_step(
+        self,
+        step: Dict,
+        intent_categories: List[str],
+        input_data: Dict,
+        context: Dict,
+        execute_single_task: Callable,
+        execute_batch_task: Callable,
+        span=None,
+        results: List[TaskStepResult] = None,
+    ) -> TaskStepResult:
         """Handle loop step"""
         loop_config = step["loop"]
         loop_steps = loop_config["steps"]
@@ -370,14 +512,23 @@ class DSLProcessor:
 
         while iteration < max_iterations:
             # Check loop condition
-            if condition and not self.evaluate_condition(condition, intent_categories, context, input_data, results):
+            if condition and not self.evaluate_condition(
+                condition, intent_categories, context, input_data, results
+            ):
                 break
 
             # Execute loop body
             iteration_step_results = []
             for sub_step in loop_steps:
-                result = await self.execute_dsl_step(sub_step, intent_categories, input_data, context,
-                                                   execute_single_task, execute_batch_task, results)
+                result = await self.execute_dsl_step(
+                    sub_step,
+                    intent_categories,
+                    input_data,
+                    context,
+                    execute_single_task,
+                    execute_batch_task,
+                    results,
+                )
                 iteration_step_results.append(result)
                 if results is not None:
                     results.append(result)
@@ -391,11 +542,13 @@ class DSLProcessor:
 
         return TaskStepResult(
             step=f"loop_{iteration}_iterations",
-            result=[{"iteration": i, "results": [r.dict() for r in iter_results]}
-                   for i, iter_results in enumerate(iteration_results)],
+            result=[
+                {"iteration": i, "results": [r.dict() for r in iter_results]}
+                for i, iter_results in enumerate(iteration_results)
+            ],
             completed=True,
             message=f"Completed loop with {iteration} iterations",
-            status=TaskStatus.COMPLETED.value
+            status=TaskStatus.COMPLETED.value,
         )
 
     def validate_dsl_step(self, step: Dict) -> List[str]:
@@ -444,7 +597,7 @@ class DSLProcessor:
                 "intent.includes('category')",
                 "context.field == value",
                 "input.field == value",
-                "result[index].field == value"
+                "result[index].field == value",
             ],
             "operators": ["==", "!=", ">", "<", ">=", "<="],
             "logical_operators": ["AND", "OR"],
@@ -455,6 +608,6 @@ class DSLProcessor:
                 "Use re.fullmatch instead of re.match for stricter matching",
                 "Optimize condition check order: AND -> OR -> intent.includes -> context -> input -> result",
                 "Enhance value parsing robustness, support null values",
-                "Add condition syntax validation method"
-            ]
+                "Add condition syntax validation method",
+            ],
         }

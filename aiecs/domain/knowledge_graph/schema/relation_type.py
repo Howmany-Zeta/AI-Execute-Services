@@ -40,39 +40,36 @@ class RelationType(BaseModel):
         ```
     """
 
-    name: str = Field(
-        ...,
-        description="Relation type name (must be unique)"
-    )
+    name: str = Field(..., description="Relation type name (must be unique)")
 
     description: Optional[str] = Field(
         default=None,
-        description="Human-readable description of this relation type"
+        description="Human-readable description of this relation type",
     )
 
     properties: Dict[str, PropertySchema] = Field(
         default_factory=dict,
-        description="Dictionary of property schemas (key=property name)"
+        description="Dictionary of property schemas (key=property name)",
     )
 
     source_entity_types: Optional[List[str]] = Field(
         default=None,
-        description="Allowed source entity types (None = any type allowed)"
+        description="Allowed source entity types (None = any type allowed)",
     )
 
     target_entity_types: Optional[List[str]] = Field(
         default=None,
-        description="Allowed target entity types (None = any type allowed)"
+        description="Allowed target entity types (None = any type allowed)",
     )
 
     is_symmetric: bool = Field(
         default=False,
-        description="Whether relation is symmetric (A->B implies B->A)"
+        description="Whether relation is symmetric (A->B implies B->A)",
     )
 
     is_transitive: bool = Field(
         default=False,
-        description="Whether relation is transitive (A->B, B->C implies A->C)"
+        description="Whether relation is transitive (A->B, B->C implies A->C)",
     )
 
     class Config:
@@ -137,11 +134,7 @@ class RelationType(BaseModel):
 
         return True
 
-    def validate_entity_types(
-        self,
-        source_entity_type: str,
-        target_entity_type: str
-    ) -> bool:
+    def validate_entity_types(self, source_entity_type: str, target_entity_type: str) -> bool:
         """
         Validate that source and target entity types are allowed
 
@@ -176,4 +169,3 @@ class RelationType(BaseModel):
 
     def __repr__(self) -> str:
         return self.__str__()
-

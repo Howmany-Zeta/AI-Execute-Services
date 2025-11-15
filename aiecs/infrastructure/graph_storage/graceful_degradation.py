@@ -16,7 +16,7 @@ from aiecs.infrastructure.graph_storage.error_handling import (
     GraphStoreError,
     ErrorHandler,
     ErrorContext,
-    ErrorSeverity
+    ErrorSeverity,
 )
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 class DegradationMode(str, Enum):
     """Degradation mode"""
+
     NORMAL = "normal"  # Using primary backend
     DEGRADED = "degraded"  # Using fallback
     FAILED = "failed"  # Both backends failed
@@ -32,6 +33,7 @@ class DegradationMode(str, Enum):
 @dataclass
 class DegradationStatus:
     """Status of graceful degradation"""
+
     mode: DegradationMode
     primary_available: bool
     fallback_available: bool
@@ -45,7 +47,7 @@ class DegradationStatus:
             "primary_available": self.primary_available,
             "fallback_available": self.fallback_available,
             "last_failure": self.last_failure,
-            "failure_count": self.failure_count
+            "failure_count": self.failure_count,
         }
 
 
@@ -70,7 +72,7 @@ class GracefulDegradationStore:
         self,
         primary_store: GraphStore,
         enable_fallback: bool = True,
-        max_failures: int = 3
+        max_failures: int = 3,
     ):
         """
         Initialize graceful degradation store
@@ -88,7 +90,7 @@ class GracefulDegradationStore:
         self.status = DegradationStatus(
             mode=DegradationMode.NORMAL,
             primary_available=True,
-            fallback_available=False
+            fallback_available=False,
         )
         self.failure_count = 0
         self.error_handler = ErrorHandler()
@@ -190,11 +192,8 @@ class GracefulDegradationStore:
                 # Log error
                 self.error_handler.handle_error(
                     e,
-                    ErrorContext(
-                        operation=operation,
-                        severity=ErrorSeverity.HIGH
-                    ),
-                    reraise=False
+                    ErrorContext(operation=operation, severity=ErrorSeverity.HIGH),
+                    reraise=False,
                 )
 
                 # Switch to fallback if threshold reached
@@ -239,25 +238,19 @@ class GracefulDegradationStore:
     async def add_entity(self, entity):
         """Add entity with fallback"""
         return await self._execute_with_fallback(
-            "add_entity",
-            lambda store, e: store.add_entity(e),
-            entity
+            "add_entity", lambda store, e: store.add_entity(e), entity
         )
 
     async def get_entity(self, entity_id: str):
         """Get entity with fallback"""
         return await self._execute_with_fallback(
-            "get_entity",
-            lambda store, eid: store.get_entity(eid),
-            entity_id
+            "get_entity", lambda store, eid: store.get_entity(eid), entity_id
         )
 
     async def add_relation(self, relation):
         """Add relation with fallback"""
         return await self._execute_with_fallback(
-            "add_relation",
-            lambda store, r: store.add_relation(r),
-            relation
+            "add_relation", lambda store, r: store.add_relation(r), relation
         )
 
     async def get_relation(self, relation_id: str):
@@ -265,7 +258,7 @@ class GracefulDegradationStore:
         return await self._execute_with_fallback(
             "get_relation",
             lambda store, rid: store.get_relation(rid),
-            relation_id
+            relation_id,
         )
 
     async def get_neighbors(self, entity_id: str, **kwargs):
@@ -274,15 +267,12 @@ class GracefulDegradationStore:
             "get_neighbors",
             lambda store, eid, **kw: store.get_neighbors(eid, **kw),
             entity_id,
-            **kwargs
+            **kwargs,
         )
 
     async def get_stats(self):
         """Get stats with fallback"""
-        return await self._execute_with_fallback(
-            "get_stats",
-            lambda store: store.get_stats()
-        )
+        return await self._execute_with_fallback("get_stats", lambda store: store.get_stats())
 
     def get_degradation_status(self) -> DegradationStatus:
         """Get current degradation status"""
@@ -314,4 +304,3 @@ class GracefulDegradationStore:
         except Exception as e:
             logger.warning(f"Primary store recovery failed: {e}")
             return False
-

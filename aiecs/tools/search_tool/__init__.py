@@ -27,23 +27,23 @@ Features:
 
 Usage:
     from aiecs.tools.search_tool import SearchTool
-    
+
     # Create search tool instance
     search_tool = SearchTool()
-    
+
     # Perform enhanced web search
     results = search_tool.search_web(
         query="machine learning tutorial",
         auto_enhance=True,
         return_summary=True
     )
-    
+
     # Access results and quality analysis
     for result in results['results']:
         print(f"Title: {result['title']}")
         print(f"Quality: {result['_quality_summary']['score']:.2f}")
         print(f"Credibility: {result['_quality_summary']['level']}")
-    
+
     # Check metrics
     print(search_tool.get_metrics_report())
 """
@@ -67,7 +67,7 @@ from .constants import (
     CircuitBreakerOpenError,
     SearchAPIError,
     ValidationError,
-    CacheError
+    CacheError,
 )
 
 # Register the tool with the AIECS tool registry
@@ -76,28 +76,25 @@ register_tool("search")(SearchTool)
 
 __all__ = [
     # Main class
-    'SearchTool',
-    
+    "SearchTool",
     # Enums
-    'SearchType',
-    'SafeSearch',
-    'ImageSize',
-    'ImageType',
-    'ImageColorType',
-    'QueryIntentType',
-    'CredibilityLevel',
-    'CircuitState',
-    
+    "SearchType",
+    "SafeSearch",
+    "ImageSize",
+    "ImageType",
+    "ImageColorType",
+    "QueryIntentType",
+    "CredibilityLevel",
+    "CircuitState",
     # Exceptions
-    'SearchToolError',
-    'AuthenticationError',
-    'QuotaExceededError',
-    'RateLimitError',
-    'CircuitBreakerOpenError',
-    'SearchAPIError',
-    'ValidationError',
-    'CacheError',
+    "SearchToolError",
+    "AuthenticationError",
+    "QuotaExceededError",
+    "RateLimitError",
+    "CircuitBreakerOpenError",
+    "SearchAPIError",
+    "ValidationError",
+    "CacheError",
 ]
 
-__version__ = '2.0.0'
-
+__version__ = "2.0.0"

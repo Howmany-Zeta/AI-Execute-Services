@@ -9,12 +9,10 @@ class IToolProvider(ABC):
     @abstractmethod
     def get_tool(self, tool_name: str) -> Any:
         """Get tool instance"""
-        pass
 
     @abstractmethod
     def has_tool(self, tool_name: str) -> bool:
         """Check if tool exists"""
-        pass
 
 
 class IToolExecutor(ABC):
@@ -23,32 +21,33 @@ class IToolExecutor(ABC):
     @abstractmethod
     def execute(self, tool: Any, operation_name: str, **params) -> Any:
         """Execute tool operation synchronously"""
-        pass
 
     @abstractmethod
     async def execute_async(self, tool: Any, operation_name: str, **params) -> Any:
         """Execute tool operation asynchronously"""
-        pass
 
 
 class ICacheProvider(ABC):
     """Cache provider interface - Domain layer abstraction"""
 
     @abstractmethod
-    def generate_cache_key(self, operation_type: str, user_id: str, task_id: str,
-                          args: tuple, kwargs: Dict[str, Any]) -> str:
+    def generate_cache_key(
+        self,
+        operation_type: str,
+        user_id: str,
+        task_id: str,
+        args: tuple,
+        kwargs: Dict[str, Any],
+    ) -> str:
         """Generate cache key"""
-        pass
 
     @abstractmethod
     def get_from_cache(self, cache_key: str) -> Optional[Any]:
         """Get data from cache"""
-        pass
 
     @abstractmethod
     def add_to_cache(self, cache_key: str, value: Any) -> None:
         """Add data to cache"""
-        pass
 
 
 class IOperationExecutor(ABC):
@@ -57,25 +56,27 @@ class IOperationExecutor(ABC):
     @abstractmethod
     async def execute_operation(self, operation_spec: str, params: Dict[str, Any]) -> Any:
         """Execute single operation"""
-        pass
 
     @abstractmethod
     async def batch_execute_operations(self, operations: List[Dict[str, Any]]) -> List[Any]:
         """Batch execute operations"""
-        pass
 
     @abstractmethod
-    async def execute_operations_sequence(self, operations: List[Dict[str, Any]],
-                                        user_id: str, task_id: str,
-                                        stop_on_failure: bool = False,
-                                        save_callback: Optional[Callable] = None) -> List[TaskStepResult]:
+    async def execute_operations_sequence(
+        self,
+        operations: List[Dict[str, Any]],
+        user_id: str,
+        task_id: str,
+        stop_on_failure: bool = False,
+        save_callback: Optional[Callable] = None,
+    ) -> List[TaskStepResult]:
         """Execute operations sequence sequentially"""
-        pass
 
     @abstractmethod
-    async def execute_parallel_operations(self, operations: List[Dict[str, Any]]) -> List[TaskStepResult]:
+    async def execute_parallel_operations(
+        self, operations: List[Dict[str, Any]]
+    ) -> List[TaskStepResult]:
         """Execute operations in parallel"""
-        pass
 
 
 class ExecutionInterface(ABC):
@@ -96,10 +97,14 @@ class ExecutionInterface(ABC):
         Returns:
             Any: Operation result
         """
-        pass
 
     @abstractmethod
-    async def execute_task(self, task_name: str, input_data: Dict[str, Any], context: Dict[str, Any]) -> Any:
+    async def execute_task(
+        self,
+        task_name: str,
+        input_data: Dict[str, Any],
+        context: Dict[str, Any],
+    ) -> Any:
         """
         Execute a single task (e.g., service task).
 
@@ -111,7 +116,6 @@ class ExecutionInterface(ABC):
         Returns:
             Any: Task result
         """
-        pass
 
     @abstractmethod
     async def batch_execute_operations(self, operations: List[Dict[str, Any]]) -> List[Any]:
@@ -124,7 +128,6 @@ class ExecutionInterface(ABC):
         Returns:
             List[Any]: List of operation results
         """
-        pass
 
     @abstractmethod
     async def batch_execute_tasks(self, tasks: List[Dict[str, Any]]) -> List[Any]:
@@ -137,7 +140,6 @@ class ExecutionInterface(ABC):
         Returns:
             List[Any]: List of task results
         """
-        pass
 
     def register_executor(self, executor_type: str, executor_instance: Any) -> None:
         """

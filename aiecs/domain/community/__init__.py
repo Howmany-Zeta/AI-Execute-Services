@@ -19,7 +19,11 @@ __version__ = "1.0.0"
 # Core managers
 from .community_manager import CommunityManager, MemberLifecycleHooks
 from .community_integration import CommunityIntegration
-from .decision_engine import DecisionEngine, ConsensusAlgorithm, ConflictResolutionStrategy
+from .decision_engine import (
+    DecisionEngine,
+    ConsensusAlgorithm,
+    ConflictResolutionStrategy,
+)
 from .resource_manager import ResourceManager
 from .collaborative_workflow import CollaborativeWorkflowEngine
 from .analytics import CommunityAnalytics
@@ -89,7 +93,6 @@ from .exceptions import (
 __all__ = [
     # Version
     "__version__",
-    
     # Core managers
     "CommunityManager",
     "CommunityIntegration",
@@ -98,7 +101,6 @@ __all__ = [
     "CollaborativeWorkflowEngine",
     "CommunityAnalytics",
     "MemberLifecycleHooks",
-    
     # Communication and context
     "CommunicationHub",
     "Message",
@@ -109,18 +111,15 @@ __all__ = [
     "SharedContext",
     "ContextScope",
     "ContextConflictStrategy",
-    
     # Agent adapters
     "AgentAdapter",
     "StandardLLMAdapter",
     "CustomAgentAdapter",
     "AgentAdapterRegistry",
     "AgentCapability",
-    
     # Builder
     "CommunityBuilder",
     "builder",
-    
     # Enums
     "CommunityRole",
     "GovernanceType",
@@ -128,14 +127,12 @@ __all__ = [
     "ResourceType",
     "ConsensusAlgorithm",
     "ConflictResolutionStrategy",
-    
     # Models
     "CommunityMember",
     "CommunityResource",
     "CommunityDecision",
     "AgentCommunity",
     "CollaborationSession",
-    
     # Exceptions
     "CommunityException",
     "CommunityNotFoundError",
@@ -156,4 +153,3 @@ __all__ = [
     "CommunicationError",
     "ContextError",
 ]
-

@@ -52,6 +52,25 @@ The tool supports **7 search modes**:
 | `graph_weight` | float | 0.4 | Graph weight in hybrid mode (0.0-1.0) |
 | `expand_results` | boolean | true | Expand results with neighbors (hybrid) |
 | `use_cache` | boolean | true | Enable result caching |
+| `enable_reranking` | boolean | false | Enable result reranking for improved relevance |
+| `rerank_strategy` | string | "text" | Reranking strategy: "text", "semantic", "structural", "hybrid" |
+
+### Reranking Parameters
+
+The tool supports **result reranking** to improve search relevance by re-scoring initial results using additional signals:
+
+- **`enable_reranking`** (boolean, default: false): Enable/disable reranking
+- **`rerank_strategy`** (string, default: "text"): Reranking strategy:
+  - `"text"`: Text similarity reranking (BM25-based)
+  - `"semantic"`: Semantic similarity using embeddings
+  - `"structural"`: Graph structure importance (centrality, PageRank)
+  - `"hybrid"`: Combines all signals for best results
+
+**When to use reranking:**
+- When initial search results need refinement
+- For complex queries requiring multiple relevance signals
+- When combining vector and graph search (hybrid mode)
+- To boost precision at the cost of slight latency increase
 
 ## Output Format
 
@@ -219,6 +238,70 @@ result = tool.execute({
 - Pattern matching
 - Path discovery
 - Relationship chain exploration
+
+### Example 8: Search with Reranking
+
+Improve search relevance using reranking.
+
+```python
+# Hybrid search with semantic reranking
+result = tool.execute({
+    "mode": "hybrid",
+    "query": "machine learning experts in computer vision",
+    "max_results": 20,
+    "enable_reranking": True,
+    "rerank_strategy": "semantic"
+})
+```
+
+**Reranking Strategies:**
+
+1. **Text Reranking** - BM25-based text similarity
+```python
+result = tool.execute({
+    "mode": "vector",
+    "query": "database optimization",
+    "enable_reranking": True,
+    "rerank_strategy": "text"
+})
+```
+
+2. **Semantic Reranking** - Deep semantic similarity
+```python
+result = tool.execute({
+    "mode": "hybrid",
+    "query": "natural language processing",
+    "enable_reranking": True,
+    "rerank_strategy": "semantic"
+})
+```
+
+3. **Structural Reranking** - Graph importance signals
+```python
+result = tool.execute({
+    "mode": "graph",
+    "seed_entity_ids": ["person_1"],
+    "enable_reranking": True,
+    "rerank_strategy": "structural"
+})
+```
+
+4. **Hybrid Reranking** - All signals combined (best results)
+```python
+result = tool.execute({
+    "mode": "hybrid",
+    "query": "AI researchers",
+    "enable_reranking": True,
+    "rerank_strategy": "hybrid",
+    "max_results": 10
+})
+```
+
+**Use Cases:**
+- Improving precision for complex queries
+- Combining multiple relevance signals
+- Refining large result sets
+- Production search systems
 
 ## Advanced Usage
 

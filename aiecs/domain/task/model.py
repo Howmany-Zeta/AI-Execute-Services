@@ -1,11 +1,17 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from datetime import datetime
 
 
 class TaskContext:
     """Task context model"""
-    def __init__(self, user_id: str, task_id: str, session_id: Optional[str] = None,
-                 metadata: Optional[Dict[str, Any]] = None):
+
+    def __init__(
+        self,
+        user_id: str,
+        task_id: str,
+        session_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ):
         self.user_id = user_id
         self.task_id = task_id
         self.session_id = session_id
@@ -28,14 +34,20 @@ class TaskContext:
             "session_id": self.session_id,
             "metadata": self.metadata,
             "created_at": self.created_at.isoformat(),
-            "variables": self.variables
+            "variables": self.variables,
         }
 
 
 class DSLStep:
     """DSL step model"""
-    def __init__(self, step_type: str, condition: Optional[str] = None,
-                 description: str = "", params: Optional[Dict[str, Any]] = None):
+
+    def __init__(
+        self,
+        step_type: str,
+        condition: Optional[str] = None,
+        description: str = "",
+        params: Optional[Dict[str, Any]] = None,
+    ):
         self.step_type = step_type
         self.condition = condition
         self.description = description
@@ -46,5 +58,5 @@ class DSLStep:
             "step_type": self.step_type,
             "condition": self.condition,
             "description": self.description,
-            "params": self.params
+            "params": self.params,
         }

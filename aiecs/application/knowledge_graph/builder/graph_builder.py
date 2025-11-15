@@ -11,11 +11,20 @@ from datetime import datetime
 
 from aiecs.domain.knowledge_graph.schema.graph_schema import GraphSchema
 from aiecs.infrastructure.graph_storage.base import GraphStore
-from aiecs.application.knowledge_graph.extractors.base import EntityExtractor, RelationExtractor
-from aiecs.application.knowledge_graph.fusion.entity_deduplicator import EntityDeduplicator
+from aiecs.application.knowledge_graph.extractors.base import (
+    EntityExtractor,
+    RelationExtractor,
+)
+from aiecs.application.knowledge_graph.fusion.entity_deduplicator import (
+    EntityDeduplicator,
+)
 from aiecs.application.knowledge_graph.fusion.entity_linker import EntityLinker
-from aiecs.application.knowledge_graph.fusion.relation_deduplicator import RelationDeduplicator
-from aiecs.application.knowledge_graph.validators.relation_validator import RelationValidator
+from aiecs.application.knowledge_graph.fusion.relation_deduplicator import (
+    RelationDeduplicator,
+)
+from aiecs.application.knowledge_graph.validators.relation_validator import (
+    RelationValidator,
+)
 
 
 @dataclass
@@ -37,6 +46,7 @@ class BuildResult:
         end_time: When build ended
         duration_seconds: Total duration in seconds
     """
+
     success: bool = True
     entities_added: int = 0
     relations_added: int = 0
@@ -104,7 +114,7 @@ class GraphBuilder:
         enable_deduplication: bool = True,
         enable_linking: bool = True,
         enable_validation: bool = True,
-        progress_callback: Optional[Callable[[str, float], None]] = None
+        progress_callback: Optional[Callable[[str, float], None]] = None,
     ):
         """
         Initialize graph builder
@@ -140,7 +150,7 @@ class GraphBuilder:
         self,
         text: str,
         source: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> BuildResult:
         """
         Build knowledge graph from text
@@ -197,7 +207,8 @@ class GraphBuilder:
             # Step 4: Extract relations
             if len(all_entities) >= 2:
                 self._report_progress(
-                    f"Extracting relations from {len(all_entities)} entities", 0.5
+                    f"Extracting relations from {len(all_entities)} entities",
+                    0.5,
                 )
                 relations = await self.relation_extractor.extract_relations(text, all_entities)
                 self._report_progress(f"Extracted {len(relations)} relations", 0.6)
@@ -267,7 +278,7 @@ class GraphBuilder:
         texts: List[str],
         sources: Optional[List[str]] = None,
         parallel: bool = True,
-        max_parallel: int = 5
+        max_parallel: int = 5,
     ) -> List[BuildResult]:
         """
         Build graph from multiple texts in batch
@@ -343,4 +354,3 @@ class GraphBuilder:
         if result.start_time:
             result.duration_seconds = (result.end_time - result.start_time).total_seconds()
         return result
-

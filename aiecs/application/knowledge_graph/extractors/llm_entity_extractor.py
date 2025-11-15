@@ -53,7 +53,7 @@ class LLMEntityExtractor(EntityExtractor):
         provider: Optional[AIProvider] = None,
         model: Optional[str] = None,
         temperature: float = 0.1,  # Low temperature for more deterministic extraction
-        max_tokens: Optional[int] = 2000
+        max_tokens: Optional[int] = 2000,
     ):
         """
         Initialize LLM entity extractor
@@ -73,10 +73,7 @@ class LLMEntityExtractor(EntityExtractor):
         self._llm_manager = None  # Lazy-loaded in async methods
 
     async def extract_entities(
-        self,
-        text: str,
-        entity_types: Optional[List[str]] = None,
-        **kwargs
+        self, text: str, entity_types: Optional[List[str]] = None, **kwargs
     ) -> List[Entity]:
         """
         Extract entities from text using LLM
@@ -110,7 +107,7 @@ class LLMEntityExtractor(EntityExtractor):
                 provider=self.provider,
                 model=self.model,
                 temperature=self.temperature,
-                max_tokens=self.max_tokens
+                max_tokens=self.max_tokens,
             )
 
             # Parse LLM response to Entity objects
@@ -121,11 +118,7 @@ class LLMEntityExtractor(EntityExtractor):
         except Exception as e:
             raise RuntimeError(f"LLM entity extraction failed: {str(e)}") from e
 
-    def _build_extraction_prompt(
-        self,
-        text: str,
-        entity_types: Optional[List[str]] = None
-    ) -> str:
+    def _build_extraction_prompt(self, text: str, entity_types: Optional[List[str]] = None) -> str:
         """
         Build prompt for LLM entity extraction
 
@@ -157,7 +150,13 @@ class LLMEntityExtractor(EntityExtractor):
             types_to_extract = entity_types
         else:
             # No schema and no filter - use common types
-            types_to_extract = ["Person", "Organization", "Location", "Event", "Product"]
+            types_to_extract = [
+                "Person",
+                "Organization",
+                "Location",
+                "Event",
+                "Product",
+            ]
 
         # Build entity type descriptions
         type_descriptions = []
@@ -171,7 +170,9 @@ class LLMEntityExtractor(EntityExtractor):
                 type_descriptions.append(desc)
             else:
                 # Generic description
-                type_descriptions.append(f"- {entity_type}: Extract name and any relevant properties")
+                type_descriptions.append(
+                    f"- {entity_type}: Extract name and any relevant properties"
+                )
 
         types_description = "\n".join(type_descriptions)
 
@@ -251,7 +252,7 @@ JSON output:"""
                 entity = Entity(
                     id=entity_id,
                     entity_type=entity_type,
-                    properties=properties
+                    properties=properties,
                 )
 
                 # Store confidence in properties for later use
@@ -318,9 +319,9 @@ JSON output:"""
             normalized = f"{entity_type}_{name}".lower().replace(" ", "_")
             # Add short hash for uniqueness
             import hashlib
+
             hash_suffix = hashlib.md5(normalized.encode()).hexdigest()[:8]
             return f"{normalized}_{hash_suffix}"
         else:
             # No name property, use UUID
             return f"{entity_type.lower()}_{uuid.uuid4().hex[:12]}"
-

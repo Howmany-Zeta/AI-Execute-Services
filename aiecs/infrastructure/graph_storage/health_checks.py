@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 class HealthStatus(str, Enum):
     """Health check status"""
+
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     UNHEALTHY = "unhealthy"
@@ -38,6 +39,7 @@ class HealthCheckResult:
         )
         ```
     """
+
     status: HealthStatus
     message: str
     response_time_ms: float = 0.0
@@ -59,7 +61,7 @@ class HealthCheckResult:
             "response_time_ms": round(self.response_time_ms, 2),
             "timestamp": self.timestamp.isoformat(),
             "details": self.details,
-            "error": self.error
+            "error": self.error,
         }
 
     def is_healthy(self) -> bool:
@@ -93,7 +95,7 @@ class HealthChecker:
         self,
         store: Any,
         timeout_seconds: float = 5.0,
-        query_timeout_ms: float = 1000.0
+        query_timeout_ms: float = 1000.0,
     ):
         """
         Initialize health checker
@@ -120,12 +122,12 @@ class HealthChecker:
 
         try:
             # Check 1: Store initialization
-            if not hasattr(self.store, '_is_initialized') or not self.store._is_initialized:
+            if not hasattr(self.store, "_is_initialized") or not self.store._is_initialized:
                 return HealthCheckResult(
                     status=HealthStatus.UNHEALTHY,
                     message="Store not initialized",
                     response_time_ms=0.0,
-                    error="Store not initialized"
+                    error="Store not initialized",
                 )
             details["initialized"] = True
 
@@ -148,7 +150,7 @@ class HealthChecker:
                 errors.append(f"Response time too high: {response_time}ms")
 
             # Check 5: Resource availability (if applicable)
-            if hasattr(self.store, 'pool'):
+            if hasattr(self.store, "pool"):
                 pool_ok = await self._check_connection_pool()
                 details["connection_pool"] = "ok" if pool_ok else "degraded"
                 if not pool_ok:
@@ -171,7 +173,7 @@ class HealthChecker:
                 status=status,
                 message=message,
                 response_time_ms=response_time_ms,
-                details=details
+                details=details,
             )
 
         except Exception as e:
@@ -183,18 +185,15 @@ class HealthChecker:
                 message=f"Health check exception: {str(e)}",
                 response_time_ms=response_time_ms,
                 error=str(e),
-                details=details
+                details=details,
             )
 
     async def _check_connection(self) -> bool:
         """Check if connection is available"""
         try:
             # Try a simple operation
-            if hasattr(self.store, 'get_stats'):
-                await asyncio.wait_for(
-                    self.store.get_stats(),
-                    timeout=self.timeout_seconds
-                )
+            if hasattr(self.store, "get_stats"):
+                await asyncio.wait_for(self.store.get_stats(), timeout=self.timeout_seconds)
                 return True
             return False
         except Exception as e:
@@ -205,11 +204,8 @@ class HealthChecker:
         """Check if queries can be executed"""
         try:
             # Try a simple query (get_stats or similar)
-            if hasattr(self.store, 'get_stats'):
-                await asyncio.wait_for(
-                    self.store.get_stats(),
-                    timeout=self.timeout_seconds
-                )
+            if hasattr(self.store, "get_stats"):
+                await asyncio.wait_for(self.store.get_stats(), timeout=self.timeout_seconds)
                 return True
             return False
         except Exception as e:
@@ -222,23 +218,23 @@ class HealthChecker:
             times = []
             for _ in range(3):
                 start = asyncio.get_event_loop().time()
-                if hasattr(self.store, 'get_stats'):
+                if hasattr(self.store, "get_stats"):
                     await self.store.get_stats()
                 elapsed = (asyncio.get_event_loop().time() - start) * 1000
                 times.append(elapsed)
 
             return sum(times) / len(times) if times else 0.0
         except Exception:
-            return float('inf')
+            return float("inf")
 
     async def _check_connection_pool(self) -> bool:
         """Check connection pool health"""
         try:
-            if hasattr(self.store, 'pool'):
+            if hasattr(self.store, "pool"):
                 pool = self.store.pool
 
                 # Check pool size
-                if hasattr(pool, 'get_size'):
+                if hasattr(pool, "get_size"):
                     size = pool.get_size()
                     free = pool.get_idle_size()
 
@@ -259,11 +255,8 @@ class HealthChecker:
             True if store is alive, False otherwise
         """
         try:
-            if hasattr(self.store, 'get_stats'):
-                await asyncio.wait_for(
-                    self.store.get_stats(),
-                    timeout=1.0
-                )
+            if hasattr(self.store, "get_stats"):
+                await asyncio.wait_for(self.store.get_stats(), timeout=1.0)
                 return True
             return False
         except Exception:
@@ -299,11 +292,7 @@ class HealthMonitor:
         ```
     """
 
-    def __init__(
-        self,
-        checker: HealthChecker,
-        interval_seconds: float = 30.0
-    ):
+    def __init__(self, checker: HealthChecker, interval_seconds: float = 30.0):
         """
         Initialize health monitor
 
@@ -351,9 +340,7 @@ class HealthMonitor:
 
                 # Log unhealthy status
                 if not result.is_healthy():
-                    logger.warning(
-                        f"Health check failed: {result.status} - {result.message}"
-                    )
+                    logger.warning(f"Health check failed: {result.status} - {result.message}")
 
                 await asyncio.sleep(self.interval_seconds)
             except asyncio.CancelledError:
@@ -382,14 +369,10 @@ class HealthMonitor:
         """
         cutoff = datetime.utcnow() - timedelta(minutes=window_minutes)
 
-        recent = [
-            r for r in self.health_history
-            if r.timestamp >= cutoff
-        ]
+        recent = [r for r in self.health_history if r.timestamp >= cutoff]
 
         if not recent:
             return 0.0
 
         healthy_count = sum(1 for r in recent if r.is_healthy())
         return (healthy_count / len(recent)) * 100.0
-

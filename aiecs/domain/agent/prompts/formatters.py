@@ -11,7 +11,7 @@ from aiecs.llm import LLMMessage
 def format_conversation_history(
     history: List[LLMMessage],
     max_messages: Optional[int] = None,
-    format_style: str = "compact"
+    format_style: str = "compact",
 ) -> str:
     """
     Format conversation history as string.
@@ -49,7 +49,7 @@ def format_tool_result(
     tool_name: str,
     result: Any,
     success: bool = True,
-    error: Optional[str] = None
+    error: Optional[str] = None,
 ) -> str:
     """
     Format tool execution result.
@@ -73,7 +73,7 @@ def truncate_context(
     text: str,
     max_length: int,
     strategy: str = "middle",
-    placeholder: str = "..."
+    placeholder: str = "...",
 ) -> str:
     """
     Truncate text to fit within max_length.
@@ -92,11 +92,11 @@ def truncate_context(
 
     if strategy == "end":
         # Keep start, truncate end
-        return text[:max_length - len(placeholder)] + placeholder
+        return text[: max_length - len(placeholder)] + placeholder
 
     elif strategy == "start":
         # Truncate start, keep end
-        return placeholder + text[-(max_length - len(placeholder)):]
+        return placeholder + text[-(max_length - len(placeholder)) :]
 
     elif strategy == "middle":
         # Keep start and end, truncate middle
@@ -134,7 +134,7 @@ def format_list_items(items: List[str], style: str = "bullets") -> str:
 def format_key_value_pairs(
     data: Dict[str, Any],
     separator: str = ": ",
-    exclude_keys: Optional[List[str]] = None
+    exclude_keys: Optional[List[str]] = None,
 ) -> str:
     """
     Format dictionary as key-value pairs.
@@ -151,7 +151,7 @@ def format_key_value_pairs(
     lines = []
 
     for key, value in data.items():
-        if key in exclude_keys or key.startswith('_'):
+        if key in exclude_keys or key.startswith("_"):
             continue
         lines.append(f"{key}{separator}{value}")
 
@@ -159,9 +159,7 @@ def format_key_value_pairs(
 
 
 def inject_context_in_prompt(
-    prompt: str,
-    context: Dict[str, Any],
-    context_marker: str = "{context}"
+    prompt: str, context: Dict[str, Any], context_marker: str = "{context}"
 ) -> str:
     """
     Inject context into prompt at marker position.
@@ -189,4 +187,3 @@ def estimate_token_count(text: str) -> int:
         Estimated token count (4 chars ≈ 1 token)
     """
     return len(text) // 4
-

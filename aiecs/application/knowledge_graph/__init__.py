@@ -5,4 +5,3 @@ This module contains application services and use cases for knowledge graph oper
 """
 
 __all__ = []
-

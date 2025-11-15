@@ -8,7 +8,7 @@ from aiecs.application.knowledge_graph.retrieval.retrieval_strategies import (
     PersonalizedPageRank,
     MultiHopRetrieval,
     FilteredRetrieval,
-    RetrievalCache
+    RetrievalCache,
 )
 
 __all__ = [
@@ -17,4 +17,3 @@ __all__ = [
     "FilteredRetrieval",
     "RetrievalCache",
 ]
-

@@ -10,4 +10,3 @@ __all__ = [
     "ToolSchemaGenerator",
     "generate_tool_schema",
 ]
-

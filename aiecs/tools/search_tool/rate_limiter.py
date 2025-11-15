@@ -17,10 +17,11 @@ from .constants import CircuitState, RateLimitError, CircuitBreakerOpenError
 # Rate Limiter
 # ============================================================================
 
+
 class RateLimiter:
     """
     Token bucket rate limiter for API requests.
-    
+
     Implements a token bucket algorithm to limit the rate of API requests
     and prevent quota exhaustion.
     """
@@ -44,11 +45,11 @@ class RateLimiter:
         """Refill tokens based on elapsed time"""
         now = time.time()
         time_passed = now - self.last_update
-        
+
         # Refill tokens proportionally to time passed
         refill_rate = self.max_requests / self.time_window
         tokens_to_add = time_passed * refill_rate
-        
+
         self.tokens = min(self.max_requests, self.tokens + tokens_to_add)
         self.last_update = now
 
@@ -67,12 +68,12 @@ class RateLimiter:
         """
         with self.lock:
             self._refill_tokens()
-            
+
             # Clean up old request history
             cutoff_time = time.time() - self.time_window
             while self.request_history and self.request_history[0] < cutoff_time:
                 self.request_history.popleft()
-            
+
             # Check if we have enough tokens
             if self.tokens >= tokens:
                 self.tokens -= tokens
@@ -97,10 +98,11 @@ class RateLimiter:
 # Circuit Breaker
 # ============================================================================
 
+
 class CircuitBreaker:
     """
     Circuit breaker pattern implementation for API resilience.
-    
+
     Implements a circuit breaker to prevent cascading failures when
     the API is experiencing issues.
     """
@@ -167,11 +169,10 @@ class CircuitBreaker:
         with self.lock:
             self.failure_count += 1
             self.last_failure_time = time.time()
-            
+
             if self.failure_count >= self.failure_threshold:
                 self.state = CircuitState.OPEN
 
     def get_state(self) -> str:
         """Get current circuit state"""
         return self.state.value
-

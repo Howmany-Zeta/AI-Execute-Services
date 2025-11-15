@@ -1,15 +1,25 @@
-import asyncio
 import logging
 import os
-from typing import Dict, Any, Optional, List, AsyncGenerator
+from typing import Optional, List, AsyncGenerator
 
 import google.generativeai as genai
-from google.generativeai.types import GenerationConfig, HarmCategory, HarmBlockThreshold
+from google.generativeai.types import (
+    GenerationConfig,
+    HarmCategory,
+    HarmBlockThreshold,
+)
 
-from aiecs.llm.clients.base_client import BaseLLMClient, LLMMessage, LLMResponse, ProviderNotAvailableError, RateLimitError
+from aiecs.llm.clients.base_client import (
+    BaseLLMClient,
+    LLMMessage,
+    LLMResponse,
+    ProviderNotAvailableError,
+    RateLimitError,
+)
 from aiecs.config.config import get_settings
 
 logger = logging.getLogger(__name__)
+
 
 class GoogleAIClient(BaseLLMClient):
     """Google AI (Gemini) provider client"""
@@ -25,7 +35,9 @@ class GoogleAIClient(BaseLLMClient):
         if not self._initialized:
             api_key = self.settings.googleai_api_key or os.environ.get("GOOGLEAI_API_KEY")
             if not api_key:
-                raise ProviderNotAvailableError("Google AI API key not configured. Set GOOGLEAI_API_KEY.")
+                raise ProviderNotAvailableError(
+                    "Google AI API key not configured. Set GOOGLEAI_API_KEY."
+                )
 
             try:
                 genai.configure(api_key=api_key)
@@ -40,14 +52,14 @@ class GoogleAIClient(BaseLLMClient):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ) -> LLMResponse:
         """Generate text using Google AI"""
         self._init_google_ai()
-        
+
         # Get model name from config if not provided
         model_name = model or self._get_default_model() or "gemini-2.5-pro"
-        
+
         # Get model config for default parameters
         model_config = self._get_model_config(model_name)
         if model_config and max_tokens is None:
@@ -55,19 +67,19 @@ class GoogleAIClient(BaseLLMClient):
 
         try:
             model_instance = genai.GenerativeModel(model_name)
-            
+
             # Convert messages to Google AI format
             history = [{"role": msg.role, "parts": [msg.content]} for msg in messages]
 
             # The last message is the prompt
             prompt = history.pop()
-            
+
             # Create GenerationConfig
             generation_config = GenerationConfig(
                 temperature=temperature,
                 max_output_tokens=max_tokens or 8192,
                 top_p=kwargs.get("top_p", 0.95),
-                top_k=kwargs.get("top_k", 40)
+                top_k=kwargs.get("top_k", 40),
             )
 
             # Safety settings to match vertex_client
@@ -79,9 +91,9 @@ class GoogleAIClient(BaseLLMClient):
             }
 
             response = await model_instance.generate_content_async(
-                contents=prompt['parts'],
+                contents=prompt["parts"],
                 generation_config=generation_config,
-                safety_settings=safety_settings
+                safety_settings=safety_settings,
             )
 
             content = response.text
@@ -99,7 +111,7 @@ class GoogleAIClient(BaseLLMClient):
                 tokens_used=total_tokens,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
-                cost_estimate=cost
+                cost_estimate=cost,
             )
 
         except Exception as e:
@@ -114,14 +126,14 @@ class GoogleAIClient(BaseLLMClient):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ) -> AsyncGenerator[str, None]:
         """Stream text generation using Google AI"""
         self._init_google_ai()
-        
+
         # Get model name from config if not provided
         model_name = model or self._get_default_model() or "gemini-2.5-pro"
-        
+
         # Get model config for default parameters
         model_config = self._get_model_config(model_name)
         if model_config and max_tokens is None:
@@ -129,7 +141,7 @@ class GoogleAIClient(BaseLLMClient):
 
         try:
             model_instance = genai.GenerativeModel(model_name)
-            
+
             # Convert messages to Google AI format
             history = [{"role": msg.role, "parts": [msg.content]} for msg in messages]
             prompt = history.pop()
@@ -138,9 +150,9 @@ class GoogleAIClient(BaseLLMClient):
                 temperature=temperature,
                 max_output_tokens=max_tokens or 8192,
                 top_p=kwargs.get("top_p", 0.95),
-                top_k=kwargs.get("top_k", 40)
+                top_k=kwargs.get("top_k", 40),
             )
-            
+
             safety_settings = {
                 HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
                 HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
@@ -149,10 +161,10 @@ class GoogleAIClient(BaseLLMClient):
             }
 
             response_stream = await model_instance.generate_content_async(
-                contents=prompt['parts'],
+                contents=prompt["parts"],
                 generation_config=generation_config,
                 safety_settings=safety_settings,
-                stream=True
+                stream=True,
             )
 
             async for chunk in response_stream:

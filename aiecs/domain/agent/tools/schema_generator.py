@@ -6,8 +6,8 @@ Generate OpenAI-style function schemas from AIECS tools.
 
 import inspect
 import logging
-from typing import Dict, Any, List, Optional, get_type_hints
-from aiecs.tools import BaseTool, get_tool
+from typing import Dict, Any, List, Optional
+from aiecs.tools import get_tool
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class ToolSchemaGenerator:
     def generate_schema(
         tool_name: str,
         operation: Optional[str] = None,
-        description: Optional[str] = None
+        description: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Generate OpenAI function schema for a tool operation.
@@ -57,7 +57,7 @@ class ToolSchemaGenerator:
             method = getattr(tool, operation)
         else:
             # Default to 'run' method
-            method = getattr(tool, 'run', None)
+            method = getattr(tool, "run", None)
             if method is None:
                 raise ValueError(f"Tool {tool_name} has no 'run' method")
 
@@ -85,7 +85,7 @@ class ToolSchemaGenerator:
 
         for param_name, param in sig.parameters.items():
             # Skip 'self' and 'op' parameters
-            if param_name in ['self', 'op', 'cls']:
+            if param_name in ["self", "op", "cls"]:
                 continue
 
             param_schema = ToolSchemaGenerator._param_to_schema(param_name, param)
@@ -162,7 +162,7 @@ class ToolSchemaGenerator:
 
         for param_name, param in sig.parameters.items():
             # Skip 'self' and 'op' parameters
-            if param_name in ['self', 'op', 'cls']:
+            if param_name in ["self", "op", "cls"]:
                 continue
 
             # Required if no default value
@@ -174,7 +174,7 @@ class ToolSchemaGenerator:
     @staticmethod
     def generate_schemas_for_tools(
         tool_names: List[str],
-        operations: Optional[Dict[str, List[str]]] = None
+        operations: Optional[Dict[str, List[str]]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Generate schemas for multiple tools.
@@ -191,7 +191,7 @@ class ToolSchemaGenerator:
 
         for tool_name in tool_names:
             tool_ops = operations.get(tool_name, [None])
-            
+
             for op in tool_ops:
                 try:
                     schema = ToolSchemaGenerator.generate_schema(tool_name, op)
@@ -205,7 +205,7 @@ class ToolSchemaGenerator:
 def generate_tool_schema(
     tool_name: str,
     operation: Optional[str] = None,
-    description: Optional[str] = None
+    description: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Convenience function to generate tool schema.
@@ -219,4 +219,3 @@ def generate_tool_schema(
         OpenAI function schema dictionary
     """
     return ToolSchemaGenerator.generate_schema(tool_name, operation, description)
-

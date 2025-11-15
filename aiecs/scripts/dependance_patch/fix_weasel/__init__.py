@@ -7,6 +7,5 @@ Weasel 库补丁工具
 from .fix_weasel_validator import main as fix_weasel_validator_main
 
 __all__ = [
-    'fix_weasel_validator_main',
+    "fix_weasel_validator_main",
 ]
-

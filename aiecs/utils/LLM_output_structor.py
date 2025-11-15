@@ -39,7 +39,6 @@ class LLMOutputTransformer:
             "agent_requirements": "required components",
             "meta_architect": "strategic planner",
             "intent_parser": "request analyzer",
-
             # Analysis terms
             "fails most SMART criteria": "lacks several key details",
             "SMART criteria": "clarity requirements",
@@ -49,7 +48,6 @@ class LLMOutputTransformer:
             "not Time-bound": "missing timeframe",
             "high-level goal": "general objective",
             "actionable task": "specific action item",
-
             # Common phrases
             "classic example": "typical case",
             "significant clarification": "more details",
@@ -58,7 +56,7 @@ class LLMOutputTransformer:
             "problem_analysis": "situation assessment",
             "intent parsing": "request understanding",
             "blueprint": "detailed plan",
-            "roadmap": "action sequence"
+            "roadmap": "action sequence",
         }
 
         # Friendly section headers
@@ -71,26 +69,31 @@ class LLMOutputTransformer:
             "Key Components:": "🔧 Main Elements:",
             "Confidence:": "📊 Confidence Level:",
             "Intent Categories:": "🎯 Identified Goals:",
-            "Complexity:": "📈 Complexity Level:"
+            "Complexity:": "📈 Complexity Level:",
         }
 
         # Opening greetings
         self.greetings = {
-            'clarification': "Hello! Thank you for reaching out. Let me help you with your request.",
-            'confirmation': "Great! I've carefully analyzed your requirements.",
-            'completion': "Excellent! I've completed the analysis.",
-            'general': "Thank you for your message."
+            "clarification": "Hello! Thank you for reaching out. Let me help you with your request.",
+            "confirmation": "Great! I've carefully analyzed your requirements.",
+            "completion": "Excellent! I've completed the analysis.",
+            "general": "Thank you for your message.",
         }
 
         # Closing messages
         self.closings = {
-            'clarification': "\n\n✨ These details will help me provide you with the most accurate and helpful solution!",
-            'confirmation': "\n\n🤝 I'm ready to proceed whenever you are. Feel free to ask any questions or suggest modifications!",
-            'completion': "\n\n✅ Everything is set up and ready. Let me know if you need any adjustments!",
-            'general': "\n\n💬 Please let me know if you need any clarification!"
+            "clarification": "\n\n✨ These details will help me provide you with the most accurate and helpful solution!",
+            "confirmation": "\n\n🤝 I'm ready to proceed whenever you are. Feel free to ask any questions or suggest modifications!",
+            "completion": "\n\n✅ Everything is set up and ready. Let me know if you need any adjustments!",
+            "general": "\n\n💬 Please let me know if you need any clarification!",
         }
 
-    def transform_message(self, content: str, message_type: str = 'general', preserve_structure: bool = True) -> str:
+    def transform_message(
+        self,
+        content: str,
+        message_type: str = "general",
+        preserve_structure: bool = True,
+    ) -> str:
         """
         Transform LLM output to be more readable while preserving content.
 
@@ -109,9 +112,9 @@ class LLMOutputTransformer:
         transformed_content = self._enhance_readability(content)
 
         # Special handling for different message types
-        if message_type == 'clarification':
+        if message_type == "clarification":
             transformed_content = self._enhance_clarification(transformed_content)
-        elif message_type == 'confirmation':
+        elif message_type == "confirmation":
             transformed_content = self._enhance_confirmation(transformed_content)
 
         result += "\n\n" + transformed_content
@@ -123,11 +126,11 @@ class LLMOutputTransformer:
 
     def _add_greeting(self, message_type: str) -> str:
         """Add an appropriate greeting based on message type."""
-        return self.greetings.get(message_type, self.greetings['general'])
+        return self.greetings.get(message_type, self.greetings["general"])
 
     def _add_closing(self, message_type: str) -> str:
         """Add an appropriate closing based on message type."""
-        return self.closings.get(message_type, self.closings['general'])
+        return self.closings.get(message_type, self.closings["general"])
 
     def _enhance_readability(self, content: str) -> str:
         """Enhance readability by replacing technical terms and improving formatting."""
@@ -140,7 +143,12 @@ class LLMOutputTransformer:
         # Replace technical terms with friendly alternatives
         for technical, friendly in self.technical_replacements.items():
             # Case-insensitive replacement
-            result = re.sub(rf'\b{re.escape(technical)}\b', friendly, result, flags=re.IGNORECASE)
+            result = re.sub(
+                rf"\b{re.escape(technical)}\b",
+                friendly,
+                result,
+                flags=re.IGNORECASE,
+            )
 
         # Improve JSON-like structures visibility
         result = self._format_json_structures(result)
@@ -160,7 +168,7 @@ class LLMOutputTransformer:
             r"(💭 My Analysis:)(.*?)(?=\n\n|$)",
             lambda m: f"{m.group(1)}\n{self._make_reasoning_conversational(m.group(2))}",
             content,
-            flags=re.DOTALL
+            flags=re.DOTALL,
         )
 
         # Format questions better
@@ -175,7 +183,7 @@ class LLMOutputTransformer:
             r"I have generated a detailed (.*?):(.*?)(?=Do you|Would you|$)",
             r"I've prepared a comprehensive \1 for you:\n\n\2\n",
             content,
-            flags=re.DOTALL
+            flags=re.DOTALL,
         )
 
         # Format proposed plans better
@@ -183,7 +191,7 @@ class LLMOutputTransformer:
             r"Proposed plan:(.*?)(?=Do you|Would you|$)",
             r"📋 **Proposed Approach:**\n\1\n",
             content,
-            flags=re.DOTALL
+            flags=re.DOTALL,
         )
 
         return content
@@ -194,7 +202,7 @@ class LLMOutputTransformer:
         reasoning = self._convert_perspective(reasoning)
 
         # Split into sentences for processing
-        sentences = reasoning.strip().split('.')
+        sentences = reasoning.strip().split(".")
         conversational_parts = []
 
         for i, sentence in enumerate(sentences):
@@ -204,31 +212,49 @@ class LLMOutputTransformer:
 
             # Make the first sentence more natural
             if i == 0:
-                # Remove phrases like "is a classic example of" to be more direct
-                sentence = re.sub(r"is a (?:classic|typical|clear) example of", "seems to be", sentence)
+                # Remove phrases like "is a classic example of" to be more
+                # direct
+                sentence = re.sub(
+                    r"is a (?:classic|typical|clear) example of",
+                    "seems to be",
+                    sentence,
+                )
                 sentence = "Looking at what you've shared, " + sentence.lower()
             # For sentences about what's missing
-            elif any(word in sentence.lower() for word in ["lacks", "missing", "doesn't have", "without"]):
+            elif any(
+                word in sentence.lower() for word in ["lacks", "missing", "doesn't have", "without"]
+            ):
                 if not sentence.lower().startswith(("i ", "it ", "this ")):
                     sentence = "I notice that it " + sentence.lower()
             # For sentences about what's not clear
-            elif "not" in sentence.lower() and any(word in sentence.lower() for word in ["specific", "clear", "measurable"]):
-                sentence = re.sub(r"it is not", "it isn't quite", sentence, flags=re.IGNORECASE)
+            elif "not" in sentence.lower() and any(
+                word in sentence.lower() for word in ["specific", "clear", "measurable"]
+            ):
+                sentence = re.sub(
+                    r"it is not",
+                    "it isn't quite",
+                    sentence,
+                    flags=re.IGNORECASE,
+                )
                 if not sentence.lower().startswith(("i ", "this ")):
                     sentence = "I can see that " + sentence.lower()
             # For requirement sentences
             elif any(word in sentence.lower() for word in ["requires", "needs", "must"]):
-                sentence = "To help you effectively, " + sentence.lower().replace("the request", "we'll")
+                sentence = "To help you effectively, " + sentence.lower().replace(
+                    "the request", "we'll"
+                )
             # Default: make it conversational
             else:
-                if len(sentence) > 20 and not sentence.lower().startswith(("i ", "this ", "that ", "we ")):
+                if len(sentence) > 20 and not sentence.lower().startswith(
+                    ("i ", "this ", "that ", "we ")
+                ):
                     sentence = "Additionally, " + sentence.lower()
 
             conversational_parts.append(sentence)
 
-        result = '. '.join(conversational_parts)
-        if result and not result.endswith('.'):
-            result += '.'
+        result = ". ".join(conversational_parts)
+        if result and not result.endswith("."):
+            result += "."
 
         return result
 
@@ -246,7 +272,12 @@ class LLMOutputTransformer:
 
         # Replace impersonal constructions
         text = re.sub(r"it is (?:a|an)", "this is", text, flags=re.IGNORECASE)
-        text = re.sub(r"this is (?:a|an) vague", "this seems vague", text, flags=re.IGNORECASE)
+        text = re.sub(
+            r"this is (?:a|an) vague",
+            "this seems vague",
+            text,
+            flags=re.IGNORECASE,
+        )
 
         return text
 
@@ -264,9 +295,9 @@ class LLMOutputTransformer:
             formatted = "📝 Questions to Help Me Understand Better:\n\n"
             for i, q in enumerate(questions, 1):
                 # Clean up the question
-                q = q.strip().strip('-*•')
-                if not q.endswith('?'):
-                    q += '?'
+                q = q.strip().strip("-*•")
+                if not q.endswith("?"):
+                    q += "?"
                 formatted += f"**{i}.** {q}\n\n"
 
             # Replace the original questions section
@@ -277,18 +308,19 @@ class LLMOutputTransformer:
     def _extract_questions(self, text: str) -> List[str]:
         """Extract individual questions from text."""
         # Split by semicolons or line breaks
-        parts = re.split(r'[;\n]', text)
+        parts = re.split(r"[;\n]", text)
         questions = []
 
         for part in parts:
             part = part.strip()
-            if part and not part.startswith('*Reason:'):
+            if part and not part.startswith("*Reason:"):
                 questions.append(part)
 
         return questions
 
     def _format_json_structures(self, content: str) -> str:
         """Format JSON-like structures to be more readable."""
+
         # Find JSON-like structures
         def format_dict(match):
             try:
@@ -300,32 +332,37 @@ class LLMOutputTransformer:
                 formatted = formatted.replace(",", ",\n  ")
                 formatted = formatted.replace("}", "\n}")
                 return formatted
-            except:
+            except Exception:
                 return match.group(0)
 
         # Apply to simple dictionaries
-        content = re.sub(r'\{[^{}]+\}', format_dict, content)
+        content = re.sub(r"\{[^{}]+\}", format_dict, content)
 
         return content
 
     def _enhance_bullet_points(self, content: str) -> str:
         """Enhance bullet points for better visibility."""
         # Replace various bullet point styles with a consistent one
-        content = re.sub(r'^[-*•]\s*', '• ', content, flags=re.MULTILINE)
-        content = re.sub(r'^\d+\.\s*', lambda m: f"**{m.group(0)}**", content, flags=re.MULTILINE)
+        content = re.sub(r"^[-*•]\s*", "• ", content, flags=re.MULTILINE)
+        content = re.sub(
+            r"^\d+\.\s*",
+            lambda m: f"**{m.group(0)}**",
+            content,
+            flags=re.MULTILINE,
+        )
 
         return content
 
     def _improve_spacing(self, content: str) -> str:
         """Improve spacing for better readability."""
         # Add space before emoji headers
-        content = re.sub(r'(?<!\n)(💭|📝|🔍|💡|🔧|📊|🎯|📈)', r'\n\n\1', content)
+        content = re.sub(r"(?<!\n)(💭|📝|🔍|💡|🔧|📊|🎯|📈)", r"\n\n\1", content)
 
         # Ensure proper spacing after headers
-        content = re.sub(r'(💭|📝|🔍|💡|🔧|📊|🎯|📈)(.*?):', r'\1\2:\n', content)
+        content = re.sub(r"(💭|📝|🔍|💡|🔧|📊|🎯|📈)(.*?):", r"\1\2:\n", content)
 
         # Clean up excessive newlines
-        content = re.sub(r'\n{3,}', '\n\n', content)
+        content = re.sub(r"\n{3,}", "\n\n", content)
 
         return content.strip()
 
@@ -334,7 +371,7 @@ class LLMOutputTransformer:
 def format_clarification_message(
     questions: List[str],
     round_number: int = 1,
-    reasoning: Optional[str] = None
+    reasoning: Optional[str] = None,
 ) -> str:
     """
     Format clarification messages with preserved reasoning.
@@ -356,12 +393,11 @@ def format_clarification_message(
     if reasoning:
         content += f"\n\nReasoning: {reasoning}"
 
-    return transformer.transform_message(content, 'clarification')
+    return transformer.transform_message(content, "clarification")
 
 
 def format_confirmation_message(
-    content: Union[str, Dict[str, Any]],
-    confirmation_type: str = 'strategy'
+    content: Union[str, Dict[str, Any]], confirmation_type: str = "strategy"
 ) -> str:
     """
     Format confirmation messages with preserved technical details.
@@ -378,7 +414,7 @@ def format_confirmation_message(
     if isinstance(content, dict):
         content = json.dumps(content, indent=2)
 
-    return transformer.transform_message(content, 'confirmation')
+    return transformer.transform_message(content, "confirmation")
 
 
 def enhance_reasoning(reasoning: str) -> str:

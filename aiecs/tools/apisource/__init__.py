@@ -11,13 +11,13 @@ A comprehensive tool for querying external API data sources with advanced featur
 
 Usage:
     from aiecs.tools.apisource import APISourceTool
-    
+
     tool = APISourceTool({
         'fred_api_key': 'YOUR_KEY',
         'enable_fallback': True,
         'enable_query_enhancement': True
     })
-    
+
     # Query with natural language
     result = tool.query(
         provider='fred',
@@ -25,7 +25,7 @@ Usage:
         params={'series_id': 'GDP'},
         query_text="Get GDP data for last 5 years"
     )
-    
+
     # Multi-provider search with fusion
     results = tool.search(
         query="unemployment trends",
@@ -38,7 +38,7 @@ from aiecs.tools.apisource.tool import (
     APISourceError,
     ProviderNotFoundError,
     APIRateLimitError,
-    APIAuthenticationError
+    APIAuthenticationError,
 )
 
 # Import providers for convenience
@@ -46,7 +46,7 @@ from aiecs.tools.apisource.providers import (
     BaseAPIProvider,
     get_provider,
     list_providers,
-    PROVIDER_REGISTRY
+    PROVIDER_REGISTRY,
 )
 
 # Import intelligence components
@@ -54,13 +54,13 @@ from aiecs.tools.apisource.intelligence import (
     QueryIntentAnalyzer,
     QueryEnhancer,
     DataFusionEngine,
-    SearchEnhancer
+    SearchEnhancer,
 )
 
 # Import reliability components
 from aiecs.tools.apisource.reliability import (
     SmartErrorHandler,
-    FallbackStrategy
+    FallbackStrategy,
 )
 
 # Import monitoring components
@@ -69,38 +69,31 @@ from aiecs.tools.apisource.monitoring import DetailedMetrics
 # Import utilities
 from aiecs.tools.apisource.utils import DataValidator
 
-__version__ = '2.0.0'
+__version__ = "2.0.0"
 
 __all__ = [
     # Main tool
-    'APISourceTool',
-    
+    "APISourceTool",
     # Exceptions
-    'APISourceError',
-    'ProviderNotFoundError',
-    'APIRateLimitError',
-    'APIAuthenticationError',
-    
+    "APISourceError",
+    "ProviderNotFoundError",
+    "APIRateLimitError",
+    "APIAuthenticationError",
     # Providers
-    'BaseAPIProvider',
-    'get_provider',
-    'list_providers',
-    'PROVIDER_REGISTRY',
-    
+    "BaseAPIProvider",
+    "get_provider",
+    "list_providers",
+    "PROVIDER_REGISTRY",
     # Intelligence
-    'QueryIntentAnalyzer',
-    'QueryEnhancer',
-    'DataFusionEngine',
-    'SearchEnhancer',
-    
+    "QueryIntentAnalyzer",
+    "QueryEnhancer",
+    "DataFusionEngine",
+    "SearchEnhancer",
     # Reliability
-    'SmartErrorHandler',
-    'FallbackStrategy',
-    
+    "SmartErrorHandler",
+    "FallbackStrategy",
     # Monitoring
-    'DetailedMetrics',
-    
+    "DetailedMetrics",
     # Utils
-    'DataValidator'
+    "DataValidator",
 ]
-

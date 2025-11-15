@@ -5,7 +5,7 @@ Convert legacy configurations and prompts to new format.
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 import re
 
 from ..models import AgentConfiguration
@@ -69,18 +69,13 @@ def convert_langchain_prompt(langchain_prompt: str) -> PromptTemplate:
     """
     # LangChain and our template use same {variable} syntax
     # Just need to extract variables
-    pattern = r'\{(\w+)\}'
+    pattern = r"\{(\w+)\}"
     variables = re.findall(pattern, langchain_prompt)
 
-    return PromptTemplate(
-        template=langchain_prompt,
-        required_variables=variables
-    )
+    return PromptTemplate(template=langchain_prompt, required_variables=variables)
 
 
-def convert_langchain_chat_prompt(
-    messages: list
-) -> ChatPromptTemplate:
+def convert_langchain_chat_prompt(messages: list) -> ChatPromptTemplate:
     """
     Convert LangChain chat prompt to ChatPromptTemplate.
 
@@ -91,13 +86,13 @@ def convert_langchain_chat_prompt(
         ChatPromptTemplate instance
     """
     message_templates = []
-    
+
     for item in messages:
         if isinstance(item, tuple):
             role, template = item
         elif isinstance(item, dict):
-            role = item.get('role', 'user')
-            template = item.get('content', '')
+            role = item.get("role", "user")
+            template = item.get("content", "")
         else:
             logger.warning(f"Unknown message format: {item}")
             continue
@@ -107,9 +102,7 @@ def convert_langchain_chat_prompt(
     return ChatPromptTemplate(messages=message_templates)
 
 
-def migrate_agent_state(
-    legacy_state: Dict[str, Any]
-) -> Dict[str, Any]:
+def migrate_agent_state(legacy_state: Dict[str, Any]) -> Dict[str, Any]:
     """
     Migrate legacy agent state to new format.
 
@@ -135,10 +128,7 @@ def migrate_agent_state(
     return migrated
 
 
-def validate_migration(
-    legacy_agent: Any,
-    new_agent: Any
-) -> Dict[str, Any]:
+def validate_migration(legacy_agent: Any, new_agent: Any) -> Dict[str, Any]:
     """
     Validate migration by comparing legacy and new agent behavior.
 
@@ -156,16 +146,15 @@ def validate_migration(
     }
 
     # Check for required methods
-    required_methods = ['execute_task']
+    required_methods = ["execute_task"]
     for method in required_methods:
         if not hasattr(new_agent, method):
             report["compatible"] = False
             report["errors"].append(f"Missing required method: {method}")
 
     # Check configuration compatibility
-    if hasattr(legacy_agent, 'config') and hasattr(new_agent, '_config'):
+    if hasattr(legacy_agent, "config") and hasattr(new_agent, "_config"):
         # Basic compatibility check
         logger.info("Configuration validated")
 
     return report
-

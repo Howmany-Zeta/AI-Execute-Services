@@ -35,49 +35,40 @@ class Entity(BaseModel):
         ```
     """
 
-    id: str = Field(
-        ...,
-        description="Unique identifier for the entity"
-    )
+    id: str = Field(..., description="Unique identifier for the entity")
 
-    entity_type: str = Field(
-        ...,
-        description="Type of the entity (e.g., 'Person', 'Company')"
-    )
+    entity_type: str = Field(..., description="Type of the entity (e.g., 'Person', 'Company')")
 
     properties: dict[str, Any] = Field(
         default_factory=dict,
-        description="Arbitrary properties associated with the entity"
+        description="Arbitrary properties associated with the entity",
     )
 
     embedding: Optional[list[float]] = Field(
-        default=None,
-        description="Vector embedding for semantic search"
+        default=None, description="Vector embedding for semantic search"
     )
 
     created_at: datetime = Field(
         default_factory=datetime.utcnow,
-        description="Timestamp when entity was created"
+        description="Timestamp when entity was created",
     )
 
     updated_at: datetime = Field(
         default_factory=datetime.utcnow,
-        description="Timestamp when entity was last updated"
+        description="Timestamp when entity was last updated",
     )
 
     source: Optional[str] = Field(
         default=None,
-        description="Source of the entity data (e.g., document ID)"
+        description="Source of the entity data (e.g., document ID)",
     )
 
     class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+        json_encoders = {datetime: lambda v: v.isoformat()}
         # Allow arbitrary types for numpy arrays if needed
         arbitrary_types_allowed = True
 
-    @field_validator('embedding')
+    @field_validator("embedding")
     @classmethod
     def validate_embedding(cls, v: Optional[list[float]]) -> Optional[list[float]]:
         """Validate embedding is a list of floats"""
@@ -137,4 +128,3 @@ class Entity(BaseModel):
 
     def __repr__(self) -> str:
         return f"Entity(id='{self.id}', entity_type='{self.entity_type}', properties={len(self.properties)} keys)"
-

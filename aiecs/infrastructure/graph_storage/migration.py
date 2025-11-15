@@ -47,7 +47,7 @@ class GraphStorageMigrator:
         self,
         batch_size: int = 1000,
         show_progress: bool = True,
-        verify: bool = True
+        verify: bool = True,
     ) -> Dict[str, Any]:
         """
         Migrate all graph data from source to target
@@ -60,23 +60,26 @@ class GraphStorageMigrator:
         Returns:
             Migration statistics dictionary
         """
-        logger.info(f"Starting migration from {type(self.source).__name__} to {type(self.target).__name__}")
+        logger.info(
+            f"Starting migration from {type(self.source).__name__} to {type(self.target).__name__}"
+        )
 
         stats = {
             "entities_migrated": 0,
             "relations_migrated": 0,
             "errors": [],
-            "duration_seconds": 0
+            "duration_seconds": 0,
         }
 
         import time
+
         start_time = time.time()
 
         try:
             # Initialize both stores
-            if not getattr(self.source, '_is_initialized', False):
+            if not getattr(self.source, "_is_initialized", False):
                 await self.source.initialize()
-            if not getattr(self.target, '_is_initialized', False):
+            if not getattr(self.target, "_is_initialized", False):
                 await self.target.initialize()
 
             # Migrate entities
@@ -98,7 +101,9 @@ class GraphStorageMigrator:
 
             stats["duration_seconds"] = time.time() - start_time
             logger.info(f"Migration completed in {stats['duration_seconds']:.2f}s")
-            logger.info(f"Migrated {stats['entities_migrated']} entities and {stats['relations_migrated']} relations")
+            logger.info(
+                f"Migrated {stats['entities_migrated']} entities and {stats['relations_migrated']} relations"
+            )
 
         except Exception as e:
             logger.error(f"Migration failed: {e}")
@@ -118,14 +123,18 @@ class GraphStorageMigrator:
             return 0
 
         # Use tqdm for progress if requested
-        iterator = tqdm(entities, desc="Entities", disable=not show_progress) if show_progress else entities
+        iterator = (
+            tqdm(entities, desc="Entities", disable=not show_progress)
+            if show_progress
+            else entities
+        )
 
         migrated = 0
         errors = []
 
         # Migrate in batches using transactions
         for i in range(0, total, batch_size):
-            batch = entities[i:i + batch_size]
+            batch = entities[i : i + batch_size]
 
             try:
                 async with self.target.transaction():
@@ -151,12 +160,12 @@ class GraphStorageMigrator:
     async def _migrate_relations(self, batch_size: int, show_progress: bool) -> int:
         """Migrate all relations from source to target"""
         # Get all relations by getting all entities and their neighbors
-        # This is a workaround since we don't have a direct get_all_relations method
+        # This is a workaround since we don't have a direct get_all_relations
+        # method
         all_entities = await self.source.get_all_entities()
         relations = []
 
         # Collect all unique relations
-        seen_relations = set()
         for entity in all_entities:
             # This is an approximation - we'd need a better way to get all relations
             # For now, we'll use a simpler approach
@@ -164,7 +173,7 @@ class GraphStorageMigrator:
 
         # Alternative: If the store has a direct way to get relations, use it
         # For SQLite and Postgres, we can query the relations table directly
-        if hasattr(self.source, 'conn') or hasattr(self.source, 'pool'):
+        if hasattr(self.source, "conn") or hasattr(self.source, "pool"):
             relations = await self._get_all_relations_direct(self.source)
         else:
             logger.warning("Cannot directly access relations, migration may be incomplete")
@@ -176,14 +185,18 @@ class GraphStorageMigrator:
             logger.warning("No relations to migrate")
             return 0
 
-        iterator = tqdm(relations, desc="Relations", disable=not show_progress) if show_progress else relations
+        iterator = (
+            tqdm(relations, desc="Relations", disable=not show_progress)
+            if show_progress
+            else relations
+        )
 
         migrated = 0
         errors = []
 
         # Migrate in batches
         for i in range(0, total, batch_size):
-            batch = relations[i:i + batch_size]
+            batch = relations[i : i + batch_size]
 
             try:
                 async with self.target.transaction():
@@ -213,37 +226,48 @@ class GraphStorageMigrator:
 
         if isinstance(store, SQLiteGraphStore):
             # SQLite direct query
-            cursor = await store.conn.execute("SELECT id, relation_type, source_id, target_id, properties, weight FROM relations")
+            cursor = await store.conn.execute(
+                "SELECT id, relation_type, source_id, target_id, properties, weight FROM relations"
+            )
             rows = await cursor.fetchall()
 
             for row in rows:
                 import json
-                relations.append(Relation(
-                    id=row[0],
-                    relation_type=row[1],
-                    source_id=row[2],
-                    target_id=row[3],
-                    properties=json.loads(row[4]) if row[4] else {},
-                    weight=row[5] if row[5] else 1.0
-                ))
+
+                relations.append(
+                    Relation(
+                        id=row[0],
+                        relation_type=row[1],
+                        source_id=row[2],
+                        target_id=row[3],
+                        properties=json.loads(row[4]) if row[4] else {},
+                        weight=row[5] if row[5] else 1.0,
+                    )
+                )
 
         elif isinstance(store, PostgresGraphStore):
             # PostgreSQL direct query
             async with store.pool.acquire() as conn:
-                rows = await conn.fetch("""
+                rows = await conn.fetch(
+                    """
                     SELECT id, relation_type, source_id, target_id, properties, weight
                     FROM graph_relations
-                """)
+                """
+                )
 
                 for row in rows:
-                    relations.append(Relation(
-                        id=row['id'],
-                        relation_type=row['relation_type'],
-                        source_id=row['source_id'],
-                        target_id=row['target_id'],
-                        properties=row['properties'] if isinstance(row['properties'], dict) else {},
-                        weight=float(row['weight']) if row['weight'] else 1.0
-                    ))
+                    relations.append(
+                        Relation(
+                            id=row["id"],
+                            relation_type=row["relation_type"],
+                            source_id=row["source_id"],
+                            target_id=row["target_id"],
+                            properties=(
+                                row["properties"] if isinstance(row["properties"], dict) else {}
+                            ),
+                            weight=(float(row["weight"]) if row["weight"] else 1.0),
+                        )
+                    )
 
         return relations
 
@@ -254,30 +278,27 @@ class GraphStorageMigrator:
             source_stats = await self.source.get_stats()
             target_stats = await self.target.get_stats()
 
-            entity_match = source_stats['entity_count'] == target_stats['entity_count']
-            relation_match = source_stats['relation_count'] == target_stats['relation_count']
+            entity_match = source_stats["entity_count"] == target_stats["entity_count"]
+            relation_match = source_stats["relation_count"] == target_stats["relation_count"]
 
             return {
                 "success": entity_match and relation_match,
-                "source_entities": source_stats['entity_count'],
-                "target_entities": target_stats['entity_count'],
-                "source_relations": source_stats['relation_count'],
-                "target_relations": target_stats['relation_count'],
+                "source_entities": source_stats["entity_count"],
+                "target_entities": target_stats["entity_count"],
+                "source_relations": source_stats["relation_count"],
+                "target_relations": target_stats["relation_count"],
                 "entity_match": entity_match,
-                "relation_match": relation_match
+                "relation_match": relation_match,
             }
         except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+            return {"success": False, "error": str(e)}
 
 
 async def migrate_sqlite_to_postgres(
     sqlite_path: str,
     postgres_config: Optional[Dict[str, Any]] = None,
     batch_size: int = 1000,
-    show_progress: bool = True
+    show_progress: bool = True,
 ) -> Dict[str, Any]:
     """
     Convenience function to migrate from SQLite to PostgreSQL
@@ -315,10 +336,7 @@ async def migrate_sqlite_to_postgres(
     migrator = GraphStorageMigrator(source, target)
 
     try:
-        stats = await migrator.migrate(
-            batch_size=batch_size,
-            show_progress=show_progress
-        )
+        stats = await migrator.migrate(batch_size=batch_size, show_progress=show_progress)
         return stats
     finally:
         await source.close()
@@ -333,8 +351,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Migrate graph storage between backends")
     parser.add_argument("--source-sqlite", help="Source SQLite database path")
     parser.add_argument("--target-pg-host", default="localhost", help="Target PostgreSQL host")
-    parser.add_argument("--target-pg-port", type=int, default=5432, help="Target PostgreSQL port")
-    parser.add_argument("--target-pg-database", required=True, help="Target PostgreSQL database")
+    parser.add_argument(
+        "--target-pg-port",
+        type=int,
+        default=5432,
+        help="Target PostgreSQL port",
+    )
+    parser.add_argument(
+        "--target-pg-database",
+        required=True,
+        help="Target PostgreSQL database",
+    )
     parser.add_argument("--target-pg-user", default="postgres", help="Target PostgreSQL user")
     parser.add_argument("--target-pg-password", help="Target PostgreSQL password")
     parser.add_argument("--batch-size", type=int, default=1000, help="Batch size")
@@ -354,10 +381,10 @@ if __name__ == "__main__":
                 "port": args.target_pg_port,
                 "database": args.target_pg_database,
                 "user": args.target_pg_user,
-                "password": args.target_pg_password
+                "password": args.target_pg_password,
             },
             batch_size=args.batch_size,
-            show_progress=not args.no_progress
+            show_progress=not args.no_progress,
         )
 
         print("\n" + "=" * 60)
@@ -367,16 +394,20 @@ if __name__ == "__main__":
         print(f"Relations migrated: {stats['relations_migrated']}")
         print(f"Duration: {stats['duration_seconds']:.2f}s")
 
-        if stats.get('verification'):
-            ver = stats['verification']
-            if ver['success']:
+        if stats.get("verification"):
+            ver = stats["verification"]
+            if ver["success"]:
                 print("✅ Verification: PASSED")
             else:
                 print("❌ Verification: FAILED")
-                print(f"   Source entities: {ver['source_entities']}, Target: {ver['target_entities']}")
-                print(f"   Source relations: {ver['source_relations']}, Target: {ver['target_relations']}")
+                print(
+                    f"   Source entities: {ver['source_entities']}, Target: {ver['target_entities']}"
+                )
+                print(
+                    f"   Source relations: {ver['source_relations']}, Target: {ver['target_relations']}"
+                )
 
-        if stats['errors']:
+        if stats["errors"]:
             print(f"\n⚠️  Errors encountered: {len(stats['errors'])}")
 
     asyncio.run(run())

@@ -42,9 +42,7 @@ class DatabaseManager:
         """Initialize database connection pool"""
         try:
             self.connection_pool = await asyncpg.create_pool(
-                **self.db_config,
-                min_size=min_size,
-                max_size=max_size
+                **self.db_config, min_size=min_size, max_size=max_size
             )
             logger.info("Database connection pool initialized successfully")
         except Exception as e:
@@ -80,7 +78,8 @@ class DatabaseManager:
 
     async def _create_tables(self, conn):
         """Create database tables"""
-        await conn.execute('''
+        await conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS task_history (
                 id SERIAL PRIMARY KEY,
                 user_id TEXT NOT NULL,
@@ -94,9 +93,16 @@ class DatabaseManager:
             CREATE INDEX IF NOT EXISTS idx_task_history_task_id ON task_history (task_id);
             CREATE INDEX IF NOT EXISTS idx_task_history_status ON task_history (status);
             CREATE INDEX IF NOT EXISTS idx_task_history_timestamp ON task_history (timestamp);
-        ''')
+        """
+        )
 
-    async def save_task_history(self, user_id: str, task_id: str, step: int, step_result: TaskStepResult):
+    async def save_task_history(
+        self,
+        user_id: str,
+        task_id: str,
+        step: int,
+        step_result: TaskStepResult,
+    ):
         """Save task execution history"""
         if not self._initialized:
             await self.init_database_schema()
@@ -105,15 +111,25 @@ class DatabaseManager:
             if self.connection_pool:
                 async with self.connection_pool.acquire() as conn:
                     await conn.execute(
-                        'INSERT INTO task_history (user_id, task_id, step, result, timestamp, status) VALUES ($1, $2, $3, $4, $5, $6)',
-                        user_id, task_id, step, json.dumps(step_result.dict()), datetime.now(), step_result.status
+                        "INSERT INTO task_history (user_id, task_id, step, result, timestamp, status) VALUES ($1, $2, $3, $4, $5, $6)",
+                        user_id,
+                        task_id,
+                        step,
+                        json.dumps(step_result.dict()),
+                        datetime.now(),
+                        step_result.status,
                     )
             else:
                 conn = await asyncpg.connect(**self.db_config)
                 try:
                     await conn.execute(
-                        'INSERT INTO task_history (user_id, task_id, step, result, timestamp, status) VALUES ($1, $2, $3, $4, $5, $6)',
-                        user_id, task_id, step, json.dumps(step_result.dict()), datetime.now(), step_result.status
+                        "INSERT INTO task_history (user_id, task_id, step, result, timestamp, status) VALUES ($1, $2, $3, $4, $5, $6)",
+                        user_id,
+                        task_id,
+                        step,
+                        json.dumps(step_result.dict()),
+                        datetime.now(),
+                        step_result.status,
                     )
                 finally:
                     await conn.close()
@@ -133,25 +149,27 @@ class DatabaseManager:
             if self.connection_pool:
                 async with self.connection_pool.acquire() as conn:
                     records = await conn.fetch(
-                        'SELECT step, result, timestamp, status FROM task_history WHERE user_id = $1 AND task_id = $2 ORDER BY step ASC',
-                        user_id, task_id
+                        "SELECT step, result, timestamp, status FROM task_history WHERE user_id = $1 AND task_id = $2 ORDER BY step ASC",
+                        user_id,
+                        task_id,
                     )
             else:
                 conn = await asyncpg.connect(**self.db_config)
                 try:
                     records = await conn.fetch(
-                        'SELECT step, result, timestamp, status FROM task_history WHERE user_id = $1 AND task_id = $2 ORDER BY step ASC',
-                        user_id, task_id
+                        "SELECT step, result, timestamp, status FROM task_history WHERE user_id = $1 AND task_id = $2 ORDER BY step ASC",
+                        user_id,
+                        task_id,
                     )
                 finally:
                     await conn.close()
 
             return [
                 {
-                    "step": r['step'],
-                    "result": json.loads(r['result']),
-                    "timestamp": r['timestamp'].isoformat(),
-                    "status": r['status']
+                    "step": r["step"],
+                    "result": json.loads(r["result"]),
+                    "timestamp": r["timestamp"].isoformat(),
+                    "status": r["status"],
                 }
                 for r in records
             ]
@@ -168,15 +186,19 @@ class DatabaseManager:
             if self.connection_pool:
                 async with self.connection_pool.acquire() as conn:
                     await conn.execute(
-                        'UPDATE task_history SET status = $1 WHERE user_id = $2 AND task_id = $3',
-                        TaskStatus.CANCELLED.value, user_id, task_id
+                        "UPDATE task_history SET status = $1 WHERE user_id = $2 AND task_id = $3",
+                        TaskStatus.CANCELLED.value,
+                        user_id,
+                        task_id,
                     )
             else:
                 conn = await asyncpg.connect(**self.db_config)
                 try:
                     await conn.execute(
-                        'UPDATE task_history SET status = $1 WHERE user_id = $2 AND task_id = $3',
-                        TaskStatus.CANCELLED.value, user_id, task_id
+                        "UPDATE task_history SET status = $1 WHERE user_id = $2 AND task_id = $3",
+                        TaskStatus.CANCELLED.value,
+                        user_id,
+                        task_id,
                     )
                 finally:
                     await conn.close()
@@ -196,20 +218,22 @@ class DatabaseManager:
             if self.connection_pool:
                 async with self.connection_pool.acquire() as conn:
                     record = await conn.fetchrow(
-                        'SELECT status FROM task_history WHERE user_id = $1 AND task_id = $2 ORDER BY step DESC LIMIT 1',
-                        user_id, task_id
+                        "SELECT status FROM task_history WHERE user_id = $1 AND task_id = $2 ORDER BY step DESC LIMIT 1",
+                        user_id,
+                        task_id,
                     )
             else:
                 conn = await asyncpg.connect(**self.db_config)
                 try:
                     record = await conn.fetchrow(
-                        'SELECT status FROM task_history WHERE user_id = $1 AND task_id = $2 ORDER BY step DESC LIMIT 1',
-                        user_id, task_id
+                        "SELECT status FROM task_history WHERE user_id = $1 AND task_id = $2 ORDER BY step DESC LIMIT 1",
+                        user_id,
+                        task_id,
                     )
                 finally:
                     await conn.close()
 
-            return TaskStatus(record['status']) if record else TaskStatus.PENDING
+            return TaskStatus(record["status"]) if record else TaskStatus.PENDING
         except Exception as e:
             logger.error(f"Database error checking task status: {e}")
             raise Exception(f"Database error: {e}")
@@ -223,7 +247,7 @@ class DatabaseManager:
             if self.connection_pool:
                 async with self.connection_pool.acquire() as conn:
                     records = await conn.fetch(
-                        '''SELECT DISTINCT task_id,
+                        """SELECT DISTINCT task_id,
                            MAX(timestamp) as last_updated,
                            (SELECT status FROM task_history th2
                             WHERE th2.user_id = $1 AND th2.task_id = th1.task_id
@@ -232,14 +256,15 @@ class DatabaseManager:
                            WHERE user_id = $1
                            GROUP BY task_id
                            ORDER BY last_updated DESC
-                           LIMIT $2''',
-                        user_id, limit
+                           LIMIT $2""",
+                        user_id,
+                        limit,
                     )
             else:
                 conn = await asyncpg.connect(**self.db_config)
                 try:
                     records = await conn.fetch(
-                        '''SELECT DISTINCT task_id,
+                        """SELECT DISTINCT task_id,
                            MAX(timestamp) as last_updated,
                            (SELECT status FROM task_history th2
                             WHERE th2.user_id = $1 AND th2.task_id = th1.task_id
@@ -248,17 +273,18 @@ class DatabaseManager:
                            WHERE user_id = $1
                            GROUP BY task_id
                            ORDER BY last_updated DESC
-                           LIMIT $2''',
-                        user_id, limit
+                           LIMIT $2""",
+                        user_id,
+                        limit,
                     )
                 finally:
                     await conn.close()
 
             return [
                 {
-                    "task_id": r['task_id'],
-                    "last_updated": r['last_updated'].isoformat(),
-                    "status": r['status']
+                    "task_id": r["task_id"],
+                    "last_updated": r["last_updated"].isoformat(),
+                    "status": r["status"],
                 }
                 for r in records
             ]
@@ -275,15 +301,15 @@ class DatabaseManager:
             if self.connection_pool:
                 async with self.connection_pool.acquire() as conn:
                     result = await conn.execute(
-                        'DELETE FROM task_history WHERE timestamp < NOW() - INTERVAL %s DAY',
-                        days_old
+                        "DELETE FROM task_history WHERE timestamp < NOW() - INTERVAL %s DAY",
+                        days_old,
                     )
             else:
                 conn = await asyncpg.connect(**self.db_config)
                 try:
                     result = await conn.execute(
-                        'DELETE FROM task_history WHERE timestamp < NOW() - INTERVAL %s DAY',
-                        days_old
+                        "DELETE FROM task_history WHERE timestamp < NOW() - INTERVAL %s DAY",
+                        days_old,
                     )
                 finally:
                     await conn.close()

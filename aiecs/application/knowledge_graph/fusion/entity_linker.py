@@ -4,7 +4,7 @@ Entity Linker
 Links newly extracted entities to existing entities in the knowledge graph.
 """
 
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.infrastructure.graph_storage.base import GraphStore
 
@@ -52,7 +52,7 @@ class EntityLinker:
         graph_store: GraphStore,
         similarity_threshold: float = 0.85,
         use_embeddings: bool = True,
-        embedding_threshold: float = 0.90
+        embedding_threshold: float = 0.90,
     ):
         """
         Initialize entity linker
@@ -68,11 +68,7 @@ class EntityLinker:
         self.use_embeddings = use_embeddings
         self.embedding_threshold = embedding_threshold
 
-    async def link_entity(
-        self,
-        new_entity: Entity,
-        candidate_limit: int = 10
-    ) -> "LinkResult":
+    async def link_entity(self, new_entity: Entity, candidate_limit: int = 10) -> "LinkResult":
         """
         Link a new entity to existing entity in graph (if match found)
 
@@ -91,7 +87,7 @@ class EntityLinker:
                 existing_entity=existing,
                 new_entity=new_entity,
                 similarity=1.0,
-                link_type="exact_id"
+                link_type="exact_id",
             )
 
         # Try embedding-based search (fast, semantic)
@@ -106,9 +102,7 @@ class EntityLinker:
         return link_result
 
     async def link_entities(
-        self,
-        new_entities: List[Entity],
-        candidate_limit: int = 10
+        self, new_entities: List[Entity], candidate_limit: int = 10
     ) -> List["LinkResult"]:
         """
         Link multiple entities in batch
@@ -126,11 +120,7 @@ class EntityLinker:
             results.append(result)
         return results
 
-    async def _link_by_embedding(
-        self,
-        new_entity: Entity,
-        candidate_limit: int
-    ) -> "LinkResult":
+    async def _link_by_embedding(self, new_entity: Entity, candidate_limit: int) -> "LinkResult":
         """
         Link entity using embedding similarity search
 
@@ -150,7 +140,7 @@ class EntityLinker:
                 query_embedding=new_entity.embedding,
                 entity_type=new_entity.entity_type,
                 max_results=candidate_limit,
-                score_threshold=self.embedding_threshold
+                score_threshold=self.embedding_threshold,
             )
 
             if not candidates:
@@ -170,7 +160,7 @@ class EntityLinker:
                         existing_entity=best_entity,
                         new_entity=new_entity,
                         similarity=best_score,
-                        link_type="embedding"
+                        link_type="embedding",
                     )
 
         except NotImplementedError:
@@ -182,11 +172,7 @@ class EntityLinker:
 
         return LinkResult(linked=False, new_entity=new_entity)
 
-    async def _link_by_name(
-        self,
-        new_entity: Entity,
-        candidate_limit: int
-    ) -> "LinkResult":
+    async def _link_by_name(self, new_entity: Entity, candidate_limit: int) -> "LinkResult":
         """
         Link entity using name-based matching
 
@@ -212,10 +198,7 @@ class EntityLinker:
             # Get candidate entities of same type
             # Note: This is a simplified implementation
             # In production, you'd want an indexed search or LIKE query
-            candidates = await self._get_candidate_entities(
-                new_entity.entity_type,
-                candidate_limit
-            )
+            candidates = await self._get_candidate_entities(new_entity.entity_type, candidate_limit)
 
             if not candidates:
                 return LinkResult(linked=False, new_entity=new_entity)
@@ -239,7 +222,7 @@ class EntityLinker:
                     existing_entity=best_match,
                     new_entity=new_entity,
                     similarity=best_score,
-                    link_type="name"
+                    link_type="name",
                 )
 
         except Exception as e:
@@ -247,11 +230,7 @@ class EntityLinker:
 
         return LinkResult(linked=False, new_entity=new_entity)
 
-    async def _get_candidate_entities(
-        self,
-        entity_type: str,
-        limit: int
-    ) -> List[Entity]:
+    async def _get_candidate_entities(self, entity_type: str, limit: int) -> List[Entity]:
         """
         Get candidate entities for linking
 
@@ -295,10 +274,10 @@ class EntityLinker:
     def _get_entity_name(self, entity: Entity) -> str:
         """Extract entity name from properties"""
         return (
-            entity.properties.get("name") or
-            entity.properties.get("title") or
-            entity.properties.get("text") or
-            ""
+            entity.properties.get("name")
+            or entity.properties.get("title")
+            or entity.properties.get("text")
+            or ""
         )
 
     def _name_similarity(self, name1: str, name2: str) -> float:
@@ -348,7 +327,7 @@ class LinkResult:
         new_entity: Entity,
         existing_entity: Optional[Entity] = None,
         similarity: float = 0.0,
-        link_type: str = "none"
+        link_type: str = "none",
     ):
         self.linked = linked
         self.existing_entity = existing_entity
@@ -358,6 +337,7 @@ class LinkResult:
 
     def __repr__(self) -> str:
         if self.linked:
-            return f"LinkResult(linked=True, type={self.link_type}, similarity={self.similarity:.2f})"
+            return (
+                f"LinkResult(linked=True, type={self.link_type}, similarity={self.similarity:.2f})"
+            )
         return "LinkResult(linked=False)"
-

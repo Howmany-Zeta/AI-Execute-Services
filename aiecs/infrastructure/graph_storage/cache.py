@@ -8,7 +8,7 @@ Supports TTL-based expiration, invalidation, and cache warming.
 import json
 import hashlib
 import logging
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Dict, Optional, Callable
 from functools import wraps
 import asyncio
 
@@ -68,7 +68,6 @@ class CacheBackend:
 
     async def close(self) -> None:
         """Close cache connection"""
-        pass
 
 
 class InMemoryCacheBackend(CacheBackend):
@@ -131,7 +130,9 @@ class InMemoryCacheBackend(CacheBackend):
     async def delete_pattern(self, pattern: str) -> None:
         """Delete all keys matching pattern (simple prefix match)"""
         async with self._lock:
-            keys_to_delete = [k for k in self.cache.keys() if k.startswith(pattern.replace('*', ''))]
+            keys_to_delete = [
+                k for k in self.cache.keys() if k.startswith(pattern.replace("*", ""))
+            ]
             for key in keys_to_delete:
                 value, _ = self.cache[key]
                 del self.cache[key]
@@ -162,10 +163,9 @@ class RedisCacheBackend(CacheBackend):
         """Initialize Redis connection"""
         try:
             import redis.asyncio as aioredis
+
             self.redis = await aioredis.from_url(
-                self.redis_url,
-                encoding="utf-8",
-                decode_responses=True
+                self.redis_url, encoding="utf-8", decode_responses=True
             )
             # Test connection
             await self.redis.ping()
@@ -321,12 +321,7 @@ class GraphStoreCache:
         args_hash = hashlib.md5(args_str.encode()).hexdigest()[:8]
         return f"{self.config.key_prefix}{operation}:{args_hash}"
 
-    async def get_or_set(
-        self,
-        key: str,
-        fetch_func: Callable,
-        ttl: Optional[int] = None
-    ) -> Any:
+    async def get_or_set(self, key: str, fetch_func: Callable, ttl: Optional[int] = None) -> Any:
         """
         Get value from cache or fetch and cache it
 
@@ -413,11 +408,12 @@ def cached_method(cache_key_func: Callable[[Any, ...], str], ttl: Optional[int] 
             pass
         ```
     """
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def wrapper(self, *args, **kwargs):
             # Check if caching is available
-            if not hasattr(self, 'cache') or not self.cache or not self.cache._initialized:
+            if not hasattr(self, "cache") or not self.cache or not self.cache._initialized:
                 return await func(self, *args, **kwargs)
 
             # Generate cache key
@@ -425,11 +421,9 @@ def cached_method(cache_key_func: Callable[[Any, ...], str], ttl: Optional[int] 
 
             # Try to get from cache or fetch
             return await self.cache.get_or_set(
-                cache_key,
-                lambda: func(self, *args, **kwargs),
-                ttl=ttl
+                cache_key, lambda: func(self, *args, **kwargs), ttl=ttl
             )
 
         return wrapper
-    return decorator
 
+    return decorator

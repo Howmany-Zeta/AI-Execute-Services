@@ -38,32 +38,28 @@ class Path(BaseModel):
         - edges[i].target_id == nodes[i+1].id
     """
 
-    nodes: List[Entity] = Field(
-        ...,
-        min_length=1,
-        description="Sequence of entities in the path"
-    )
+    nodes: List[Entity] = Field(..., min_length=1, description="Sequence of entities in the path")
 
     edges: List[Relation] = Field(
         default_factory=list,
-        description="Sequence of relations connecting entities"
+        description="Sequence of relations connecting entities",
     )
 
     score: Optional[float] = Field(
         default=None,
         ge=0.0,
         le=1.0,
-        description="Relevance score for the path (0.0-1.0)"
+        description="Relevance score for the path (0.0-1.0)",
     )
 
     class Config:
         arbitrary_types_allowed = True
 
-    @field_validator('edges')
+    @field_validator("edges")
     @classmethod
     def validate_path_structure(cls, v: List[Relation], info) -> List[Relation]:
         """Validate that edges match nodes structure"""
-        nodes = info.data.get('nodes', [])
+        nodes = info.data.get("nodes", [])
         if not nodes:
             return v
 
@@ -181,4 +177,3 @@ class Path(BaseModel):
 
     def __repr__(self) -> str:
         return f"Path(length={self.length}, nodes={len(self.nodes)}, score={self.score})"
-
