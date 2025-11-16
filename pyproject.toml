@@ -27,7 +27,6 @@ pytest-cov = "^7.0.0"
 pytest-timeout = "^2.4.0"
 mypy = "^1.18.2"
 flake8 = "^7.3.0"
-lark-parser = "^0.12.0"
 black = "^25.1.0"
 
 [project]
@@ -151,6 +150,7 @@ dependencies = [
     "asyncpg (>=0.30.0,<1.0.0)",                    # PostgreSQL async driver
     "aiosqlite (>=0.20.0,<1.0.0)",                  # SQLite async driver for graph storage
     "networkx (>=3.0,<4.0.0)",                      # Graph data structures and algorithms for knowledge graphs
+    "lark-parser (>=0.12.0,<0.13.0)",              # Parsing library for logic query DSL
 
     # =============================================================================
     # Monitoring, Metrics, and Observability

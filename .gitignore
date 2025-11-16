@@ -222,4 +222,14 @@ bug_report/
 openspec/
 developer_sample/
 AGENTS.md
+openspec/project.md
+openspec/AGENTS.md
 
+# augment
+augment/
+.augment/
+.augment/commands/
+
+# test scripts
+test/scripts/run_apisource_tests.sh
+test/scripts/run_search_tool_tests.sh
