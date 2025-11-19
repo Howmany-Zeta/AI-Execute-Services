@@ -174,7 +174,7 @@ class AgentLifecycleManager:
         Returns:
             Dictionary with shutdown results
         """
-        results = {
+        results: Dict[str, Any] = {
             "success": [],
             "failed": [],
             "total": self.registry.count(),

@@ -343,7 +343,7 @@ class GraphAwareAgentMixin:
 
         try:
             entities = []
-            relations = []
+            relations: List[Any] = []
             visited: Set[str] = {entity_id}
 
             # Get center entity
@@ -538,8 +538,9 @@ class GraphAwareAgentMixin:
 
         try:
             # Use graph store's get_stats if available
-            if hasattr(self.graph_store, "get_stats"):
-                stats = self.graph_store.get_stats()
+            graph_store = getattr(self, "graph_store", None)  # type: ignore[attr-defined]
+            if graph_store is not None and hasattr(graph_store, "get_stats"):
+                stats = graph_store.get_stats()  # type: ignore[attr-defined]
                 # Normalize stats format
                 return {
                     "available": True,

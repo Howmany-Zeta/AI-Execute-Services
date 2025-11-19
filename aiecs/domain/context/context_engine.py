@@ -22,8 +22,8 @@ import json
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, List
-from dataclasses import dataclass, asdict
+from typing import Dict, Any, List, Optional, Optional, List
+from dataclasses import dataclass, asdict, is_dataclass
 
 
 class DateTimeEncoder(json.JSONEncoder):
@@ -105,6 +105,134 @@ class ConversationMessage:
         return cls(**data)
 
 
+@dataclass
+class CompressionConfig:
+    """
+    Configuration for conversation compression.
+
+    Provides flexible control over compression behavior with multiple strategies
+    to manage conversation history size and reduce token usage.
+
+    **Compression Strategies:**
+    - truncate: Fast truncation, keeps most recent N messages (no LLM required)
+    - summarize: LLM-based summarization of older messages
+    - semantic: Embedding-based deduplication of similar messages
+    - hybrid: Combination of multiple strategies applied sequentially
+
+    **Key Features:**
+    - Automatic compression triggers based on message count
+    - Custom prompt templates for summarization
+    - Configurable similarity thresholds for semantic deduplication
+    - Performance timeouts to prevent long-running operations
+
+    Attributes:
+        strategy: Compression strategy to use. One of: "truncate", "summarize", "semantic", "hybrid"
+        max_messages: Maximum messages to keep (for truncation strategy)
+        keep_recent: Always keep N most recent messages (applies to all strategies)
+        summary_prompt_template: Custom prompt template for summarization (uses {messages} placeholder)
+        summary_max_tokens: Maximum tokens for summary output
+        include_summary_in_history: Whether to add summary as system message in history
+        similarity_threshold: Similarity threshold for semantic deduplication (0.0-1.0)
+        embedding_model: Embedding model name for semantic deduplication
+        hybrid_strategies: List of strategies to combine for hybrid mode (default: ["truncate", "summarize"])
+        auto_compress_enabled: Enable automatic compression when threshold exceeded
+        auto_compress_threshold: Message count threshold to trigger auto-compression
+        auto_compress_target: Target message count after auto-compression
+        compression_timeout: Maximum time for compression operation in seconds
+
+    Examples:
+        # Example 1: Basic truncation configuration
+        config = CompressionConfig(
+            strategy="truncate",
+            max_messages=50,
+            keep_recent=10
+        )
+
+        # Example 2: LLM-based summarization
+        config = CompressionConfig(
+            strategy="summarize",
+            keep_recent=10,
+            summary_max_tokens=500,
+            include_summary_in_history=True
+        )
+
+        # Example 3: Semantic deduplication
+        config = CompressionConfig(
+            strategy="semantic",
+            keep_recent=10,
+            similarity_threshold=0.95,
+            embedding_model="text-embedding-ada-002"
+        )
+
+        # Example 4: Hybrid strategy (truncate then summarize)
+        config = CompressionConfig(
+            strategy="hybrid",
+            hybrid_strategies=["truncate", "summarize"],
+            keep_recent=10,
+            summary_max_tokens=500
+        )
+
+        # Example 5: Auto-compression enabled
+        config = CompressionConfig(
+            auto_compress_enabled=True,
+            auto_compress_threshold=100,
+            auto_compress_target=50,
+            strategy="summarize",
+            keep_recent=10
+        )
+
+        # Example 6: Custom summarization prompt
+        config = CompressionConfig(
+            strategy="summarize",
+            summary_prompt_template=(
+                "Summarize the following conversation focusing on "
+                "key decisions and action items:\n\n{messages}"
+            ),
+            summary_max_tokens=300
+        )
+    """
+
+    # Strategy selection
+    strategy: str = "truncate"  # truncate, summarize, semantic, hybrid
+
+    # Truncation settings
+    max_messages: int = 50  # Maximum messages to keep
+    keep_recent: int = 10  # Always keep N most recent messages
+
+    # Summarization settings (LLM-based)
+    summary_prompt_template: Optional[str] = None  # Custom prompt template
+    summary_max_tokens: int = 500  # Max tokens for summary
+    include_summary_in_history: bool = True  # Add summary as system message
+
+    # Semantic deduplication settings (embedding-based)
+    similarity_threshold: float = 0.95  # Messages above this similarity are duplicates
+    embedding_model: str = "text-embedding-ada-002"  # Embedding model to use
+
+    # Hybrid strategy settings
+    hybrid_strategies: List[str] = None  # Strategies to combine (default: ["truncate", "summarize"])
+
+    # Auto-compression triggers
+    auto_compress_enabled: bool = False  # Enable automatic compression
+    auto_compress_threshold: int = 100  # Trigger when message count exceeds this
+    auto_compress_target: int = 50  # Target message count after compression
+
+    # Performance settings
+    compression_timeout: float = 30.0  # Max time for compression operation (seconds)
+
+    def __post_init__(self):
+        """Validate and set defaults."""
+        if self.hybrid_strategies is None:
+            self.hybrid_strategies = ["truncate", "summarize"]
+
+        # Validate strategy
+        valid_strategies = ["truncate", "summarize", "semantic", "hybrid"]
+        if self.strategy not in valid_strategies:
+            raise ValueError(
+                f"Invalid strategy '{self.strategy}'. "
+                f"Must be one of: {', '.join(valid_strategies)}"
+            )
+
+
 class ContextEngine(IStorageBackend, ICheckpointerBackend):
     """
     Advanced Context and Session Management Engine.
@@ -114,15 +242,271 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
     This implementation follows the middleware's core interface pattern,
     enabling dependency inversion and clean architecture.
+
+    **Key Features:**
+    - Multi-session management with Redis backend
+    - Conversation history management with compression
+    - Performance metrics and analytics
+    - Resource and lifecycle management
+    - Integration with BaseServiceCheckpointer
+
+    **Compression Strategies:**
+    - truncate: Fast truncation (no LLM required)
+    - summarize: LLM-based summarization
+    - semantic: Embedding-based deduplication
+    - hybrid: Combination of multiple strategies
+
+    Examples:
+        # Example 1: Basic ContextEngine initialization
+        engine = ContextEngine()
+        await engine.initialize()
+
+        # Create session
+        session = await engine.create_session(
+            session_id="session-123",
+            user_id="user-456"
+        )
+
+        # Add conversation messages
+        await engine.add_conversation_message(
+            session_id="session-123",
+            role="user",
+            content="Hello, I need help"
+        )
+
+        # Example 2: ContextEngine with compression (truncation strategy)
+        from aiecs.domain.context.context_engine import CompressionConfig
+
+        compression_config = CompressionConfig(
+            strategy="truncate",
+            max_messages=50,
+            keep_recent=10  # Always keep 10 most recent messages
+        )
+
+        engine = ContextEngine(compression_config=compression_config)
+        await engine.initialize()
+
+        # Add many messages
+        for i in range(100):
+            await engine.add_conversation_message(
+                session_id="session-123",
+                role="user" if i % 2 == 0 else "assistant",
+                content=f"Message {i}"
+            )
+
+        # Compress conversation (truncates to 10 most recent)
+        result = await engine.compress_conversation("session-123")
+        print(f"Compressed from {result['original_count']} to {result['compressed_count']} messages")
+
+        # Example 3: ContextEngine with LLM-based summarization
+        from aiecs.llm import OpenAIClient
+
+        llm_client = OpenAIClient()
+
+        compression_config = CompressionConfig(
+            strategy="summarize",
+            keep_recent=10,  # Keep 10 most recent messages
+            summary_max_tokens=500,
+            include_summary_in_history=True
+        )
+
+        engine = ContextEngine(
+            compression_config=compression_config,
+            llm_client=llm_client  # Required for summarization
+        )
+        await engine.initialize()
+
+        # Add conversation
+        for i in range(50):
+            await engine.add_conversation_message(
+                session_id="session-123",
+                role="user" if i % 2 == 0 else "assistant",
+                content=f"Message {i}: Important information about topic {i % 5}"
+            )
+
+        # Compress using summarization
+        result = await engine.compress_conversation("session-123", strategy="summarize")
+        print(f"Compressed: {result['original_count']} -> {result['compressed_count']} messages")
+        print(f"Compression ratio: {result['compression_ratio']:.1%}")
+
+        # Example 4: ContextEngine with semantic deduplication
+        compression_config = CompressionConfig(
+            strategy="semantic",
+            keep_recent=10,
+            similarity_threshold=0.95,  # Remove messages >95% similar
+            embedding_model="text-embedding-ada-002"
+        )
+
+        engine = ContextEngine(
+            compression_config=compression_config,
+            llm_client=llm_client  # Required for embeddings
+        )
+        await engine.initialize()
+
+        # Add conversation with similar messages
+        messages = [
+            "What's the weather?",
+            "What's the weather today?",
+            "Tell me about the weather",
+            "What's the temperature?"
+        ]
+        for msg in messages:
+            await engine.add_conversation_message(
+                session_id="session-123",
+                role="user",
+                content=msg
+            )
+
+        # Compress using semantic deduplication
+        result = await engine.compress_conversation("session-123", strategy="semantic")
+        print(f"Removed {result['original_count'] - result['compressed_count']} similar messages")
+
+        # Example 5: ContextEngine with hybrid compression
+        compression_config = CompressionConfig(
+            strategy="hybrid",
+            hybrid_strategies=["truncate", "summarize"],  # Apply truncate then summarize
+            keep_recent=10,
+            summary_max_tokens=500
+        )
+
+        engine = ContextEngine(
+            compression_config=compression_config,
+            llm_client=llm_client
+        )
+        await engine.initialize()
+
+        # Compress using hybrid strategy
+        result = await engine.compress_conversation("session-123", strategy="hybrid")
+
+        # Example 6: Auto-compression on message limit
+        compression_config = CompressionConfig(
+            auto_compress_enabled=True,
+            auto_compress_threshold=100,  # Trigger at 100 messages
+            auto_compress_target=50,  # Compress to 50 messages
+            strategy="summarize",
+            keep_recent=10
+        )
+
+        engine = ContextEngine(
+            compression_config=compression_config,
+            llm_client=llm_client
+        )
+        await engine.initialize()
+
+        # Add messages - auto-compression triggers at 100
+        for i in range(105):
+            await engine.add_conversation_message(
+                session_id="session-123",
+                role="user" if i % 2 == 0 else "assistant",
+                content=f"Message {i}"
+            )
+
+            # Check if auto-compression was triggered
+            result = await engine.auto_compress_on_limit("session-123")
+            if result:
+                print(f"Auto-compressed: {result['original_count']} -> {result['compressed_count']}")
+
+        # Example 7: Custom compression prompt template
+        compression_config = CompressionConfig(
+            strategy="summarize",
+            summary_prompt_template=(
+                "Summarize the following conversation focusing on key decisions, "
+                "action items, and important facts. Keep it concise:\n\n{messages}"
+            ),
+            summary_max_tokens=300
+        )
+
+        engine = ContextEngine(
+            compression_config=compression_config,
+            llm_client=llm_client
+        )
+        await engine.initialize()
+
+        # Compress with custom prompt
+        result = await engine.compress_conversation("session-123")
+
+        # Example 8: Get compressed context in different formats
+        engine = ContextEngine(compression_config=compression_config, llm_client=llm_client)
+        await engine.initialize()
+
+        # Get as formatted string
+        context_string = await engine.get_compressed_context(
+            session_id="session-123",
+            format="string",
+            compress_first=True  # Compress before returning
+        )
+        print(context_string)
+
+        # Get as messages list
+        messages = await engine.get_compressed_context(
+            session_id="session-123",
+            format="messages",
+            compress_first=False  # Use existing compressed version
+        )
+
+        # Get as dictionary
+        context_dict = await engine.get_compressed_context(
+            session_id="session-123",
+            format="dict"
+        )
+
+        # Example 9: Runtime compression config override
+        engine = ContextEngine(
+            compression_config=CompressionConfig(strategy="truncate"),
+            llm_client=llm_client
+        )
+        await engine.initialize()
+
+        # Override compression config for specific operation
+        custom_config = CompressionConfig(
+            strategy="summarize",
+            summary_max_tokens=1000
+        )
+
+        result = await engine.compress_conversation(
+            session_id="session-123",
+            config_override=custom_config
+        )
+
+        # Example 10: Compression with custom LLM client
+        class CustomLLMClient:
+            provider_name = "custom"
+
+            async def generate_text(self, messages, **kwargs):
+                # Custom summarization logic
+                return LLMResponse(content="Custom summary...")
+
+            async def get_embeddings(self, texts, model):
+                # Custom embedding logic
+                return [[0.1] * 1536 for _ in texts]
+
+        custom_llm = CustomLLMClient()
+
+        compression_config = CompressionConfig(strategy="semantic")
+        engine = ContextEngine(
+            compression_config=compression_config,
+            llm_client=custom_llm  # Custom LLM client for compression
+        )
+        await engine.initialize()
+
+        # Compress using custom LLM client
+        result = await engine.compress_conversation("session-123", strategy="semantic")
     """
 
-    def __init__(self, use_existing_redis: bool = True):
+    def __init__(
+        self,
+        use_existing_redis: bool = True,
+        compression_config: Optional[CompressionConfig] = None,
+        llm_client: Optional[Any] = None,
+    ):
         """
         Initialize ContextEngine.
 
         Args:
             use_existing_redis: Whether to use the existing Redis client from infrastructure
                               (已弃用: 现在总是创建独立的 RedisClient 实例以避免事件循环冲突)
+            compression_config: Optional compression configuration for conversation compression
+            llm_client: Optional LLM client for summarization and embeddings (must implement LLMClientProtocol)
         """
         self.use_existing_redis = use_existing_redis
         self.redis_client: Optional[redis.Redis] = None
@@ -139,6 +523,10 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         self.conversation_limit = 1000  # Max messages per conversation
         self.checkpoint_ttl = 3600 * 24 * 7  # 7 days for checkpoints
 
+        # Compression configuration (Phase 6)
+        self.compression_config = compression_config or CompressionConfig()
+        self.llm_client = llm_client
+
         # Metrics
         self._global_metrics = {
             "total_sessions": 0,
@@ -147,7 +535,9 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             "total_checkpoints": 0,
         }
 
-        logger.info("ContextEngine initialized")
+        logger.info(
+            f"ContextEngine initialized with compression strategy: {self.compression_config.strategy}"
+        )
 
     async def initialize(self) -> bool:
         """Initialize Redis connection and validate setup."""
@@ -423,14 +813,61 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         # Fallback to memory
         return self._memory_contexts.get(session_id)
 
+    def _sanitize_dataclasses(self, obj: Any) -> Any:
+        """
+        Recursively convert dataclasses to dictionaries for JSON serialization.
+
+        This method handles:
+        - Dataclass instances -> dict (via asdict)
+        - Nested dataclasses in dictionaries
+        - Nested dataclasses in lists
+        - Other types -> pass through
+
+        Args:
+            obj: Object to sanitize
+
+        Returns:
+            Sanitized object (JSON-serializable)
+        """
+        # Handle dataclass instances
+        if is_dataclass(obj) and not isinstance(obj, type):
+            logger.debug(f"Converting dataclass {type(obj).__name__} to dict for serialization")
+            # Convert dataclass to dict and recursively sanitize
+            return self._sanitize_dataclasses(asdict(obj))
+
+        # Handle dictionaries
+        if isinstance(obj, dict):
+            return {key: self._sanitize_dataclasses(value) for key, value in obj.items()}
+
+        # Handle lists and tuples
+        if isinstance(obj, (list, tuple)):
+            sanitized_list = [self._sanitize_dataclasses(item) for item in obj]
+            return sanitized_list if isinstance(obj, list) else tuple(sanitized_list)
+
+        # Handle sets
+        if isinstance(obj, set):
+            return [self._sanitize_dataclasses(item) for item in obj]
+
+        # All other types pass through
+        return obj
+
     async def _store_task_context(self, session_id: str, context: TaskContext):
-        """Store TaskContext to Redis or memory."""
+        """
+        Store TaskContext to Redis or memory.
+
+        Automatically converts dataclasses to dictionaries to ensure
+        JSON serialization compatibility.
+        """
         if self.redis_client:
             try:
+                # Get context dict and sanitize dataclasses
+                context_dict = context.to_dict()
+                sanitized_dict = self._sanitize_dataclasses(context_dict)
+
                 await self.redis_client.hset(
                     "task_contexts",
                     session_id,
-                    json.dumps(context.to_dict(), cls=DateTimeEncoder),
+                    json.dumps(sanitized_dict, cls=DateTimeEncoder),
                 )
                 await self.redis_client.expire("task_contexts", self.session_ttl)
                 return
@@ -468,12 +905,21 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         checkpoint_data: Dict[str, Any],
         metadata: Dict[str, Any] = None,
     ) -> bool:
-        """Store checkpoint data for LangGraph workflows."""
+        """
+        Store checkpoint data for LangGraph workflows.
+
+        Automatically converts dataclasses to dictionaries to ensure
+        JSON serialization compatibility.
+        """
+        # Sanitize checkpoint data to handle dataclasses
+        sanitized_data = self._sanitize_dataclasses(checkpoint_data)
+        sanitized_metadata = self._sanitize_dataclasses(metadata or {})
+
         checkpoint = {
             "checkpoint_id": checkpoint_id,
             "thread_id": thread_id,
-            "data": checkpoint_data,
-            "metadata": metadata or {},
+            "data": sanitized_data,
+            "metadata": sanitized_metadata,
             "created_at": datetime.utcnow().isoformat(),
         }
 
@@ -987,3 +1433,569 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             self._memory_conversation_sessions[session_key][
                 "last_activity"
             ] = datetime.utcnow().isoformat()
+
+    # ==================== Compression Methods (Phase 6) ====================
+
+    async def compress_conversation(
+        self,
+        session_id: str,
+        strategy: Optional[str] = None,
+        config_override: Optional[CompressionConfig] = None,
+    ) -> Dict[str, Any]:
+        """
+        Compress conversation history using specified strategy.
+
+        Args:
+            session_id: Session ID to compress
+            strategy: Compression strategy (overrides config if provided)
+            config_override: Override compression config for this operation
+
+        Returns:
+            Dictionary with compression results:
+            {
+                "success": bool,
+                "strategy": str,
+                "original_count": int,
+                "compressed_count": int,
+                "compression_ratio": float,
+                "tokens_saved": int (if applicable),
+                "time_taken": float
+            }
+
+        Example:
+            result = await engine.compress_conversation(
+                session_id="session-123",
+                strategy="summarize"
+            )
+            print(f"Compressed from {result['original_count']} to {result['compressed_count']} messages")
+        """
+        import time
+        start_time = time.time()
+
+        # Use config override or default
+        config = config_override or self.compression_config
+        selected_strategy = strategy or config.strategy
+
+        logger.info(
+            f"Compressing conversation {session_id} using strategy: {selected_strategy}"
+        )
+
+        try:
+            # Get current conversation
+            messages = await self.get_conversation_history(session_id)
+            original_count = len(messages)
+
+            if original_count == 0:
+                return {
+                    "success": False,
+                    "error": "No messages to compress",
+                    "original_count": 0,
+                    "compressed_count": 0,
+                }
+
+            # Select compression strategy
+            if selected_strategy == "truncate":
+                compressed_messages = await self._compress_with_truncation(messages, config)
+            elif selected_strategy == "summarize":
+                compressed_messages = await self._compress_with_summarization(messages, config)
+            elif selected_strategy == "semantic":
+                compressed_messages = await self._compress_with_semantic_dedup(messages, config)
+            elif selected_strategy == "hybrid":
+                compressed_messages = await self._compress_with_hybrid(messages, config)
+            else:
+                raise ValueError(f"Unknown compression strategy: {selected_strategy}")
+
+            compressed_count = len(compressed_messages)
+            compression_ratio = (
+                1.0 - (compressed_count / original_count) if original_count > 0 else 0.0
+            )
+
+            # Replace conversation history
+            await self._replace_conversation_history(session_id, compressed_messages)
+
+            time_taken = time.time() - start_time
+
+            result = {
+                "success": True,
+                "strategy": selected_strategy,
+                "original_count": original_count,
+                "compressed_count": compressed_count,
+                "compression_ratio": compression_ratio,
+                "time_taken": time_taken,
+            }
+
+            logger.info(
+                f"Compression complete: {original_count} -> {compressed_count} messages "
+                f"({compression_ratio:.1%} reduction) in {time_taken:.2f}s"
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Compression failed for session {session_id}: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "strategy": selected_strategy,
+                "time_taken": time.time() - start_time,
+            }
+
+    async def _compress_with_truncation(
+        self, messages: List[ConversationMessage], config: CompressionConfig
+    ) -> List[ConversationMessage]:
+        """
+        Compress by truncating old messages (fast, no LLM required).
+
+        Keeps the most recent N messages based on config.keep_recent.
+
+        Args:
+            messages: List of conversation messages
+            config: Compression configuration
+
+        Returns:
+            Truncated list of messages
+        """
+        if len(messages) <= config.keep_recent:
+            return messages
+
+        # Keep most recent messages
+        truncated = messages[-config.keep_recent :]
+
+        logger.debug(
+            f"Truncation: kept {len(truncated)} most recent messages "
+            f"(removed {len(messages) - len(truncated)})"
+        )
+
+        return truncated
+
+    async def _compress_with_summarization(
+        self, messages: List[ConversationMessage], config: CompressionConfig
+    ) -> List[ConversationMessage]:
+        """
+        Compress using LLM-based summarization.
+
+        Creates a summary of older messages and keeps recent messages intact.
+
+        Args:
+            messages: List of conversation messages
+            config: Compression configuration
+
+        Returns:
+            List with summary message + recent messages
+
+        Raises:
+            ValueError: If no LLM client configured
+        """
+        if not self.llm_client:
+            raise ValueError(
+                "LLM client required for summarization compression. "
+                "Provide llm_client parameter to ContextEngine."
+            )
+
+        if len(messages) <= config.keep_recent:
+            return messages
+
+        # Split into messages to summarize and messages to keep
+        messages_to_summarize = messages[: -config.keep_recent]
+        messages_to_keep = messages[-config.keep_recent :]
+
+        # Build summary prompt
+        summary_prompt = self._build_summary_prompt(messages_to_summarize, config)
+
+        # Generate summary using LLM
+        from aiecs.llm.clients.base_client import LLMMessage
+
+        llm_messages = [LLMMessage(role="user", content=summary_prompt)]
+
+        response = await self.llm_client.generate_text(
+            messages=llm_messages, max_tokens=config.summary_max_tokens
+        )
+
+        summary_text = response.content
+
+        # Create summary message
+        summary_message = ConversationMessage(
+            role="system",
+            content=f"[Summary of {len(messages_to_summarize)} previous messages]\n\n{summary_text}",
+            timestamp=datetime.utcnow(),
+            metadata={"type": "summary", "summarized_count": len(messages_to_summarize)},
+        )
+
+        # Combine summary + recent messages
+        if config.include_summary_in_history:
+            compressed = [summary_message] + messages_to_keep
+        else:
+            compressed = messages_to_keep
+
+        logger.debug(
+            f"Summarization: {len(messages_to_summarize)} messages -> 1 summary, "
+            f"kept {len(messages_to_keep)} recent messages"
+        )
+
+        return compressed
+
+    def _build_summary_prompt(
+        self, messages: List[ConversationMessage], config: CompressionConfig
+    ) -> str:
+        """
+        Build prompt for summarization.
+
+        Args:
+            messages: Messages to summarize
+            config: Compression configuration
+
+        Returns:
+            Prompt string for LLM
+        """
+        # Use custom template if provided
+        if config.summary_prompt_template:
+            # Format template with messages
+            messages_text = "\n\n".join(
+                [f"{msg.role}: {msg.content}" for msg in messages]
+            )
+            return config.summary_prompt_template.format(messages=messages_text)
+
+        # Default template
+        messages_text = "\n\n".join([f"{msg.role}: {msg.content}" for msg in messages])
+
+        prompt = f"""Please provide a concise summary of the following conversation.
+Focus on key points, decisions, and important information.
+Keep the summary under {config.summary_max_tokens} tokens.
+
+Conversation:
+{messages_text}
+
+Summary:"""
+
+        return prompt
+
+    async def _compress_with_semantic_dedup(
+        self, messages: List[ConversationMessage], config: CompressionConfig
+    ) -> List[ConversationMessage]:
+        """
+        Compress using semantic deduplication (embedding-based).
+
+        Removes messages that are semantically similar to keep diverse content.
+
+        Args:
+            messages: List of conversation messages
+            config: Compression configuration
+
+        Returns:
+            List of semantically diverse messages
+
+        Raises:
+            ValueError: If no LLM client configured
+        """
+        if not self.llm_client:
+            raise ValueError(
+                "LLM client required for semantic deduplication. "
+                "Provide llm_client parameter to ContextEngine."
+            )
+
+        if len(messages) <= config.keep_recent:
+            return messages
+
+        # Get embeddings for all messages
+        texts = [msg.content for msg in messages]
+
+        try:
+            embeddings = await self.llm_client.get_embeddings(
+                texts=texts, model=config.embedding_model
+            )
+        except NotImplementedError:
+            logger.warning(
+                "LLM client does not support embeddings. Falling back to truncation."
+            )
+            return await self._compress_with_truncation(messages, config)
+
+        # Find diverse messages using embeddings
+        diverse_indices = self._find_diverse_messages(
+            embeddings, config.similarity_threshold, config.keep_recent
+        )
+
+        # Keep messages at diverse indices
+        compressed = [messages[i] for i in sorted(diverse_indices)]
+
+        logger.debug(
+            f"Semantic dedup: kept {len(compressed)} diverse messages "
+            f"(removed {len(messages) - len(compressed)} similar messages)"
+        )
+
+        return compressed
+
+    def _find_diverse_messages(
+        self, embeddings: List[List[float]], similarity_threshold: float, target_count: int
+    ) -> List[int]:
+        """
+        Find diverse messages using embeddings.
+
+        Uses greedy selection to find messages that are semantically diverse.
+
+        Args:
+            embeddings: List of embedding vectors
+            similarity_threshold: Similarity threshold for deduplication
+            target_count: Target number of messages to keep
+
+        Returns:
+            List of indices of diverse messages
+        """
+        import numpy as np
+
+        if len(embeddings) <= target_count:
+            return list(range(len(embeddings)))
+
+        # Convert to numpy array
+        emb_array = np.array(embeddings)
+
+        # Normalize embeddings for cosine similarity
+        norms = np.linalg.norm(emb_array, axis=1, keepdims=True)
+        emb_normalized = emb_array / (norms + 1e-8)
+
+        # Greedy selection: always keep most recent messages
+        selected_indices = list(range(len(embeddings) - target_count, len(embeddings)))
+
+        # For older messages, select diverse ones
+        remaining_indices = list(range(len(embeddings) - target_count))
+
+        while remaining_indices and len(selected_indices) < target_count:
+            # Find message most different from selected ones
+            max_min_distance = -1
+            best_idx = None
+
+            for idx in remaining_indices:
+                # Calculate similarity to all selected messages
+                similarities = np.dot(
+                    emb_normalized[idx], emb_normalized[selected_indices].T
+                )
+                min_similarity = np.min(similarities) if len(similarities) > 0 else 0
+
+                # We want maximum minimum distance (most diverse)
+                if min_similarity > max_min_distance:
+                    max_min_distance = min_similarity
+                    best_idx = idx
+
+            if best_idx is not None and max_min_distance < similarity_threshold:
+                selected_indices.append(best_idx)
+                remaining_indices.remove(best_idx)
+            else:
+                break
+
+        return selected_indices
+
+    async def _replace_conversation_history(
+        self, session_id: str, messages: List[ConversationMessage]
+    ) -> None:
+        """
+        Replace conversation history with compressed messages.
+
+        Args:
+            session_id: Session ID
+            messages: New list of messages
+        """
+        if self.redis_client:
+            try:
+                # Clear existing messages
+                await self.redis_client.delete(f"conversation:{session_id}")
+
+                # Store new messages
+                for msg in messages:
+                    await self.redis_client.rpush(
+                        f"conversation:{session_id}",
+                        json.dumps(msg.to_dict(), cls=DateTimeEncoder),
+                    )
+
+                # Set TTL
+                await self.redis_client.expire(
+                    f"conversation:{session_id}", self.session_ttl
+                )
+
+                logger.debug(
+                    f"Replaced conversation history for {session_id} with {len(messages)} messages"
+                )
+                return
+            except Exception as e:
+                logger.error(f"Failed to replace conversation history in Redis: {e}")
+
+        # Fallback to memory
+        self._memory_conversations[session_id] = messages
+        logger.debug(
+            f"Replaced conversation history (memory) for {session_id} with {len(messages)} messages"
+        )
+
+    async def _compress_with_hybrid(
+        self, messages: List[ConversationMessage], config: CompressionConfig
+    ) -> List[ConversationMessage]:
+        """
+        Compress using hybrid strategy (combination of multiple strategies).
+
+        Applies multiple compression strategies in sequence based on config.hybrid_strategies.
+
+        Args:
+            messages: List of conversation messages
+            config: Compression configuration
+
+        Returns:
+            Compressed list of messages
+
+        Example:
+            # Default hybrid: truncate then summarize
+            config = CompressionConfig(
+                strategy="hybrid",
+                hybrid_strategies=["truncate", "summarize"]
+            )
+        """
+        compressed = messages
+
+        for strategy in config.hybrid_strategies:
+            if strategy == "truncate":
+                compressed = await self._compress_with_truncation(compressed, config)
+            elif strategy == "summarize":
+                compressed = await self._compress_with_summarization(compressed, config)
+            elif strategy == "semantic":
+                compressed = await self._compress_with_semantic_dedup(compressed, config)
+            else:
+                logger.warning(f"Unknown hybrid strategy: {strategy}, skipping")
+
+        logger.debug(
+            f"Hybrid compression: {len(messages)} -> {len(compressed)} messages "
+            f"using strategies: {', '.join(config.hybrid_strategies)}"
+        )
+
+        return compressed
+
+    async def auto_compress_on_limit(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Automatically compress conversation if it exceeds threshold.
+
+        Checks if conversation exceeds auto_compress_threshold and compresses
+        to auto_compress_target if needed.
+
+        Args:
+            session_id: Session ID to check
+
+        Returns:
+            Compression result dict if compression was triggered, None otherwise
+
+        Example:
+            # Configure auto-compression
+            config = CompressionConfig(
+                auto_compress_enabled=True,
+                auto_compress_threshold=100,
+                auto_compress_target=50
+            )
+            engine = ContextEngine(compression_config=config)
+
+            # Check and auto-compress if needed
+            result = await engine.auto_compress_on_limit(session_id)
+            if result:
+                print(f"Auto-compressed: {result['original_count']} -> {result['compressed_count']}")
+        """
+        if not self.compression_config.auto_compress_enabled:
+            return None
+
+        # Get current message count
+        messages = await self.get_conversation_history(session_id)
+        message_count = len(messages)
+
+        # Check if threshold exceeded
+        if message_count <= self.compression_config.auto_compress_threshold:
+            return None
+
+        logger.info(
+            f"Auto-compression triggered for {session_id}: "
+            f"{message_count} messages exceeds threshold of "
+            f"{self.compression_config.auto_compress_threshold}"
+        )
+
+        # Compress conversation
+        result = await self.compress_conversation(session_id)
+
+        if result.get("success"):
+            logger.info(
+                f"Auto-compression complete for {session_id}: "
+                f"{result['original_count']} -> {result['compressed_count']} messages"
+            )
+
+        return result
+
+    async def get_compressed_context(
+        self,
+        session_id: str,
+        format: str = "messages",
+        compress_first: bool = False,
+    ) -> Any:
+        """
+        Get conversation context in compressed format.
+
+        Args:
+            session_id: Session ID
+            format: Output format - "messages", "string", or "dict"
+            compress_first: Whether to compress before returning
+
+        Returns:
+            Conversation in requested format:
+            - "messages": List[ConversationMessage]
+            - "string": Formatted string
+            - "dict": List[Dict[str, Any]]
+
+        Example:
+            # Get as formatted string
+            context = await engine.get_compressed_context(
+                session_id="session-123",
+                format="string"
+            )
+            print(context)
+
+            # Get as messages, compress first
+            messages = await engine.get_compressed_context(
+                session_id="session-456",
+                format="messages",
+                compress_first=True
+            )
+        """
+        # Compress first if requested
+        if compress_first:
+            await self.compress_conversation(session_id)
+
+        # Get conversation history
+        messages = await self.get_conversation_history(session_id)
+
+        # Return in requested format
+        if format == "messages":
+            return messages
+
+        elif format == "string":
+            # Format as string
+            lines = []
+            for msg in messages:
+                timestamp = msg.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                lines.append(f"[{timestamp}] {msg.role}: {msg.content}")
+            return "\n\n".join(lines)
+
+        elif format == "dict":
+            # Return as list of dicts
+            return [self._sanitize_for_json(msg.to_dict()) for msg in messages]
+
+        else:
+            raise ValueError(
+                f"Invalid format '{format}'. Must be 'messages', 'string', or 'dict'"
+            )
+
+    def _sanitize_for_json(self, obj: Any) -> Any:
+        """
+        Sanitize object for JSON serialization.
+
+        Handles common non-serializable types like datetime, dataclasses, etc.
+
+        Args:
+            obj: Object to sanitize
+
+        Returns:
+            JSON-serializable version of object
+
+        Note:
+            This is similar to _sanitize_dataclasses but more general purpose.
+        """
+        # Use existing sanitization logic
+        return self._sanitize_dataclasses(obj)
