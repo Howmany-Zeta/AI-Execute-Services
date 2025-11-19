@@ -25,6 +25,8 @@ from .clients import (
     XAIClient,
 )
 
+from .protocols import LLMClientProtocol
+
 from .client_factory import (
     AIProvider,
     LLMClientFactory,
@@ -58,6 +60,8 @@ __all__ = [
     "ProviderNotAvailableError",
     "RateLimitError",
     "AIProvider",
+    # Protocols
+    "LLMClientProtocol",
     # Factory and manager
     "LLMClientFactory",
     "LLMClientManager",

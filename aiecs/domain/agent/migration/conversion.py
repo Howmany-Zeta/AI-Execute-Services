@@ -42,16 +42,19 @@ def convert_legacy_config(legacy_config: Dict[str, Any]) -> AgentConfiguration:
 
     # Create AgentConfiguration
     try:
-        config = AgentConfiguration(**converted)
+        config = AgentConfiguration(**converted)  # type: ignore[call-arg]
         logger.info("Legacy configuration converted successfully")
         return config
     except Exception as e:
         logger.error(f"Failed to convert legacy config: {e}")
         # Return default config with available fields
-        return AgentConfiguration(
+        max_tokens = converted.get("max_tokens")
+        return AgentConfiguration(  # type: ignore[call-arg]
             llm_model=converted.get("llm_model"),
             temperature=converted.get("temperature", 0.7),
-            max_tokens=converted.get("max_tokens"),
+            max_tokens=(
+                max_tokens if max_tokens is not None and isinstance(max_tokens, int) else 4096
+            ),
         )
 
 
@@ -139,7 +142,7 @@ def validate_migration(legacy_agent: Any, new_agent: Any) -> Dict[str, Any]:
     Returns:
         Validation report
     """
-    report = {
+    report: Dict[str, Any] = {
         "compatible": True,
         "warnings": [],
         "errors": [],
@@ -150,7 +153,9 @@ def validate_migration(legacy_agent: Any, new_agent: Any) -> Dict[str, Any]:
     for method in required_methods:
         if not hasattr(new_agent, method):
             report["compatible"] = False
-            report["errors"].append(f"Missing required method: {method}")
+            errors_list = report["errors"]
+            if isinstance(errors_list, list):
+                errors_list.append(f"Missing required method: {method}")
 
     # Check configuration compatibility
     if hasattr(legacy_agent, "config") and hasattr(new_agent, "_config"):

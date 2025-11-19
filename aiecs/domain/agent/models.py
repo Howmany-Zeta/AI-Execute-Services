@@ -70,6 +70,83 @@ class MemoryType(str, Enum):
     LONG_TERM = "long_term"
 
 
+class RecoveryStrategy(str, Enum):
+    """
+    Recovery strategies for error handling.
+
+    Defines different strategies for recovering from task execution failures.
+    Strategies are typically applied in sequence until one succeeds or all fail.
+
+    **Strategy Descriptions:**
+    - RETRY: Retry the same task with exponential backoff (for transient errors)
+    - SIMPLIFY: Simplify the task and retry (break down complex tasks)
+    - FALLBACK: Use a fallback approach or alternative method
+    - DELEGATE: Delegate the task to another capable agent
+    - ABORT: Abort execution and return error (terminal strategy)
+
+    **Usage Pattern:**
+    Strategies are typically chained together, trying each in sequence:
+    1. RETRY - Quick retry for transient errors
+    2. SIMPLIFY - Break down complex tasks
+    3. FALLBACK - Use alternative approach
+    4. DELEGATE - Hand off to another agent
+    5. ABORT - Give up and return error
+
+    Examples:
+        # Example 1: Basic retry strategy
+        from aiecs.domain.agent.models import RecoveryStrategy
+
+        strategies = [RecoveryStrategy.RETRY]
+        result = await agent.execute_with_recovery(
+            task=task,
+            context=context,
+            strategies=strategies
+        )
+
+        # Example 2: Full recovery chain
+        strategies = [
+            RecoveryStrategy.RETRY,
+            RecoveryStrategy.SIMPLIFY,
+            RecoveryStrategy.FALLBACK,
+            RecoveryStrategy.DELEGATE
+        ]
+        result = await agent.execute_with_recovery(
+            task=task,
+            context=context,
+            strategies=strategies
+        )
+
+        # Example 3: Conservative recovery (no delegation)
+        strategies = [
+            RecoveryStrategy.RETRY,
+            RecoveryStrategy.SIMPLIFY,
+            RecoveryStrategy.FALLBACK
+        ]
+        result = await agent.execute_with_recovery(
+            task=task,
+            context=context,
+            strategies=strategies
+        )
+
+        # Example 4: Quick fail (abort after retry)
+        strategies = [
+            RecoveryStrategy.RETRY,
+            RecoveryStrategy.ABORT
+        ]
+        result = await agent.execute_with_recovery(
+            task=task,
+            context=context,
+            strategies=strategies
+        )
+    """
+
+    RETRY = "retry"  # Retry with exponential backoff
+    SIMPLIFY = "simplify"  # Simplify task and retry
+    FALLBACK = "fallback"  # Use fallback approach
+    DELEGATE = "delegate"  # Delegate to another agent
+    ABORT = "abort"  # Abort execution
+
+
 class RetryPolicy(BaseModel):
     """Retry policy configuration for agent operations."""
 
@@ -261,6 +338,48 @@ class AgentMetrics(BaseModel):
     error_count: int = Field(default=0, ge=0, description="Total number of errors")
     error_types: Dict[str, int] = Field(default_factory=dict, description="Count of errors by type")
 
+    # Session-level metrics (Phase 2 enhancement)
+    total_sessions: int = Field(default=0, ge=0, description="Total number of sessions created")
+    active_sessions: int = Field(default=0, ge=0, description="Number of currently active sessions")
+    completed_sessions: int = Field(default=0, ge=0, description="Number of completed sessions")
+    failed_sessions: int = Field(default=0, ge=0, description="Number of failed sessions")
+    expired_sessions: int = Field(default=0, ge=0, description="Number of expired sessions")
+    total_session_requests: int = Field(
+        default=0, ge=0, description="Total requests across all sessions"
+    )
+    total_session_errors: int = Field(
+        default=0, ge=0, description="Total errors across all sessions"
+    )
+    average_session_duration: Optional[float] = Field(
+        None, ge=0, description="Average session duration in seconds"
+    )
+    average_requests_per_session: Optional[float] = Field(
+        None, ge=0, description="Average number of requests per session"
+    )
+
+    # Operation-level metrics (Phase 3 enhancement)
+    operation_history: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Recent operation timing history (limited to last 100)"
+    )
+    operation_counts: Dict[str, int] = Field(
+        default_factory=dict, description="Count of operations by name"
+    )
+    operation_total_time: Dict[str, float] = Field(
+        default_factory=dict, description="Total time spent in each operation type (seconds)"
+    )
+    operation_error_counts: Dict[str, int] = Field(
+        default_factory=dict, description="Error count by operation type"
+    )
+    p50_operation_time: Optional[float] = Field(
+        None, ge=0, description="50th percentile operation time (median) in seconds"
+    )
+    p95_operation_time: Optional[float] = Field(
+        None, ge=0, description="95th percentile operation time in seconds"
+    )
+    p99_operation_time: Optional[float] = Field(
+        None, ge=0, description="99th percentile operation time in seconds"
+    )
+
     # Timestamps
     last_reset_at: Optional[datetime] = Field(None, description="When metrics were last reset")
     updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last metrics update")
@@ -315,3 +434,448 @@ class AgentMemory(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional memory metadata")
 
     model_config = ConfigDict()
+
+
+class Experience(BaseModel):
+    """
+    Model for recording agent learning experiences.
+
+    Tracks task execution experiences to enable learning and adaptation.
+    Used by agents to improve performance over time by learning from
+    past successes and failures. Experiences are used to recommend
+    optimal approaches for similar tasks.
+
+    **Key Features:**
+    - Comprehensive task execution tracking
+    - Success/failure outcome recording
+    - Quality scoring and error classification
+    - Learning insights and recommendations
+    - Context and performance metrics
+
+    Attributes:
+        experience_id: Unique identifier for the experience
+        agent_id: ID of the agent that had this experience
+        task_type: Type/category of task (e.g., "data_analysis", "search")
+        task_description: Human-readable task description
+        task_complexity: Task complexity level (simple, medium, complex)
+        approach: Approach/strategy used (e.g., "parallel_tools", "sequential")
+        tools_used: List of tool names used in execution
+        execution_time: Execution time in seconds
+        success: Whether task execution succeeded
+        quality_score: Quality score from 0.0 to 1.0 (None if not available)
+        error_type: Type of error if failed (e.g., "timeout", "validation_error")
+        error_message: Error message if failed
+        context_size: Context size in tokens (if applicable)
+        iterations: Number of iterations/attempts (if applicable)
+        lessons_learned: Human-readable lessons learned from this experience
+        recommended_improvements: Recommended improvements for future tasks
+        timestamp: When the experience occurred
+        metadata: Additional experience metadata
+
+    Examples:
+        # Example 1: Successful experience
+        experience = Experience(
+            agent_id="agent-1",
+            task_type="data_analysis",
+            task_description="Analyze sales data for Q4",
+            task_complexity="medium",
+            approach="parallel_tools",
+            tools_used=["pandas", "numpy"],
+            execution_time=2.5,
+            success=True,
+            quality_score=0.95,
+            context_size=5000,
+            iterations=1
+        )
+
+        # Example 2: Failed experience with error details
+        experience = Experience(
+            agent_id="agent-1",
+            task_type="web_scraping",
+            task_description="Scrape product prices",
+            task_complexity="simple",
+            approach="single_tool",
+            tools_used=["scraper"],
+            execution_time=30.0,
+            success=False,
+            error_type="timeout",
+            error_message="Request timed out after 30 seconds",
+            lessons_learned="Use retry logic for network operations",
+            recommended_improvements="Add exponential backoff retry"
+        )
+
+        # Example 3: Experience with learning insights
+        experience = Experience(
+            agent_id="agent-1",
+            task_type="data_analysis",
+            task_description="Analyze customer feedback",
+            approach="parallel_tools",
+            tools_used=["nlp", "sentiment"],
+            execution_time=5.2,
+            success=True,
+            quality_score=0.88,
+            lessons_learned="Parallel execution reduced time by 40%",
+            recommended_improvements="Use parallel approach for similar tasks"
+        )
+    """
+
+    experience_id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()),
+        description="Unique experience identifier",
+    )
+    agent_id: str = Field(..., description="Agent that had this experience")
+
+    # Task information
+    task_type: str = Field(..., description="Type/category of task")
+    task_description: str = Field(..., description="Task description")
+    task_complexity: Optional[str] = Field(
+        None, description="Task complexity (simple, medium, complex)"
+    )
+
+    # Execution details
+    approach: str = Field(..., description="Approach/strategy used")
+    tools_used: List[str] = Field(default_factory=list, description="Tools used in execution")
+    execution_time: float = Field(..., ge=0, description="Execution time in seconds")
+
+    # Outcome
+    success: bool = Field(..., description="Whether task was successful")
+    quality_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Quality score (0-1)")
+    error_type: Optional[str] = Field(None, description="Error type if failed")
+    error_message: Optional[str] = Field(None, description="Error message if failed")
+
+    # Context
+    context_size: Optional[int] = Field(None, ge=0, description="Context size in tokens")
+    iterations: Optional[int] = Field(None, ge=0, description="Number of iterations")
+
+    # Learning insights
+    lessons_learned: Optional[str] = Field(None, description="Lessons learned from experience")
+    recommended_improvements: Optional[str] = Field(None, description="Recommended improvements")
+
+    # Timestamps
+    timestamp: datetime = Field(
+        default_factory=datetime.utcnow, description="When experience occurred"
+    )
+
+    # Metadata
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Additional experience metadata"
+    )
+
+    model_config = ConfigDict()
+
+
+class ResourceLimits(BaseModel):
+    """
+    Configuration for agent resource limits and rate limiting.
+
+    Provides control over resource usage to prevent exhaustion and
+    ensure stable operation in production environments. Supports
+    token bucket algorithm for rate limiting, concurrent task limits,
+    and memory constraints.
+
+    **Key Features:**
+    - Concurrent task limits to prevent overload
+    - Token rate limiting with burst support (token bucket algorithm)
+    - Tool call rate limiting per minute/hour
+    - Memory usage limits
+    - Task timeout configuration
+    - Configurable enforcement (enforce vs monitor)
+
+    Attributes:
+        max_concurrent_tasks: Maximum number of concurrent tasks (default: 10)
+        max_tokens_per_minute: Maximum tokens per minute (None = unlimited)
+        max_tokens_per_hour: Maximum tokens per hour (None = unlimited)
+        token_burst_size: Token burst size for token bucket (None = use max_tokens_per_minute)
+        max_tool_calls_per_minute: Maximum tool calls per minute (None = unlimited)
+        max_tool_calls_per_hour: Maximum tool calls per hour (None = unlimited)
+        max_memory_mb: Maximum memory usage in MB (None = unlimited)
+        task_timeout_seconds: Maximum task execution time in seconds (None = unlimited)
+        resource_wait_timeout_seconds: Maximum time to wait for resources (default: 60)
+        enforce_limits: Whether to enforce resource limits (default: True)
+        reject_on_limit: Reject requests when limit reached vs wait (default: False)
+
+    Examples:
+        # Example 1: Basic rate limiting
+        limits = ResourceLimits(
+            max_concurrent_tasks=5,
+            max_tokens_per_minute=10000,
+            max_tool_calls_per_minute=100
+        )
+
+        # Example 2: Token bucket with burst support
+        limits = ResourceLimits(
+            max_tokens_per_minute=10000,
+            token_burst_size=20000,  # Allow 2x burst
+            max_tool_calls_per_minute=100
+        )
+
+        # Example 3: Strict limits for production
+        limits = ResourceLimits(
+            max_concurrent_tasks=10,
+            max_tokens_per_minute=50000,
+            max_tokens_per_hour=2000000,
+            max_tool_calls_per_minute=500,
+            max_memory_mb=2048,
+            task_timeout_seconds=300,
+            enforce_limits=True,
+            reject_on_limit=True  # Reject instead of waiting
+        )
+
+        # Example 4: Monitoring mode (don't enforce)
+        limits = ResourceLimits(
+            max_concurrent_tasks=10,
+            max_tokens_per_minute=10000,
+            enforce_limits=False  # Monitor but don't enforce
+        )
+
+        # Example 5: Wait for resources instead of rejecting
+        limits = ResourceLimits(
+            max_concurrent_tasks=5,
+            max_tokens_per_minute=10000,
+            resource_wait_timeout_seconds=120,  # Wait up to 2 minutes
+            reject_on_limit=False  # Wait instead of reject
+        )
+    """
+
+    # Concurrent task limits
+    max_concurrent_tasks: int = Field(
+        default=10, ge=1, description="Maximum number of concurrent tasks"
+    )
+
+    # Token rate limits (token bucket algorithm)
+    max_tokens_per_minute: Optional[int] = Field(
+        None, ge=0, description="Maximum tokens per minute (None = unlimited)"
+    )
+    max_tokens_per_hour: Optional[int] = Field(
+        None, ge=0, description="Maximum tokens per hour (None = unlimited)"
+    )
+    token_burst_size: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Token burst size for token bucket (None = use max_tokens_per_minute)",
+    )
+
+    # Tool call rate limits
+    max_tool_calls_per_minute: Optional[int] = Field(
+        None, ge=0, description="Maximum tool calls per minute (None = unlimited)"
+    )
+    max_tool_calls_per_hour: Optional[int] = Field(
+        None, ge=0, description="Maximum tool calls per hour (None = unlimited)"
+    )
+
+    # Memory limits
+    max_memory_mb: Optional[int] = Field(
+        None, ge=0, description="Maximum memory usage in MB (None = unlimited)"
+    )
+
+    # Timeout settings
+    task_timeout_seconds: Optional[int] = Field(
+        None, ge=0, description="Maximum task execution time in seconds (None = unlimited)"
+    )
+    resource_wait_timeout_seconds: int = Field(
+        default=60, ge=0, description="Maximum time to wait for resources"
+    )
+
+    # Enforcement
+    enforce_limits: bool = Field(default=True, description="Whether to enforce resource limits")
+    reject_on_limit: bool = Field(
+        default=False, description="Reject requests when limit reached (vs wait)"
+    )
+
+    model_config = ConfigDict()
+
+
+class ToolObservation(BaseModel):
+    """
+    Structured observation of tool execution results.
+
+    Provides a standardized format for tracking tool execution with
+    success/error status, execution time, and timestamps. Used for
+    debugging, analysis, and LLM reasoning loops.
+
+    This pattern is essential for MasterController compatibility and
+    observation-based reasoning. Observations can be converted to text
+    format for inclusion in LLM prompts or to dictionaries for serialization.
+
+    **Key Features:**
+    - Automatic success/error tracking
+    - Execution time measurement
+    - ISO timestamp generation
+    - Text formatting for LLM context
+    - Dictionary serialization for storage
+
+    Attributes:
+        tool_name: Name of the tool that was executed
+        parameters: Dictionary of parameters passed to the tool
+        result: Tool execution result (any type)
+        success: Whether tool execution succeeded (True/False)
+        error: Error message if execution failed (None if successful)
+        execution_time_ms: Execution time in milliseconds (None if not measured)
+        timestamp: ISO format timestamp of execution
+
+    Examples:
+        # Example 1: Successful tool execution
+        from aiecs.domain.agent.models import ToolObservation
+
+        obs = ToolObservation(
+            tool_name="search",
+            parameters={"query": "AI", "limit": 10},
+            result=["result1", "result2", "result3"],
+            success=True,
+            execution_time_ms=250.5
+        )
+
+        # Convert to text for LLM context
+        text = obs.to_text()
+        # "Tool: search
+        # Parameters: {'query': 'AI', 'limit': 10}
+        # Status: SUCCESS
+        # Result: ['result1', 'result2', 'result3']
+        # Execution time: 250.5ms"
+
+        # Example 2: Failed tool execution
+        obs = ToolObservation(
+            tool_name="calculator",
+            parameters={"operation": "divide", "a": 10, "b": 0},
+            result=None,
+            success=False,
+            error="Division by zero",
+            execution_time_ms=5.2
+        )
+
+        text = obs.to_text()
+        # "Tool: calculator
+        # Parameters: {'operation': 'divide', 'a': 10, 'b': 0}
+        # Status: ERROR
+        # Error: Division by zero
+        # Execution time: 5.2ms"
+
+        # Example 3: Using with agent execution
+        from aiecs.domain.agent import HybridAgent
+
+        agent = HybridAgent(...)
+        obs = await agent._execute_tool_with_observation(
+            tool_name="search",
+            operation="query",
+            parameters={"q": "Python"}
+        )
+
+        # Check success
+        if obs.success:
+            print(f"Found {len(obs.result)} results")
+        else:
+            print(f"Error: {obs.error}")
+
+        # Example 4: Serialization for storage
+        obs = ToolObservation(
+            tool_name="api_call",
+            parameters={"endpoint": "/data", "method": "GET"},
+            result={"status": 200, "data": {...}},
+            success=True,
+            execution_time_ms=1234.5
+        )
+
+        # Convert to dict for JSON serialization
+        data = obs.to_dict()
+        # {'tool_name': 'api_call', 'parameters': {...}, 'success': True, ...}
+
+        # Example 5: Using in observation-based reasoning loop
+        observations = []
+        for tool_call in tool_calls:
+            obs = await agent._execute_tool_with_observation(
+                tool_name=tool_call["tool"],
+                parameters=tool_call["parameters"]
+            )
+            observations.append(obs)
+
+        # Format observations for LLM context
+        observation_text = "\\n\\n".join([obs.to_text() for obs in observations])
+        # Include in LLM prompt for reasoning
+    """
+
+    tool_name: str = Field(..., description="Name of the tool that was executed")
+    parameters: Dict[str, Any] = Field(
+        default_factory=dict, description="Parameters passed to the tool"
+    )
+    result: Any = Field(None, description="Tool execution result")
+    success: bool = Field(..., description="Whether tool execution succeeded")
+    error: Optional[str] = Field(None, description="Error message if execution failed")
+    execution_time_ms: Optional[float] = Field(
+        None, ge=0, description="Execution time in milliseconds"
+    )
+    timestamp: str = Field(
+        default_factory=lambda: datetime.utcnow().isoformat(),
+        description="ISO format timestamp of execution",
+    )
+
+    model_config = ConfigDict()
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert observation to dictionary.
+
+        Returns:
+            Dict representation of the observation
+
+        Example:
+            ```python
+            obs = ToolObservation(tool_name="search", success=True, result="data")
+            data = obs.to_dict()
+            # {'tool_name': 'search', 'success': True, 'result': 'data', ...}
+            ```
+        """
+        return {
+            "tool_name": self.tool_name,
+            "parameters": self.parameters,
+            "result": self.result,
+            "success": self.success,
+            "error": self.error,
+            "execution_time_ms": self.execution_time_ms,
+            "timestamp": self.timestamp,
+        }
+
+    def to_text(self) -> str:
+        """
+        Format observation as text for LLM context.
+
+        Provides a human-readable format suitable for including in
+        LLM prompts and reasoning loops.
+
+        Returns:
+            Formatted text representation
+
+        Example:
+            ```python
+            obs = ToolObservation(
+                tool_name="search",
+                parameters={"query": "AI"},
+                success=True,
+                result="Found 10 results",
+                execution_time_ms=250.5
+            )
+            text = obs.to_text()
+            # "Tool: search
+            # Parameters: {'query': 'AI'}
+            # Status: SUCCESS
+            # Result: Found 10 results
+            # Execution time: 250.5ms"
+            ```
+        """
+        lines = [
+            f"Tool: {self.tool_name}",
+            f"Parameters: {self.parameters}",
+        ]
+
+        if self.success:
+            lines.append("Status: SUCCESS")
+            lines.append(f"Result: {self.result}")
+        else:
+            lines.append("Status: FAILURE")
+            lines.append(f"Error: {self.error}")
+
+        if self.execution_time_ms is not None:
+            lines.append(f"Execution time: {self.execution_time_ms:.2f}ms")
+
+        lines.append(f"Timestamp: {self.timestamp}")
+
+        return "\n".join(lines)

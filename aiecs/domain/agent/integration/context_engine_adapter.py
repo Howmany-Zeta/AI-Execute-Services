@@ -93,6 +93,8 @@ class ContextEngineAdapter:
         Returns:
             Agent state dictionary or None
         """
+        if version is None:
+            return None
         checkpoint = await self.context_engine.get_checkpoint(
             thread_id=agent_id, checkpoint_id=version
         )
@@ -250,3 +252,374 @@ class ContextEngineAdapter:
     async def delete(self, agent_id: str) -> None:
         """Delete agent state (implements AgentPersistence protocol)."""
         await self.delete_agent_state(agent_id)
+
+    # ==================== Session Management Methods ====================
+
+    def create_session(
+        self,
+        session_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        metadata: Optional[Dict] = None,
+    ) -> str:
+        """
+        Create a new session (sync version - not recommended with ContextEngine).
+
+        This is a synchronous wrapper that raises NotImplementedError.
+        Use acreate_session() instead for ContextEngine integration.
+
+        Args:
+            session_id: Optional custom session ID
+            user_id: Optional user ID
+            metadata: Optional session metadata
+
+        Raises:
+            NotImplementedError: Sync version not supported with ContextEngine
+
+        Note:
+            ContextEngine operations are async. Use acreate_session() instead.
+        """
+        raise NotImplementedError(
+            "Synchronous create_session not supported with ContextEngine. "
+            "Use acreate_session() instead."
+        )
+
+    async def acreate_session(
+        self,
+        session_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        metadata: Optional[Dict] = None,
+    ) -> str:
+        """
+        Create a new session (async version with ContextEngine integration).
+
+        Args:
+            session_id: Optional custom session ID (auto-generated if None)
+            user_id: Optional user ID (defaults to adapter's user_id)
+            metadata: Optional session metadata
+
+        Returns:
+            Session ID
+
+        Example:
+            adapter = ContextEngineAdapter(context_engine)
+            session_id = await adapter.acreate_session(
+                user_id="user-123",
+                metadata={"source": "web", "language": "en"}
+            )
+        """
+        if session_id is None:
+            session_id = f"session_{uuid.uuid4()}"
+
+        user_id = user_id or self.user_id
+        metadata = metadata or {}
+
+        await self.context_engine.create_session(
+            session_id=session_id, user_id=user_id, metadata=metadata
+        )
+
+        logger.debug(f"Created session {session_id} via ContextEngine")
+        return session_id
+
+    def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get session (sync version - not recommended with ContextEngine).
+
+        This is a synchronous wrapper that raises NotImplementedError.
+        Use aget_session() instead for ContextEngine integration.
+
+        Args:
+            session_id: Session ID
+
+        Raises:
+            NotImplementedError: Sync version not supported with ContextEngine
+
+        Note:
+            ContextEngine operations are async. Use aget_session() instead.
+        """
+        raise NotImplementedError(
+            "Synchronous get_session not supported with ContextEngine. "
+            "Use aget_session() instead."
+        )
+
+    async def aget_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get session (async version with ContextEngine integration).
+
+        Args:
+            session_id: Session ID
+
+        Returns:
+            Session data dictionary or None if not found
+
+        Example:
+            session = await adapter.aget_session(session_id)
+            if session:
+                print(f"Session status: {session.status}")
+                print(f"Request count: {session.request_count}")
+        """
+        session = await self.context_engine.get_session(session_id)
+
+        if session:
+            logger.debug(f"Retrieved session {session_id} from ContextEngine")
+            # Convert SessionMetrics to dict
+            if hasattr(session, "to_dict"):
+                return session.to_dict()  # type: ignore[attr-defined]
+            else:
+                # Fallback for dataclass
+                from dataclasses import asdict
+
+                return asdict(session)  # type: ignore[arg-type]
+
+        logger.debug(f"Session {session_id} not found in ContextEngine")
+        return None
+
+    async def end_session(self, session_id: str, status: str = "completed") -> bool:
+        """
+        End a session.
+
+        Args:
+            session_id: Session ID
+            status: Final session status (completed, failed, expired)
+
+        Returns:
+            True if session was ended successfully, False otherwise
+
+        Example:
+            success = await adapter.end_session(session_id, status="completed")
+        """
+        try:
+            await self.context_engine.end_session(session_id, status=status)
+            logger.debug(f"Ended session {session_id} with status: {status}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to end session {session_id}: {e}")
+            return False
+
+    # ==================== Conversation Message Methods ====================
+
+    def add_conversation_message(
+        self, session_id: str, role: str, content: str, metadata: Optional[Dict] = None
+    ) -> None:
+        """
+        Add conversation message (sync version - not recommended with ContextEngine).
+
+        This is a synchronous wrapper that raises NotImplementedError.
+        Use aadd_conversation_message() instead for ContextEngine integration.
+
+        Args:
+            session_id: Session ID
+            role: Message role (user, assistant, system)
+            content: Message content
+            metadata: Optional message metadata
+
+        Raises:
+            NotImplementedError: Sync version not supported with ContextEngine
+
+        Note:
+            ContextEngine operations are async. Use aadd_conversation_message() instead.
+        """
+        raise NotImplementedError(
+            "Synchronous add_conversation_message not supported with ContextEngine. "
+            "Use aadd_conversation_message() instead."
+        )
+
+    async def aadd_conversation_message(
+        self, session_id: str, role: str, content: str, metadata: Optional[Dict] = None
+    ) -> bool:
+        """
+        Add conversation message (async version with ContextEngine integration).
+
+        Args:
+            session_id: Session ID
+            role: Message role (user, assistant, system)
+            content: Message content
+            metadata: Optional message metadata
+
+        Returns:
+            True if message was added successfully, False otherwise
+
+        Example:
+            success = await adapter.aadd_conversation_message(
+                session_id="session-123",
+                role="user",
+                content="Hello, how are you?",
+                metadata={"source": "web"}
+            )
+        """
+        try:
+            await self.context_engine.add_conversation_message(
+                session_id=session_id, role=role, content=content, metadata=metadata or {}
+            )
+            logger.debug(f"Added message to session {session_id} (role={role})")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to add message to session {session_id}: {e}")
+            return False
+
+    def get_conversation_history(
+        self, session_id: str, limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get conversation history (sync version - not recommended with ContextEngine).
+
+        This is a synchronous wrapper that raises NotImplementedError.
+        Use aget_conversation_history() instead for ContextEngine integration.
+
+        Args:
+            session_id: Session ID
+            limit: Optional limit on number of messages
+
+        Raises:
+            NotImplementedError: Sync version not supported with ContextEngine
+
+        Note:
+            ContextEngine operations are async. Use aget_conversation_history() instead.
+        """
+        raise NotImplementedError(
+            "Synchronous get_conversation_history not supported with ContextEngine. "
+            "Use aget_conversation_history() instead."
+        )
+
+    async def aget_conversation_history(
+        self, session_id: str, limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get conversation history (async version with ContextEngine integration).
+
+        Args:
+            session_id: Session ID
+            limit: Optional limit on number of messages (default: 50)
+
+        Returns:
+            List of message dictionaries
+
+        Example:
+            messages = await adapter.aget_conversation_history(
+                session_id="session-123",
+                limit=10
+            )
+            for msg in messages:
+                print(f"{msg['role']}: {msg['content']}")
+        """
+        try:
+            messages = await self.context_engine.get_conversation_history(
+                session_id=session_id, limit=limit or 50
+            )
+
+            # Convert ConversationMessage objects to dictionaries
+            result = []
+            for msg in messages:
+                result.append(
+                    {
+                        "role": msg.role,
+                        "content": msg.content,
+                        "timestamp": (
+                            msg.timestamp.isoformat()
+                            if hasattr(msg.timestamp, "isoformat")
+                            else str(msg.timestamp)
+                        ),
+                        "metadata": msg.metadata,
+                    }
+                )
+
+            logger.debug(f"Retrieved {len(result)} messages from session {session_id}")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to get conversation history for session {session_id}: {e}")
+            return []
+
+    # ==================== Checkpoint Methods ====================
+
+    async def store_checkpoint(
+        self,
+        thread_id: str,
+        checkpoint_id: str,
+        checkpoint_data: Dict[str, Any],
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """
+        Store a checkpoint in ContextEngine.
+
+        This is a convenience wrapper around ContextEngine.store_checkpoint()
+        that provides consistent error handling and logging.
+
+        Args:
+            thread_id: Thread identifier (typically agent_id or session_id)
+            checkpoint_id: Checkpoint identifier (version or timestamp)
+            checkpoint_data: Checkpoint data to store
+            metadata: Optional metadata for the checkpoint
+
+        Returns:
+            True if checkpoint was stored successfully, False otherwise
+
+        Example:
+            success = await adapter.store_checkpoint(
+                thread_id="agent-123",
+                checkpoint_id="v1.0",
+                checkpoint_data={"state": agent_state},
+                metadata={"type": "agent_state", "version": "1.0"}
+            )
+        """
+        try:
+            await self.context_engine.store_checkpoint(
+                thread_id=thread_id,
+                checkpoint_id=checkpoint_id,
+                checkpoint_data=checkpoint_data,
+                metadata=metadata or {},
+            )
+            logger.debug(f"Stored checkpoint {checkpoint_id} for thread {thread_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to store checkpoint {checkpoint_id} for thread {thread_id}: {e}")
+            return False
+
+    async def get_checkpoint(
+        self, thread_id: str, checkpoint_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get a checkpoint from ContextEngine.
+
+        This is a convenience wrapper around ContextEngine.get_checkpoint()
+        that provides consistent error handling and logging.
+
+        Args:
+            thread_id: Thread identifier (typically agent_id or session_id)
+            checkpoint_id: Optional checkpoint identifier (gets latest if None)
+
+        Returns:
+            Checkpoint data dictionary or None if not found
+
+        Example:
+            # Get latest checkpoint
+            checkpoint = await adapter.get_checkpoint(thread_id="agent-123")
+
+            # Get specific checkpoint
+            checkpoint = await adapter.get_checkpoint(
+                thread_id="agent-123",
+                checkpoint_id="v1.0"
+            )
+
+            if checkpoint:
+                data = checkpoint.get("data", {})
+                metadata = checkpoint.get("metadata", {})
+        """
+        try:
+            if checkpoint_id is None:
+                return None
+            checkpoint = await self.context_engine.get_checkpoint(
+                thread_id=thread_id, checkpoint_id=checkpoint_id
+            )
+
+            if checkpoint:
+                logger.debug(
+                    f"Retrieved checkpoint {checkpoint_id or 'latest'} for thread {thread_id}"
+                )
+                return checkpoint
+
+            logger.debug(f"Checkpoint {checkpoint_id or 'latest'} not found for thread {thread_id}")
+            return None
+        except Exception as e:
+            logger.error(
+                f"Failed to get checkpoint {checkpoint_id or 'latest'} for thread {thread_id}: {e}"
+            )
+            return None

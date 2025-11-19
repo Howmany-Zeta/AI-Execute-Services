@@ -5,7 +5,7 @@ Load agent configuration from role templates.
 """
 
 import logging
-import yaml
+import yaml  # type: ignore[import-untyped]
 from typing import Dict, Any, Optional
 from pathlib import Path
 
@@ -66,13 +66,13 @@ class RoleConfiguration:
         Returns:
             AgentConfiguration instance
         """
-        return AgentConfiguration(
+        return AgentConfiguration(  # type: ignore[call-arg]
             goal=self.goal,
             backstory=self.backstory,
             domain_knowledge=self.domain_knowledge,
             llm_model=self.llm_model,
             temperature=self.temperature,
-            max_tokens=self.max_tokens,
+            max_tokens=self.max_tokens if self.max_tokens is not None else 4096,  # type: ignore[arg-type]
             **self.additional_config,
         )
 
@@ -169,7 +169,10 @@ ROLE_TEMPLATES = {
     "developer": {
         "role_name": "developer",
         "goal": "Write clean, efficient, and maintainable code",
-        "backstory": "You are an experienced software developer with expertise in multiple programming languages and best practices",
+        "backstory": (
+            "You are an experienced software developer with expertise in "
+            "multiple programming languages and best practices"
+        ),
         "domain_knowledge": "Software development, design patterns, testing, debugging",
         "temperature": 0.3,
     },

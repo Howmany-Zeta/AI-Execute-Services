@@ -162,9 +162,11 @@ pytest aiecs/domain/agent/ --cov=aiecs.domain.agent --cov-report=html
 ## Documentation
 
 - [Examples](./EXAMPLES.md) - Usage examples and best practices
+- [Agent Integration Guide](../../../docs/DOMAIN_AGENT/AGENT_INTEGRATION.md) - Complete integration guide
+- [Migration Guide](../../../docs/DOMAIN_AGENT/MIGRATION_GUIDE.md) - Migration instructions
+- [Example Implementations](../../../docs/DOMAIN_AGENT/EXAMPLES.md) - Common pattern examples
 - [OpenSpec Proposal](../../openspec/changes/add-base-ai-agent-model/proposal.md) - Feature overview
 - [Design Decisions](../../openspec/changes/add-base-ai-agent-model/design.md) - Technical decisions
-- [Migration Guide](../../openspec/changes/add-base-ai-agent-model/MIGRATION_GUIDE.md) - Migration from legacy agents
 
 ## Implementation Status
 
