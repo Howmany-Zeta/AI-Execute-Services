@@ -192,6 +192,8 @@ class EnhancedRetryPolicy:
                 await asyncio.sleep(delay)
 
         # All retries exhausted
+        if last_error is None:
+            raise RuntimeError("Retry failed but no error was captured")
         raise last_error
 
 

@@ -6,16 +6,24 @@ Extends the standard HybridAgent with graph reasoning capabilities.
 """
 
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING
 from datetime import datetime
 
 from aiecs.llm import BaseLLMClient
 from aiecs.infrastructure.graph_storage.base import GraphStore
 from aiecs.tools.knowledge_graph import GraphReasoningTool
 from aiecs.domain.knowledge_graph.models.entity import Entity
+from aiecs.tools.base_tool import BaseTool
 
 from .hybrid_agent import HybridAgent
 from .models import AgentConfiguration
+
+if TYPE_CHECKING:
+    from aiecs.llm.protocols import LLMClientProtocol
+    from aiecs.domain.agent.integration.protocols import (
+        ConfigManagerProtocol,
+        CheckpointerProtocol,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +38,7 @@ class KnowledgeAwareAgent(HybridAgent):
     - Knowledge-augmented prompt construction
     - Automatic access to graph reasoning capabilities
 
-    Example:
+    Example with tool names (backward compatible):
         ```python
         from aiecs.domain.agent import KnowledgeAwareAgent
         from aiecs.infrastructure.graph_storage import InMemoryGraphStore
@@ -51,20 +59,38 @@ class KnowledgeAwareAgent(HybridAgent):
         await agent.initialize()
         result = await agent.execute_task("How is Alice connected to Company X?")
         ```
+
+    Example with tool instances (new flexibility):
+        ```python
+        # Pre-configured tools with state
+        agent = KnowledgeAwareAgent(
+            agent_id="kg_agent_001",
+            name="Knowledge Assistant",
+            llm_client=llm_client,
+            tools={
+                "web_search": WebSearchTool(api_key="..."),
+                "calculator": CalculatorTool()
+            },
+            config=config,
+            graph_store=graph_store
+        )
+        ```
     """
 
     def __init__(
         self,
         agent_id: str,
         name: str,
-        llm_client: BaseLLMClient,
-        tools: List[str],
+        llm_client: Union[BaseLLMClient, "LLMClientProtocol"],
+        tools: Union[List[str], Dict[str, BaseTool]],
         config: AgentConfiguration,
         graph_store: Optional[GraphStore] = None,
         description: Optional[str] = None,
         version: str = "1.0.0",
         max_iterations: int = 10,
         enable_graph_reasoning: bool = True,
+        config_manager: Optional["ConfigManagerProtocol"] = None,
+        checkpointer: Optional["CheckpointerProtocol"] = None,
     ):
         """
         Initialize Knowledge-Aware agent.
@@ -72,17 +98,31 @@ class KnowledgeAwareAgent(HybridAgent):
         Args:
             agent_id: Unique agent identifier
             name: Agent name
-            llm_client: LLM client for reasoning
-            tools: List of tool names (graph_reasoning auto-added if graph_store provided)
+            llm_client: LLM client for reasoning (BaseLLMClient or any LLMClientProtocol)
+            tools: Tools - either list of tool names or dict of tool instances
+                   (graph_reasoning auto-added if graph_store provided and tools is a list)
             config: Agent configuration
             graph_store: Optional knowledge graph store
             description: Optional description
             version: Agent version
             max_iterations: Maximum ReAct iterations
             enable_graph_reasoning: Whether to enable graph reasoning capabilities
+            config_manager: Optional configuration manager for dynamic config
+            checkpointer: Optional checkpointer for state persistence
+
+        Note:
+            When using tool instances (Dict[str, BaseTool]), graph_reasoning tool
+            is NOT auto-added. You must include it manually if needed:
+
+            ```python
+            tools = {
+                "web_search": WebSearchTool(),
+                "graph_reasoning": GraphReasoningTool(graph_store)
+            }
+            ```
         """
-        # Auto-add graph_reasoning tool if graph_store is provided
-        if graph_store is not None and enable_graph_reasoning:
+        # Auto-add graph_reasoning tool if graph_store is provided and tools is a list
+        if graph_store is not None and enable_graph_reasoning and isinstance(tools, list):
             if "graph_reasoning" not in tools:
                 tools = tools + ["graph_reasoning"]
 
@@ -95,6 +135,8 @@ class KnowledgeAwareAgent(HybridAgent):
             description=description or "Knowledge-aware agent with integrated graph reasoning",
             version=version,
             max_iterations=max_iterations,
+            config_manager=config_manager,
+            checkpointer=checkpointer,
         )
 
         self.graph_store = graph_store
@@ -212,6 +254,7 @@ Use graph reasoning proactively when questions involve:
             # Use multi_hop mode by default for general queries
             from aiecs.tools.knowledge_graph.graph_reasoning_tool import (
                 GraphReasoningInput,
+                ReasoningModeEnum,
             )
 
             # Extract entity IDs from context if available
@@ -221,8 +264,8 @@ Use graph reasoning proactively when questions involve:
                 start_entity_id = context.get("start_entity_id")
                 target_entity_id = context.get("target_entity_id")
 
-            input_data = GraphReasoningInput(
-                mode="multi_hop",
+            input_data = GraphReasoningInput(  # type: ignore[call-arg]
+                mode=ReasoningModeEnum.MULTI_HOP,
                 query=query,
                 start_entity_id=start_entity_id,
                 target_entity_id=target_entity_id,
@@ -321,8 +364,9 @@ Use graph reasoning proactively when questions involve:
         for query, kg_context in self._knowledge_context.items():
             # Simple keyword matching (could be enhanced with embeddings)
             if any(word in task.lower() for word in query.lower().split()):
+                confidence = kg_context.get("confidence", 0.0)
                 relevant_knowledge.append(
-                    f"- {query}: {kg_context['answer']} (confidence: {kg_context['confidence']:.2f})"
+                    f"- {query}: {kg_context['answer']} (confidence: {confidence:.2f})"
                 )
 
         if relevant_knowledge:

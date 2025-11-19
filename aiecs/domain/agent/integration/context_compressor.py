@@ -5,7 +5,7 @@ Smart context compression for token limits.
 """
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, Set
 from enum import Enum
 
 from aiecs.llm import LLMMessage
@@ -89,8 +89,8 @@ class ContextCompressor:
         self, messages: List[LLMMessage], priority_indices: Optional[List[int]]
     ) -> List[LLMMessage]:
         """Preserve recent messages and priority messages."""
-        priority_indices = set(priority_indices or [])
-        compressed = []
+        priority_indices_set: Set[int] = set(priority_indices or [])
+        compressed: List[LLMMessage] = []
 
         # Always include system messages if enabled
         if self.preserve_system:
@@ -101,7 +101,7 @@ class ContextCompressor:
         remaining_tokens = self.max_tokens - self._estimate_tokens(compressed)
 
         # Add priority messages
-        for idx in priority_indices:
+        for idx in priority_indices_set:
             if idx < len(messages) and messages[idx] not in compressed:
                 msg_tokens = self._estimate_tokens([messages[idx]])
                 if msg_tokens <= remaining_tokens:
@@ -150,7 +150,7 @@ class ContextCompressor:
 
     def _compress_truncate_start(self, messages: List[LLMMessage]) -> List[LLMMessage]:
         """Keep recent messages, truncate start."""
-        compressed = []
+        compressed: List[LLMMessage] = []
         remaining_tokens = self.max_tokens
 
         # Process from end

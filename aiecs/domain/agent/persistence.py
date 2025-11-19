@@ -8,6 +8,10 @@ import logging
 import json
 from typing import Dict, Any, Optional, Protocol
 from datetime import datetime
+from collections import ChainMap
+import asyncio
+import queue
+import dataclasses
 
 from .base_agent import BaseAIAgent
 from .exceptions import SerializationError
@@ -220,21 +224,30 @@ class AgentStateSerializer:
     """
     Helper class for serializing/deserializing agent state.
 
-    Handles complex types that need special serialization.
+    Handles complex types that need special serialization, including:
+    - datetime objects
+    - asyncio.Queue and queue.Queue
+    - ChainMap
+    - dataclasses
+    - Other non-JSON-serializable types
     """
 
     @staticmethod
     def serialize(agent: BaseAIAgent) -> Dict[str, Any]:
         """
-        Serialize agent to dictionary.
+        Serialize agent to dictionary with sanitization.
+
+        This method gets the agent state and sanitizes it to ensure
+        all values are JSON-serializable.
 
         Args:
             agent: Agent to serialize
 
         Returns:
-            Serialized state dictionary
+            Serialized state dictionary (JSON-safe)
         """
-        return agent.to_dict()
+        state = agent.to_dict()
+        return AgentStateSerializer._sanitize_checkpoint(state)
 
     @staticmethod
     def deserialize(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -252,6 +265,167 @@ class AgentStateSerializer:
         """
         # In the future, this could handle type conversion, validation, etc.
         return data
+
+    @staticmethod
+    def _sanitize_checkpoint(checkpoint_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Sanitize checkpoint data to ensure JSON serializability.
+
+        This method recursively processes checkpoint data to convert
+        non-serializable types to serializable representations.
+
+        Args:
+            checkpoint_data: Checkpoint data to sanitize
+
+        Returns:
+            Sanitized checkpoint data (JSON-safe)
+
+        Example:
+            data = {
+                "timestamp": datetime.utcnow(),
+                "queue": asyncio.Queue(),
+                "config": {"nested": datetime.utcnow()}
+            }
+            sanitized = AgentStateSerializer._sanitize_checkpoint(data)
+            # All datetime objects converted to ISO strings
+            # Queue converted to placeholder
+        """
+        return AgentStateSerializer._sanitize_dict(checkpoint_data)
+
+    @staticmethod
+    def _sanitize_dict(obj: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Sanitize dictionary recursively.
+
+        Args:
+            obj: Dictionary to sanitize
+
+        Returns:
+            Sanitized dictionary
+        """
+        result = {}
+        for key, value in obj.items():
+            try:
+                result[key] = AgentStateSerializer._make_json_serializable(value)
+            except Exception as e:
+                logger.warning(f"Failed to sanitize key '{key}': {e}. Using placeholder.")
+                result[key] = f"<non-serializable: {type(value).__name__}>"
+        return result
+
+    @staticmethod
+    def _sanitize_list(obj: list) -> list:
+        """
+        Sanitize list recursively.
+
+        Args:
+            obj: List to sanitize
+
+        Returns:
+            Sanitized list
+        """
+        result = []
+        for i, item in enumerate(obj):
+            try:
+                result.append(AgentStateSerializer._make_json_serializable(item))
+            except Exception as e:
+                logger.warning(
+                    f"Failed to sanitize list item at index {i}: {e}. Using placeholder."
+                )
+                result.append(f"<non-serializable: {type(item).__name__}>")
+        return result
+
+    @staticmethod
+    def _make_json_serializable(obj: Any) -> Any:
+        """
+        Convert object to JSON-serializable form.
+
+        Handles common non-serializable types:
+        - datetime -> ISO string
+        - asyncio.Queue -> placeholder
+        - queue.Queue -> placeholder
+        - ChainMap -> dict
+        - dataclasses -> dict
+        - dict -> recursive sanitization
+        - list -> recursive sanitization
+
+        Args:
+            obj: Object to convert
+
+        Returns:
+            JSON-serializable representation
+
+        Raises:
+            TypeError: If object cannot be made serializable
+        """
+        # Handle None, bool, int, float, str (already serializable)
+        if obj is None or isinstance(obj, (bool, int, float, str)):
+            return obj
+
+        # Handle datetime
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+
+        # Handle asyncio.Queue
+        if isinstance(obj, asyncio.Queue):
+            logger.warning(
+                "asyncio.Queue detected in checkpoint data. "
+                "Queues cannot be serialized. Using placeholder."
+            )
+            return "<asyncio.Queue: not serializable>"
+
+        # Handle queue.Queue
+        if isinstance(obj, queue.Queue):
+            logger.warning(
+                "queue.Queue detected in checkpoint data. "
+                "Queues cannot be serialized. Using placeholder."
+            )
+            return "<queue.Queue: not serializable>"
+
+        # Handle ChainMap
+        if isinstance(obj, ChainMap):
+            logger.debug("Converting ChainMap to dict for serialization")
+            return AgentStateSerializer._sanitize_dict(dict(obj))
+
+        # Handle dataclasses
+        if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+            logger.debug(f"Converting dataclass {type(obj).__name__} to dict for serialization")
+            return AgentStateSerializer._sanitize_dict(dataclasses.asdict(obj))
+
+        # Handle dictionaries
+        if isinstance(obj, dict):
+            return AgentStateSerializer._sanitize_dict(obj)
+
+        # Handle lists and tuples
+        if isinstance(obj, (list, tuple)):
+            sanitized_list = AgentStateSerializer._sanitize_list(list(obj))
+            return sanitized_list if isinstance(obj, list) else tuple(sanitized_list)
+
+        # Handle sets
+        if isinstance(obj, set):
+            logger.debug("Converting set to list for serialization")
+            return AgentStateSerializer._sanitize_list(list(obj))
+
+        # Handle bytes
+        if isinstance(obj, bytes):
+            logger.debug("Converting bytes to base64 string for serialization")
+            import base64
+
+            return base64.b64encode(obj).decode("utf-8")
+
+        # Try to convert using __dict__ for custom objects
+        if hasattr(obj, "__dict__"):
+            logger.warning(
+                f"Converting custom object {type(obj).__name__} using __dict__. "
+                "This may not preserve all state."
+            )
+            return AgentStateSerializer._sanitize_dict(obj.__dict__)
+
+        # Last resort: convert to string
+        logger.warning(
+            f"Object of type {type(obj).__name__} is not directly serializable. "
+            "Converting to string representation."
+        )
+        return str(obj)
 
 
 # Global persistence instance

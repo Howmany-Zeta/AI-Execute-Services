@@ -89,6 +89,22 @@ class AgentObserver(Protocol):
         """
         ...
 
+    def on_health_status_changed(
+        self,
+        agent_id: str,
+        health_status: Dict[str, Any],
+        timestamp: datetime,
+    ) -> None:
+        """
+        Called when agent health status changes significantly.
+
+        Args:
+            agent_id: Agent identifier
+            health_status: Health status dictionary with score and issues
+            timestamp: Status change timestamp
+        """
+        ...
+
     def on_tool_called(
         self,
         agent_id: str,
@@ -177,6 +193,29 @@ class LoggingObserver:
         """Log tool call."""
         self.logger.log(self.log_level, f"Agent {agent_id}: Tool '{tool_name}' called")
 
+    def on_health_status_changed(
+        self,
+        agent_id: str,
+        health_status: Dict[str, Any],
+        timestamp: datetime,
+    ) -> None:
+        """Log health status change."""
+        status = health_status.get("status", "unknown")
+        score = health_status.get("health_score", 0)
+        issues = health_status.get("issues", [])
+
+        log_level = self.log_level
+        if status == "unhealthy":
+            log_level = logging.WARNING
+        elif status == "degraded":
+            log_level = logging.INFO
+
+        message = f"Agent {agent_id}: Health status {status} (score: {score:.1f}/100)"
+        if issues:
+            message += f" - Issues: {', '.join(issues)}"
+
+        self.logger.log(log_level, message)
+
 
 class MetricsObserver:
     """Observer that collects metrics."""
@@ -186,6 +225,7 @@ class MetricsObserver:
         self.state_changes: List[Dict[str, Any]] = []
         self.task_events: List[Dict[str, Any]] = []
         self.tool_calls: List[Dict[str, Any]] = []
+        self.health_status_changes: List[Dict[str, Any]] = []
 
     def on_state_changed(
         self,
@@ -272,15 +312,34 @@ class MetricsObserver:
             }
         )
 
+    def on_health_status_changed(
+        self,
+        agent_id: str,
+        health_status: Dict[str, Any],
+        timestamp: datetime,
+    ) -> None:
+        """Record health status change."""
+        self.health_status_changes.append(
+            {
+                "agent_id": agent_id,
+                "status": health_status.get("status"),
+                "health_score": health_status.get("health_score"),
+                "issues": health_status.get("issues", []),
+                "timestamp": timestamp.isoformat(),
+            }
+        )
+
     def get_metrics(self) -> Dict[str, Any]:
         """Get collected metrics."""
         return {
             "state_changes": len(self.state_changes),
             "task_events": len(self.task_events),
             "tool_calls": len(self.tool_calls),
+            "health_status_changes": len(self.health_status_changes),
             "state_changes_data": self.state_changes,
             "task_events_data": self.task_events,
             "tool_calls_data": self.tool_calls,
+            "health_status_changes_data": self.health_status_changes,
         }
 
     def clear(self) -> None:
@@ -288,6 +347,7 @@ class MetricsObserver:
         self.state_changes.clear()
         self.task_events.clear()
         self.tool_calls.clear()
+        self.health_status_changes.clear()
 
 
 class AgentController:
@@ -371,6 +431,20 @@ class AgentController:
         for observer in self.observers:
             try:
                 observer.on_tool_called(self.agent.agent_id, tool_name, parameters, timestamp)
+            except Exception as e:
+                logger.error(f"Observer notification failed: {e}")
+
+    def notify_health_status_changed(self, health_status: Dict[str, Any]) -> None:
+        """
+        Notify observers of health status change.
+
+        Args:
+            health_status: Health status dictionary with score and issues
+        """
+        timestamp = datetime.utcnow()
+        for observer in self.observers:
+            try:
+                observer.on_health_status_changed(self.agent.agent_id, health_status, timestamp)
             except Exception as e:
                 logger.error(f"Observer notification failed: {e}")
 

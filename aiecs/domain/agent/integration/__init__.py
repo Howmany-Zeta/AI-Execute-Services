@@ -12,6 +12,7 @@ from .context_compressor import (
     compress_messages,
     CompressionStrategy,
 )
+from .protocols import ConfigManagerProtocol, CheckpointerProtocol
 
 __all__ = [
     "ContextEngineAdapter",
@@ -23,4 +24,6 @@ __all__ = [
     "ContextCompressor",
     "compress_messages",
     "CompressionStrategy",
+    "ConfigManagerProtocol",
+    "CheckpointerProtocol",
 ]
