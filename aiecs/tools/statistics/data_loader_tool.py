@@ -79,15 +79,11 @@ class DataLoaderTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the data loader tool"""
 
-        model_config = ConfigDict(env_prefix="DATA_LOADER_")
+        model_config = ConfigDict(env_prefix="DATA_LOADER_")  # type: ignore[typeddict-unknown-key]
 
         max_file_size_mb: int = Field(default=500, description="Maximum file size in megabytes")
-        default_chunk_size: int = Field(
-            default=10000, description="Default chunk size for chunked loading"
-        )
-        max_memory_usage_mb: int = Field(
-            default=2000, description="Maximum memory usage in megabytes"
-        )
+        default_chunk_size: int = Field(default=10000, description="Default chunk size for chunked loading")
+        max_memory_usage_mb: int = Field(default=2000, description="Maximum memory usage in megabytes")
         enable_schema_inference: bool = Field(
             default=True,
             description="Whether to enable automatic schema inference",
@@ -142,22 +138,12 @@ class DataLoaderTool(BaseTool):
         """Schema for load_data operation"""
 
         source: str = Field(description="Path to data source file")
-        source_type: Optional[DataSourceType] = Field(
-            default=DataSourceType.AUTO, description="Data source type"
-        )
-        strategy: LoadStrategy = Field(
-            default=LoadStrategy.FULL_LOAD, description="Loading strategy"
-        )
-        data_schema: Optional[Dict[str, Any]] = Field(
-            default=None, description="Expected schema for validation"
-        )
-        validation_rules: Optional[Dict[str, Any]] = Field(
-            default=None, description="Data quality validation rules"
-        )
+        source_type: Optional[DataSourceType] = Field(default=DataSourceType.AUTO, description="Data source type")
+        strategy: LoadStrategy = Field(default=LoadStrategy.FULL_LOAD, description="Loading strategy")
+        data_schema: Optional[Dict[str, Any]] = Field(default=None, description="Expected schema for validation")
+        validation_rules: Optional[Dict[str, Any]] = Field(default=None, description="Data quality validation rules")
         nrows: Optional[int] = Field(default=None, description="Number of rows to load")
-        chunk_size: Optional[int] = Field(
-            default=None, description="Chunk size for chunked loading"
-        )
+        chunk_size: Optional[int] = Field(default=None, description="Chunk size for chunked loading")
         encoding: Optional[str] = Field(default=None, description="File encoding")
 
     class DetectFormatSchema(BaseModel):
@@ -176,9 +162,7 @@ class DataLoaderTool(BaseTool):
 
         source: str = Field(description="Path to data source file")
         chunk_size: int = Field(default=10000, description="Chunk size for streaming")
-        source_type: Optional[DataSourceType] = Field(
-            default=DataSourceType.AUTO, description="Data source type"
-        )
+        source_type: Optional[DataSourceType] = Field(default=DataSourceType.AUTO, description="Data source type")
 
     def load_data(
         self,
@@ -502,9 +486,7 @@ class DataLoaderTool(BaseTool):
         self.logger.warning("Lazy loading not fully implemented, using full load")
         return self._load_full(source, source_type, None, encoding)
 
-    def _generate_metadata(
-        self, data: Any, source: str, source_type: DataSourceType
-    ) -> Dict[str, Any]:
+    def _generate_metadata(self, data: Any, source: str, source_type: DataSourceType) -> Dict[str, Any]:
         """Generate metadata about loaded data"""
         if isinstance(data, pd.DataFrame):
             return {
@@ -531,9 +513,7 @@ class DataLoaderTool(BaseTool):
 
         return expected_columns.issubset(actual_columns)
 
-    def _validate_quality(
-        self, data: pd.DataFrame, validation_rules: Optional[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    def _validate_quality(self, data: pd.DataFrame, validation_rules: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """Validate data quality"""
         quality_report = {
             "total_rows": len(data),
@@ -544,9 +524,7 @@ class DataLoaderTool(BaseTool):
         }
 
         # Calculate quality score
-        missing_ratio = (
-            data.isnull().sum().sum() / (len(data) * len(data.columns)) if len(data) > 0 else 0
-        )
+        missing_ratio = data.isnull().sum().sum() / (len(data) * len(data.columns)) if len(data) > 0 else 0
         duplicate_ratio = quality_report["duplicate_rows"] / len(data) if len(data) > 0 else 0
 
         quality_score = 1.0 - (missing_ratio * 0.5 + duplicate_ratio * 0.5)

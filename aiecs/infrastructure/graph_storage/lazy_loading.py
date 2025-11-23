@@ -171,9 +171,7 @@ class LazyLoadingMixin:
         """
         return LazyEntity(id=entity_id, _store=self)
 
-    async def get_lazy_entities(
-        self, entity_type: Optional[str] = None, limit: Optional[int] = None
-    ) -> List[LazyEntity]:
+    async def get_lazy_entities(self, entity_type: Optional[str] = None, limit: Optional[int] = None) -> List[LazyEntity]:
         """
         Get lazy-loaded entity wrappers
 
@@ -191,9 +189,7 @@ class LazyLoadingMixin:
 
         return [LazyEntity(id=eid, entity_type=etype, _store=self) for eid, etype in entities]
 
-    async def _get_entity_ids(
-        self, entity_type: Optional[str] = None, limit: Optional[int] = None
-    ) -> List[tuple[str, str]]:
+    async def _get_entity_ids(self, entity_type: Optional[str] = None, limit: Optional[int] = None) -> List[tuple[str, str]]:
         """
         Get entity IDs and types only (efficient query)
 
@@ -354,9 +350,7 @@ class EntityBatchLoader:
         self._cache.clear()
 
 
-async def lazy_traverse(
-    store: Any, start_entity_id: str, max_depth: int = 3, batch_size: int = 100
-) -> AsyncIterator[LazyEntity]:
+async def lazy_traverse(store: Any, start_entity_id: str, max_depth: int = 3, batch_size: int = 100) -> AsyncIterator[LazyEntity]:
     """
     Lazy graph traversal with batch loading
 

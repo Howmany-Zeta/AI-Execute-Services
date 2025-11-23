@@ -28,11 +28,11 @@ try:
     LARK_AVAILABLE = True
 except ImportError:
     LARK_AVAILABLE = False
-    Lark = None
-    LarkError = Exception
-    UnexpectedInput = Exception
-    UnexpectedToken = Exception
-    UnexpectedCharacters = Exception
+    Lark = None  # type: ignore[misc]
+    LarkError = Exception  # type: ignore[misc]
+    UnexpectedInput = Exception  # type: ignore[misc]
+    UnexpectedToken = Exception  # type: ignore[misc]
+    UnexpectedCharacters = Exception  # type: ignore[misc]
 
 # AST node types imported for type hints in docstrings
 # from .ast_nodes import ASTNode, QueryNode, FindNode, TraversalNode, FilterNode
@@ -47,7 +47,7 @@ try:
     QUERY_PLAN_AVAILABLE = True
 except ImportError:
     QUERY_PLAN_AVAILABLE = False
-    QueryPlan = None
+    QueryPlan = None  # type: ignore[misc]
 
 
 class LogicQueryParser:
@@ -94,10 +94,7 @@ class LogicQueryParser:
             ImportError: If lark-parser is not installed
         """
         if not LARK_AVAILABLE:
-            raise ImportError(
-                "lark-parser is required for LogicQueryParser. "
-                "Install with: pip install lark-parser"
-            )
+            raise ImportError("lark-parser is required for LogicQueryParser. " "Install with: pip install lark-parser")
 
         self.schema = schema
 
@@ -157,10 +154,7 @@ class LogicQueryParser:
                 validation_errors = ast.validate(self.schema)
                 if validation_errors:
                     # Convert validation errors to parser errors
-                    return [
-                        self.error_handler.from_validation_error(err, query)
-                        for err in validation_errors
-                    ]
+                    return [self.error_handler.from_validation_error(err, query) for err in validation_errors]
 
             return ast
 

@@ -106,9 +106,7 @@ class QueryContext:
             ```
         """
         if name in self.variables:
-            raise VariableRedefinitionError(
-                f"Variable '{name}' is already defined with value: {self.variables[name]}"
-            )
+            raise VariableRedefinitionError(f"Variable '{name}' is already defined with value: {self.variables[name]}")
         self.variables[name] = value
 
     def resolve_variable(self, name: str) -> Any:
@@ -132,9 +130,7 @@ class QueryContext:
             ```
         """
         if name not in self.variables:
-            raise UndefinedVariableError(
-                f"Variable '{name}' is not defined. Available variables: {list(self.variables.keys())}"
-            )
+            raise UndefinedVariableError(f"Variable '{name}' is not defined. Available variables: {list(self.variables.keys())}")
         return self.variables[name]
 
     def add_error(self, error: Any) -> None:
@@ -209,9 +205,4 @@ class QueryContext:
 
     def __repr__(self) -> str:
         """String representation for debugging"""
-        return (
-            f"QueryContext("
-            f"variables={len(self.variables)}, "
-            f"steps={len(self.query_steps)}, "
-            f"errors={len(self.errors)})"
-        )
+        return f"QueryContext(" f"variables={len(self.variables)}, " f"steps={len(self.query_steps)}, " f"errors={len(self.errors)})"

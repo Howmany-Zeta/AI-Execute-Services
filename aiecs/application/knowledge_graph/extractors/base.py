@@ -28,9 +28,7 @@ class EntityExtractor(ABC):
     """
 
     @abstractmethod
-    async def extract_entities(
-        self, text: str, entity_types: Optional[List[str]] = None, **kwargs
-    ) -> List[Entity]:
+    async def extract_entities(self, text: str, entity_types: Optional[List[str]] = None, **kwargs) -> List[Entity]:
         """
         Extract entities from text
 

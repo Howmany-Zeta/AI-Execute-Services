@@ -176,9 +176,7 @@ class QueryOptimizer:
 
         self._optimization_count += 1
 
-        explanation = self._generate_explanation(
-            plan, optimized_plan, rules_applied, cost_reduction
-        )
+        explanation = self._generate_explanation(plan, optimized_plan, rules_applied, cost_reduction)
 
         return OptimizationResult(
             original_plan=plan,
@@ -188,9 +186,7 @@ class QueryOptimizer:
             explanation=explanation,
         )
 
-    def _eliminate_redundant_operations(
-        self, steps: List[QueryStep]
-    ) -> Tuple[List[QueryStep], int]:
+    def _eliminate_redundant_operations(self, steps: List[QueryStep]) -> Tuple[List[QueryStep], int]:
         """
         Eliminate redundant operations
 
@@ -217,15 +213,10 @@ class QueryOptimizer:
                 for other_step in steps:
                     if step.step_id in other_step.depends_on:
                         # Replace dependency with original step
-                        other_step.depends_on = [
-                            (original_step.step_id if dep == step.step_id else dep)
-                            for dep in other_step.depends_on
-                        ]
+                        other_step.depends_on = [(original_step.step_id if dep == step.step_id else dep) for dep in other_step.depends_on]
 
                 eliminated += 1
-                logger.debug(
-                    f"Eliminated redundant operation: {step.step_id} -> {original_step.step_id}"
-                )
+                logger.debug(f"Eliminated redundant operation: {step.step_id} -> {original_step.step_id}")
             else:
                 seen_operations[signature] = step
                 optimized.append(step)
@@ -439,9 +430,7 @@ class QueryOptimizer:
 
         while remaining:
             # Find steps with all dependencies satisfied
-            current_level = [
-                step for step in remaining if all(dep in completed for dep in step.depends_on)
-            ]
+            current_level = [step for step in remaining if all(dep in completed for dep in step.depends_on)]
 
             if not current_level:
                 # Circular dependency or error
@@ -497,9 +486,7 @@ class QueryOptimizer:
             statistics: New query statistics
         """
         self.statistics = statistics
-        logger.info(
-            f"Updated query statistics: {statistics.entity_count} entities, {statistics.relation_count} relations"
-        )
+        logger.info(f"Updated query statistics: {statistics.entity_count} entities, {statistics.relation_count} relations")
 
     def get_optimization_count(self) -> int:
         """Get number of optimizations performed"""
@@ -583,9 +570,7 @@ class QueryStatisticsCollector:
             relation_type_counts=relation_type_counts,
         )
 
-        logger.info(
-            f"Collected statistics: {entity_count} entities, {relation_count} relations, avg degree {avg_degree:.1f}"
-        )
+        logger.info(f"Collected statistics: {entity_count} entities, {relation_count} relations, avg degree {avg_degree:.1f}")
 
         return stats
 

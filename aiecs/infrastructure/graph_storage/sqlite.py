@@ -7,11 +7,12 @@ Provides file-based persistent graph storage using SQLite.
 import json
 import aiosqlite
 from typing import Any, Dict, List, Optional, Tuple
-from pathlib import Path
+from pathlib import Path as PathLibPath
 from contextlib import asynccontextmanager
 
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.relation import Relation
+from aiecs.domain.knowledge_graph.models.path import Path
 from aiecs.infrastructure.graph_storage.base import GraphStore
 
 
@@ -97,12 +98,14 @@ class SQLiteGraphStore(GraphStore):
         """Initialize SQLite database and create schema"""
         # Create directory if needed
         if self.db_path != ":memory:":
-            Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+            PathLibPath(self.db_path).parent.mkdir(parents=True, exist_ok=True)
 
         # Connect to database
         self.conn = await aiosqlite.connect(self.db_path, **self.conn_kwargs)
 
         # Enable foreign keys
+        if self.conn is None:
+            raise RuntimeError("Failed to initialize database connection")
         await self.conn.execute("PRAGMA foreign_keys = ON")
 
         # Create schema
@@ -160,6 +163,8 @@ class SQLiteGraphStore(GraphStore):
         """Add entity to SQLite database"""
         if not self._is_initialized:
             raise RuntimeError("GraphStore not initialized")
+        if self.conn is None:
+            raise RuntimeError("Database connection not initialized")
 
         # Check if entity already exists
         cursor = await self.conn.execute("SELECT id FROM entities WHERE id = ?", (entity.id,))
@@ -186,6 +191,8 @@ class SQLiteGraphStore(GraphStore):
         """Get entity from SQLite database"""
         if not self._is_initialized:
             raise RuntimeError("GraphStore not initialized")
+        if self.conn is None:
+            raise RuntimeError("Database connection not initialized")
 
         cursor = await self.conn.execute(
             """
@@ -200,12 +207,14 @@ class SQLiteGraphStore(GraphStore):
         if not row:
             return None
 
-        return self._row_to_entity(row)
+        return self._row_to_entity(tuple(row))
 
     async def update_entity(self, entity: Entity) -> Entity:
         """Update entity in SQLite database"""
         if not self._is_initialized:
             raise RuntimeError("GraphStore not initialized")
+        if self.conn is None:
+            raise RuntimeError("Database connection not initialized")
 
         # Check if entity exists
         existing = await self.get_entity(entity.id)
@@ -234,6 +243,8 @@ class SQLiteGraphStore(GraphStore):
         """Delete entity and its relations from SQLite database"""
         if not self._is_initialized:
             raise RuntimeError("GraphStore not initialized")
+        if self.conn is None:
+            raise RuntimeError("Database connection not initialized")
 
         # Foreign key cascade will automatically delete relations
         await self.conn.execute("DELETE FROM entities WHERE id = ?", (entity_id,))
@@ -244,6 +255,8 @@ class SQLiteGraphStore(GraphStore):
         """Add relation to SQLite database"""
         if not self._is_initialized:
             raise RuntimeError("GraphStore not initialized")
+        if self.conn is None:
+            raise RuntimeError("Database connection not initialized")
 
         # Check if relation already exists
         cursor = await self.conn.execute("SELECT id FROM relations WHERE id = ?", (relation.id,))
@@ -284,6 +297,8 @@ class SQLiteGraphStore(GraphStore):
         """Get relation from SQLite database"""
         if not self._is_initialized:
             raise RuntimeError("GraphStore not initialized")
+        if self.conn is None:
+            raise RuntimeError("Database connection not initialized")
 
         cursor = await self.conn.execute(
             """
@@ -298,12 +313,14 @@ class SQLiteGraphStore(GraphStore):
         if not row:
             return None
 
-        return self._row_to_relation(row)
+        return self._row_to_relation(tuple(row))
 
     async def update_relation(self, relation: Relation) -> Relation:
         """Update relation in SQLite database"""
         if not self._is_initialized:
             raise RuntimeError("GraphStore not initialized")
+        if self.conn is None:
+            raise RuntimeError("Database connection not initialized")
 
         # Check if relation exists
         existing = await self.get_relation(relation.id)
@@ -339,6 +356,8 @@ class SQLiteGraphStore(GraphStore):
         """Delete relation from SQLite database"""
         if not self._is_initialized:
             raise RuntimeError("GraphStore not initialized")
+        if self.conn is None:
+            raise RuntimeError("Database connection not initialized")
 
         await self.conn.execute("DELETE FROM relations WHERE id = ?", (relation_id,))
         if not self._in_transaction:
@@ -365,6 +384,8 @@ class SQLiteGraphStore(GraphStore):
         """
         if not self._is_initialized:
             raise RuntimeError("GraphStore not initialized")
+        if self.conn is None:
+            raise RuntimeError("Database connection not initialized")
 
         neighbors = []
 
@@ -388,7 +409,7 @@ class SQLiteGraphStore(GraphStore):
             rows = await cursor.fetchall()
 
             for row in rows:
-                entity = self._row_to_entity(row)
+                entity = self._row_to_entity(tuple(row))
                 neighbors.append(entity)
 
         # Incoming relations
@@ -408,7 +429,7 @@ class SQLiteGraphStore(GraphStore):
             rows = await cursor.fetchall()
 
             for row in rows:
-                entity = self._row_to_entity(row)
+                entity = self._row_to_entity(tuple(row))
                 neighbors.append(entity)
 
         return neighbors
@@ -446,6 +467,8 @@ class SQLiteGraphStore(GraphStore):
         """
         if not self._is_initialized:
             raise RuntimeError("GraphStore not initialized")
+        if self.conn is None:
+            raise RuntimeError("Database connection not initialized")
 
         if not query_embedding:
             raise ValueError("Query embedding cannot be empty")
@@ -466,7 +489,7 @@ class SQLiteGraphStore(GraphStore):
         # Compute similarities
         scored_entities = []
         for row in rows:
-            entity = self._row_to_entity(row)
+            entity = self._row_to_entity(tuple(row))
 
             # Skip entities without embeddings
             if not entity.embedding:
@@ -504,9 +527,7 @@ class SQLiteGraphStore(GraphStore):
         # building full Path objects with them is complex. The default is sufficient.
         # Backends with native graph query languages (e.g., Neo4j with Cypher)
         # should override this for better performance.
-        return await self._default_traverse_bfs(
-            start_entity_id, relation_type, max_depth, max_results
-        )
+        return await self._default_traverse_bfs(start_entity_id, relation_type, max_depth, max_results)
 
     # =========================================================================
     # Helper Methods
@@ -586,20 +607,24 @@ class SQLiteGraphStore(GraphStore):
         """Get statistics about the SQLite graph store"""
         if not self._is_initialized:
             raise RuntimeError("GraphStore not initialized")
+        if self.conn is None:
+            raise RuntimeError("Database connection not initialized")
 
         # Count entities
         cursor = await self.conn.execute("SELECT COUNT(*) FROM entities")
-        entity_count = (await cursor.fetchone())[0]
+        entity_row = await cursor.fetchone()
+        entity_count = entity_row[0] if entity_row else 0
 
         # Count relations
         cursor = await self.conn.execute("SELECT COUNT(*) FROM relations")
-        relation_count = (await cursor.fetchone())[0]
+        relation_row = await cursor.fetchone()
+        relation_count = relation_row[0] if relation_row else 0
 
         # Database file size
         file_size = 0
         if self.db_path != ":memory:":
             try:
-                file_size = Path(self.db_path).stat().st_size
+                file_size = PathLibPath(self.db_path).stat().st_size
             except (OSError, ValueError):
                 pass
 

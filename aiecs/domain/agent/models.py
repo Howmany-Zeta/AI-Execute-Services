@@ -157,21 +157,15 @@ class RetryPolicy(BaseModel):
         description="Base delay in seconds for exponential backoff",
     )
     max_delay: float = Field(default=32.0, ge=0, description="Maximum delay cap in seconds")
-    exponential_factor: float = Field(
-        default=2.0, ge=1.0, description="Exponential factor for backoff"
-    )
+    exponential_factor: float = Field(default=2.0, ge=1.0, description="Exponential factor for backoff")
     jitter_factor: float = Field(
         default=0.2,
         ge=0.0,
         le=1.0,
         description="Jitter factor (±percentage) for randomization",
     )
-    rate_limit_base_delay: float = Field(
-        default=5.0, ge=0, description="Base delay for rate limit errors"
-    )
-    rate_limit_max_delay: float = Field(
-        default=120.0, ge=0, description="Maximum delay for rate limit errors"
-    )
+    rate_limit_base_delay: float = Field(default=5.0, ge=0, description="Base delay for rate limit errors")
+    rate_limit_max_delay: float = Field(default=120.0, ge=0, description="Maximum delay for rate limit errors")
 
     model_config = ConfigDict()
 
@@ -180,17 +174,13 @@ class AgentConfiguration(BaseModel):
     """Configuration model for agent behavior and capabilities."""
 
     # LLM settings
-    llm_provider: Optional[str] = Field(
-        None, description="LLM provider name (e.g., 'openai', 'vertex')"
-    )
+    llm_provider: Optional[str] = Field(None, description="LLM provider name (e.g., 'openai', 'vertex')")
     llm_model: Optional[str] = Field(None, description="LLM model name")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="LLM temperature setting")
     max_tokens: int = Field(default=4096, ge=1, description="Maximum tokens for LLM responses")
 
     # Tool access
-    allowed_tools: List[str] = Field(
-        default_factory=list, description="List of tool names agent can use"
-    )
+    allowed_tools: List[str] = Field(default_factory=list, description="List of tool names agent can use")
     tool_selection_strategy: str = Field(
         default="llm_based",
         description="Strategy for tool selection ('llm_based', 'rule_based')",
@@ -199,9 +189,7 @@ class AgentConfiguration(BaseModel):
     # Memory configuration
     memory_enabled: bool = Field(default=True, description="Whether memory is enabled")
     memory_capacity: int = Field(default=1000, ge=0, description="Maximum number of memory items")
-    memory_ttl_seconds: Optional[int] = Field(
-        None, ge=0, description="Time-to-live for short-term memory in seconds"
-    )
+    memory_ttl_seconds: Optional[int] = Field(None, ge=0, description="Time-to-live for short-term memory in seconds")
 
     # Behavior parameters
     max_iterations: int = Field(default=10, ge=1, description="Maximum iterations for ReAct loop")
@@ -209,9 +197,7 @@ class AgentConfiguration(BaseModel):
     verbose: bool = Field(default=False, description="Verbose logging")
 
     # Retry policy
-    retry_policy: RetryPolicy = Field(
-        default_factory=RetryPolicy, description="Retry policy configuration"
-    )
+    retry_policy: RetryPolicy = Field(default_factory=RetryPolicy, description="Retry policy configuration")
 
     # Goal and context
     goal: Optional[str] = Field(None, description="Agent's primary goal")
@@ -220,17 +206,11 @@ class AgentConfiguration(BaseModel):
     reasoning_guidance: Optional[str] = Field(None, description="Guidance for reasoning approach")
 
     # Context compression
-    context_window_limit: int = Field(
-        default=20000, ge=0, description="Token limit for context window"
-    )
-    enable_context_compression: bool = Field(
-        default=True, description="Enable automatic context compression"
-    )
+    context_window_limit: int = Field(default=20000, ge=0, description="Token limit for context window")
+    enable_context_compression: bool = Field(default=True, description="Enable automatic context compression")
 
     # Metadata
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict, description="Additional configuration metadata"
-    )
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional configuration metadata")
 
     model_config = ConfigDict()
 
@@ -258,14 +238,10 @@ class AgentGoal(BaseModel):
 
     # Dependencies
     parent_goal_id: Optional[str] = Field(None, description="Parent goal ID if this is a sub-goal")
-    depends_on: List[str] = Field(
-        default_factory=list, description="List of goal IDs this depends on"
-    )
+    depends_on: List[str] = Field(default_factory=list, description="List of goal IDs this depends on")
 
     # Timestamps
-    created_at: datetime = Field(
-        default_factory=datetime.utcnow, description="Goal creation timestamp"
-    )
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Goal creation timestamp")
     started_at: Optional[datetime] = Field(None, description="When goal execution started")
     achieved_at: Optional[datetime] = Field(None, description="When goal was achieved")
 
@@ -302,28 +278,16 @@ class AgentMetrics(BaseModel):
     total_tasks_executed: int = Field(default=0, ge=0, description="Total number of tasks executed")
     successful_tasks: int = Field(default=0, ge=0, description="Number of successful tasks")
     failed_tasks: int = Field(default=0, ge=0, description="Number of failed tasks")
-    success_rate: float = Field(
-        default=0.0, ge=0.0, le=100.0, description="Success rate percentage"
-    )
+    success_rate: float = Field(default=0.0, ge=0.0, le=100.0, description="Success rate percentage")
 
     # Execution time metrics
-    average_execution_time: Optional[float] = Field(
-        None, ge=0, description="Average task execution time in seconds"
-    )
-    total_execution_time: float = Field(
-        default=0.0, ge=0, description="Total execution time in seconds"
-    )
-    min_execution_time: Optional[float] = Field(
-        None, ge=0, description="Minimum execution time in seconds"
-    )
-    max_execution_time: Optional[float] = Field(
-        None, ge=0, description="Maximum execution time in seconds"
-    )
+    average_execution_time: Optional[float] = Field(None, ge=0, description="Average task execution time in seconds")
+    total_execution_time: float = Field(default=0.0, ge=0, description="Total execution time in seconds")
+    min_execution_time: Optional[float] = Field(None, ge=0, description="Minimum execution time in seconds")
+    max_execution_time: Optional[float] = Field(None, ge=0, description="Maximum execution time in seconds")
 
     # Quality metrics
-    average_quality_score: Optional[float] = Field(
-        None, ge=0.0, le=1.0, description="Average quality score (0-1)"
-    )
+    average_quality_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Average quality score (0-1)")
 
     # Resource usage
     total_tokens_used: int = Field(default=0, ge=0, description="Total LLM tokens used")
@@ -344,41 +308,19 @@ class AgentMetrics(BaseModel):
     completed_sessions: int = Field(default=0, ge=0, description="Number of completed sessions")
     failed_sessions: int = Field(default=0, ge=0, description="Number of failed sessions")
     expired_sessions: int = Field(default=0, ge=0, description="Number of expired sessions")
-    total_session_requests: int = Field(
-        default=0, ge=0, description="Total requests across all sessions"
-    )
-    total_session_errors: int = Field(
-        default=0, ge=0, description="Total errors across all sessions"
-    )
-    average_session_duration: Optional[float] = Field(
-        None, ge=0, description="Average session duration in seconds"
-    )
-    average_requests_per_session: Optional[float] = Field(
-        None, ge=0, description="Average number of requests per session"
-    )
+    total_session_requests: int = Field(default=0, ge=0, description="Total requests across all sessions")
+    total_session_errors: int = Field(default=0, ge=0, description="Total errors across all sessions")
+    average_session_duration: Optional[float] = Field(None, ge=0, description="Average session duration in seconds")
+    average_requests_per_session: Optional[float] = Field(None, ge=0, description="Average number of requests per session")
 
     # Operation-level metrics (Phase 3 enhancement)
-    operation_history: List[Dict[str, Any]] = Field(
-        default_factory=list, description="Recent operation timing history (limited to last 100)"
-    )
-    operation_counts: Dict[str, int] = Field(
-        default_factory=dict, description="Count of operations by name"
-    )
-    operation_total_time: Dict[str, float] = Field(
-        default_factory=dict, description="Total time spent in each operation type (seconds)"
-    )
-    operation_error_counts: Dict[str, int] = Field(
-        default_factory=dict, description="Error count by operation type"
-    )
-    p50_operation_time: Optional[float] = Field(
-        None, ge=0, description="50th percentile operation time (median) in seconds"
-    )
-    p95_operation_time: Optional[float] = Field(
-        None, ge=0, description="95th percentile operation time in seconds"
-    )
-    p99_operation_time: Optional[float] = Field(
-        None, ge=0, description="99th percentile operation time in seconds"
-    )
+    operation_history: List[Dict[str, Any]] = Field(default_factory=list, description="Recent operation timing history (limited to last 100)")
+    operation_counts: Dict[str, int] = Field(default_factory=dict, description="Count of operations by name")
+    operation_total_time: Dict[str, float] = Field(default_factory=dict, description="Total time spent in each operation type (seconds)")
+    operation_error_counts: Dict[str, int] = Field(default_factory=dict, description="Error count by operation type")
+    p50_operation_time: Optional[float] = Field(None, ge=0, description="50th percentile operation time (median) in seconds")
+    p95_operation_time: Optional[float] = Field(None, ge=0, description="95th percentile operation time in seconds")
+    p99_operation_time: Optional[float] = Field(None, ge=0, description="99th percentile operation time in seconds")
 
     # Timestamps
     last_reset_at: Optional[datetime] = Field(None, description="When metrics were last reset")
@@ -402,15 +344,11 @@ class AgentInteraction(BaseModel):
     content: Dict[str, Any] = Field(..., description="Interaction content")
 
     # Timestamps
-    timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="Interaction timestamp"
-    )
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Interaction timestamp")
     duration_seconds: Optional[float] = Field(None, ge=0, description="Interaction duration")
 
     # Metadata
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict, description="Additional interaction metadata"
-    )
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional interaction metadata")
 
     model_config = ConfigDict()
 
@@ -426,9 +364,7 @@ class AgentMemory(BaseModel):
     memory_type: MemoryType = Field(..., description="Type of memory")
     key: str = Field(..., description="Memory key")
     value: Any = Field(..., description="Memory value")
-    timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="When memory was stored"
-    )
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="When memory was stored")
 
     # Metadata
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional memory metadata")
@@ -528,9 +464,7 @@ class Experience(BaseModel):
     # Task information
     task_type: str = Field(..., description="Type/category of task")
     task_description: str = Field(..., description="Task description")
-    task_complexity: Optional[str] = Field(
-        None, description="Task complexity (simple, medium, complex)"
-    )
+    task_complexity: Optional[str] = Field(None, description="Task complexity (simple, medium, complex)")
 
     # Execution details
     approach: str = Field(..., description="Approach/strategy used")
@@ -552,14 +486,10 @@ class Experience(BaseModel):
     recommended_improvements: Optional[str] = Field(None, description="Recommended improvements")
 
     # Timestamps
-    timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="When experience occurred"
-    )
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="When experience occurred")
 
     # Metadata
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict, description="Additional experience metadata"
-    )
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional experience metadata")
 
     model_config = ConfigDict()
 
@@ -638,17 +568,11 @@ class ResourceLimits(BaseModel):
     """
 
     # Concurrent task limits
-    max_concurrent_tasks: int = Field(
-        default=10, ge=1, description="Maximum number of concurrent tasks"
-    )
+    max_concurrent_tasks: int = Field(default=10, ge=1, description="Maximum number of concurrent tasks")
 
     # Token rate limits (token bucket algorithm)
-    max_tokens_per_minute: Optional[int] = Field(
-        None, ge=0, description="Maximum tokens per minute (None = unlimited)"
-    )
-    max_tokens_per_hour: Optional[int] = Field(
-        None, ge=0, description="Maximum tokens per hour (None = unlimited)"
-    )
+    max_tokens_per_minute: Optional[int] = Field(None, ge=0, description="Maximum tokens per minute (None = unlimited)")
+    max_tokens_per_hour: Optional[int] = Field(None, ge=0, description="Maximum tokens per hour (None = unlimited)")
     token_burst_size: Optional[int] = Field(
         None,
         ge=0,
@@ -656,31 +580,19 @@ class ResourceLimits(BaseModel):
     )
 
     # Tool call rate limits
-    max_tool_calls_per_minute: Optional[int] = Field(
-        None, ge=0, description="Maximum tool calls per minute (None = unlimited)"
-    )
-    max_tool_calls_per_hour: Optional[int] = Field(
-        None, ge=0, description="Maximum tool calls per hour (None = unlimited)"
-    )
+    max_tool_calls_per_minute: Optional[int] = Field(None, ge=0, description="Maximum tool calls per minute (None = unlimited)")
+    max_tool_calls_per_hour: Optional[int] = Field(None, ge=0, description="Maximum tool calls per hour (None = unlimited)")
 
     # Memory limits
-    max_memory_mb: Optional[int] = Field(
-        None, ge=0, description="Maximum memory usage in MB (None = unlimited)"
-    )
+    max_memory_mb: Optional[int] = Field(None, ge=0, description="Maximum memory usage in MB (None = unlimited)")
 
     # Timeout settings
-    task_timeout_seconds: Optional[int] = Field(
-        None, ge=0, description="Maximum task execution time in seconds (None = unlimited)"
-    )
-    resource_wait_timeout_seconds: int = Field(
-        default=60, ge=0, description="Maximum time to wait for resources"
-    )
+    task_timeout_seconds: Optional[int] = Field(None, ge=0, description="Maximum task execution time in seconds (None = unlimited)")
+    resource_wait_timeout_seconds: int = Field(default=60, ge=0, description="Maximum time to wait for resources")
 
     # Enforcement
     enforce_limits: bool = Field(default=True, description="Whether to enforce resource limits")
-    reject_on_limit: bool = Field(
-        default=False, description="Reject requests when limit reached (vs wait)"
-    )
+    reject_on_limit: bool = Field(default=False, description="Reject requests when limit reached (vs wait)")
 
     model_config = ConfigDict()
 
@@ -794,15 +706,11 @@ class ToolObservation(BaseModel):
     """
 
     tool_name: str = Field(..., description="Name of the tool that was executed")
-    parameters: Dict[str, Any] = Field(
-        default_factory=dict, description="Parameters passed to the tool"
-    )
+    parameters: Dict[str, Any] = Field(default_factory=dict, description="Parameters passed to the tool")
     result: Any = Field(None, description="Tool execution result")
     success: bool = Field(..., description="Whether tool execution succeeded")
     error: Optional[str] = Field(None, description="Error message if execution failed")
-    execution_time_ms: Optional[float] = Field(
-        None, ge=0, description="Execution time in milliseconds"
-    )
+    execution_time_ms: Optional[float] = Field(None, ge=0, description="Execution time in milliseconds")
     timestamp: str = Field(
         default_factory=lambda: datetime.utcnow().isoformat(),
         description="ISO format timestamp of execution",

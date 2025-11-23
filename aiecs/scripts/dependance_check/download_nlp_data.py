@@ -231,9 +231,7 @@ def download_rake_nltk_data(logger: logging.Logger) -> bool:
     logger.info("Checking RAKE-NLTK data...")
 
     if not check_python_package("rake_nltk", logger):
-        logger.warning(
-            "RAKE-NLTK is not installed. This is optional for English keyword extraction."
-        )
+        logger.warning("RAKE-NLTK is not installed. This is optional for English keyword extraction.")
         return True  # Not critical, return True
 
     try:
@@ -269,9 +267,7 @@ def verify_installation(logger: logging.Logger) -> bool:
         from nltk.corpus import stopwords
 
         english_stopwords = stopwords.words("english")
-        logger.info(
-            f"NLTK verification successful. Loaded {len(english_stopwords)} English stopwords"
-        )
+        logger.info(f"NLTK verification successful. Loaded {len(english_stopwords)} English stopwords")
     except Exception as e:
         logger.error(f"NLTK verification failed: {e}")
         success = False

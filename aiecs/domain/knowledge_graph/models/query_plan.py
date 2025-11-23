@@ -71,9 +71,7 @@ class QueryStep(BaseModel):
         description="Estimated computational cost (0-1, higher = more expensive)",
     )
 
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict, description="Additional metadata for this step"
-    )
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata for this step")
 
 
 class QueryPlan(BaseModel):
@@ -111,17 +109,13 @@ class QueryPlan(BaseModel):
 
     steps: List[QueryStep] = Field(..., description="List of query steps to execute in order")
 
-    total_estimated_cost: float = Field(
-        default=0.0, description="Total estimated cost of executing this plan"
-    )
+    total_estimated_cost: float = Field(default=0.0, description="Total estimated cost of executing this plan")
 
     optimized: bool = Field(default=False, description="Whether this plan has been optimized")
 
     explanation: str = Field(default="", description="Human-readable explanation of the plan")
 
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict, description="Additional metadata for this plan"
-    )
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata for this plan")
 
     def calculate_total_cost(self) -> float:
         """Calculate total estimated cost from all steps"""

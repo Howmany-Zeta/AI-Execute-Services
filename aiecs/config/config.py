@@ -61,9 +61,7 @@ class Settings(BaseSettings):
 
     # Vector store backend selection (Qdrant deprecated, using Vertex AI by
     # default)
-    vector_store_backend: str = Field(
-        "vertex", alias="VECTOR_STORE_BACKEND"
-    )  # "vertex" (qdrant deprecated)
+    vector_store_backend: str = Field("vertex", alias="VECTOR_STORE_BACKEND")  # "vertex" (qdrant deprecated)
 
     # Development/Server Configuration
     reload: bool = Field(default=False, alias="RELOAD")
@@ -235,7 +233,7 @@ class Settings(BaseSettings):
         description="Query optimization strategy: cost, latency, balanced",
     )
 
-    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8", extra="allow")
+    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8", extra="allow")  # type: ignore[typeddict-unknown-key]
 
     @property
     def database_config(self) -> dict:
@@ -256,10 +254,7 @@ class Settings(BaseSettings):
             if self.postgres_url:
                 return {"dsn": self.postgres_url}
             else:
-                logger.warning(
-                    "DB_CONNECTION_MODE is set to 'cloud' but POSTGRES_URL is not provided. "
-                    "Falling back to individual parameters (local mode)."
-                )
+                logger.warning("DB_CONNECTION_MODE is set to 'cloud' but POSTGRES_URL is not provided. " "Falling back to individual parameters (local mode).")
                 # Fall back to individual parameters
                 return {
                     "host": self.db_host,
@@ -355,9 +350,7 @@ class Settings(BaseSettings):
         """Validate knowledge graph storage backend selection"""
         valid_backends = ["inmemory", "sqlite", "postgresql"]
         if v not in valid_backends:
-            raise ValueError(
-                f"Invalid KG_STORAGE_BACKEND: {v}. " f"Must be one of: {', '.join(valid_backends)}"
-            )
+            raise ValueError(f"Invalid KG_STORAGE_BACKEND: {v}. " f"Must be one of: {', '.join(valid_backends)}")
         return v
 
     @field_validator("kg_sqlite_db_path")
@@ -377,10 +370,7 @@ class Settings(BaseSettings):
         if v < 1:
             raise ValueError("KG_MAX_TRAVERSAL_DEPTH must be at least 1")
         if v > 10:
-            logger.warning(
-                f"KG_MAX_TRAVERSAL_DEPTH is set to {v}, which may cause performance issues. "
-                "Consider using a value <= 10 for production use."
-            )
+            logger.warning(f"KG_MAX_TRAVERSAL_DEPTH is set to {v}, which may cause performance issues. " "Consider using a value <= 10 for production use.")
         return v
 
     @field_validator("kg_vector_dimension")
@@ -392,10 +382,7 @@ class Settings(BaseSettings):
         # Common dimensions: 128, 256, 384, 512, 768, 1024, 1536, 3072
         common_dims = [128, 256, 384, 512, 768, 1024, 1536, 3072]
         if v not in common_dims:
-            logger.warning(
-                f"KG_VECTOR_DIMENSION is set to {v}, which is not a common embedding dimension. "
-                f"Common dimensions are: {common_dims}"
-            )
+            logger.warning(f"KG_VECTOR_DIMENSION is set to {v}, which is not a common embedding dimension. " f"Common dimensions are: {common_dims}")
         return v
 
     def validate_llm_models_config(self) -> bool:
@@ -472,27 +459,19 @@ def validate_required_settings(operation_type: str = "full") -> bool:
 
     if operation_type in ["storage", "full"]:
         if settings.google_cloud_project_id and not settings.google_cloud_storage_bucket:
-            missing.append(
-                "GOOGLE_CLOUD_STORAGE_BUCKET (required when GOOGLE_CLOUD_PROJECT_ID is set)"
-            )
+            missing.append("GOOGLE_CLOUD_STORAGE_BUCKET (required when GOOGLE_CLOUD_PROJECT_ID is set)")
 
     if operation_type in ["knowledge_graph", "full"]:
         # Validate knowledge graph configuration
         if settings.kg_storage_backend == "postgresql":
             # Check if KG-specific or main DB config is available
             if not (settings.kg_postgres_url or settings.kg_db_host or settings.db_password):
-                missing.append(
-                    "Knowledge graph PostgreSQL configuration: "
-                    "Either set KG_POSTGRES_URL, KG_DB_* parameters, or main DB_PASSWORD"
-                )
+                missing.append("Knowledge graph PostgreSQL configuration: " "Either set KG_POSTGRES_URL, KG_DB_* parameters, or main DB_PASSWORD")
         elif settings.kg_storage_backend == "sqlite":
             if not settings.kg_sqlite_db_path:
                 missing.append("KG_SQLITE_DB_PATH (required for SQLite backend)")
 
     if missing:
-        raise ValueError(
-            f"Missing required settings for {operation_type} operation: {', '.join(missing)}\n"
-            "Please check your .env file or environment variables."
-        )
+        raise ValueError(f"Missing required settings for {operation_type} operation: {', '.join(missing)}\n" "Please check your .env file or environment variables.")
 
     return True

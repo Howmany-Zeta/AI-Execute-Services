@@ -153,9 +153,7 @@ class InferenceResult(BaseModel):
         description="List of relations that were inferred",
     )
 
-    inference_steps: List[InferenceStep] = Field(
-        default_factory=list, description="List of inference steps taken"
-    )
+    inference_steps: List[InferenceStep] = Field(default_factory=list, description="List of inference steps taken")
 
     total_steps: int = Field(default=0, ge=0, description="Total number of inference steps")
 

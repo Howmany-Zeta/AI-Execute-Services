@@ -130,9 +130,7 @@ class InMemoryCacheBackend(CacheBackend):
     async def delete_pattern(self, pattern: str) -> None:
         """Delete all keys matching pattern (simple prefix match)"""
         async with self._lock:
-            keys_to_delete = [
-                k for k in self.cache.keys() if k.startswith(pattern.replace("*", ""))
-            ]
+            keys_to_delete = [k for k in self.cache.keys() if k.startswith(pattern.replace("*", ""))]
             for key in keys_to_delete:
                 value, _ = self.cache[key]
                 del self.cache[key]
@@ -164,9 +162,7 @@ class RedisCacheBackend(CacheBackend):
         try:
             import redis.asyncio as aioredis
 
-            self.redis = await aioredis.from_url(
-                self.redis_url, encoding="utf-8", decode_responses=True
-            )
+            self.redis = await aioredis.from_url(self.redis_url, encoding="utf-8", decode_responses=True)
             # Test connection
             await self.redis.ping()
             self._initialized = True
@@ -392,7 +388,7 @@ class GraphStoreCache:
             await self.backend.clear()
 
 
-def cached_method(cache_key_func: Callable[[Any, ...], str], ttl: Optional[int] = None):
+def cached_method(cache_key_func: Callable[..., str], ttl: Optional[int] = None):
     """
     Decorator for caching graph store methods
 
@@ -420,9 +416,7 @@ def cached_method(cache_key_func: Callable[[Any, ...], str], ttl: Optional[int] 
             cache_key = cache_key_func(self, *args, **kwargs)
 
             # Try to get from cache or fetch
-            return await self.cache.get_or_set(
-                cache_key, lambda: func(self, *args, **kwargs), ttl=ttl
-            )
+            return await self.cache.get_or_set(cache_key, lambda: func(self, *args, **kwargs), ttl=ttl)
 
         return wrapper
 

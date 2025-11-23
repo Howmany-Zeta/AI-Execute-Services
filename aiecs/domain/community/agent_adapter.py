@@ -60,9 +60,7 @@ class AgentAdapter(ABC):
         """
 
     @abstractmethod
-    async def execute(
-        self, task: str, context: Optional[Dict[str, Any]] = None, **kwargs
-    ) -> Dict[str, Any]:
+    async def execute(self, task: str, context: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
         """
         Execute a task with the agent.
 
@@ -169,9 +167,7 @@ class StandardLLMAdapter(AgentAdapter):
             logger.error(f"Failed to initialize LLM adapter: {e}")
             return False
 
-    async def execute(
-        self, task: str, context: Optional[Dict[str, Any]] = None, **kwargs
-    ) -> Dict[str, Any]:
+    async def execute(self, task: str, context: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
         """Execute a task with the LLM."""
         if not self._initialized:
             return {"status": "error", "error": "Adapter not initialized"}
@@ -182,9 +178,7 @@ class StandardLLMAdapter(AgentAdapter):
 
             # Call LLM client
             if hasattr(self.llm_client, "generate"):
-                response = await self.llm_client.generate(
-                    prompt=prompt, model=self.model_name, **kwargs
-                )
+                response = await self.llm_client.generate(prompt=prompt, model=self.model_name, **kwargs)
             elif hasattr(self.llm_client, "complete"):
                 response = await self.llm_client.complete(prompt, **kwargs)
             else:
@@ -291,9 +285,7 @@ class CustomAgentAdapter(AgentAdapter):
             logger.error(f"Failed to initialize custom agent: {e}")
             return False
 
-    async def execute(
-        self, task: str, context: Optional[Dict[str, Any]] = None, **kwargs
-    ) -> Dict[str, Any]:
+    async def execute(self, task: str, context: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
         """Execute a task with the custom agent."""
         if not self._initialized:
             return {"status": "error", "error": "Adapter not initialized"}

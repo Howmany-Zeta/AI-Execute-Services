@@ -105,9 +105,7 @@ class MessageBuilder:
             self.add_system(f"{prefix}\n{context_str}")
         return self
 
-    def add_conversation_history(
-        self, history: List[Dict[str, str]], max_messages: Optional[int] = None
-    ) -> "MessageBuilder":
+    def add_conversation_history(self, history: List[Dict[str, str]], max_messages: Optional[int] = None) -> "MessageBuilder":
         """
         Add conversation history.
 

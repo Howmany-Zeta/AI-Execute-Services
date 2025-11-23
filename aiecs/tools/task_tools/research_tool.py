@@ -42,7 +42,7 @@ class ResearchTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the research tool"""
 
-        model_config = ConfigDict(env_prefix="RESEARCH_TOOL_")
+        model_config = ConfigDict(env_prefix="RESEARCH_TOOL_")  # type: ignore[typeddict-unknown-key]
 
         max_workers: int = Field(
             default=min(32, (os.cpu_count() or 4) * 2),
@@ -95,9 +95,7 @@ class ResearchTool(BaseTool):
         """
         if self._spacy_nlp is None:
             if self.config.spacy_model not in self.config.allowed_spacy_models:
-                raise ResearchToolError(
-                    f"Invalid spaCy model '{self.config.spacy_model}', expected {self.config.allowed_spacy_models}"
-                )
+                raise ResearchToolError(f"Invalid spaCy model '{self.config.spacy_model}', expected {self.config.allowed_spacy_models}")
             self._spacy_nlp = spacy.load(self.config.spacy_model, disable=["textcat"])
         return self._spacy_nlp
 
@@ -125,9 +123,7 @@ class ResearchTool(BaseTool):
         except Exception as e:
             raise FileOperationError(f"Failed to process mill_agreement: {str(e)}")
 
-    def mill_difference(
-        self, positive_case: Dict[str, Any], negative_case: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def mill_difference(self, positive_case: Dict[str, Any], negative_case: Dict[str, Any]) -> Dict[str, Any]:
         """
         Find attribute(s) present in positive case but absent in negative case using Mill's Method of Difference.
 
@@ -183,9 +179,7 @@ class ResearchTool(BaseTool):
         except Exception as e:
             raise FileOperationError(f"Failed to process mill_joint: {str(e)}")
 
-    def mill_residues(
-        self, cases: List[Dict[str, Any]], known_causes: Dict[str, List[str]]
-    ) -> Dict[str, Any]:
+    def mill_residues(self, cases: List[Dict[str, Any]], known_causes: Dict[str, List[str]]) -> Dict[str, Any]:
         """
         Identify residual causes after accounting for known causes using Mill's Method of Residues.
 
@@ -214,9 +208,7 @@ class ResearchTool(BaseTool):
         except Exception as e:
             raise FileOperationError(f"Failed to process mill_residues: {str(e)}")
 
-    def mill_concomitant(
-        self, cases: List[Dict[str, Any]], factor: str, effect: str
-    ) -> Dict[str, Any]:
+    def mill_concomitant(self, cases: List[Dict[str, Any]], factor: str, effect: str) -> Dict[str, Any]:
         """
         Analyze correlation between factor and effect variations using Mill's Method of Concomitant Variations.
 
@@ -321,13 +313,9 @@ class ResearchTool(BaseTool):
             premise_predicates = set()
             for doc in premises_docs:
                 premise_entities.update(ent.text.lower() for ent in doc.ents)
-                premise_predicates.update(
-                    token.lemma_.lower() for token in doc if token.pos_ == "VERB"
-                )
+                premise_predicates.update(token.lemma_.lower() for token in doc if token.pos_ == "VERB")
             conclusion_entities = set(ent.text.lower() for ent in conclusion_doc.ents)
-            conclusion_predicates = set(
-                token.lemma_.lower() for token in conclusion_doc if token.pos_ == "VERB"
-            )
+            conclusion_predicates = set(token.lemma_.lower() for token in conclusion_doc if token.pos_ == "VERB")
             entities_valid = conclusion_entities.issubset(premise_entities)
             predicates_valid = conclusion_predicates.issubset(premise_predicates)
             valid = entities_valid and predicates_valid
@@ -363,23 +351,13 @@ class ResearchTool(BaseTool):
             sentences = [sent.text for sent in doc.sents]
             if not sentences:
                 return ""
-            keywords = [
-                token.lemma_.lower()
-                for token in doc
-                if token.pos_ in ("NOUN", "VERB", "ADJ") and not token.is_stop
-            ]
+            keywords = [token.lemma_.lower() for token in doc if token.pos_ in ("NOUN", "VERB", "ADJ") and not token.is_stop]
             keyword_freq = Counter(keywords)
             scores = []
             for sent in sentences:
                 sent_doc = nlp(sent)
-                sent_keywords = [
-                    token.lemma_.lower()
-                    for token in sent_doc
-                    if token.pos_ in ("NOUN", "VERB", "ADJ")
-                ]
-                score = sum(keyword_freq.get(k, 0) for k in sent_keywords) / (
-                    len(sent_keywords) + 1
-                )
+                sent_keywords = [token.lemma_.lower() for token in sent_doc if token.pos_ in ("NOUN", "VERB", "ADJ")]
+                score = sum(keyword_freq.get(k, 0) for k in sent_keywords) / (len(sent_keywords) + 1)
                 scores.append((sent, score))
             scores.sort(key=lambda x: x[1], reverse=True)
             selected = [sent for sent, _ in scores[: max(1, max_length // 50)]]

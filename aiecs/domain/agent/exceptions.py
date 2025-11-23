@@ -42,11 +42,7 @@ class InvalidStateTransitionError(AgentException):
         attempted_state: str,
         message: Optional[str] = None,
     ):
-        msg = (
-            message
-            or f"Invalid state transition for agent '{agent_id}': "
-            f"cannot transition from '{current_state}' to '{attempted_state}'"
-        )
+        msg = message or f"Invalid state transition for agent '{agent_id}': " f"cannot transition from '{current_state}' to '{attempted_state}'"
         super().__init__(msg, agent_id)
         self.current_state = current_state
         self.attempted_state = attempted_state

@@ -13,9 +13,7 @@ from urllib.parse import urlparse, urlunparse
 class ResultDeduplicator:
     """Removes duplicate and similar search results"""
 
-    def deduplicate_results(
-        self, results: List[Dict[str, Any]], similarity_threshold: float = 0.85
-    ) -> List[Dict[str, Any]]:
+    def deduplicate_results(self, results: List[Dict[str, Any]], similarity_threshold: float = 0.85) -> List[Dict[str, Any]]:
         """
         Remove duplicate and highly similar results.
 
@@ -31,7 +29,7 @@ class ResultDeduplicator:
 
         unique_results = []
         seen_urls = set()
-        seen_content_hashes = set()
+        seen_content_hashes: set[str] = set()
 
         for result in results:
             url = result.get("link", "")
@@ -42,9 +40,7 @@ class ResultDeduplicator:
                 continue
 
             # 2. Content similarity deduplication
-            content_hash = self._calculate_content_hash(
-                result.get("title", ""), result.get("snippet", "")
-            )
+            content_hash = self._calculate_content_hash(result.get("title", ""), result.get("snippet", ""))
 
             # Check for high similarity with existing results
             is_duplicate = False

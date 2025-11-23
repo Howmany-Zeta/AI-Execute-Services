@@ -9,7 +9,7 @@ Provides automatic provider failover:
 """
 
 import logging
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, cast
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ class FallbackStrategy:
                 - attempts: list of attempt information
                 - fallback_used: bool
         """
-        result = {
+        result: Dict[str, Any] = {
             "success": False,
             "data": None,
             "attempts": [],
@@ -99,7 +99,8 @@ class FallbackStrategy:
 
             result["success"] = True
             result["data"] = data
-            result["attempts"].append(
+            attempts = cast(List[Dict[str, Any]], result["attempts"])
+            attempts.append(
                 {
                     "provider": primary_provider,
                     "operation": operation,
@@ -110,10 +111,9 @@ class FallbackStrategy:
             return result
 
         except Exception as primary_error:
-            logger.warning(
-                f"Primary provider {primary_provider}.{operation} failed: {primary_error}"
-            )
-            result["attempts"].append(
+            logger.warning(f"Primary provider {primary_provider}.{operation} failed: {primary_error}")
+            attempts = cast(List[Dict[str, Any]], result["attempts"])
+            attempts.append(
                 {
                     "provider": primary_provider,
                     "operation": operation,
@@ -136,15 +136,10 @@ class FallbackStrategy:
                 continue
 
             # Find equivalent operation
-            fallback_operations = self._get_fallback_operations(
-                primary_provider, operation, fallback_provider
-            )
+            fallback_operations = self._get_fallback_operations(primary_provider, operation, fallback_provider)
 
             if not fallback_operations:
-                logger.debug(
-                    f"No operation mapping from {primary_provider}.{operation} "
-                    f"to {fallback_provider}"
-                )
+                logger.debug(f"No operation mapping from {primary_provider}.{operation} " f"to {fallback_provider}")
                 continue
 
             # Try each mapped operation
@@ -153,9 +148,7 @@ class FallbackStrategy:
                     logger.info(f"Attempting fallback: {fallback_provider}.{fallback_op}")
 
                     # Convert parameters
-                    converted_params = self._convert_parameters(
-                        primary_provider, fallback_provider, params
-                    )
+                    converted_params = self._convert_parameters(primary_provider, fallback_provider, params)
 
                     # Execute fallback
                     data = provider_executor(fallback_provider, fallback_op, converted_params)
@@ -164,7 +157,8 @@ class FallbackStrategy:
                     result["success"] = True
                     result["data"] = data
                     result["fallback_used"] = True
-                    result["attempts"].append(
+                    attempts = cast(List[Dict[str, Any]], result["attempts"])
+                    attempts.append(
                         {
                             "provider": fallback_provider,
                             "operation": fallback_op,
@@ -174,10 +168,7 @@ class FallbackStrategy:
 
                     # Add fallback warning to metadata
                     if isinstance(data, dict) and "metadata" in data:
-                        data["metadata"]["fallback_warning"] = (
-                            f"Primary provider {primary_provider} failed, "
-                            f"using fallback {fallback_provider}"
-                        )
+                        data["metadata"]["fallback_warning"] = f"Primary provider {primary_provider} failed, " f"using fallback {fallback_provider}"
                         data["metadata"]["original_provider"] = primary_provider
                         data["metadata"]["original_operation"] = operation
 
@@ -189,10 +180,9 @@ class FallbackStrategy:
                     return result
 
                 except Exception as fallback_error:
-                    logger.warning(
-                        f"Fallback {fallback_provider}.{fallback_op} failed: " f"{fallback_error}"
-                    )
-                    result["attempts"].append(
+                    logger.warning(f"Fallback {fallback_provider}.{fallback_op} failed: " f"{fallback_error}")
+                    attempts = cast(List[Dict[str, Any]], result["attempts"])
+                    attempts.append(
                         {
                             "provider": fallback_provider,
                             "operation": fallback_op,
@@ -205,16 +195,11 @@ class FallbackStrategy:
                     self._update_stats(fallback_provider, fallback_op, success=False)
 
         # All attempts failed
-        logger.error(
-            f"All providers failed for operation {operation}. "
-            f"Attempts: {len(result['attempts'])}"
-        )
+        logger.error(f"All providers failed for operation {operation}. " f"Attempts: {len(result['attempts'])}")
 
         return result
 
-    def _get_fallback_operations(
-        self, primary_provider: str, operation: str, fallback_provider: str
-    ) -> List[str]:
+    def _get_fallback_operations(self, primary_provider: str, operation: str, fallback_provider: str) -> List[str]:
         """
         Get equivalent operations in fallback provider.
 

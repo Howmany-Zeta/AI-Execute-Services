@@ -4,7 +4,7 @@ Path Scoring and Ranking
 Provides utilities for scoring and ranking graph paths based on various criteria.
 """
 
-from typing import List, Callable, Optional
+from typing import List, Callable, Optional, Dict, Any, Tuple
 from aiecs.domain.knowledge_graph.models.path import Path
 
 
@@ -208,7 +208,7 @@ class PathScorer:
         weights = [w / total_weight for w in weights]
 
         # Build path ID to combined score mapping
-        path_scores = {}
+        path_scores: Dict[Tuple[str, ...], Dict[str, Any]] = {}
 
         for paths, weight in zip(paths_lists, weights):
             for path in paths:
@@ -220,7 +220,9 @@ class PathScorer:
 
                 # Add weighted score
                 if path.score is not None:
-                    path_scores[path_key]["score"] += path.score * weight
+                    score = path_scores[path_key]["score"]
+                    if isinstance(score, (int, float)):
+                        path_scores[path_key]["score"] = score + path.score * weight
 
         # Create scored paths
         combined_paths = []

@@ -38,20 +38,12 @@ class LLMResponse:
         """Ensure consistency of token data"""
         # If there are detailed token information but no total, calculate the
         # total
-        if (
-            self.prompt_tokens is not None
-            and self.completion_tokens is not None
-            and self.tokens_used is None
-        ):
+        if self.prompt_tokens is not None and self.completion_tokens is not None and self.tokens_used is None:
             self.tokens_used = self.prompt_tokens + self.completion_tokens
 
         # If only total is available but no detailed information, try to
         # estimate (cannot accurately allocate in this case)
-        elif (
-            self.tokens_used is not None
-            and self.prompt_tokens is None
-            and self.completion_tokens is None
-        ):
+        elif self.tokens_used is not None and self.prompt_tokens is None and self.completion_tokens is None:
             # In this case we cannot accurately allocate, keep as is
             pass
 
@@ -129,9 +121,7 @@ class BaseLLMClient(ABC):
             return (input_tokens * costs["input"] + output_tokens * costs["output"]) / 1000
         return 0.0
 
-    def _estimate_cost_from_config(
-        self, model_name: str, input_tokens: int, output_tokens: int
-    ) -> float:
+    def _estimate_cost_from_config(self, model_name: str, input_tokens: int, output_tokens: int) -> float:
         """
         Estimate the cost using configuration-based pricing.
 
@@ -152,10 +142,7 @@ class BaseLLMClient(ABC):
                 output_cost = (output_tokens * model_config.costs.output) / 1000
                 return input_cost + output_cost
             else:
-                self.logger.warning(
-                    f"No cost configuration found for model {model_name} "
-                    f"in provider {self.provider_name}"
-                )
+                self.logger.warning(f"No cost configuration found for model {model_name} " f"in provider {self.provider_name}")
                 return 0.0
         except Exception as e:
             self.logger.warning(f"Failed to estimate cost from config: {e}")

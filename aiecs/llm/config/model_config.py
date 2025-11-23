@@ -55,12 +55,8 @@ class ModelConfig(BaseModel):
     name: str = Field(description="Model identifier")
     display_name: Optional[str] = Field(default=None, description="Human-readable model name")
     costs: ModelCostConfig = Field(description="Token cost configuration")
-    capabilities: ModelCapabilities = Field(
-        default_factory=ModelCapabilities, description="Model capabilities"
-    )
-    default_params: ModelDefaultParams = Field(
-        default_factory=ModelDefaultParams, description="Default parameters"
-    )
+    capabilities: ModelCapabilities = Field(default_factory=ModelCapabilities, description="Model capabilities")
+    default_params: ModelDefaultParams = Field(default_factory=ModelDefaultParams, description="Default parameters")
     description: Optional[str] = Field(default=None, description="Model description")
 
     def __init__(self, **data):
@@ -116,15 +112,11 @@ class ProviderConfig(BaseModel):
 class LLMModelsConfig(BaseModel):
     """Root configuration containing all providers"""
 
-    providers: Dict[str, ProviderConfig] = Field(
-        description="Provider configurations keyed by provider name"
-    )
+    providers: Dict[str, ProviderConfig] = Field(description="Provider configurations keyed by provider name")
 
     @field_validator("providers")
     @classmethod
-    def validate_providers_not_empty(
-        cls, v: Dict[str, ProviderConfig]
-    ) -> Dict[str, ProviderConfig]:
+    def validate_providers_not_empty(cls, v: Dict[str, ProviderConfig]) -> Dict[str, ProviderConfig]:
         """Ensure at least one provider is configured"""
         if not v:
             raise ValueError("At least one provider must be configured")

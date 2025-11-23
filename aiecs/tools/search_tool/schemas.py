@@ -45,9 +45,7 @@ class SearchWebSchema(BaseModel):
         default=None,
         description="File type filter (e.g., 'pdf', 'doc', 'xls')",
     )
-    exclude_terms: Optional[List[str]] = Field(
-        default=None, description="Terms to exclude from search results"
-    )
+    exclude_terms: Optional[List[str]] = Field(default=None, description="Terms to exclude from search results")
     auto_enhance: bool = Field(
         default=True,
         description="Whether to automatically enhance query based on detected intent",

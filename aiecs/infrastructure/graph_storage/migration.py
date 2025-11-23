@@ -60,9 +60,7 @@ class GraphStorageMigrator:
         Returns:
             Migration statistics dictionary
         """
-        logger.info(
-            f"Starting migration from {type(self.source).__name__} to {type(self.target).__name__}"
-        )
+        logger.info(f"Starting migration from {type(self.source).__name__} to {type(self.target).__name__}")
 
         stats = {
             "entities_migrated": 0,
@@ -101,9 +99,7 @@ class GraphStorageMigrator:
 
             stats["duration_seconds"] = time.time() - start_time
             logger.info(f"Migration completed in {stats['duration_seconds']:.2f}s")
-            logger.info(
-                f"Migrated {stats['entities_migrated']} entities and {stats['relations_migrated']} relations"
-            )
+            logger.info(f"Migrated {stats['entities_migrated']} entities and {stats['relations_migrated']} relations")
 
         except Exception as e:
             logger.error(f"Migration failed: {e}")
@@ -123,11 +119,7 @@ class GraphStorageMigrator:
             return 0
 
         # Use tqdm for progress if requested
-        iterator = (
-            tqdm(entities, desc="Entities", disable=not show_progress)
-            if show_progress
-            else entities
-        )
+        iterator = tqdm(entities, desc="Entities", disable=not show_progress) if show_progress else entities
 
         migrated = 0
         errors = []
@@ -185,11 +177,7 @@ class GraphStorageMigrator:
             logger.warning("No relations to migrate")
             return 0
 
-        iterator = (
-            tqdm(relations, desc="Relations", disable=not show_progress)
-            if show_progress
-            else relations
-        )
+        iterator = tqdm(relations, desc="Relations", disable=not show_progress) if show_progress else relations
 
         migrated = 0
         errors = []
@@ -226,9 +214,7 @@ class GraphStorageMigrator:
 
         if isinstance(store, SQLiteGraphStore):
             # SQLite direct query
-            cursor = await store.conn.execute(
-                "SELECT id, relation_type, source_id, target_id, properties, weight FROM relations"
-            )
+            cursor = await store.conn.execute("SELECT id, relation_type, source_id, target_id, properties, weight FROM relations")
             rows = await cursor.fetchall()
 
             for row in rows:
@@ -262,9 +248,7 @@ class GraphStorageMigrator:
                             relation_type=row["relation_type"],
                             source_id=row["source_id"],
                             target_id=row["target_id"],
-                            properties=(
-                                row["properties"] if isinstance(row["properties"], dict) else {}
-                            ),
+                            properties=(row["properties"] if isinstance(row["properties"], dict) else {}),
                             weight=(float(row["weight"]) if row["weight"] else 1.0),
                         )
                     )
@@ -400,12 +384,8 @@ if __name__ == "__main__":
                 print("✅ Verification: PASSED")
             else:
                 print("❌ Verification: FAILED")
-                print(
-                    f"   Source entities: {ver['source_entities']}, Target: {ver['target_entities']}"
-                )
-                print(
-                    f"   Source relations: {ver['source_relations']}, Target: {ver['target_relations']}"
-                )
+                print(f"   Source entities: {ver['source_entities']}, Target: {ver['target_entities']}")
+                print(f"   Source relations: {ver['source_relations']}, Target: {ver['target_relations']}")
 
         if stats["errors"]:
             print(f"\n⚠️  Errors encountered: {len(stats['errors'])}")

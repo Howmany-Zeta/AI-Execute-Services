@@ -280,9 +280,7 @@ class Runnable(ABC, Generic[ConfigT, ResultT]):
             Exception: If execution fails
         """
         if self._state != RunnableState.READY:
-            raise RuntimeError(
-                f"Cannot execute component in state {self._state.value}. " f"Call setup() first."
-            )
+            raise RuntimeError(f"Cannot execute component in state {self._state.value}. " f"Call setup() first.")
 
         try:
             self._state = RunnableState.RUNNING
@@ -292,25 +290,21 @@ class Runnable(ABC, Generic[ConfigT, ResultT]):
             result = await self._execute(**kwargs)
 
             self._metrics.end_time = datetime.utcnow()
-            self._metrics.duration_seconds = (
-                self._metrics.end_time - self._metrics.start_time
-            ).total_seconds()
+            self._metrics.duration_seconds = (self._metrics.end_time - self._metrics.start_time).total_seconds()
             self._metrics.success = True
 
             # Reset to READY for potential re-execution
             self._state = RunnableState.READY
-            logger.debug(
-                f"{self.__class__.__name__} execution completed in "
-                f"{self._metrics.duration_seconds:.2f}s"
-            )
+            logger.debug(f"{self.__class__.__name__} execution completed in " f"{self._metrics.duration_seconds:.2f}s")
 
             return result
 
         except Exception as e:
             self._metrics.end_time = datetime.utcnow()
-            self._metrics.duration_seconds = (
-                self._metrics.end_time - self._metrics.start_time
-            ).total_seconds()
+            if self._metrics.start_time is not None:
+                self._metrics.duration_seconds = (self._metrics.end_time - self._metrics.start_time).total_seconds()
+            else:
+                self._metrics.duration_seconds = 0.0
             self._metrics.error = str(e)
             self._state = RunnableState.FAILED
             logger.error(f"{self.__class__.__name__} execution failed: {e}")
@@ -364,9 +358,7 @@ class Runnable(ABC, Generic[ConfigT, ResultT]):
             try:
                 # Execute with timeout if configured
                 if self._config.timeout:
-                    result = await asyncio.wait_for(
-                        self.execute(**kwargs), timeout=self._config.timeout
-                    )
+                    result = await asyncio.wait_for(self.execute(**kwargs), timeout=self._config.timeout)
                 else:
                     result = await self.execute(**kwargs)
 
@@ -393,16 +385,11 @@ class Runnable(ABC, Generic[ConfigT, ResultT]):
 
                 # Don't retry if this was the last attempt
                 if attempt >= self._config.max_retries:
-                    logger.error(
-                        f"{self.__class__.__name__} failed after " f"{attempt + 1} attempts: {e}"
-                    )
+                    logger.error(f"{self.__class__.__name__} failed after " f"{attempt + 1} attempts: {e}")
                     break
 
                 # Log retry attempt
-                logger.warning(
-                    f"{self.__class__.__name__} attempt {attempt + 1} failed: {e}. "
-                    f"Retrying in {retry_delay:.1f}s..."
-                )
+                logger.warning(f"{self.__class__.__name__} attempt {attempt + 1} failed: {e}. " f"Retrying in {retry_delay:.1f}s...")
 
                 # Wait before retry
                 await asyncio.sleep(retry_delay)
@@ -472,9 +459,7 @@ class Runnable(ABC, Generic[ConfigT, ResultT]):
             Dictionary with execution metrics
         """
         return {
-            "start_time": (
-                self._metrics.start_time.isoformat() if self._metrics.start_time else None
-            ),
+            "start_time": (self._metrics.start_time.isoformat() if self._metrics.start_time else None),
             "end_time": (self._metrics.end_time.isoformat() if self._metrics.end_time else None),
             "duration_seconds": self._metrics.duration_seconds,
             "retry_count": self._metrics.retry_count,

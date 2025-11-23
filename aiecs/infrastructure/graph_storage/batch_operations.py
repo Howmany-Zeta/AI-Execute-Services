@@ -100,18 +100,12 @@ class BatchOperationsMixin:
         for entity in entities:
             # Serialize data
             properties_json = json.dumps(entity.properties)
-            embedding_bytes = (
-                self._serialize_embedding(entity.embedding)
-                if hasattr(entity, "embedding") and entity.embedding
-                else None
-            )
+            embedding_bytes = self._serialize_embedding(entity.embedding) if hasattr(entity, "embedding") and entity.embedding else None
 
             # Write tab-separated values
             # Format: id \t entity_type \t properties \t embedding
             embedding_hex = embedding_bytes.hex() if embedding_bytes else "\\N"
-            copy_data.write(
-                f"{entity.id}\t{entity.entity_type}\t{properties_json}\t{embedding_hex}\n"
-            )
+            copy_data.write(f"{entity.id}\t{entity.entity_type}\t{properties_json}\t{embedding_hex}\n")
 
         copy_data.seek(0)
 
@@ -157,16 +151,10 @@ class BatchOperationsMixin:
 
         for i, entity in enumerate(entities):
             base_idx = i * 4
-            values_placeholders.append(
-                f"(${base_idx+1}, ${base_idx+2}, ${base_idx+3}::jsonb, ${base_idx+4})"
-            )
+            values_placeholders.append(f"(${base_idx+1}, ${base_idx+2}, ${base_idx+3}::jsonb, ${base_idx+4})")
 
             properties_json = json.dumps(entity.properties)
-            embedding_blob = (
-                self._serialize_embedding(entity.embedding)
-                if hasattr(entity, "embedding") and entity.embedding
-                else None
-            )
+            embedding_blob = self._serialize_embedding(entity.embedding) if hasattr(entity, "embedding") and entity.embedding else None
 
             values.extend(
                 [
@@ -264,10 +252,7 @@ class BatchOperationsMixin:
             # Write tab-separated values
             # Format: id \t relation_type \t source_id \t target_id \t
             # properties \t weight
-            copy_data.write(
-                f"{relation.id}\t{relation.relation_type}\t{relation.source_id}\t"
-                f"{relation.target_id}\t{properties_json}\t{relation.weight}\n"
-            )
+            copy_data.write(f"{relation.id}\t{relation.relation_type}\t{relation.source_id}\t" f"{relation.target_id}\t{properties_json}\t{relation.weight}\n")
 
         copy_data.seek(0)
 
@@ -320,9 +305,7 @@ class BatchOperationsMixin:
 
         for i, relation in enumerate(relations):
             base_idx = i * 6
-            values_placeholders.append(
-                f"(${base_idx+1}, ${base_idx+2}, ${base_idx+3}, ${base_idx+4}, ${base_idx+5}::jsonb, ${base_idx+6})"
-            )
+            values_placeholders.append(f"(${base_idx+1}, ${base_idx+2}, ${base_idx+3}, ${base_idx+4}, ${base_idx+5}::jsonb, ${base_idx+6})")
 
             properties_json = json.dumps(relation.properties)
 

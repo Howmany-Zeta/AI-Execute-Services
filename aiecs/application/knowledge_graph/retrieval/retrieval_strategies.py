@@ -107,9 +107,7 @@ class PersonalizedPageRank:
 
                 # Get neighbors (cache for efficiency)
                 if entity_id not in adjacency:
-                    neighbors = await self.graph_store.get_neighbors(
-                        entity_id, direction="outgoing"
-                    )
+                    neighbors = await self.graph_store.get_neighbors(entity_id, direction="outgoing")
                     adjacency[entity_id] = [n.id for n in neighbors]
 
                 neighbor_ids = adjacency[entity_id]
@@ -239,9 +237,7 @@ class MultiHopRetrieval:
 
                 # Get neighbors for next level
                 if hop < max_hops:
-                    neighbors = await self.graph_store.get_neighbors(
-                        entity_id, relation_type=None, direction="outgoing"
-                    )
+                    neighbors = await self.graph_store.get_neighbors(entity_id, relation_type=None, direction="outgoing")
 
                     for neighbor in neighbors:
                         if neighbor.id not in visited:

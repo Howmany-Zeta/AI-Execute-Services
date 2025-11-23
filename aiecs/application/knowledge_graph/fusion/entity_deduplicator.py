@@ -175,12 +175,7 @@ class EntityDeduplicator:
 
     def _get_entity_name(self, entity: Entity) -> str:
         """Extract entity name from properties"""
-        return (
-            entity.properties.get("name")
-            or entity.properties.get("title")
-            or entity.properties.get("text")
-            or ""
-        )
+        return entity.properties.get("name") or entity.properties.get("title") or entity.properties.get("text") or ""
 
     def _string_similarity(self, str1: str, str2: str) -> float:
         """

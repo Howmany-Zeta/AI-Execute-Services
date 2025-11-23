@@ -59,16 +59,12 @@ class BaseFileSchema(BaseModel):
         abs_path = os.path.abspath(os.path.normpath(v))
         ext = os.path.splitext(abs_path)[1].lower()
         if ext not in _DEFAULT_ALLOWED_EXTENSIONS:
-            raise SecurityError(
-                f"Extension '{ext}' not allowed, expected {_DEFAULT_ALLOWED_EXTENSIONS}"
-            )
+            raise SecurityError(f"Extension '{ext}' not allowed, expected {_DEFAULT_ALLOWED_EXTENSIONS}")
         if not os.path.isfile(abs_path):
             raise FileOperationError(f"File not found: {abs_path}")
         size_mb = os.path.getsize(abs_path) / (1024 * 1024)
         if size_mb > _DEFAULT_MAX_FILE_SIZE_MB:
-            raise FileOperationError(
-                f"File too large: {size_mb:.1f}MB, max {_DEFAULT_MAX_FILE_SIZE_MB}MB"
-            )
+            raise FileOperationError(f"File too large: {size_mb:.1f}MB, max {_DEFAULT_MAX_FILE_SIZE_MB}MB")
         return abs_path
 
 
@@ -105,9 +101,7 @@ class ResizeSchema(BaseFileSchema):
         abs_path = os.path.abspath(os.path.normpath(v))
         ext = os.path.splitext(abs_path)[1].lower()
         if ext not in _DEFAULT_ALLOWED_EXTENSIONS:
-            raise SecurityError(
-                f"Output extension '{ext}' not allowed, expected {_DEFAULT_ALLOWED_EXTENSIONS}"
-            )
+            raise SecurityError(f"Output extension '{ext}' not allowed, expected {_DEFAULT_ALLOWED_EXTENSIONS}")
         if os.path.exists(abs_path):
             raise FileOperationError(f"Output file already exists: {abs_path}")
         return abs_path
@@ -135,9 +129,7 @@ class FilterSchema(BaseFileSchema):
         abs_path = os.path.abspath(os.path.normpath(v))
         ext = os.path.splitext(abs_path)[1].lower()
         if ext not in _DEFAULT_ALLOWED_EXTENSIONS:
-            raise SecurityError(
-                f"Output extension '{ext}' not allowed, expected {_DEFAULT_ALLOWED_EXTENSIONS}"
-            )
+            raise SecurityError(f"Output extension '{ext}' not allowed, expected {_DEFAULT_ALLOWED_EXTENSIONS}")
         if os.path.exists(abs_path):
             raise FileOperationError(f"Output file already exists: {abs_path}")
         return abs_path
@@ -208,16 +200,14 @@ class ImageTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the image tool"""
 
-        model_config = ConfigDict(env_prefix="IMAGE_TOOL_")
+        model_config = ConfigDict(env_prefix="IMAGE_TOOL_")  # type: ignore[typeddict-unknown-key]
 
         max_file_size_mb: int = Field(default=50, description="Maximum file size in megabytes")
         allowed_extensions: List[str] = Field(
             default=[".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".gif"],
             description="Allowed image file extensions",
         )
-        tesseract_pool_size: int = Field(
-            default=2, description="Number of Tesseract processes for OCR"
-        )
+        tesseract_pool_size: int = Field(default=2, description="Number of Tesseract processes for OCR")
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
@@ -311,9 +301,7 @@ class ImageTool(BaseTool):
 
         proc = self._tesseract_manager.get_process()
         if not proc:
-            raise FileOperationError(
-                f"ocr: No Tesseract processes available (lang: {lang or 'eng'})"
-            )
+            raise FileOperationError(f"ocr: No Tesseract processes available (lang: {lang or 'eng'})")
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp_file:
             temp_path = temp_file.name
         try:
@@ -321,14 +309,10 @@ class ImageTool(BaseTool):
             img.save(temp_path)
             stdout, stderr = proc.communicate(input=temp_path, timeout=30)
             if proc.returncode != 0:
-                raise FileOperationError(
-                    f"ocr: Tesseract failed for '{file_path}' (lang: {lang or 'eng'}): {stderr}"
-                )
+                raise FileOperationError(f"ocr: Tesseract failed for '{file_path}' (lang: {lang or 'eng'}): {stderr}")
             return stdout.strip()
         except Exception as e:
-            raise FileOperationError(
-                f"ocr: Failed to process '{file_path}' (lang: {lang or 'eng'}): {e}"
-            )
+            raise FileOperationError(f"ocr: Failed to process '{file_path}' (lang: {lang or 'eng'}): {e}")
         finally:
             self._tesseract_manager.return_process(proc)
             if os.path.exists(temp_path):
@@ -402,9 +386,7 @@ class ImageTool(BaseTool):
                 "output_path": validated_input.output_path,
             }
         except Exception as e:
-            raise FileOperationError(
-                f"resize: Failed to process '{file_path}' (output_path: {output_path}): {e}"
-            )
+            raise FileOperationError(f"resize: Failed to process '{file_path}' (output_path: {output_path}): {e}")
 
     def filter(self, file_path: str, output_path: str, filter_type: str) -> Dict[str, Any]:
         """
@@ -442,6 +424,4 @@ class ImageTool(BaseTool):
                 "output_path": validated_input.output_path,
             }
         except Exception as e:
-            raise FileOperationError(
-                f"filter: Failed to process '{file_path}' (output_path: {output_path}, filter_type: {filter_type}): {e}"
-            )
+            raise FileOperationError(f"filter: Failed to process '{file_path}' (output_path: {output_path}, filter_type: {filter_type}): {e}")

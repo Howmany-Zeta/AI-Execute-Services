@@ -88,10 +88,7 @@ class ExecutionUtils:
             return None
         with self._cache_lock:
             if cache_key in self._cache:
-                if (
-                    cache_key in self._cache_ttl_dict
-                    and time.time() > self._cache_ttl_dict[cache_key]
-                ):
+                if cache_key in self._cache_ttl_dict and time.time() > self._cache_ttl_dict[cache_key]:
                     del self._cache[cache_key]
                     del self._cache_ttl_dict[cache_key]
                     return None
@@ -127,9 +124,7 @@ class ExecutionUtils:
         """
 
         def after_retry(retry_state):
-            logger.warning(
-                f"Retry {retry_state.attempt_number}/{self.retry_attempts} for {metric_name or 'operation'} after {retry_state.idle_for}s: {retry_state.outcome.exception()}"
-            )
+            logger.warning(f"Retry {retry_state.attempt_number}/{self.retry_attempts} for {metric_name or 'operation'} after {retry_state.idle_for}s: {retry_state.outcome.exception()}")
 
         return retry(
             stop=stop_after_attempt(self.retry_attempts),
@@ -159,9 +154,7 @@ class ExecutionUtils:
         finally:
             handle.cancel()
 
-    async def execute_with_retry_and_timeout(
-        self, func: Callable, timeout: int, *args, **kwargs
-    ) -> Any:
+    async def execute_with_retry_and_timeout(self, func: Callable, timeout: int, *args, **kwargs) -> Any:
         """
         Execute operation with retry and timeout mechanism.
 

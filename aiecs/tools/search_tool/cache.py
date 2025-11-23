@@ -64,6 +64,8 @@ class IntelligentCache:
             return None
 
         try:
+            if self.redis_client is None:
+                return None
             cache_key = self._generate_cache_key(query, params)
             redis = await self.redis_client.get_client()
             cached_data = await redis.get(cache_key)
@@ -118,6 +120,8 @@ class IntelligentCache:
             }
 
             # Store in Redis
+            if self.redis_client is None:
+                return
             redis = await self.redis_client.get_client()
             await redis.set(cache_key, json.dumps(cache_data), ex=ttl)
 
@@ -139,9 +143,7 @@ class IntelligentCache:
             TTL in seconds
         """
         # Base TTL from intent type
-        base_ttl = self.TTL_STRATEGIES.get(
-            intent_type, self.TTL_STRATEGIES[QueryIntentType.GENERAL.value]
-        )
+        base_ttl = self.TTL_STRATEGIES.get(intent_type, self.TTL_STRATEGIES[QueryIntentType.GENERAL.value])
 
         if not results:
             # No results: shorter cache time
@@ -149,9 +151,7 @@ class IntelligentCache:
 
         # Adjust based on result freshness
         try:
-            avg_freshness = sum(
-                r.get("_quality", {}).get("freshness_score", 0.5) for r in results
-            ) / len(results)
+            avg_freshness = sum(r.get("_quality", {}).get("freshness_score", 0.5) for r in results) / len(results)
 
             # Very fresh results can be cached longer
             if avg_freshness > 0.9:
@@ -164,9 +164,7 @@ class IntelligentCache:
 
         # Adjust based on result quality
         try:
-            avg_quality = sum(
-                r.get("_quality", {}).get("quality_score", 0.5) for r in results
-            ) / len(results)
+            avg_quality = sum(r.get("_quality", {}).get("quality_score", 0.5) for r in results) / len(results)
 
             # High quality results can be cached longer
             if avg_quality > 0.8:
@@ -188,6 +186,8 @@ class IntelligentCache:
             return
 
         try:
+            if self.redis_client is None:
+                return
             cache_key = self._generate_cache_key(query, params)
             redis = await self.redis_client.get_client()
             await redis.delete(cache_key)
@@ -201,6 +201,8 @@ class IntelligentCache:
             return
 
         try:
+            if self.redis_client is None:
+                return
             redis = await self.redis_client.get_client()
             # Find all search_tool cache keys
             pattern = f"{self.cache_prefix}*"
@@ -243,6 +245,8 @@ class IntelligentCache:
             return {"enabled": False, "total_keys": 0}
 
         try:
+            if self.redis_client is None:
+                return {"enabled": False, "total_keys": 0}
             redis = await self.redis_client.get_client()
             # Count cache keys
             pattern = f"{self.cache_prefix}*"

@@ -93,9 +93,7 @@ class CeleryTaskManager:
         Returns:
             Celery AsyncResult object
         """
-        logger.info(
-            f"Queueing task {task_name} to {queue} for user {user_id}, task {task_id}, step {step}"
-        )
+        logger.info(f"Queueing task {task_name} to {queue} for user {user_id}, task {task_id}, step {step}")
 
         # Determine Celery task to use based on queue
         celery_task_name = "aiecs.tasks.worker.execute_task"
@@ -180,9 +178,7 @@ class CeleryTaskManager:
         input_data["queue"] = "heavy_tasks"
         return await self.execute_task(task_name, input_data, context)
 
-    async def execute_dsl_task_step(
-        self, step: Dict, input_data: Dict, context: Dict
-    ) -> Dict[str, Any]:
+    async def execute_dsl_task_step(self, step: Dict, input_data: Dict, context: Dict) -> Dict[str, Any]:
         """
         Execute DSL task step
         """
@@ -210,11 +206,7 @@ class CeleryTaskManager:
             logger.warning(f"Could not determine task type for {task_name}, defaulting to 'fast'")
 
         queue = "heavy_tasks" if task_type == "heavy" else "fast_tasks"
-        celery_task_name = (
-            "aiecs.tasks.worker.execute_heavy_task"
-            if task_type == "heavy"
-            else "aiecs.tasks.worker.execute_task"
-        )
+        celery_task_name = "aiecs.tasks.worker.execute_heavy_task" if task_type == "heavy" else "aiecs.tasks.worker.execute_task"
 
         user_id = context.get("user_id", str(uuid.uuid4()))
         task_id = context.get("task_id", str(uuid.uuid4()))
@@ -243,9 +235,7 @@ class CeleryTaskManager:
             # Wait for task completion
             while not celery_task.ready():
                 if time.time() - start_time > timeout_seconds:
-                    raise AsyncioTimeoutError(
-                        f"Task {task_name} timed out after {timeout_seconds} seconds"
-                    )
+                    raise AsyncioTimeoutError(f"Task {task_name} timed out after {timeout_seconds} seconds")
                 await asyncio.sleep(0.5)
 
             if celery_task.successful():
@@ -262,16 +252,8 @@ class CeleryTaskManager:
                     }
             else:
                 error = celery_task.get(propagate=False)
-                status = (
-                    TaskStatus.TIMED_OUT
-                    if isinstance(error, CeleryTimeoutError)
-                    else TaskStatus.FAILED
-                )
-                error_code = (
-                    ErrorCode.TIMEOUT_ERROR
-                    if isinstance(error, CeleryTimeoutError)
-                    else ErrorCode.EXECUTION_ERROR
-                )
+                status = TaskStatus.TIMED_OUT if isinstance(error, CeleryTimeoutError) else TaskStatus.FAILED
+                error_code = ErrorCode.TIMEOUT_ERROR if isinstance(error, CeleryTimeoutError) else ErrorCode.EXECUTION_ERROR
 
                 return {
                     "step": f"{category}/{task_name}",

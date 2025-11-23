@@ -56,9 +56,7 @@ def main():
 
             logger.info("  Available Models:")
             for model in provider_config.models:
-                cost_str = (
-                    f"${model.costs.input:.6f} in / ${model.costs.output:.6f} out (per 1K tokens)"
-                )
+                cost_str = f"${model.costs.input:.6f} in / ${model.costs.output:.6f} out (per 1K tokens)"
                 logger.info(f"    - {model.name}: {cost_str}")
                 if model.capabilities.vision:
                     logger.info("        Vision: Yes")

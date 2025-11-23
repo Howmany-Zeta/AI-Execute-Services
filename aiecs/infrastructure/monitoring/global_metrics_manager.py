@@ -75,14 +75,10 @@ async def initialize_global_metrics(
             if not enable_metrics:
                 enable_metrics = os.environ.get("ENABLE_METRICS", "true").lower() == "true"
 
-            logger.info(
-                f"Initializing global metrics (port: {metrics_port}, enabled: {enable_metrics})..."
-            )
+            logger.info(f"Initializing global metrics (port: {metrics_port}, enabled: {enable_metrics})...")
 
             # Create metrics instance
-            _global_metrics = ExecutorMetrics(
-                enable_metrics=enable_metrics, metrics_port=metrics_port
-            )
+            _global_metrics = ExecutorMetrics(enable_metrics=enable_metrics, metrics_port=metrics_port)
 
             _initialized = True
             logger.info("✅ Global metrics initialized successfully")
@@ -197,9 +193,7 @@ def record_operation_success(operation: str, labels: Optional[Dict[str, str]] = 
         metrics.record_operation_success(operation, labels)
 
 
-def record_operation_failure(
-    operation: str, error_type: str, labels: Optional[Dict[str, str]] = None
-):
+def record_operation_failure(operation: str, error_type: str, labels: Optional[Dict[str, str]] = None):
     """Record operation failure using global metrics."""
     metrics = get_global_metrics()
     if metrics:

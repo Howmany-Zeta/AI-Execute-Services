@@ -709,9 +709,7 @@ class BaseAIAgent(ABC):
             features.append("resource limits")
 
         feature_str = f" with {', '.join(features)}" if features else ""
-        logger.info(
-            f"Agent initialized: {self.agent_id} ({self.name}, {self.agent_type.value}){feature_str}"
-        )
+        logger.info(f"Agent initialized: {self.agent_id} ({self.name}, {self.agent_type.value}){feature_str}")
 
     # ==================== State Management ====================
 
@@ -761,9 +759,7 @@ class BaseAIAgent(ABC):
         self._state = new_state
         self.updated_at = datetime.utcnow()
 
-        logger.info(
-            f"Agent {self.agent_id} state: {self._previous_state.value} → {new_state.value}"
-        )
+        logger.info(f"Agent {self.agent_id} state: {self._previous_state.value} → {new_state.value}")
 
     # ==================== Lifecycle Methods ====================
 
@@ -812,9 +808,7 @@ class BaseAIAgent(ABC):
             self.last_active_at = datetime.utcnow()
             logger.info(f"Agent {self.agent_id} activated")
         else:
-            logger.warning(
-                f"Agent {self.agent_id} cannot be activated from state {self._state.value}"
-            )
+            logger.warning(f"Agent {self.agent_id} cannot be activated from state {self._state.value}")
 
     async def deactivate(self) -> None:
         """Deactivate the agent (enter idle state)."""
@@ -822,9 +816,7 @@ class BaseAIAgent(ABC):
             self._transition_state(AgentState.IDLE)
             logger.info(f"Agent {self.agent_id} deactivated")
         else:
-            logger.warning(
-                f"Agent {self.agent_id} cannot be deactivated from state {self._state.value}"
-            )
+            logger.warning(f"Agent {self.agent_id} cannot be deactivated from state {self._state.value}")
 
     async def shutdown(self) -> None:
         """
@@ -876,20 +868,14 @@ class BaseAIAgent(ABC):
 
             for tool_name, tool_instance in self._tools_input.items():
                 if not isinstance(tool_instance, BaseTool):
-                    raise ConfigurationError(
-                        f"Tool '{tool_name}' must be a BaseTool instance, got {type(tool_instance)}"
-                    )
+                    raise ConfigurationError(f"Tool '{tool_name}' must be a BaseTool instance, got {type(tool_instance)}")
 
             self._tool_instances = self._tools_input
             self._available_tools = list(self._tools_input.keys())
-            logger.debug(
-                f"Agent {self.agent_id}: Registered {len(self._tools_input)} tool instances"
-            )
+            logger.debug(f"Agent {self.agent_id}: Registered {len(self._tools_input)} tool instances")
 
         else:
-            raise ConfigurationError(
-                f"Tools must be List[str] or Dict[str, BaseTool], got {type(self._tools_input)}"
-            )
+            raise ConfigurationError(f"Tools must be List[str] or Dict[str, BaseTool], got {type(self._tools_input)}")
 
     def _validate_llm_client(self) -> None:
         """
@@ -966,9 +952,7 @@ class BaseAIAgent(ABC):
         """
 
     @abstractmethod
-    async def process_message(
-        self, message: str, sender_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def process_message(self, message: str, sender_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Process an incoming message.
 
@@ -1087,9 +1071,7 @@ class BaseAIAgent(ABC):
             self._memory_metadata.clear()
             logger.info(f"Agent {self.agent_id} cleared all memory")
         else:
-            keys_to_remove = [
-                k for k, v in self._memory_metadata.items() if v.get("type") == memory_type.value
-            ]
+            keys_to_remove = [k for k, v in self._memory_metadata.items() if v.get("type") == memory_type.value]
             for key in keys_to_remove:
                 del self._memory[key]
                 del self._memory_metadata[key]
@@ -1099,16 +1081,8 @@ class BaseAIAgent(ABC):
         """Get a summary of agent memory."""
         return {
             "total_items": len(self._memory),
-            "short_term_count": sum(
-                1
-                for v in self._memory_metadata.values()
-                if v.get("type") == MemoryType.SHORT_TERM.value
-            ),
-            "long_term_count": sum(
-                1
-                for v in self._memory_metadata.values()
-                if v.get("type") == MemoryType.LONG_TERM.value
-            ),
+            "short_term_count": sum(1 for v in self._memory_metadata.values() if v.get("type") == MemoryType.SHORT_TERM.value),
+            "long_term_count": sum(1 for v in self._memory_metadata.values() if v.get("type") == MemoryType.LONG_TERM.value),
         }
 
     # ==================== Goal Management ====================
@@ -1293,26 +1267,16 @@ class BaseAIAgent(ABC):
             self._metrics.failed_tasks += 1
 
         # Update success rate
-        self._metrics.success_rate = (
-            self._metrics.successful_tasks / self._metrics.total_tasks_executed * 100
-        )
+        self._metrics.success_rate = self._metrics.successful_tasks / self._metrics.total_tasks_executed * 100
 
         # Update execution time
         if execution_time is not None:
             self._metrics.total_execution_time += execution_time
-            self._metrics.average_execution_time = (
-                self._metrics.total_execution_time / self._metrics.total_tasks_executed
-            )
+            self._metrics.average_execution_time = self._metrics.total_execution_time / self._metrics.total_tasks_executed
 
-            if (
-                self._metrics.min_execution_time is None
-                or execution_time < self._metrics.min_execution_time
-            ):
+            if self._metrics.min_execution_time is None or execution_time < self._metrics.min_execution_time:
                 self._metrics.min_execution_time = execution_time
-            if (
-                self._metrics.max_execution_time is None
-                or execution_time > self._metrics.max_execution_time
-            ):
+            if self._metrics.max_execution_time is None or execution_time > self._metrics.max_execution_time:
                 self._metrics.max_execution_time = execution_time
 
         # Update quality score
@@ -1321,12 +1285,8 @@ class BaseAIAgent(ABC):
                 self._metrics.average_quality_score = quality_score
             else:
                 # Running average
-                total_quality = self._metrics.average_quality_score * (
-                    self._metrics.total_tasks_executed - 1
-                )
-                self._metrics.average_quality_score = (
-                    total_quality + quality_score
-                ) / self._metrics.total_tasks_executed
+                total_quality = self._metrics.average_quality_score * (self._metrics.total_tasks_executed - 1)
+                self._metrics.average_quality_score = (total_quality + quality_score) / self._metrics.total_tasks_executed
 
         # Update resource usage
         if tokens_used is not None:
@@ -1387,33 +1347,21 @@ class BaseAIAgent(ABC):
 
         # Update average session duration
         if session_duration is not None and session_duration > 0:
-            completed_count = (
-                self._metrics.completed_sessions
-                + self._metrics.failed_sessions
-                + self._metrics.expired_sessions
-            )
+            completed_count = self._metrics.completed_sessions + self._metrics.failed_sessions + self._metrics.expired_sessions
             if completed_count > 0:
                 if self._metrics.average_session_duration is None:
                     self._metrics.average_session_duration = session_duration
                 else:
                     # Running average
                     total_duration = self._metrics.average_session_duration * (completed_count - 1)
-                    self._metrics.average_session_duration = (
-                        total_duration + session_duration
-                    ) / completed_count
+                    self._metrics.average_session_duration = (total_duration + session_duration) / completed_count
 
         # Update average requests per session
         if self._metrics.total_sessions > 0:
-            self._metrics.average_requests_per_session = (
-                self._metrics.total_session_requests / self._metrics.total_sessions
-            )
+            self._metrics.average_requests_per_session = self._metrics.total_session_requests / self._metrics.total_sessions
 
         self._metrics.updated_at = datetime.utcnow()
-        logger.debug(
-            f"Agent {self.agent_id} session metrics updated: "
-            f"status={session_status}, total_sessions={self._metrics.total_sessions}, "
-            f"active_sessions={self._metrics.active_sessions}"
-        )
+        logger.debug(f"Agent {self.agent_id} session metrics updated: " f"status={session_status}, total_sessions={self._metrics.total_sessions}, " f"active_sessions={self._metrics.active_sessions}")
 
     # ==================== Performance Tracking ====================
 
@@ -1440,9 +1388,7 @@ class BaseAIAgent(ABC):
         """
         return OperationTimer(operation_name=operation_name, agent=self)
 
-    def _record_operation_metrics(
-        self, operation_name: str, duration: float, success: bool = True
-    ) -> None:
+    def _record_operation_metrics(self, operation_name: str, duration: float, success: bool = True) -> None:
         """
         Record operation-level metrics.
 
@@ -1493,10 +1439,7 @@ class BaseAIAgent(ABC):
         self._update_operation_percentiles()
 
         self._metrics.updated_at = datetime.utcnow()
-        logger.debug(
-            f"Agent {self.agent_id} operation metrics recorded: "
-            f"operation={operation_name}, duration={duration:.3f}s, success={success}"
-        )
+        logger.debug(f"Agent {self.agent_id} operation metrics recorded: " f"operation={operation_name}, duration={duration:.3f}s, success={success}")
 
     def _update_operation_percentiles(self) -> None:
         """Update operation time percentiles from operation history."""
@@ -1636,11 +1579,7 @@ class BaseAIAgent(ABC):
 
         # Factor 4: Session health (10% weight)
         if self._metrics.total_sessions > 0:
-            session_failure_rate = (
-                (self._metrics.failed_sessions + self._metrics.expired_sessions)
-                / self._metrics.total_sessions
-                * 100
-            )
+            session_failure_rate = (self._metrics.failed_sessions + self._metrics.expired_sessions) / self._metrics.total_sessions * 100
             if session_failure_rate > 30:
                 issues.append("High session failure rate")
                 health_score -= 10
@@ -1721,9 +1660,7 @@ class BaseAIAgent(ABC):
                 "error_types": self._metrics.error_types,
             },
             "capabilities": [cap.capability_type for cap in self.get_capabilities()],
-            "active_goals": len(
-                [g for g in self._goals.values() if g.status == GoalStatus.IN_PROGRESS]
-            ),
+            "active_goals": len([g for g in self._goals.values() if g.status == GoalStatus.IN_PROGRESS]),
             "timestamp": datetime.utcnow().isoformat(),
         }
 
@@ -1773,9 +1710,7 @@ class BaseAIAgent(ABC):
                 "memory_summary": self.get_memory_summary(),
                 "created_at": self.created_at.isoformat(),
                 "updated_at": self.updated_at.isoformat(),
-                "last_active_at": (
-                    self.last_active_at.isoformat() if self.last_active_at else None
-                ),
+                "last_active_at": (self.last_active_at.isoformat() if self.last_active_at else None),
             }
         except Exception as e:
             raise SerializationError(
@@ -1801,9 +1736,7 @@ class BaseAIAgent(ABC):
 
     # ==================== Checkpointer Support ====================
 
-    async def save_checkpoint(
-        self, session_id: str, checkpoint_id: Optional[str] = None
-    ) -> Optional[str]:
+    async def save_checkpoint(self, session_id: str, checkpoint_id: Optional[str] = None) -> Optional[str]:
         """
         Save agent state checkpoint.
 
@@ -1832,9 +1765,7 @@ class BaseAIAgent(ABC):
             The checkpoint includes full agent state from to_dict().
         """
         if not self._checkpointer:
-            logger.warning(
-                f"Agent {self.agent_id}: No checkpointer configured, cannot save checkpoint"
-            )
+            logger.warning(f"Agent {self.agent_id}: No checkpointer configured, cannot save checkpoint")
             return None
 
         try:
@@ -1856,16 +1787,11 @@ class BaseAIAgent(ABC):
                 checkpoint_data=checkpoint_data,
             )
 
-            logger.info(
-                f"Agent {self.agent_id}: Checkpoint saved successfully "
-                f"(session={session_id}, checkpoint={saved_checkpoint_id})"
-            )
+            logger.info(f"Agent {self.agent_id}: Checkpoint saved successfully " f"(session={session_id}, checkpoint={saved_checkpoint_id})")
             return saved_checkpoint_id
 
         except Exception as e:
-            logger.error(
-                f"Agent {self.agent_id}: Failed to save checkpoint " f"(session={session_id}): {e}"
-            )
+            logger.error(f"Agent {self.agent_id}: Failed to save checkpoint " f"(session={session_id}): {e}")
             return None
 
     async def load_checkpoint(self, session_id: str, checkpoint_id: Optional[str] = None) -> bool:
@@ -1898,9 +1824,7 @@ class BaseAIAgent(ABC):
             Not all state may be restorable (e.g., runtime objects, connections).
         """
         if not self._checkpointer:
-            logger.warning(
-                f"Agent {self.agent_id}: No checkpointer configured, cannot load checkpoint"
-            )
+            logger.warning(f"Agent {self.agent_id}: No checkpointer configured, cannot load checkpoint")
             return False
 
         try:
@@ -1912,26 +1836,17 @@ class BaseAIAgent(ABC):
             )
 
             if not checkpoint_data:
-                logger.warning(
-                    f"Agent {self.agent_id}: No checkpoint found "
-                    f"(session={session_id}, checkpoint={checkpoint_id or 'latest'})"
-                )
+                logger.warning(f"Agent {self.agent_id}: No checkpoint found " f"(session={session_id}, checkpoint={checkpoint_id or 'latest'})")
                 return False
 
             # Restore agent state from checkpoint
             self._restore_from_checkpoint(checkpoint_data)
 
-            logger.info(
-                f"Agent {self.agent_id}: Checkpoint loaded successfully "
-                f"(session={session_id}, checkpoint={checkpoint_id or 'latest'})"
-            )
+            logger.info(f"Agent {self.agent_id}: Checkpoint loaded successfully " f"(session={session_id}, checkpoint={checkpoint_id or 'latest'})")
             return True
 
         except Exception as e:
-            logger.error(
-                f"Agent {self.agent_id}: Failed to load checkpoint "
-                f"(session={session_id}, checkpoint={checkpoint_id or 'latest'}): {e}"
-            )
+            logger.error(f"Agent {self.agent_id}: Failed to load checkpoint " f"(session={session_id}, checkpoint={checkpoint_id or 'latest'}): {e}")
             return False
 
     def _restore_from_checkpoint(self, checkpoint_data: Dict[str, Any]) -> None:
@@ -2020,10 +1935,7 @@ class BaseAIAgent(ABC):
                     else:
                         return await tool.run_async(**params)
 
-        raise NotImplementedError(
-            f"execute_tool not implemented for {self.__class__.__name__}. "
-            "Tool {tool_name} not found or doesn't have execute/run_async method."
-        )
+        raise NotImplementedError(f"execute_tool not implemented for {self.__class__.__name__}. " "Tool {tool_name} not found or doesn't have execute/run_async method.")
 
     # ==================== Parallel Tool Execution (Phase 7) ====================
 
@@ -2084,11 +1996,7 @@ class BaseAIAgent(ABC):
         results_unordered = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Sort results by index to maintain order
-        valid_results = [
-            r
-            for r in results_unordered
-            if not isinstance(r, Exception) and isinstance(r, dict) and "index" in r
-        ]
+        valid_results = [r for r in results_unordered if not isinstance(r, Exception) and isinstance(r, dict) and "index" in r]
         results_sorted = sorted(
             valid_results,
             key=lambda x: x["index"],  # type: ignore[index]
@@ -2097,9 +2005,7 @@ class BaseAIAgent(ABC):
         # Remove index from results
         return [{k: v for k, v in r.items() if k != "index"} for r in results_sorted]
 
-    async def analyze_tool_dependencies(
-        self, tool_calls: List[Dict[str, Any]]
-    ) -> Dict[str, List[str]]:
+    async def analyze_tool_dependencies(self, tool_calls: List[Dict[str, Any]]) -> Dict[str, List[str]]:
         """
         Analyze dependencies between tool calls.
 
@@ -2139,9 +2045,7 @@ class BaseAIAgent(ABC):
 
         return dependencies
 
-    async def execute_tools_with_dependencies(
-        self, tool_calls: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    async def execute_tools_with_dependencies(self, tool_calls: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Execute tools respecting dependencies using topological sort.
 
@@ -2198,9 +2102,7 @@ class BaseAIAgent(ABC):
         # Filter out None values and return
         return [r for r in results if r is not None]
 
-    def _substitute_tool_result(
-        self, tool_call: Dict[str, Any], source_index: int, source_result: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def _substitute_tool_result(self, tool_call: Dict[str, Any], source_index: int, source_result: Dict[str, Any]) -> Dict[str, Any]:
         """
         Substitute tool result references in parameters.
 
@@ -2319,9 +2221,7 @@ class BaseAIAgent(ABC):
 
         return result
 
-    def invalidate_cache(
-        self, tool_name: Optional[str] = None, pattern: Optional[str] = None
-    ) -> int:
+    def invalidate_cache(self, tool_name: Optional[str] = None, pattern: Optional[str] = None) -> int:
         """
         Invalidate cache entries.
 
@@ -2425,10 +2325,7 @@ class BaseAIAgent(ABC):
         self._last_cleanup_time = current_time
 
         # Check size limit
-        if (
-            len(self._tool_cache)
-            > self._cache_config.max_cache_size * self._cache_config.cleanup_threshold
-        ):
+        if len(self._tool_cache) > self._cache_config.max_cache_size * self._cache_config.cleanup_threshold:
             # Remove oldest entries
             entries_to_remove = int(len(self._tool_cache) - self._cache_config.max_cache_size * 0.8)
 
@@ -2445,9 +2342,7 @@ class BaseAIAgent(ABC):
 
     # ==================== Streaming Support (Phase 7 - Tasks 1.15.11-1.15.12) ====================
 
-    async def execute_task_streaming(
-        self, task: Dict[str, Any], context: Dict[str, Any]
-    ) -> AsyncIterator[Dict[str, Any]]:
+    async def execute_task_streaming(self, task: Dict[str, Any], context: Dict[str, Any]) -> AsyncIterator[Dict[str, Any]]:
         """
         Execute a task with streaming results.
 
@@ -2503,9 +2398,7 @@ class BaseAIAgent(ABC):
             }
             raise
 
-    async def process_message_streaming(
-        self, message: str, sender_id: Optional[str] = None
-    ) -> AsyncIterator[str]:
+    async def process_message_streaming(self, message: str, sender_id: Optional[str] = None) -> AsyncIterator[str]:
         """
         Process a message with streaming response.
 
@@ -2586,9 +2479,7 @@ class BaseAIAgent(ABC):
         elif required_capabilities:
             capable_agents = await self.find_capable_agents(required_capabilities)
             if not capable_agents:
-                raise ValueError(
-                    f"No capable agents found for capabilities: {required_capabilities}"
-                )
+                raise ValueError(f"No capable agents found for capabilities: {required_capabilities}")
             target_agent = capable_agents[0]  # Use first capable agent
         else:
             raise ValueError("Either target_agent_id or required_capabilities must be provided")
@@ -2675,11 +2566,7 @@ class BaseAIAgent(ABC):
                 raise ValueError(f"Reviewer {reviewer_id} not found in registry")
         else:
             # Select first available agent (excluding self)
-            available_reviewers = [
-                agent
-                for agent_id, agent in self._agent_registry.items()
-                if agent_id != self.agent_id
-            ]
+            available_reviewers = [agent for agent_id, agent in self._agent_registry.items() if agent_id != self.agent_id]
             if not available_reviewers:
                 raise ValueError("No reviewers available")
             reviewer = available_reviewers[0]
@@ -2695,9 +2582,7 @@ class BaseAIAgent(ABC):
                 task_desc = task.get("description", "")
                 task_result = result.get("output", "")
                 review_task = {
-                    "description": (
-                        f"Review this task result:\nTask: {task_desc}\nResult: {task_result}"
-                    ),
+                    "description": (f"Review this task result:\nTask: {task_desc}\nResult: {task_result}"),
                     "task_id": f"review_{task.get('task_id', 'unknown')}",
                 }
                 review_result = await reviewer.execute_task(review_task, context={})
@@ -2774,10 +2659,7 @@ class BaseAIAgent(ABC):
         if not collaborators:
             raise ValueError("No valid collaborators found")
 
-        logger.info(
-            f"Agent {self.agent_id} collaborating with {len(collaborators)} agents "
-            f"using {strategy} strategy"
-        )
+        logger.info(f"Agent {self.agent_id} collaborating with {len(collaborators)} agents " f"using {strategy} strategy")
 
         # Execute based on strategy
         if strategy == "parallel":
@@ -2789,9 +2671,7 @@ class BaseAIAgent(ABC):
         else:
             raise ValueError(f"Unknown collaboration strategy: {strategy}")
 
-    async def _collaborate_parallel(
-        self, task: Dict[str, Any], collaborators: List[Any]
-    ) -> Dict[str, Any]:
+    async def _collaborate_parallel(self, task: Dict[str, Any], collaborators: List[Any]) -> Dict[str, Any]:
         """
         Parallel collaboration: all agents work simultaneously.
 
@@ -2803,19 +2683,14 @@ class BaseAIAgent(ABC):
             Aggregated result
         """
         # Execute task on all agents in parallel
-        tasks = [
-            agent.execute_task(task, context={"collaboration": "parallel"})
-            for agent in collaborators
-        ]
+        tasks = [agent.execute_task(task, context={"collaboration": "parallel"}) for agent in collaborators]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Aggregate results
         return await self._aggregate_results(task, results, collaborators)
 
-    async def _collaborate_sequential(
-        self, task: Dict[str, Any], collaborators: List[Any]
-    ) -> Dict[str, Any]:
+    async def _collaborate_sequential(self, task: Dict[str, Any], collaborators: List[Any]) -> Dict[str, Any]:
         """
         Sequential collaboration: agents work in order, building on previous results.
 
@@ -2833,9 +2708,7 @@ class BaseAIAgent(ABC):
             logger.debug(f"Sequential step {i + 1}/{len(collaborators)}: {agent.agent_id}")
 
             # Execute task
-            result = await agent.execute_task(
-                current_task, context={"collaboration": "sequential", "step": i + 1}
-            )
+            result = await agent.execute_task(current_task, context={"collaboration": "sequential", "step": i + 1})
             results.append(result)
 
             # Update task for next agent with previous result
@@ -2855,9 +2728,7 @@ class BaseAIAgent(ABC):
             "timestamp": datetime.utcnow().isoformat(),
         }
 
-    async def _collaborate_consensus(
-        self, task: Dict[str, Any], collaborators: List[Any]
-    ) -> Dict[str, Any]:
+    async def _collaborate_consensus(self, task: Dict[str, Any], collaborators: List[Any]) -> Dict[str, Any]:
         """
         Consensus collaboration: all agents work independently, best result selected.
 
@@ -2869,19 +2740,14 @@ class BaseAIAgent(ABC):
             Best result selected by consensus
         """
         # Execute task on all agents in parallel
-        tasks = [
-            agent.execute_task(task, context={"collaboration": "consensus"})
-            for agent in collaborators
-        ]
+        tasks = [agent.execute_task(task, context={"collaboration": "consensus"}) for agent in collaborators]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Select best result by consensus
         return await self._select_consensus_result(task, results, collaborators)
 
-    async def _aggregate_results(
-        self, task: Dict[str, Any], results: List[Any], collaborators: List[Any]
-    ) -> Dict[str, Any]:
+    async def _aggregate_results(self, task: Dict[str, Any], results: List[Any], collaborators: List[Any]) -> Dict[str, Any]:
         """
         Aggregate results from parallel collaboration.
 
@@ -2903,9 +2769,7 @@ class BaseAIAgent(ABC):
                 successful_results.append({"agent": collaborators[i].agent_id, "result": result})
 
         # Combine outputs
-        combined_output = "\n\n".join(
-            [f"[{r['agent']}]: {r['result'].get('output', '')}" for r in successful_results]
-        )
+        combined_output = "\n\n".join([f"[{r['agent']}]: {r['result'].get('output', '')}" for r in successful_results])
 
         return {
             "success": len(successful_results) > 0,
@@ -2918,9 +2782,7 @@ class BaseAIAgent(ABC):
             "timestamp": datetime.utcnow().isoformat(),
         }
 
-    async def _select_consensus_result(
-        self, task: Dict[str, Any], results: List[Any], collaborators: List[Any]
-    ) -> Dict[str, Any]:
+    async def _select_consensus_result(self, task: Dict[str, Any], results: List[Any], collaborators: List[Any]) -> Dict[str, Any]:
         """
         Select best result by consensus voting.
 
@@ -2936,9 +2798,7 @@ class BaseAIAgent(ABC):
 
         for i, result in enumerate(results):
             if not isinstance(result, Exception):
-                successful_results.append(
-                    {"agent": collaborators[i].agent_id, "result": result, "votes": 0}
-                )
+                successful_results.append({"agent": collaborators[i].agent_id, "result": result, "votes": 0})
 
         if not successful_results:
             return {
@@ -2955,9 +2815,7 @@ class BaseAIAgent(ABC):
             # In production, use LLM-based evaluation
             best_idx = max(
                 range(len(successful_results)),
-                key=lambda i: (
-                    len(successful_results[i]["result"].get("output", "")) if i != voter_idx else 0
-                ),
+                key=lambda i: (len(successful_results[i]["result"].get("output", "")) if i != voter_idx else 0),
             )
             successful_results[best_idx]["votes"] += 1
 
@@ -3034,10 +2892,7 @@ class BaseAIAgent(ABC):
         if max_items is not None:
             scored_items = scored_items[:max_items]
 
-        logger.debug(
-            f"Selected {len(scored_items)}/{len(context_items)} relevant context items "
-            f"(min_score={min_relevance_score})"
-        )
+        logger.debug(f"Selected {len(scored_items)}/{len(context_items)} relevant context items " f"(min_score={min_relevance_score})")
 
         return scored_items
 
@@ -3215,10 +3070,7 @@ class BaseAIAgent(ABC):
             else:
                 break
 
-        logger.info(
-            f"Pruned context from {len(context_items)} to {len(result)} items "
-            f"({current_tokens}/{max_tokens} tokens)"
-        )
+        logger.info(f"Pruned context from {len(context_items)} to {len(result)} items " f"({current_tokens}/{max_tokens} tokens)")
 
         return result
 
@@ -3283,11 +3135,7 @@ class BaseAIAgent(ABC):
         if len(self._experiences) > self._max_experiences:
             self._experiences = self._experiences[-self._max_experiences :]
 
-        logger.debug(
-            f"Recorded experience: {task_type} - "
-            f"{'success' if experience.success else 'failure'} "
-            f"({experience.execution_time:.2f}s)"
-        )
+        logger.debug(f"Recorded experience: {task_type} - " f"{'success' if experience.success else 'failure'} " f"({experience.execution_time:.2f}s)")
 
     async def get_recommended_approach(self, task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
@@ -3373,9 +3221,7 @@ class BaseAIAgent(ABC):
             "approach": approach_name,
             "confidence": confidence,
             "reasoning": (
-                f"Based on {stats['count']} successful experiences with {task_type} tasks. "
-                f"Average execution time: {stats['avg_time']:.2f}s, "
-                f"Average quality: {stats['avg_quality']:.2f}"
+                f"Based on {stats['count']} successful experiences with {task_type} tasks. " f"Average execution time: {stats['avg_time']:.2f}s, " f"Average quality: {stats['avg_quality']:.2f}"
             ),
             "stats": stats,
         }
@@ -3424,10 +3270,7 @@ class BaseAIAgent(ABC):
                 approach_success[exp.approach]["failure"] += 1
 
         # Calculate success rates
-        approach_rates = {
-            approach: stats["success"] / (stats["success"] + stats["failure"])
-            for approach, stats in approach_success.items()
-        }
+        approach_rates = {approach: stats["success"] / (stats["success"] + stats["failure"]) for approach, stats in approach_success.items()}
 
         # Error patterns
         error_types: Dict[str, int] = {}
@@ -3441,17 +3284,11 @@ class BaseAIAgent(ABC):
             "failed_experiences": failed,
             "overall_success_rate": successful / total if total > 0 else 0.0,
             "task_type_distribution": task_types,
-            "most_common_task_type": (
-                max(task_types.items(), key=lambda x: x[1])[0] if task_types else None
-            ),
+            "most_common_task_type": (max(task_types.items(), key=lambda x: x[1])[0] if task_types else None),
             "approach_effectiveness": approach_rates,
-            "best_approach": (
-                max(approach_rates.items(), key=lambda x: x[1])[0] if approach_rates else None
-            ),
+            "best_approach": (max(approach_rates.items(), key=lambda x: x[1])[0] if approach_rates else None),
             "error_patterns": error_types,
-            "most_common_error": (
-                max(error_types.items(), key=lambda x: x[1])[0] if error_types else None
-            ),
+            "most_common_error": (max(error_types.items(), key=lambda x: x[1])[0] if error_types else None),
             "learning_enabled": self._learning_enabled,
         }
 
@@ -3493,9 +3330,7 @@ class BaseAIAgent(ABC):
         task_type = await self._classify_task(task)
 
         # Find similar successful experiences
-        similar_successful = [
-            exp for exp in self._experiences if exp.task_type == task_type and exp.success
-        ]
+        similar_successful = [exp for exp in self._experiences if exp.task_type == task_type and exp.success]
 
         # Analyze tool usage patterns
         tool_usage: Dict[str, int] = {}
@@ -3504,9 +3339,7 @@ class BaseAIAgent(ABC):
                 tool_usage[tool] = tool_usage.get(tool, 0) + 1
 
         # Get most commonly used tools
-        suggested_tools = sorted(tool_usage.items(), key=lambda x: x[1], reverse=True)[
-            :5
-        ]  # Top 5 tools
+        suggested_tools = sorted(tool_usage.items(), key=lambda x: x[1], reverse=True)[:5]  # Top 5 tools
 
         return {
             "adapted": True,
@@ -3665,12 +3498,8 @@ class BaseAIAgent(ABC):
         current_time = time.time()
 
         # Calculate token usage rates
-        tokens_last_minute = sum(
-            count for ts, count in self._token_usage_window if current_time - ts < 60
-        )
-        tokens_last_hour = sum(
-            count for ts, count in self._token_usage_window if current_time - ts < 3600
-        )
+        tokens_last_minute = sum(count for ts, count in self._token_usage_window if current_time - ts < 60)
+        tokens_last_hour = sum(count for ts, count in self._token_usage_window if current_time - ts < 3600)
 
         # Calculate tool call rates
         tool_calls_last_minute = sum(1 for ts in self._tool_call_window if current_time - ts < 60)
@@ -3679,8 +3508,7 @@ class BaseAIAgent(ABC):
         return {
             "active_tasks": len(self._active_tasks),
             "max_concurrent_tasks": self._resource_limits.max_concurrent_tasks,
-            "task_utilization": len(self._active_tasks)
-            / self._resource_limits.max_concurrent_tasks,
+            "task_utilization": len(self._active_tasks) / self._resource_limits.max_concurrent_tasks,
             "tokens_per_minute": tokens_last_minute,
             "tokens_per_hour": tokens_last_hour,
             "max_tokens_per_minute": self._resource_limits.max_tokens_per_minute,
@@ -3705,15 +3533,11 @@ class BaseAIAgent(ABC):
         current_time = time.time()
 
         # Clean old entries (older than 1 hour)
-        self._token_usage_window = [
-            (ts, count) for ts, count in self._token_usage_window if current_time - ts < 3600
-        ]
+        self._token_usage_window = [(ts, count) for ts, count in self._token_usage_window if current_time - ts < 3600]
 
         # Check per-minute limit
         if self._resource_limits.max_tokens_per_minute is not None:
-            tokens_last_minute = sum(
-                count for ts, count in self._token_usage_window if current_time - ts < 60
-            )
+            tokens_last_minute = sum(count for ts, count in self._token_usage_window if current_time - ts < 60)
             if tokens_last_minute >= self._resource_limits.max_tokens_per_minute:
                 return {
                     "available": False,
@@ -3941,9 +3765,7 @@ class BaseAIAgent(ABC):
 
         return simplified_task
 
-    async def _execute_with_fallback(
-        self, task: Dict[str, Any], context: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def _execute_with_fallback(self, task: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute task with fallback approach.
 
@@ -3983,9 +3805,7 @@ class BaseAIAgent(ABC):
 
         return result
 
-    async def _delegate_to_capable_agent(
-        self, task: Dict[str, Any], context: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def _delegate_to_capable_agent(self, task: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Delegate task to a capable agent as recovery strategy.
 
@@ -4025,11 +3845,7 @@ class BaseAIAgent(ABC):
 
         if not capable_agents:
             # Try any available agent as last resort
-            capable_agents = [
-                agent
-                for agent_id, agent in self._agent_registry.items()
-                if agent_id != self.agent_id
-            ]
+            capable_agents = [agent for agent_id, agent in self._agent_registry.items() if agent_id != self.agent_id]
 
         if not capable_agents:
             raise ValueError("No capable agents available for delegation")
@@ -4038,9 +3854,7 @@ class BaseAIAgent(ABC):
         target_agent = capable_agents[0]
         logger.info(f"Delegating task to {target_agent.agent_id} for recovery")
 
-        result = await target_agent.execute_task(
-            task, context={**context, "delegated_by": self.agent_id, "recovery_delegation": True}
-        )
+        result = await target_agent.execute_task(task, context={**context, "delegated_by": self.agent_id, "recovery_delegation": True})
 
         result["delegated_to"] = target_agent.agent_id
         result["recovery_delegation"] = True
@@ -4053,7 +3867,4 @@ class BaseAIAgent(ABC):
 
     def __repr__(self) -> str:
         """Detailed representation."""
-        return (
-            f"BaseAIAgent(agent_id='{self.agent_id}', name='{self.name}', "
-            f"type='{self.agent_type.value}', state='{self._state.value}')"
-        )
+        return f"BaseAIAgent(agent_id='{self.agent_id}', name='{self.name}', " f"type='{self.agent_type.value}', state='{self._state.value}')"

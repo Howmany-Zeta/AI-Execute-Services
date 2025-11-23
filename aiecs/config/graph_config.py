@@ -54,9 +54,7 @@ class KnowledgeGraphConfig:
         description="Default number of results to return in searches",
     )
 
-    max_traversal_depth: int = Field(
-        default=5, description="Maximum depth for graph traversal queries"
-    )
+    max_traversal_depth: int = Field(default=5, description="Maximum depth for graph traversal queries")
 
     # Cache configuration
     enable_query_cache: bool = Field(default=True, description="Enable caching of query results")
@@ -87,9 +85,7 @@ class KnowledgeGraphConfig:
         description="Enable logical query parsing for structured queries",
     )
 
-    enable_structured_import: bool = Field(
-        default=True, description="Enable structured data import (CSV/JSON)"
-    )
+    enable_structured_import: bool = Field(default=True, description="Enable structured data import (CSV/JSON)")
 
     # Knowledge Fusion configuration
     fusion_similarity_threshold: float = Field(
@@ -116,9 +112,7 @@ class KnowledgeGraphConfig:
         description="Enable schema caching for improved performance",
     )
 
-    schema_cache_ttl_seconds: int = Field(
-        default=3600, description="Time-to-live for cached schemas (seconds)"
-    )
+    schema_cache_ttl_seconds: int = Field(default=3600, description="Time-to-live for cached schemas (seconds)")
 
     # Query optimization configuration
     enable_query_optimization: bool = Field(

@@ -189,9 +189,7 @@ class SharedContextManager:
         logger.info(f"Created {scope.value} context {context_id}")
         return context_id
 
-    async def get_context(
-        self, context_id: str, requester_id: str, version: Optional[int] = None
-    ) -> Optional[Dict[str, Any]]:
+    async def get_context(self, context_id: str, requester_id: str, version: Optional[int] = None) -> Optional[Dict[str, Any]]:
         """
         Get context data.
 
@@ -254,9 +252,7 @@ class SharedContextManager:
 
         # Apply updates with conflict resolution
         strategy = conflict_strategy or self.default_conflict_strategy
-        merged_data = await self._resolve_conflicts(
-            context.data, updates, strategy, context, updater_id
-        )
+        merged_data = await self._resolve_conflicts(context.data, updates, strategy, context, updater_id)
 
         # Create new version if requested
         if create_version:
@@ -302,9 +298,7 @@ class SharedContextManager:
                     current_value = merged[key]
                     # Merge lists
                     if isinstance(current_value, list) and isinstance(new_value, list):
-                        merged[key] = current_value + [
-                            item for item in new_value if item not in current_value
-                        ]
+                        merged[key] = current_value + [item for item in new_value if item not in current_value]
                     # Merge dicts
                     elif isinstance(current_value, dict) and isinstance(new_value, dict):
                         merged[key] = {**current_value, **new_value}
@@ -352,9 +346,7 @@ class SharedContextManager:
 
         # Check access control
         if subscriber_id not in context.access_control:
-            logger.warning(
-                f"Access denied for {subscriber_id} to subscribe to context {context_id}"
-            )
+            logger.warning(f"Access denied for {subscriber_id} to subscribe to context {context_id}")
             return False
 
         context.subscribers.add(subscriber_id)
@@ -395,9 +387,7 @@ class SharedContextManager:
         logger.debug(f"Agent {subscriber_id} unsubscribed from context {context_id}")
         return True
 
-    async def _notify_subscribers(
-        self, context_id: str, updated_data: Dict[str, Any], updater_id: str
-    ) -> None:
+    async def _notify_subscribers(self, context_id: str, updated_data: Dict[str, Any], updater_id: str) -> None:
         """Notify subscribers of context updates."""
         context = self.contexts.get(context_id)
         if not context:
@@ -478,9 +468,7 @@ class SharedContextManager:
         logger.info(f"Revoked access from {revokee_id} for context {context_id}")
         return True
 
-    async def get_version_history(
-        self, context_id: str, requester_id: str
-    ) -> Optional[List[Dict[str, Any]]]:
+    async def get_version_history(self, context_id: str, requester_id: str) -> Optional[List[Dict[str, Any]]]:
         """
         Get version history for a context.
 
@@ -513,9 +501,7 @@ class SharedContextManager:
 
         return history
 
-    async def rollback_to_version(
-        self, context_id: str, requester_id: str, target_version: int
-    ) -> bool:
+    async def rollback_to_version(self, context_id: str, requester_id: str, target_version: int) -> bool:
         """
         Rollback context to a previous version.
 

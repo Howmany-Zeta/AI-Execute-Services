@@ -158,9 +158,7 @@ class AgentRegistry:
         agent_ids = self._agents_by_state.get(state, set())
         return [self._agents[aid] for aid in agent_ids if aid in self._agents]
 
-    def update_state_index(
-        self, agent_id: str, old_state: AgentState, new_state: AgentState
-    ) -> None:
+    def update_state_index(self, agent_id: str, old_state: AgentState, new_state: AgentState) -> None:
         """
         Update state index when agent state changes.
 
@@ -220,13 +218,8 @@ class AgentRegistry:
         """
         return {
             "total_agents": self.count(),
-            "by_type": {
-                agent_type.value: len(agent_ids)
-                for agent_type, agent_ids in self._agents_by_type.items()
-            },
-            "by_state": {
-                state.value: len(agent_ids) for state, agent_ids in self._agents_by_state.items()
-            },
+            "by_type": {agent_type.value: len(agent_ids) for agent_type, agent_ids in self._agents_by_type.items()},
+            "by_state": {state.value: len(agent_ids) for state, agent_ids in self._agents_by_state.items()},
         }
 
     def clear(self) -> None:

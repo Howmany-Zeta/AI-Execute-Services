@@ -123,9 +123,7 @@ class CheckpointerProtocol(Protocol):
         ```
     """
 
-    async def save_checkpoint(
-        self, agent_id: str, session_id: str, checkpoint_data: Dict[str, Any]
-    ) -> str:
+    async def save_checkpoint(self, agent_id: str, session_id: str, checkpoint_data: Dict[str, Any]) -> str:
         """
         Save checkpoint and return checkpoint ID.
 
@@ -139,9 +137,7 @@ class CheckpointerProtocol(Protocol):
         """
         ...
 
-    async def load_checkpoint(
-        self, agent_id: str, session_id: str, checkpoint_id: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
+    async def load_checkpoint(self, agent_id: str, session_id: str, checkpoint_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Load checkpoint data.
 

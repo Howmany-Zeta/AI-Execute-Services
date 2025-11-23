@@ -6,7 +6,7 @@ understanding query intent, and generating result summaries.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from .constants import QueryIntentType, CredibilityLevel
 
@@ -61,9 +61,7 @@ class ResultQualityAnalyzer:
         "pills",
     ]
 
-    def analyze_result_quality(
-        self, result: Dict[str, Any], query: str, position: int
-    ) -> Dict[str, Any]:
+    def analyze_result_quality(self, result: Dict[str, Any], query: str, position: int) -> Dict[str, Any]:
         """
         Analyze quality of a single search result.
 
@@ -75,7 +73,7 @@ class ResultQualityAnalyzer:
         Returns:
             Quality analysis dictionary with scores and signals
         """
-        quality_analysis = {
+        quality_analysis: Dict[str, Any] = {
             "quality_score": 0.0,
             "authority_score": 0.0,
             "relevance_score": 0.0,
@@ -89,14 +87,11 @@ class ResultQualityAnalyzer:
         domain = result.get("displayLink", "").lower()
         authority_score = self._calculate_authority_score(domain)
         quality_analysis["authority_score"] = authority_score
-        quality_analysis["quality_signals"]["domain_authority"] = (
-            "high" if authority_score > 0.8 else "medium" if authority_score > 0.5 else "low"
-        )
+        quality_signals = cast(Dict[str, Any], quality_analysis["quality_signals"])
+        quality_signals["domain_authority"] = "high" if authority_score > 0.8 else "medium" if authority_score > 0.5 else "low"
 
         # 2. Evaluate relevance
-        relevance_score = self._calculate_relevance_score(
-            query, result.get("title", ""), result.get("snippet", ""), position
-        )
+        relevance_score = self._calculate_relevance_score(query, result.get("title", ""), result.get("snippet", ""), position)
         quality_analysis["relevance_score"] = relevance_score
 
         # 3. Evaluate freshness
@@ -106,47 +101,47 @@ class ResultQualityAnalyzer:
         # 4. Check HTTPS
         link = result.get("link", "")
         has_https = link.startswith("https://")
-        quality_analysis["quality_signals"]["has_https"] = has_https
+        quality_signals["has_https"] = has_https
+        warnings = cast(List[str], quality_analysis["warnings"])
         if not has_https:
-            quality_analysis["warnings"].append("No HTTPS - security concern")
+            warnings.append("No HTTPS - security concern")
 
         # 5. Check content length
         snippet_length = len(result.get("snippet", ""))
-        quality_analysis["quality_signals"]["content_length"] = (
-            "adequate" if snippet_length > 100 else "short"
-        )
+        quality_signals["content_length"] = "adequate" if snippet_length > 100 else "short"
         if snippet_length < 50:
-            quality_analysis["warnings"].append("Very short snippet - may lack detail")
+            warnings.append("Very short snippet - may lack detail")
 
         # 6. Check metadata
         has_metadata = "metadata" in result
-        quality_analysis["quality_signals"]["has_metadata"] = has_metadata
+        quality_signals["has_metadata"] = has_metadata
 
         # 7. Position ranking (Google's ranking is a quality signal)
         position_score = max(0, 1.0 - (position - 1) * 0.05)
-        quality_analysis["quality_signals"]["position_rank"] = position
+        quality_signals["position_rank"] = position
 
         # 8. Detect low quality indicators
         url_lower = link.lower()
         title_lower = result.get("title", "").lower()
         for indicator in self.LOW_QUALITY_INDICATORS:
             if indicator in url_lower or indicator in title_lower:
-                quality_analysis["warnings"].append(f"Low quality indicator detected: {indicator}")
+                warnings.append(f"Low quality indicator detected: {indicator}")
                 authority_score *= 0.5  # Significantly reduce authority
 
         # 9. Calculate comprehensive quality score
-        quality_analysis["quality_score"] = (
+        quality_score = (
             authority_score * 0.35  # Authority 35%
             + relevance_score * 0.30  # Relevance 30%
             + position_score * 0.20  # Position 20%
             + freshness_score * 0.10  # Freshness 10%
             + (0.05 if has_https else 0)  # HTTPS 5%
         )
+        quality_analysis["quality_score"] = quality_score
 
         # 10. Determine credibility level
-        if quality_analysis["quality_score"] > 0.75:
+        if quality_score > 0.75:
             quality_analysis["credibility_level"] = CredibilityLevel.HIGH.value
-        elif quality_analysis["quality_score"] > 0.5:
+        elif quality_score > 0.5:
             quality_analysis["credibility_level"] = CredibilityLevel.MEDIUM.value
         else:
             quality_analysis["credibility_level"] = CredibilityLevel.LOW.value
@@ -167,9 +162,7 @@ class ResultQualityAnalyzer:
         # Default medium authority
         return 0.5
 
-    def _calculate_relevance_score(
-        self, query: str, title: str, snippet: str, position: int
-    ) -> float:
+    def _calculate_relevance_score(self, query: str, title: str, snippet: str, position: int) -> float:
         """Calculate relevance score based on query match"""
         query_terms = set(query.lower().split())
         title_lower = title.lower()
@@ -187,11 +180,7 @@ class ResultQualityAnalyzer:
         position_bonus = 0.2 if position <= 3 else 0.1 if position <= 10 else 0
 
         # Combined relevance
-        relevance = (
-            title_score * 0.6  # Title weighted higher
-            + snippet_score * 0.3  # Snippet secondary
-            + position_bonus  # Position bonus
-        )
+        relevance = title_score * 0.6 + snippet_score * 0.3 + position_bonus  # Title weighted higher  # Snippet secondary  # Position bonus
 
         return min(1.0, relevance)
 
@@ -247,9 +236,7 @@ class ResultQualityAnalyzer:
         except Exception:
             return 0.5
 
-    def rank_results(
-        self, results: List[Dict[str, Any]], ranking_strategy: str = "balanced"
-    ) -> List[Dict[str, Any]]:
+    def rank_results(self, results: List[Dict[str, Any]], ranking_strategy: str = "balanced") -> List[Dict[str, Any]]:
         """
         Re-rank results by quality metrics.
 
@@ -364,7 +351,7 @@ class QueryIntentAnalyzer:
         """
         query_lower = query.lower()
 
-        analysis = {
+        analysis: Dict[str, Any] = {
             "original_query": query,
             "intent_type": QueryIntentType.GENERAL.value,
             "confidence": 0.0,
@@ -400,7 +387,8 @@ class QueryIntentAnalyzer:
             if enhancement:
                 analysis["enhanced_query"] = f"{query} {enhancement}"
 
-            analysis["suggested_params"] = intent_config["suggested_params"].copy()
+            suggested_params = cast(Dict[str, Any], intent_config["suggested_params"])
+            analysis["suggested_params"] = suggested_params.copy()
 
         # Extract entities and modifiers
         analysis["query_entities"] = self._extract_entities(query)
@@ -496,7 +484,7 @@ class ResultSummarizer:
         Returns:
             Summary dictionary with statistics and recommendations
         """
-        summary = {
+        summary: Dict[str, Any] = {
             "query": query,
             "total_results": len(results),
             "quality_distribution": {"high": 0, "medium": 0, "low": 0},
@@ -514,16 +502,22 @@ class ResultSummarizer:
         }
 
         if not results:
-            summary["warnings"].append("No results found")
+            warnings = cast(List[str], summary["warnings"])
+            warnings.append("No results found")
             return summary
 
         # Gather statistics
-        domain_stats = {}
+        domain_stats: Dict[str, Dict[str, Any]] = {}
+
+        quality_distribution = cast(Dict[str, int], summary["quality_distribution"])
+        freshness_distribution = cast(Dict[str, int], summary["freshness_distribution"])
+        warnings = cast(List[str], summary["warnings"])
+        suggestions = cast(List[str], summary["suggestions"])
 
         for result in results:
             quality = result.get("_quality", {})
             quality_level = quality.get("credibility_level", "medium")
-            summary["quality_distribution"][quality_level] += 1
+            quality_distribution[quality_level] += 1
 
             # Domain statistics
             domain = result.get("displayLink", "unknown")
@@ -535,16 +529,16 @@ class ResultSummarizer:
             # Freshness distribution
             freshness = quality.get("freshness_score", 0.5)
             if freshness > 0.9:
-                summary["freshness_distribution"]["very_fresh"] += 1
+                freshness_distribution["very_fresh"] += 1
             elif freshness > 0.7:
-                summary["freshness_distribution"]["fresh"] += 1
+                freshness_distribution["fresh"] += 1
             elif freshness > 0.5:
-                summary["freshness_distribution"]["moderate"] += 1
+                freshness_distribution["moderate"] += 1
             else:
-                summary["freshness_distribution"]["old"] += 1
+                freshness_distribution["old"] += 1
 
         # Top domains
-        top_domains = []
+        top_domains: List[Dict[str, Any]] = []
         for domain, stats in domain_stats.items():
             avg_quality = stats["total_quality"] / stats["count"]
             top_domains.append(
@@ -570,20 +564,18 @@ class ResultSummarizer:
         summary["recommended_results"] = sorted_results[:3]
 
         # Generate warnings
-        if summary["quality_distribution"]["low"] > 0:
-            summary["warnings"].append(
-                f"{summary['quality_distribution']['low']} low quality result(s) detected"
-            )
+        if quality_distribution["low"] > 0:
+            warnings.append(f"{quality_distribution['low']} low quality result(s) detected")
 
         https_count = sum(1 for r in results if r.get("link", "").startswith("https://"))
         if https_count < len(results):
-            summary["warnings"].append(f"{len(results) - https_count} result(s) lack HTTPS")
+            warnings.append(f"{len(results) - https_count} result(s) lack HTTPS")
 
         # Generate suggestions
-        if summary["freshness_distribution"]["old"] > len(results) / 2:
-            summary["suggestions"].append("Many results are outdated - consider adding date filter")
+        if freshness_distribution["old"] > len(results) / 2:
+            suggestions.append("Many results are outdated - consider adding date filter")
 
-        if summary["quality_distribution"]["high"] < 3:
-            summary["suggestions"].append("Few high-quality results - try refining your query")
+        if quality_distribution["high"] < 3:
+            suggestions.append("Few high-quality results - try refining your query")
 
         return summary

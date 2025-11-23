@@ -258,10 +258,7 @@ class HybridAgent(BaseAIAgent):
         self._system_prompt: Optional[str] = None
         self._conversation_history: List[LLMMessage] = []
 
-        logger.info(
-            f"HybridAgent initialized: {agent_id} with LLM ({self.llm_client.provider_name}) "
-            f"and {len(tools) if isinstance(tools, (list, dict)) else 0} tools"
-        )
+        logger.info(f"HybridAgent initialized: {agent_id} with LLM ({self.llm_client.provider_name}) " f"and {len(tools) if isinstance(tools, (list, dict)) else 0} tools")
 
     async def _initialize(self) -> None:
         """Initialize Hybrid agent - validate LLM client, load tools, and build system prompt."""
@@ -277,10 +274,7 @@ class HybridAgent(BaseAIAgent):
         if base_tool_instances:
             # Tool instances were provided - use them directly
             self._tool_instances = base_tool_instances
-            logger.info(
-                f"HybridAgent {self.agent_id} using "
-                f"{len(self._tool_instances)} pre-configured tool instances"
-            )
+            logger.info(f"HybridAgent {self.agent_id} using " f"{len(self._tool_instances)} pre-configured tool instances")
         elif self._available_tools:
             # Tool names were provided - load them
             self._tool_instances = {}
@@ -291,9 +285,7 @@ class HybridAgent(BaseAIAgent):
                 except Exception as e:
                     logger.warning(f"Failed to load tool {tool_name}: {e}")
 
-            logger.info(
-                f"HybridAgent {self.agent_id} initialized with {len(self._tool_instances)} tools"
-            )
+            logger.info(f"HybridAgent {self.agent_id} initialized with {len(self._tool_instances)} tools")
 
         # Build system prompt
         self._system_prompt = self._build_system_prompt()
@@ -419,9 +411,7 @@ class HybridAgent(BaseAIAgent):
                 task_id=task.get("task_id"),
             )
 
-    async def process_message(
-        self, message: str, sender_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def process_message(self, message: str, sender_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Process an incoming message using ReAct loop.
 
@@ -452,9 +442,7 @@ class HybridAgent(BaseAIAgent):
             logger.error(f"Message processing failed for {self.agent_id}: {e}")
             raise
 
-    async def execute_task_streaming(
-        self, task: Dict[str, Any], context: Dict[str, Any]
-    ) -> AsyncIterator[Dict[str, Any]]:
+    async def execute_task_streaming(self, task: Dict[str, Any], context: Dict[str, Any]) -> AsyncIterator[Dict[str, Any]]:
         """
         Execute a task with streaming tokens and tool calls.
 
@@ -541,9 +529,7 @@ class HybridAgent(BaseAIAgent):
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
-    async def process_message_streaming(
-        self, message: str, sender_id: Optional[str] = None
-    ) -> AsyncIterator[str]:
+    async def process_message_streaming(self, message: str, sender_id: Optional[str] = None) -> AsyncIterator[str]:
         """
         Process a message with streaming response.
 
@@ -576,9 +562,7 @@ class HybridAgent(BaseAIAgent):
             logger.error(f"Streaming message processing failed for {self.agent_id}: {e}")
             raise
 
-    async def _react_loop_streaming(
-        self, task: str, context: Dict[str, Any]
-    ) -> AsyncIterator[Dict[str, Any]]:
+    async def _react_loop_streaming(self, task: str, context: Dict[str, Any]) -> AsyncIterator[Dict[str, Any]]:
         """
         Execute ReAct loop with streaming: Reason → Act → Observe.
 
@@ -1076,7 +1060,4 @@ class HybridAgent(BaseAIAgent):
         Returns:
             HybridAgent instance
         """
-        raise NotImplementedError(
-            "HybridAgent.from_dict requires LLM client to be provided separately. "
-            "Use constructor instead."
-        )
+        raise NotImplementedError("HybridAgent.from_dict requires LLM client to be provided separately. " "Use constructor instead.")

@@ -37,9 +37,7 @@ class TempFileManager:
 
         # Ensure base directory exists
         os.makedirs(self.base_dir, exist_ok=True)
-        logger.info(
-            f"Initialized TempFileManager with base_dir: {self.base_dir}, max_age: {self.max_age} seconds"
-        )
+        logger.info(f"Initialized TempFileManager with base_dir: {self.base_dir}, max_age: {self.max_age} seconds")
 
     def register_file(self, file_path: str) -> None:
         """

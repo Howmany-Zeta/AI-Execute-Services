@@ -144,10 +144,7 @@ class KnowledgeAwareAgent(HybridAgent):
         self._graph_reasoning_tool: Optional[GraphReasoningTool] = None
         self._knowledge_context: Dict[str, Any] = {}
 
-        logger.info(
-            f"KnowledgeAwareAgent initialized: {agent_id} "
-            f"with graph_store={'enabled' if graph_store else 'disabled'}"
-        )
+        logger.info(f"KnowledgeAwareAgent initialized: {agent_id} " f"with graph_store={'enabled' if graph_store else 'disabled'}")
 
     async def _initialize(self) -> None:
         """Initialize Knowledge-Aware agent - setup graph tools and augmented prompts."""
@@ -233,9 +230,7 @@ Use graph reasoning proactively when questions involve:
 
         return base_prompt + kg_section
 
-    async def _reason_with_graph(
-        self, query: str, context: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    async def _reason_with_graph(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Consult knowledge graph during reasoning.
 
@@ -290,9 +285,7 @@ Use graph reasoning proactively when questions involve:
             logger.error(f"Error in graph reasoning: {e}")
             return {"error": str(e)}
 
-    async def _select_tools_with_graph_awareness(
-        self, task: str, available_tools: List[str]
-    ) -> List[str]:
+    async def _select_tools_with_graph_awareness(self, task: str, available_tools: List[str]) -> List[str]:
         """
         Select tools with graph awareness.
 
@@ -343,9 +336,7 @@ Use graph reasoning proactively when questions involve:
 
         return available_tools
 
-    async def _augment_prompt_with_knowledge(
-        self, task: str, context: Optional[Dict[str, Any]] = None
-    ) -> str:
+    async def _augment_prompt_with_knowledge(self, task: str, context: Optional[Dict[str, Any]] = None) -> str:
         """
         Augment prompt with relevant knowledge from graph.
 
@@ -365,14 +356,10 @@ Use graph reasoning proactively when questions involve:
             # Simple keyword matching (could be enhanced with embeddings)
             if any(word in task.lower() for word in query.lower().split()):
                 confidence = kg_context.get("confidence", 0.0)
-                relevant_knowledge.append(
-                    f"- {query}: {kg_context['answer']} (confidence: {confidence:.2f})"
-                )
+                relevant_knowledge.append(f"- {query}: {kg_context['answer']} (confidence: {confidence:.2f})")
 
         if relevant_knowledge:
-            knowledge_section = "\n\nRELEVANT KNOWLEDGE FROM GRAPH:\n" + "\n".join(
-                relevant_knowledge[:3]
-            )
+            knowledge_section = "\n\nRELEVANT KNOWLEDGE FROM GRAPH:\n" + "\n".join(relevant_knowledge[:3])
             return task + knowledge_section
 
         return task
@@ -470,9 +457,7 @@ Use graph reasoning proactively when questions involve:
             retrieved_knowledge = []
             if self.graph_store is not None and self.enable_graph_reasoning:
                 try:
-                    retrieved_knowledge = await self._retrieve_relevant_knowledge(
-                        task, context, iteration
-                    )
+                    retrieved_knowledge = await self._retrieve_relevant_knowledge(task, context, iteration)
 
                     if retrieved_knowledge:
                         knowledge_retrievals += 1
@@ -482,11 +467,7 @@ Use graph reasoning proactively when questions involve:
                             {
                                 "type": "retrieve",
                                 "knowledge_count": len(retrieved_knowledge),
-                                "content": (
-                                    knowledge_str[:200] + "..."
-                                    if len(knowledge_str) > 200
-                                    else knowledge_str
-                                ),
+                                "content": (knowledge_str[:200] + "..." if len(knowledge_str) > 200 else knowledge_str),
                                 "iteration": iteration + 1,
                             }
                         )
@@ -604,9 +585,7 @@ Use graph reasoning proactively when questions involve:
             "max_iterations_reached": True,
         }
 
-    async def _retrieve_relevant_knowledge(
-        self, task: str, context: Dict[str, Any], iteration: int
-    ) -> List[Entity]:
+    async def _retrieve_relevant_knowledge(self, task: str, context: Dict[str, Any], iteration: int) -> List[Entity]:
         """
         Retrieve relevant knowledge for the current reasoning step.
 

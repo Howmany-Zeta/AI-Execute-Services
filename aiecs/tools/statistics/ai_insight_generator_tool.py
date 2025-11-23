@@ -59,7 +59,7 @@ class AIInsightGeneratorTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the AI insight generator tool"""
 
-        model_config = ConfigDict(env_prefix="AI_INSIGHT_GENERATOR_")
+        model_config = ConfigDict(env_prefix="AI_INSIGHT_GENERATOR_")  # type: ignore[typeddict-unknown-key]
 
         min_confidence: float = Field(
             default=0.7,
@@ -125,30 +125,20 @@ class AIInsightGeneratorTool(BaseTool):
         """Schema for generate_insights operation"""
 
         data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(description="Data to analyze")
-        analysis_results: Optional[Dict[str, Any]] = Field(
-            default=None, description="Previous analysis results"
-        )
-        insight_types: Optional[List[InsightType]] = Field(
-            default=None, description="Types of insights to generate"
-        )
+        analysis_results: Optional[Dict[str, Any]] = Field(default=None, description="Previous analysis results")
+        insight_types: Optional[List[InsightType]] = Field(default=None, description="Types of insights to generate")
         min_confidence: float = Field(default=0.7, description="Minimum confidence threshold")
 
     class DiscoverPatternsSchema(BaseModel):
         """Schema for discover_patterns operation"""
 
-        data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(
-            description="Data for pattern discovery"
-        )
-        pattern_types: Optional[List[str]] = Field(
-            default=None, description="Specific pattern types"
-        )
+        data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(description="Data for pattern discovery")
+        pattern_types: Optional[List[str]] = Field(default=None, description="Specific pattern types")
 
     class DetectAnomaliesSchema(BaseModel):
         """Schema for detect_anomalies operation"""
 
-        data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(
-            description="Data for anomaly detection"
-        )
+        data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(description="Data for anomaly detection")
         columns: Optional[List[str]] = Field(default=None, description="Columns to check")
         threshold: float = Field(default=3.0, description="Standard deviation threshold")
 
@@ -349,9 +339,7 @@ class AIInsightGeneratorTool(BaseTool):
         """Detect anomalies using statistical methods"""
         anomalies = []
 
-        numeric_cols = (
-            columns if columns else df.select_dtypes(include=[np.number]).columns.tolist()
-        )
+        numeric_cols = columns if columns else df.select_dtypes(include=[np.number]).columns.tolist()
 
         for col in numeric_cols:
             if col not in df.columns:
@@ -471,9 +459,7 @@ class AIInsightGeneratorTool(BaseTool):
         if self.external_tools.get("research"):
             # Placeholder for causal analysis using Mill's methods
             # This would require domain knowledge and proper case structures
-            self.logger.info(
-                "Causal analysis with reasoning methods available but requires domain-specific setup"
-            )
+            self.logger.info("Causal analysis with reasoning methods available but requires domain-specific setup")
 
         return causations
 

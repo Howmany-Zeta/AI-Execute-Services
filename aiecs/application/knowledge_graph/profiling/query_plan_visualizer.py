@@ -188,11 +188,7 @@ class QueryPlanVisualizer:
                 {
                     "name": step["name"],
                     "value": step["duration_ms"],
-                    "percentage": (
-                        (step["duration_ms"] / profile.duration_ms * 100)
-                        if profile.duration_ms
-                        else 0
-                    ),
+                    "percentage": ((step["duration_ms"] / profile.duration_ms * 100) if profile.duration_ms else 0),
                 }
             )
 

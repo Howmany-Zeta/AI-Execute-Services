@@ -127,10 +127,7 @@ class TextSimilarityReranker(RerankerStrategy):
         jaccard_scores = [jaccard_similarity_text(query, text) for text in entity_texts]
 
         # Combine scores
-        combined_scores = [
-            self.bm25_weight * bm25 + self.jaccard_weight * jaccard
-            for bm25, jaccard in zip(bm25_normalized, jaccard_scores)
-        ]
+        combined_scores = [self.bm25_weight * bm25 + self.jaccard_weight * jaccard for bm25, jaccard in zip(bm25_normalized, jaccard_scores)]
 
         return combined_scores
 
@@ -324,9 +321,7 @@ class StructuralReranker(RerankerStrategy):
         # Compute missing degrees
         for entity_id in entity_ids:
             if entity_id not in degrees:
-                neighbors_out = await self.graph_store.get_neighbors(
-                    entity_id, direction="outgoing"
-                )
+                neighbors_out = await self.graph_store.get_neighbors(entity_id, direction="outgoing")
                 neighbors_in = await self.graph_store.get_neighbors(entity_id, direction="incoming")
                 degree = len(neighbors_out) + len(neighbors_in)
                 degrees[entity_id] = degree
@@ -365,11 +360,7 @@ class StructuralReranker(RerankerStrategy):
         degree_scores = await self._compute_degree_scores(entity_ids)
 
         # Combine scores
-        combined_scores = [
-            self.pagerank_weight * pagerank_scores.get(entity.id, 0.0)
-            + self.degree_weight * degree_scores.get(entity.id, 0.0)
-            for entity in entities
-        ]
+        combined_scores = [self.pagerank_weight * pagerank_scores.get(entity.id, 0.0) + self.degree_weight * degree_scores.get(entity.id, 0.0) for entity in entities]
 
         return combined_scores
 
@@ -454,17 +445,12 @@ class HybridReranker(RerankerStrategy):
 
         # Get scores from each strategy
         text_scores = await self.text_reranker.score(query, entities, **kwargs)
-        semantic_scores = await self.semantic_reranker.score(
-            query, entities, query_embedding=query_embedding, **kwargs
-        )
+        semantic_scores = await self.semantic_reranker.score(query, entities, query_embedding=query_embedding, **kwargs)
         structural_scores = await self.structural_reranker.score(query, entities, **kwargs)
 
         # Combine scores
         combined_scores = [
-            self.text_weight * text
-            + self.semantic_weight * semantic
-            + self.structural_weight * structural
-            for text, semantic, structural in zip(text_scores, semantic_scores, structural_scores)
+            self.text_weight * text + self.semantic_weight * semantic + self.structural_weight * structural for text, semantic, structural in zip(text_scores, semantic_scores, structural_scores)
         ]
 
         return combined_scores

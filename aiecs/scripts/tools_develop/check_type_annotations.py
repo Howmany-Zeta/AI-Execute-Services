@@ -214,9 +214,7 @@ def check_annotations(tool_names: Optional[List[str]] = None, verbose: bool = Fa
         overall_coverage = (total_complete / total_methods * 100) if total_methods > 0 else 0
 
         print("\n" + "=" * 100)
-        print(
-            f"总体统计: {total_complete}/{total_methods} 方法有完整类型注解 ({overall_coverage:.1f}%)"
-        )
+        print(f"总体统计: {total_complete}/{total_methods} 方法有完整类型注解 ({overall_coverage:.1f}%)")
         print("=" * 100)
 
     print("\n💡 提示:")

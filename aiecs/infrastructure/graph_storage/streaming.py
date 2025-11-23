@@ -130,9 +130,7 @@ class GraphStreamExporter:
 
             # Stream entities
             first = True
-            async for entity in self.stream_entities(
-                entity_type=entity_type, batch_size=batch_size
-            ):
+            async for entity in self.stream_entities(entity_type=entity_type, batch_size=batch_size):
                 if format == StreamFormat.JSONL:
                     json.dump(
                         {"type": "entity", "data": entity.model_dump()},
@@ -196,9 +194,7 @@ class GraphStreamExporter:
             "compressed": compress,
         }
 
-    async def stream_entities(
-        self, entity_type: Optional[str] = None, batch_size: int = 1000
-    ) -> AsyncIterator[Entity]:
+    async def stream_entities(self, entity_type: Optional[str] = None, batch_size: int = 1000) -> AsyncIterator[Entity]:
         """
         Stream entities in batches
 
@@ -232,9 +228,7 @@ class GraphStreamExporter:
             for entity in entities:
                 yield entity
 
-    async def stream_relations(
-        self, relation_type: Optional[str] = None, batch_size: int = 1000
-    ) -> AsyncIterator[Relation]:
+    async def stream_relations(self, relation_type: Optional[str] = None, batch_size: int = 1000) -> AsyncIterator[Relation]:
         """
         Stream relations in batches
 
@@ -295,9 +289,7 @@ class GraphStreamExporter:
 
         count = 0
         try:
-            async for entity in self.stream_entities(
-                entity_type=entity_type, batch_size=batch_size
-            ):
+            async for entity in self.stream_entities(entity_type=entity_type, batch_size=batch_size):
                 json.dump(entity.model_dump(), file, cls=DateTimeEncoder)
                 file.write("\n")
                 count += 1

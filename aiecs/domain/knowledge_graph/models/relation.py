@@ -130,7 +130,4 @@ class Relation(BaseModel):
         return f"Relation({self.source_id} -[{self.relation_type}]-> {self.target_id})"
 
     def __repr__(self) -> str:
-        return (
-            f"Relation(id='{self.id}', type='{self.relation_type}', "
-            f"source='{self.source_id}', target='{self.target_id}', weight={self.weight})"
-        )
+        return f"Relation(id='{self.id}', type='{self.relation_type}', " f"source='{self.source_id}', target='{self.target_id}', weight={self.weight})"

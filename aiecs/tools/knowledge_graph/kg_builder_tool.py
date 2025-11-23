@@ -53,9 +53,7 @@ class KGBuilderInput(BaseModel):
     )
     entity_types: Optional[List[str]] = Field(
         None,
-        description=(
-            "Optional list of entity types to extract " "(e.g., ['Person', 'Company', 'Location'])"
-        ),
+        description=("Optional list of entity types to extract " "(e.g., ['Person', 'Company', 'Location'])"),
     )
     data_path: Optional[str] = Field(
         None,
@@ -94,12 +92,8 @@ class BuildFromDocumentSchema(BaseModel):
     """Schema for build_from_document operation"""
 
     document_path: str = Field(..., description="Path to document file (PDF, DOCX, TXT, etc.)")
-    entity_types: Optional[List[str]] = Field(
-        default=None, description="Optional list of entity types to extract"
-    )
-    relation_types: Optional[List[str]] = Field(
-        default=None, description="Optional list of relation types to extract"
-    )
+    entity_types: Optional[List[str]] = Field(default=None, description="Optional list of entity types to extract")
+    relation_types: Optional[List[str]] = Field(default=None, description="Optional list of relation types to extract")
 
 
 class GetStatsSchema(BaseModel):
@@ -225,10 +219,7 @@ class KnowledgeGraphBuilderTool(BaseTool):
         else:
             return {
                 "success": False,
-                "error": (
-                    f"Unknown action: {action}. "
-                    f"Supported actions: build_from_text, build_from_document, build_from_structured_data, get_stats"
-                ),
+                "error": (f"Unknown action: {action}. " f"Supported actions: build_from_text, build_from_document, build_from_structured_data, get_stats"),
             }
 
     async def _build_from_text(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:

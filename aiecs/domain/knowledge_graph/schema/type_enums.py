@@ -110,9 +110,7 @@ class TypeEnumGenerator:
             enum_member_name = self._to_enum_name(entity_type_name)
 
             # Create enum class
-            enum_class = EntityTypeEnum(
-                entity_type_name + "Enum", {enum_member_name: entity_type_name}
-            )
+            enum_class = EntityTypeEnum(entity_type_name + "Enum", {enum_member_name: entity_type_name})
 
             enums[entity_type_name] = enum_class
 

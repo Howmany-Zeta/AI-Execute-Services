@@ -96,10 +96,7 @@ class DistributedGraphMixin:
         logger.info("  - Amazon Neptune with read replicas")
 
         # Placeholder: Return empty partitions
-        return [
-            GraphPartition(partition_id=i, node_count=0, edge_count=0)
-            for i in range(num_partitions)
-        ]
+        return [GraphPartition(partition_id=i, node_count=0, edge_count=0) for i in range(num_partitions)]
 
     async def get_partition_info(self, partition_id: int) -> Optional[GraphPartition]:
         """

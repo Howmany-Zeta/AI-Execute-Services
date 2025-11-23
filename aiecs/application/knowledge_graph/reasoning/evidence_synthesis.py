@@ -49,9 +49,7 @@ class EvidenceSynthesizer:
         self.confidence_threshold = confidence_threshold
         self.contradiction_threshold = contradiction_threshold
 
-    def synthesize_evidence(
-        self, evidence_list: List[Evidence], method: str = "weighted_average"
-    ) -> List[Evidence]:
+    def synthesize_evidence(self, evidence_list: List[Evidence], method: str = "weighted_average") -> List[Evidence]:
         """
         Synthesize evidence from multiple sources
 
@@ -185,9 +183,7 @@ class EvidenceSynthesizer:
         sources = list(set(ev.source for ev in group if ev.source))
         explanation = f"Combined from {len(group)} sources: {', '.join(sources[:3])}"
         if len(group) > 1:
-            explanation += (
-                f"\nAgreement across {len(group)} pieces of evidence increases confidence"
-            )
+            explanation += f"\nAgreement across {len(group)} pieces of evidence increases confidence"
 
         # Create synthesized evidence
         combined = Evidence(
@@ -209,9 +205,7 @@ class EvidenceSynthesizer:
 
         return combined
 
-    def filter_by_confidence(
-        self, evidence_list: List[Evidence], threshold: Optional[float] = None
-    ) -> List[Evidence]:
+    def filter_by_confidence(self, evidence_list: List[Evidence], threshold: Optional[float] = None) -> List[Evidence]:
         """
         Filter evidence by confidence threshold
 

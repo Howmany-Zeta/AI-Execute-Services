@@ -98,18 +98,12 @@ class AIDocumentWriterOrchestrator(BaseTool):
             default=50000,
             description="Maximum content length for AI generation",
         )
-        max_concurrent_writes: int = Field(
-            default=5, description="Maximum concurrent write operations"
-        )
-        default_temperature: float = Field(
-            default=0.3, description="Default temperature for AI model"
-        )
+        max_concurrent_writes: int = Field(default=5, description="Maximum concurrent write operations")
+        default_temperature: float = Field(default=0.3, description="Default temperature for AI model")
         max_tokens: int = Field(default=4000, description="Maximum tokens for AI response")
         timeout: int = Field(default=60, description="Timeout in seconds for AI operations")
         enable_draft_mode: bool = Field(default=True, description="Whether to enable draft mode")
-        enable_content_review: bool = Field(
-            default=True, description="Whether to enable content review"
-        )
+        enable_content_review: bool = Field(default=True, description="Whether to enable content review")
         auto_backup_on_ai_write: bool = Field(
             default=True,
             description="Whether to automatically backup before AI writes",
@@ -215,27 +209,45 @@ class AIDocumentWriterOrchestrator(BaseTool):
         self.content_templates = {
             ContentGenerationMode.GENERATE: {
                 "system_prompt": "You are an expert content writer. Generate high-quality, well-structured content based on the given requirements.",
-                "user_prompt_template": "Generate content for: {content_type}\n\nRequirements:\n{requirements}\n\nTarget audience: {audience}\n\nPlease provide well-structured, engaging content that meets these requirements.",
+                "user_prompt_template": (
+                    "Generate content for: {content_type}\n\nRequirements:\n{requirements}\n\n"
+                    "Target audience: {audience}\n\nPlease provide well-structured, engaging content that meets these requirements."
+                ),
             },
             ContentGenerationMode.ENHANCE: {
                 "system_prompt": "You are an expert content editor. Enhance and improve existing content while maintaining its core message.",
-                "user_prompt_template": "Enhance the following content:\n\n{existing_content}\n\nImprovement goals:\n{enhancement_goals}\n\nPlease provide an enhanced version that is more engaging, clear, and effective.",
+                "user_prompt_template": (
+                    "Enhance the following content:\n\n{existing_content}\n\nImprovement goals:\n{enhancement_goals}\n\n"
+                    "Please provide an enhanced version that is more engaging, clear, and effective."
+                ),
             },
             ContentGenerationMode.REWRITE: {
                 "system_prompt": "You are an expert content rewriter. Rewrite content to improve clarity, style, and effectiveness.",
-                "user_prompt_template": "Rewrite the following content:\n\n{existing_content}\n\nRewriting goals:\n{rewrite_goals}\n\nTarget style: {target_style}\n\nPlease provide a completely rewritten version that maintains the core information but improves presentation.",
+                "user_prompt_template": (
+                    "Rewrite the following content:\n\n{existing_content}\n\nRewriting goals:\n{rewrite_goals}\n\n"
+                    "Target style: {target_style}\n\nPlease provide a completely rewritten version that maintains "
+                    "the core information but improves presentation."
+                ),
             },
             ContentGenerationMode.TRANSLATE: {
                 "system_prompt": "You are an expert translator. Provide accurate, natural translations that preserve meaning and context.",
-                "user_prompt_template": "Translate the following content to {target_language}:\n\n{content}\n\nPlease provide a natural, accurate translation that preserves the original meaning and tone.",
+                "user_prompt_template": (
+                    "Translate the following content to {target_language}:\n\n{content}\n\n" "Please provide a natural, accurate translation that preserves the original meaning and tone."
+                ),
             },
             ContentGenerationMode.CONVERT_FORMAT: {
                 "system_prompt": "You are an expert document formatter. Convert content between different formats while preserving structure and meaning.",
-                "user_prompt_template": "Convert the following content from {source_format} to {target_format}:\n\n{content}\n\nPlease maintain the structure and ensure the converted format is properly formatted and readable.",
+                "user_prompt_template": (
+                    "Convert the following content from {source_format} to {target_format}:\n\n{content}\n\n"
+                    "Please maintain the structure and ensure the converted format is properly formatted and readable."
+                ),
             },
             ContentGenerationMode.TEMPLATE_FILL: {
                 "system_prompt": "You are an expert template processor. Fill templates with appropriate content based on provided data.",
-                "user_prompt_template": "Fill the following template with the provided data:\n\nTemplate:\n{template}\n\nData:\n{data}\n\nPlease generate complete, coherent content that properly fills all template sections.",
+                "user_prompt_template": (
+                    "Fill the following template with the provided data:\n\nTemplate:\n{template}\n\nData:\n{data}\n\n"
+                    "Please generate complete, coherent content that properly fills all template sections."
+                ),
             },
         }
 
@@ -247,16 +259,10 @@ class AIDocumentWriterOrchestrator(BaseTool):
         content_requirements: str = Field(description="Content requirements and specifications")
         generation_mode: ContentGenerationMode = Field(description="Content generation mode")
         document_format: str = Field(description="Target document format")
-        write_strategy: WriteStrategy = Field(
-            default=WriteStrategy.IMMEDIATE, description="Write strategy"
-        )
+        write_strategy: WriteStrategy = Field(default=WriteStrategy.IMMEDIATE, description="Write strategy")
         ai_provider: Optional[AIProvider] = Field(default=None, description="AI provider to use")
-        generation_params: Optional[Dict[str, Any]] = Field(
-            default=None, description="AI generation parameters"
-        )
-        write_params: Optional[Dict[str, Any]] = Field(
-            default=None, description="Document write parameters"
-        )
+        generation_params: Optional[Dict[str, Any]] = Field(default=None, description="AI generation parameters")
+        write_params: Optional[Dict[str, Any]] = Field(default=None, description="Document write parameters")
 
     class EnhanceDocumentSchema(BaseModel):
         """Schema for enhance_document operation"""
@@ -272,9 +278,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
 
         write_requests: List[Dict[str, Any]] = Field(description="List of write requests")
         coordination_strategy: str = Field(default="parallel", description="Coordination strategy")
-        max_concurrent: Optional[int] = Field(
-            default=None, description="Maximum concurrent operations"
-        )
+        max_concurrent: Optional[int] = Field(default=None, description="Maximum concurrent operations")
 
     class AIEditDocumentSchema(BaseModel):
         """Schema for ai_edit_document operation"""
@@ -284,9 +288,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
         edit_instructions: str = Field(description="Specific editing instructions")
         ai_provider: Optional[AIProvider] = Field(default=None, description="AI provider to use")
         preserve_structure: bool = Field(default=True, description="Preserve document structure")
-        format_options: Optional[Dict[str, Any]] = Field(
-            default=None, description="Format-specific options"
-        )
+        format_options: Optional[Dict[str, Any]] = Field(default=None, description="Format-specific options")
 
     class SmartFormatSchema(BaseModel):
         """Schema for smart_format_document operation"""
@@ -294,27 +296,21 @@ class AIDocumentWriterOrchestrator(BaseTool):
         target_path: str = Field(description="Target document path")
         format_goals: str = Field(description="Formatting goals and requirements")
         target_format: str = Field(description="Target document format")
-        style_preferences: Optional[Dict[str, Any]] = Field(
-            default=None, description="Style preferences"
-        )
+        style_preferences: Optional[Dict[str, Any]] = Field(default=None, description="Style preferences")
 
     class ContentAnalysisSchema(BaseModel):
         """Schema for analyze_document_content operation"""
 
         source_path: str = Field(description="Source document path")
         analysis_type: str = Field(description="Type of analysis to perform")
-        analysis_params: Optional[Dict[str, Any]] = Field(
-            default=None, description="Analysis parameters"
-        )
+        analysis_params: Optional[Dict[str, Any]] = Field(default=None, description="Analysis parameters")
 
     class CreateRichDocumentSchema(BaseModel):
         """Schema for create_rich_document operation"""
 
         document_template: str = Field(description="Document template type")
         content_plan: Dict[str, Any] = Field(description="Content planning configuration")
-        layout_config: Optional[Dict[str, Any]] = Field(
-            default=None, description="Layout configuration"
-        )
+        layout_config: Optional[Dict[str, Any]] = Field(default=None, description="Layout configuration")
         output_path: Optional[str] = Field(default=None, description="Custom output path")
         ai_assistance: bool = Field(
             default=True,
@@ -328,9 +324,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
         data_sources: List[Dict[str, Any]] = Field(description="Data sources for charts and tables")
         document_type: str = Field(description="Type of document to generate")
         include_analysis: bool = Field(default=True, description="Include data analysis sections")
-        chart_preferences: Optional[Dict[str, Any]] = Field(
-            default=None, description="Chart style preferences"
-        )
+        chart_preferences: Optional[Dict[str, Any]] = Field(default=None, description="Chart style preferences")
 
     class OptimizeDocumentLayoutSchema(BaseModel):
         """Schema for optimize_document_layout operation"""
@@ -610,9 +604,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
             start_time = datetime.now()
             operation_id = f"ai_edit_{int(start_time.timestamp())}"
 
-            self.logger.info(
-                f"Starting AI edit operation {operation_id}: {edit_operation} on {target_path}"
-            )
+            self.logger.info(f"Starting AI edit operation {operation_id}: {edit_operation} on {target_path}")
 
             if not self.document_writer:
                 raise WriteOrchestrationError("DocumentWriterTool not available")
@@ -621,9 +613,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
             current_content = self._read_document_for_editing(target_path)
 
             # Step 2: Analyze content for editing
-            analysis_result = self._analyze_document_for_editing(
-                current_content, edit_operation, edit_instructions
-            )
+            analysis_result = self._analyze_document_for_editing(current_content, edit_operation, edit_instructions)
 
             # Step 3: Generate editing instructions using AI
             ai_edit_plan = self._generate_ai_edit_plan(
@@ -638,9 +628,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
             edit_results = self._execute_ai_editing_plan(target_path, ai_edit_plan, format_options)
 
             # Step 5: Post-process and validate
-            validation_result = self._validate_ai_editing_result(
-                target_path, current_content, edit_results, preserve_structure
-            )
+            validation_result = self._validate_ai_editing_result(target_path, current_content, edit_results, preserve_structure)
 
             result = {
                 "operation_id": operation_id,
@@ -784,9 +772,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
         except Exception as e:
             raise WriteOrchestrationError(f"Cannot read document {file_path}: {str(e)}")
 
-    def _analyze_document_for_editing(
-        self, content: str, operation: AIEditOperation, instructions: str
-    ) -> Dict[str, Any]:
+    def _analyze_document_for_editing(self, content: str, operation: AIEditOperation, instructions: str) -> Dict[str, Any]:
         """Analyze document content for editing operations"""
         analysis = {
             "content_length": len(content),
@@ -842,10 +828,11 @@ Please provide a detailed editing plan with:
 4. Expected outcomes"""
 
             # Generate editing plan using AI
+            # Combine system and user prompts
+            combined_prompt = f"{system_prompt}\n\n{user_prompt}"
             ai_response = self._call_ai_provider(
+                combined_prompt,
                 ai_provider,
-                system_prompt,
-                user_prompt,
                 {"max_tokens": 2000, "temperature": 0.3},
             )
 
@@ -943,9 +930,7 @@ Please provide a detailed editing plan with:
             }
 
             if preserve_structure:
-                validation["structure_check"] = self._check_structure_preservation(
-                    original_content, edited_content
-                )
+                validation["structure_check"] = self._check_structure_preservation(original_content, edited_content)
 
             return validation
 
@@ -1037,14 +1022,10 @@ Please provide a detailed editing plan with:
             "empty_lines": sum(1 for line in lines if not line.strip()),
             "header_lines": sum(1 for line in lines if line.startswith("#")),
             "list_items": sum(1 for line in lines if line.strip().startswith(("-", "*", "+"))),
-            "paragraphs": len(
-                [line for line in lines if line.strip() and not line.startswith("#")]
-            ),
+            "paragraphs": len([line for line in lines if line.strip() and not line.startswith("#")]),
         }
 
-    def _parse_ai_edit_response(
-        self, ai_response: str, operation: AIEditOperation
-    ) -> Dict[str, Any]:
+    def _parse_ai_edit_response(self, ai_response: str, operation: AIEditOperation) -> Dict[str, Any]:
         """Parse AI response into structured editing plan"""
         # This is a simplified parser - could be enhanced with more
         # sophisticated parsing
@@ -1063,11 +1044,8 @@ Please provide a detailed editing plan with:
         edited_structure = self._analyze_content_structure(edited)
 
         return {
-            "headers_preserved": original_structure["header_lines"]
-            == edited_structure["header_lines"],
-            "structure_similarity": self._calculate_structure_similarity(
-                original_structure, edited_structure
-            ),
+            "headers_preserved": original_structure["header_lines"] == edited_structure["header_lines"],
+            "structure_similarity": self._calculate_structure_similarity(original_structure, edited_structure),
         }
 
     def _calculate_structure_similarity(self, struct1: Dict, struct2: Dict) -> float:
@@ -1076,9 +1054,7 @@ Please provide a detailed editing plan with:
         if struct1["total_lines"] == 0:
             return 1.0 if struct2["total_lines"] == 0 else 0.0
 
-        similarity = 1.0 - abs(struct1["total_lines"] - struct2["total_lines"]) / max(
-            struct1["total_lines"], struct2["total_lines"]
-        )
+        similarity = 1.0 - abs(struct1["total_lines"] - struct2["total_lines"]) / max(struct1["total_lines"], struct2["total_lines"])
         return max(0.0, similarity)
 
     def _analyze_document_structure(self, file_path: str, format_type: str) -> Dict[str, Any]:
@@ -1102,9 +1078,7 @@ Please provide a detailed editing plan with:
             "style_preferences": style_prefs or {},
         }
 
-    def _execute_smart_formatting(
-        self, target_path: str, plan: Dict[str, Any], target_format: str
-    ) -> Dict[str, Any]:
+    def _execute_smart_formatting(self, target_path: str, plan: Dict[str, Any], target_format: str) -> Dict[str, Any]:
         """Execute smart formatting plan"""
         return {
             "target_path": target_path,
@@ -1113,9 +1087,7 @@ Please provide a detailed editing plan with:
             "formatting_completed": True,
         }
 
-    def _analyze_readability(
-        self, content: str, params: Optional[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    def _analyze_readability(self, content: str, params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """Analyze content readability"""
         words = content.split()
         sentences = content.split(".")
@@ -1143,9 +1115,7 @@ Please provide a detailed editing plan with:
             "top_keywords": top_keywords,
         }
 
-    def _analyze_formatting_issues(
-        self, content: str, params: Optional[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    def _analyze_formatting_issues(self, content: str, params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """Analyze formatting issues in content"""
         issues = self._detect_formatting_issues(content)
 
@@ -1155,9 +1125,7 @@ Please provide a detailed editing plan with:
             "content_length": len(content),
         }
 
-    def _analyze_content_quality(
-        self, content: str, params: Optional[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    def _analyze_content_quality(self, content: str, params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """Analyze overall content quality"""
         return {
             "content_length": len(content),
@@ -1241,9 +1209,7 @@ Please provide a detailed editing plan with:
                     doc_type = DocumentType.ARTICLE
                 else:
                     doc_type = DocumentType.TECHNICAL  # Default fallback
-                self.logger.warning(
-                    f"Unknown document type '{doc_type_str}', using {doc_type.value}"
-                )
+                self.logger.warning(f"Unknown document type '{doc_type_str}', using {doc_type.value}")
 
             # Parse template_type with fallback
             try:
@@ -1286,22 +1252,16 @@ Please provide a detailed editing plan with:
             # Step 4: Generate and insert content with AI assistance
             content_results = []
             if ai_assistance and content_plan.get("content_items"):
-                content_results = self._generate_and_insert_content_items(
-                    document_path, content_plan["content_items"]
-                )
+                content_results = self._generate_and_insert_content_items(document_path, content_plan["content_items"])
 
             # Step 5: Insert complex content (charts, tables, images)
             insertion_results = []
             if content_tool and content_plan.get("insertions"):
-                insertion_results = self._batch_insert_complex_content(
-                    document_path, content_plan["insertions"], content_tool
-                )
+                insertion_results = self._batch_insert_complex_content(document_path, content_plan["insertions"], content_tool)
 
             # Step 6: Final optimization
             if ai_assistance:
-                self._optimize_rich_document(
-                    document_path, content_plan.get("optimization_goals", [])
-                )
+                self._optimize_rich_document(document_path, content_plan.get("optimization_goals", []))
 
             result = {
                 "operation_id": operation_id,
@@ -1354,9 +1314,7 @@ Please provide a detailed editing plan with:
             self.logger.info(f"Starting document generation with charts {operation_id}")
 
             # Step 1: Analyze data sources and generate content plan
-            content_plan = self._analyze_data_and_create_plan(
-                data_sources, requirements, document_type, include_analysis
-            )
+            content_plan = self._analyze_data_and_create_plan(data_sources, requirements, document_type, include_analysis)
 
             # Step 2: Generate charts from data sources
             chart_results = self._generate_charts_from_data(data_sources, chart_preferences)
@@ -1369,9 +1327,7 @@ Please provide a detailed editing plan with:
             )
 
             # Step 4: Insert generated charts
-            chart_insertion_results = self._insert_generated_charts(
-                rich_doc_result["document_path"], chart_results, content_plan
-            )
+            chart_insertion_results = self._insert_generated_charts(rich_doc_result["document_path"], chart_results, content_plan)
 
             # Step 5: Generate AI analysis content
             if include_analysis:
@@ -1399,9 +1355,7 @@ Please provide a detailed editing plan with:
                 },
             }
 
-            self.logger.info(
-                f"Document with charts generation {operation_id} completed successfully"
-            )
+            self.logger.info(f"Document with charts generation {operation_id} completed successfully")
             return result
 
         except Exception as e:
@@ -1437,9 +1391,7 @@ Please provide a detailed editing plan with:
                 raise WriteOrchestrationError("DocumentLayoutTool not available")
 
             # Step 1: Analyze current document content
-            content_analysis = self.analyze_document_content(
-                source_path=document_path, analysis_type="structure"
-            )
+            content_analysis = self.analyze_document_content(source_path=document_path, analysis_type="structure")
 
             # Step 2: Generate optimization plan
             optimization_plan = self._generate_layout_optimization_plan(
@@ -1505,9 +1457,7 @@ Please provide a detailed editing plan with:
             start_time = datetime.now()
             operation_id = f"batch_insert_{int(start_time.timestamp())}"
 
-            self.logger.info(
-                f"Starting batch content insertion {operation_id} for: {document_path}"
-            )
+            self.logger.info(f"Starting batch content insertion {operation_id} for: {document_path}")
 
             content_tool = self.creation_tools.get("content")
             if not content_tool:
@@ -1521,17 +1471,11 @@ Please provide a detailed editing plan with:
 
             # Step 2: Execute insertions based on strategy
             if insertion_strategy == "sequential":
-                insertion_results = self._execute_sequential_insertions(
-                    document_path, optimized_plan, content_tool
-                )
+                insertion_results = self._execute_sequential_insertions(document_path, optimized_plan, content_tool)
             elif insertion_strategy == "parallel":
-                insertion_results = self._execute_parallel_insertions(
-                    document_path, optimized_plan, content_tool
-                )
+                insertion_results = self._execute_parallel_insertions(document_path, optimized_plan, content_tool)
             else:  # optimized
-                insertion_results = self._execute_optimized_insertions(
-                    document_path, optimized_plan, content_tool
-                )
+                insertion_results = self._execute_optimized_insertions(document_path, optimized_plan, content_tool)
 
             # Step 3: Post-insertion optimization
             if ai_optimization:
@@ -1559,9 +1503,7 @@ Please provide a detailed editing plan with:
             raise WriteOrchestrationError(f"Batch content insertion failed: {str(e)}")
 
     # Helper methods for new functionality
-    def _generate_and_insert_content_items(
-        self, document_path: str, content_items: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    def _generate_and_insert_content_items(self, document_path: str, content_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Generate and insert content items with AI assistance"""
         results = []
 
@@ -1610,16 +1552,12 @@ Please provide a detailed editing plan with:
         """Batch insert complex content using ContentInsertionTool"""
         try:
             # Use the content tool's batch insertion capability
-            return content_tool.batch_insert_content(
-                document_path=document_path, content_items=insertions
-            )
+            return content_tool.batch_insert_content(document_path=document_path, content_items=insertions)
         except Exception as e:
             self.logger.warning(f"Batch insertion failed: {e}")
             return []
 
-    def _optimize_rich_document(
-        self, document_path: str, optimization_goals: List[str]
-    ) -> Dict[str, Any]:
+    def _optimize_rich_document(self, document_path: str, optimization_goals: List[str]) -> Dict[str, Any]:
         """Optimize rich document based on goals"""
         try:
             if "layout" in self.creation_tools:
@@ -1822,15 +1760,11 @@ Please provide a detailed editing plan with:
             ],
         }
 
-    def _validate_content_preservation(
-        self, document_path: str, original_analysis: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def _validate_content_preservation(self, document_path: str, original_analysis: Dict[str, Any]) -> Dict[str, Any]:
         """Validate that content was preserved during optimization"""
         try:
             # Re-analyze document after optimization
-            new_analysis = self.analyze_document_content(
-                source_path=document_path, analysis_type="structure"
-            )
+            new_analysis = self.analyze_document_content(source_path=document_path, analysis_type="structure")
 
             # Compare analyses
             original_length = original_analysis.get("analysis_result", {}).get("content_length", 0)
@@ -1848,35 +1782,25 @@ Please provide a detailed editing plan with:
         except Exception as e:
             return {"validation_error": str(e)}
 
-    def _optimize_content_insertion_plan(
-        self, document_path: str, content_plan: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    def _optimize_content_insertion_plan(self, document_path: str, content_plan: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Optimize content insertion plan using AI"""
         # For now, return original plan
         # In a full implementation, this would use AI to optimize the order
         return content_plan
 
-    def _execute_sequential_insertions(
-        self, document_path: str, plan: List[Dict[str, Any]], content_tool
-    ) -> Dict[str, Any]:
+    def _execute_sequential_insertions(self, document_path: str, plan: List[Dict[str, Any]], content_tool) -> Dict[str, Any]:
         """Execute content insertions sequentially"""
         return content_tool.batch_insert_content(document_path=document_path, content_items=plan)
 
-    def _execute_parallel_insertions(
-        self, document_path: str, plan: List[Dict[str, Any]], content_tool
-    ) -> Dict[str, Any]:
+    def _execute_parallel_insertions(self, document_path: str, plan: List[Dict[str, Any]], content_tool) -> Dict[str, Any]:
         """Execute content insertions in parallel (simplified to sequential for now)"""
         return self._execute_sequential_insertions(document_path, plan, content_tool)
 
-    def _execute_optimized_insertions(
-        self, document_path: str, plan: List[Dict[str, Any]], content_tool
-    ) -> Dict[str, Any]:
+    def _execute_optimized_insertions(self, document_path: str, plan: List[Dict[str, Any]], content_tool) -> Dict[str, Any]:
         """Execute optimized content insertions"""
         return self._execute_sequential_insertions(document_path, plan, content_tool)
 
-    def _post_insertion_optimization(
-        self, document_path: str, insertion_results: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def _post_insertion_optimization(self, document_path: str, insertion_results: Dict[str, Any]) -> Dict[str, Any]:
         """Perform post-insertion optimization"""
         return {
             "optimization_performed": True,
@@ -2000,9 +1924,7 @@ Please provide a detailed editing plan with:
             # Get content generation template
             template = self.content_templates.get(generation_mode)
             if not template:
-                raise ContentGenerationError(
-                    f"No template found for generation mode: {generation_mode}"
-                )
+                raise ContentGenerationError(f"No template found for generation mode: {generation_mode}")
 
             # Prepare AI prompt
             prompt_params = {
@@ -2195,9 +2117,7 @@ Please provide a detailed editing plan with:
         except Exception as e:
             raise WriteOrchestrationError(f"Failed to read existing document: {str(e)}")
 
-    def _call_ai_provider(
-        self, prompt: str, ai_provider: AIProvider, params: Dict[str, Any]
-    ) -> str:
+    def _call_ai_provider(self, prompt: str, ai_provider: AIProvider, params: Dict[str, Any]) -> str:
         """Call AI provider with prompt"""
 
         try:
@@ -2225,9 +2145,7 @@ Please provide a detailed editing plan with:
 
     def _generate_mock_content(self, prompt: str, params: Dict[str, Any]) -> str:
         """Generate mock content for testing"""
-        self.logger.warning(
-            "Using mock content generation - implement actual AI provider integration"
-        )
+        self.logger.warning("Using mock content generation - implement actual AI provider integration")
 
         # Generate simple mock content based on prompt
         if "requirements" in params:
@@ -2267,12 +2185,7 @@ Please provide a detailed editing plan with:
 
         for line in lines:
             line = line.strip()
-            if (
-                line
-                and not line.startswith("#")
-                and not line.startswith("-")
-                and not line.startswith("*")
-            ):
+            if line and not line.startswith("#") and not line.startswith("-") and not line.startswith("*"):
                 # Add paragraph spacing
                 formatted_lines.append(line + "\n")
             else:
@@ -2299,9 +2212,7 @@ Please provide a detailed editing plan with:
             return json.dumps({"content": content}, indent=2, ensure_ascii=False)
 
     # Batch processing methods
-    async def _batch_write_parallel(
-        self, write_requests: List[Dict[str, Any]], max_concurrent: int
-    ) -> List[Dict[str, Any]]:
+    async def _batch_write_parallel(self, write_requests: List[Dict[str, Any]], max_concurrent: int) -> List[Dict[str, Any]]:
         """Process write requests in parallel"""
 
         semaphore = asyncio.Semaphore(max_concurrent)
@@ -2340,9 +2251,7 @@ Please provide a detailed editing plan with:
 
         return results
 
-    async def _batch_write_smart(
-        self, write_requests: List[Dict[str, Any]], max_concurrent: int
-    ) -> List[Dict[str, Any]]:
+    async def _batch_write_smart(self, write_requests: List[Dict[str, Any]], max_concurrent: int) -> List[Dict[str, Any]]:
         """Smart batch processing with dependency awareness"""
 
         # Analyze dependencies (simplified implementation)
@@ -2359,9 +2268,7 @@ Please provide a detailed editing plan with:
         # Process independent requests in parallel
         results = []
         if independent_requests:
-            parallel_results = await self._batch_write_parallel(
-                independent_requests, max_concurrent
-            )
+            parallel_results = await self._batch_write_parallel(independent_requests, max_concurrent)
             results.extend(parallel_results)
 
         # Process dependent requests sequentially

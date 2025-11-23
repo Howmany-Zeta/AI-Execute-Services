@@ -83,9 +83,7 @@ class CensusProvider(BaseAPIProvider):
         operation_name="get_acs_data",
         description="Get American Community Survey (ACS) demographic and economic data",
     )
-    def get_acs_data(
-        self, variables: str, geography: str, year: Optional[int] = None
-    ) -> Dict[str, Any]:
+    def get_acs_data(self, variables: str, geography: str, year: Optional[int] = None) -> Dict[str, Any]:
         """
         Get ACS data.
 
@@ -170,9 +168,7 @@ class CensusProvider(BaseAPIProvider):
         operation_name="list_variables",
         description="List available variables for a specific dataset",
     )
-    def list_variables(
-        self, dataset: Optional[str] = None, year: Optional[int] = None
-    ) -> Dict[str, Any]:
+    def list_variables(self, dataset: Optional[str] = None, year: Optional[int] = None) -> Dict[str, Any]:
         """
         List available variables.
 

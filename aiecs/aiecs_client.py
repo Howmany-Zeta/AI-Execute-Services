@@ -373,9 +373,7 @@ class AIECS:
             return {
                 "status": "failed",
                 "error": str(e),
-                "context_id": (
-                    task_context.chat_id if hasattr(task_context, "chat_id") else "unknown"
-                ),
+                "context_id": (task_context.chat_id if hasattr(task_context, "chat_id") else "unknown"),
             }
 
     async def _wait_for_task_completion(self, task_id: str, timeout: int = 300) -> Dict[str, Any]:
@@ -439,9 +437,7 @@ class AIECS:
 
 
 # Convenience functions for quick usage
-async def create_aiecs_client(
-    config: Optional[Dict[str, Any]] = None, mode: str = "simple"
-) -> AIECS:
+async def create_aiecs_client(config: Optional[Dict[str, Any]] = None, mode: str = "simple") -> AIECS:
     """
     Create and initialize an AIECS client
 

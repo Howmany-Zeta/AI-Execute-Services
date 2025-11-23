@@ -76,16 +76,12 @@ class ConversationSession:
         if self.session_type == "user_to_mc":
             expected_types = {"user", "master_controller"}
             if not expected_types.issubset(set(participant_types)):
-                raise ValueError(
-                    "user_to_mc session requires user and master_controller participants"
-                )
+                raise ValueError("user_to_mc session requires user and master_controller participants")
 
         elif self.session_type == "mc_to_agent":
             expected_types = {"master_controller", "agent"}
             if not expected_types.issubset(set(participant_types)):
-                raise ValueError(
-                    "mc_to_agent session requires master_controller and agent participants"
-                )
+                raise ValueError("mc_to_agent session requires master_controller and agent participants")
 
         elif self.session_type == "agent_to_agent":
             agent_count = sum(1 for p in self.participants if p.participant_type == "agent")
@@ -108,9 +104,7 @@ class ConversationSession:
             )
             return f"{self.session_id}_mc_to_{agent_role}"
         elif self.session_type == "agent_to_agent":
-            agent_roles = [
-                p.participant_role for p in self.participants if p.participant_type == "agent"
-            ]
+            agent_roles = [p.participant_role for p in self.participants if p.participant_type == "agent"]
             if len(agent_roles) >= 2:
                 return f"{self.session_id}_{agent_roles[0]}_to_{agent_roles[1]}"
             return f"{self.session_id}_agent_to_agent"
@@ -123,9 +117,7 @@ class ConversationSession:
         else:
             return self.session_id
 
-    def get_participant_by_type_and_role(
-        self, participant_type: str, participant_role: Optional[str] = None
-    ) -> Optional[ConversationParticipant]:
+    def get_participant_by_type_and_role(self, participant_type: str, participant_role: Optional[str] = None) -> Optional[ConversationParticipant]:
         """Get a participant by type and optionally by role."""
         for participant in self.participants:
             if participant.participant_type == participant_type:
@@ -337,17 +329,11 @@ def validate_conversation_isolation_pattern(session_key: str, expected_pattern: 
     """
     if expected_pattern == "user_to_mc":
         # Should be just the base session_id
-        return "_" not in session_key or not any(
-            x in session_key for x in ["_mc_to_", "_to_", "_user_to_"]
-        )
+        return "_" not in session_key or not any(x in session_key for x in ["_mc_to_", "_to_", "_user_to_"])
     elif expected_pattern == "mc_to_agent":
         return "_mc_to_" in session_key
     elif expected_pattern == "agent_to_agent":
-        return (
-            "_to_" in session_key
-            and "_mc_to_" not in session_key
-            and "_user_to_" not in session_key
-        )
+        return "_to_" in session_key and "_mc_to_" not in session_key and "_user_to_" not in session_key
     elif expected_pattern == "user_to_agent":
         return "_user_to_" in session_key
     else:

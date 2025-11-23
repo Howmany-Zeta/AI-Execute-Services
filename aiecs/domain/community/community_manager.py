@@ -32,9 +32,7 @@ class MemberLifecycleHooks(Protocol):
     Implement this protocol to receive notifications about member lifecycle events.
     """
 
-    async def on_member_join(
-        self, community_id: str, member_id: str, member: CommunityMember
-    ) -> None:
+    async def on_member_join(self, community_id: str, member_id: str, member: CommunityMember) -> None:
         """Called when a member joins a community."""
         ...
 
@@ -141,6 +139,8 @@ class CommunityManager:
             description=description,
             governance_type=governance_type,
             governance_rules=governance_rules or {},
+            max_members=None,
+            updated_at=None,
         )
 
         self.communities[community.community_id] = community
@@ -196,6 +196,7 @@ class CommunityManager:
             agent_role=agent_role,
             community_role=community_role,
             specializations=specializations or [],
+            last_active_at=None,
         )
 
         self.members[member.member_id] = member
@@ -262,6 +263,7 @@ class CommunityManager:
             resource_type=resource_type,
             description=description,
             owner_id=owner_member_id,
+            updated_at=None,
             access_level=access_level,
             content=content,
             tags=tags or [],
@@ -319,6 +321,7 @@ class CommunityManager:
             implementation_plan=implementation_plan,
             deadline=deadline,
             voting_ends_at=datetime.utcnow() + timedelta(days=3),  # Default 3-day voting period
+            implemented_at=None,
         )
 
         self.decisions[decision.decision_id] = decision
@@ -455,16 +458,12 @@ class CommunityManager:
         await self._save_to_storage()
 
         # Execute lifecycle hooks
-        await self._execute_hook(
-            "on_member_exit", community_id, member_id, member, reason="removed"
-        )
+        await self._execute_hook("on_member_exit", community_id, member_id, member, reason="removed")
 
         logger.info(f"Removed member {member_id} from community {community_id}")
         return True
 
-    async def transfer_member_resources(
-        self, member_id: str, new_owner_id: Optional[str], community_id: str
-    ) -> List[str]:
+    async def transfer_member_resources(self, member_id: str, new_owner_id: Optional[str], community_id: str) -> List[str]:
         """
         Transfer ownership of member's resources to another member.
 
@@ -572,9 +571,7 @@ class CommunityManager:
         logger.info(f"Reactivated member {member_id}")
         return True
 
-    def _find_member_by_agent_id(
-        self, community_id: str, agent_id: str
-    ) -> Optional[CommunityMember]:
+    def _find_member_by_agent_id(self, community_id: str, agent_id: str) -> Optional[CommunityMember]:
         """Find a community member by agent ID."""
         if community_id not in self.community_members:
             return None
@@ -717,9 +714,7 @@ class CommunityManager:
                             self.member_communities[member.agent_id] = set()
                         self.member_communities[member.agent_id].add(community_id)
 
-            logger.info(
-                f"Loaded {len(self.communities)} communities, {len(self.members)} members from storage"
-            )
+            logger.info(f"Loaded {len(self.communities)} communities, {len(self.members)} members from storage")
 
         except Exception as e:
             logger.error(f"Error loading from storage: {e}")
@@ -762,9 +757,7 @@ class CommunityManager:
 
         try:
             # Save communities
-            communities_data = {
-                cid: community.model_dump() for cid, community in self.communities.items()
-            }
+            communities_data = {cid: community.model_dump() for cid, community in self.communities.items()}
             await self._save_data_by_key("communities", communities_data)
 
             # Save members
@@ -772,24 +765,18 @@ class CommunityManager:
             await self._save_data_by_key("community_members", members_data)
 
             # Save resources
-            resources_data = {
-                rid: resource.model_dump() for rid, resource in self.resources.items()
-            }
+            resources_data = {rid: resource.model_dump() for rid, resource in self.resources.items()}
             await self._save_data_by_key("community_resources", resources_data)
 
             # Save decisions
-            decisions_data = {
-                did: decision.model_dump() for did, decision in self.decisions.items()
-            }
+            decisions_data = {did: decision.model_dump() for did, decision in self.decisions.items()}
             await self._save_data_by_key("community_decisions", decisions_data)
 
             # Save sessions
             sessions_data = {sid: session.model_dump() for sid, session in self.sessions.items()}
             await self._save_data_by_key("community_sessions", sessions_data)
 
-            logger.debug(
-                f"Saved {len(self.communities)} communities, {len(self.members)} members to storage"
-            )
+            logger.debug(f"Saved {len(self.communities)} communities, {len(self.members)} members to storage")
 
         except Exception as e:
             logger.error(f"Error saving to storage: {e}")

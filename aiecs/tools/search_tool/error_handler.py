@@ -45,18 +45,10 @@ class AgentFriendlyErrorHandler:
         error_type = type(error).__name__
 
         # Handle specific error types
-        if (
-            isinstance(error, QuotaExceededError)
-            or "quota" in error_str
-            or "rate limit" in error_str
-        ):
+        if isinstance(error, QuotaExceededError) or "quota" in error_str or "rate limit" in error_str:
             self._handle_quota_exceeded(error_response)
 
-        elif (
-            isinstance(error, AuthenticationError)
-            or "auth" in error_str
-            or "credential" in error_str
-        ):
+        elif isinstance(error, AuthenticationError) or "auth" in error_str or "credential" in error_str:
             self._handle_authentication_error(error_response)
 
         elif isinstance(error, RateLimitError):
@@ -65,11 +57,7 @@ class AgentFriendlyErrorHandler:
         elif isinstance(error, CircuitBreakerOpenError) or "circuit breaker" in error_str:
             self._handle_circuit_breaker_error(error_response, context)
 
-        elif (
-            isinstance(error, ValidationError)
-            or "invalid" in error_str
-            or "validation" in error_str
-        ):
+        elif isinstance(error, ValidationError) or "invalid" in error_str or "validation" in error_str:
             self._handle_validation_error(error_response)
 
         elif "timeout" in error_str or "connection" in error_str or "network" in error_str:
@@ -102,10 +90,7 @@ class AgentFriendlyErrorHandler:
             {
                 "error_type": "quota_exceeded",
                 "severity": "high",
-                "user_message": (
-                    "Search API quota has been exceeded. "
-                    "The service has temporarily reached its usage limit."
-                ),
+                "user_message": ("Search API quota has been exceeded. " "The service has temporarily reached its usage limit."),
                 "suggested_actions": [
                     "Wait 60-120 seconds before retrying",
                     "Reduce the number of results requested",
@@ -128,10 +113,7 @@ class AgentFriendlyErrorHandler:
             {
                 "error_type": "authentication_failed",
                 "severity": "high",
-                "user_message": (
-                    "Search API authentication failed. "
-                    "The API credentials may be invalid or expired."
-                ),
+                "user_message": ("Search API authentication failed. " "The API credentials may be invalid or expired."),
                 "suggested_actions": [
                     "Verify that GOOGLE_API_KEY is set correctly in environment",
                     "Check that GOOGLE_CSE_ID is valid",
@@ -153,9 +135,7 @@ class AgentFriendlyErrorHandler:
             {
                 "error_type": "rate_limit_exceeded",
                 "severity": "medium",
-                "user_message": (
-                    "Rate limit has been exceeded. " "Too many requests in a short time period."
-                ),
+                "user_message": ("Rate limit has been exceeded. " "Too many requests in a short time period."),
                 "suggested_actions": [
                     "Wait for the suggested time before retrying",
                     "Reduce request frequency",
@@ -179,10 +159,7 @@ class AgentFriendlyErrorHandler:
             {
                 "error_type": "circuit_breaker_open",
                 "severity": "high",
-                "user_message": (
-                    "Search service is temporarily unavailable due to repeated failures. "
-                    "The circuit breaker has been triggered for protection."
-                ),
+                "user_message": ("Search service is temporarily unavailable due to repeated failures. " "The circuit breaker has been triggered for protection."),
                 "suggested_actions": [
                     f"Wait {timeout} seconds for circuit to reset",
                     "Check search service status",
@@ -204,9 +181,7 @@ class AgentFriendlyErrorHandler:
             {
                 "error_type": "invalid_query",
                 "severity": "low",
-                "user_message": (
-                    "The search query or parameters are invalid. " "Please check the query format."
-                ),
+                "user_message": ("The search query or parameters are invalid. " "Please check the query format."),
                 "suggested_actions": [
                     "Simplify the query - remove special characters",
                     "Check that all parameters are within valid ranges",
@@ -228,9 +203,7 @@ class AgentFriendlyErrorHandler:
             {
                 "error_type": "network_error",
                 "severity": "medium",
-                "user_message": (
-                    "Network connection to search API failed. " "This is usually a temporary issue."
-                ),
+                "user_message": ("Network connection to search API failed. " "This is usually a temporary issue."),
                 "suggested_actions": [
                     "Retry the search in 5-10 seconds",
                     "Check internet connectivity",
@@ -251,9 +224,7 @@ class AgentFriendlyErrorHandler:
             {
                 "error_type": "no_results",
                 "severity": "low",
-                "user_message": (
-                    "No search results found for the query. " "Try broadening your search terms."
-                ),
+                "user_message": ("No search results found for the query. " "Try broadening your search terms."),
                 "suggested_actions": [
                     "Remove overly specific terms",
                     "Try synonyms or related terms",

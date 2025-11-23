@@ -78,7 +78,7 @@ class APISourceTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the API Source Tool"""
 
-        model_config = ConfigDict(env_prefix="APISOURCE_TOOL_")
+        model_config = ConfigDict(env_prefix="APISOURCE_TOOL_")  # type: ignore[typeddict-unknown-key]
 
         cache_ttl: int = Field(
             default=300,
@@ -113,9 +113,7 @@ class APISourceTool(BaseTool):
             description="API key for Federal Reserve Economic Data (FRED)",
         )
         newsapi_api_key: Optional[str] = Field(default=None, description="API key for News API")
-        census_api_key: Optional[str] = Field(
-            default=None, description="API key for US Census Bureau"
-        )
+        census_api_key: Optional[str] = Field(default=None, description="API key for US Census Bureau")
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
@@ -140,9 +138,7 @@ class APISourceTool(BaseTool):
         self.query_enhancer = QueryEnhancer(self.query_analyzer)
         self.data_fusion = DataFusionEngine()
         self.fallback_strategy = FallbackStrategy()
-        self.search_enhancer = SearchEnhancer(
-            relevance_weight=0.5, popularity_weight=0.3, recency_weight=0.2
-        )
+        self.search_enhancer = SearchEnhancer(relevance_weight=0.5, popularity_weight=0.3, recency_weight=0.2)
 
         # Load providers (they auto-discover on import)
         self._providers = {}
@@ -195,13 +191,7 @@ class APISourceTool(BaseTool):
 
                 for op in exposed_ops:
                     # Convert Dict-based schema to Pydantic schema
-                    pydantic_schema = (
-                        cls._convert_dict_schema_to_pydantic(
-                            op["schema"], f"{provider_name}_{op['name']}"
-                        )
-                        if op["schema"]
-                        else None
-                    )
+                    pydantic_schema = cls._convert_dict_schema_to_pydantic(op["schema"], f"{provider_name}_{op['name']}") if op["schema"] else None
 
                     # Create operation info
                     operation_info = {
@@ -219,15 +209,11 @@ class APISourceTool(BaseTool):
             except Exception as e:
                 logger.warning(f"Error discovering operations for provider {provider_name}: {e}")
 
-        logger.info(
-            f"Discovered {len(operations)} provider operations across {len(PROVIDER_REGISTRY)} providers"
-        )
+        logger.info(f"Discovered {len(operations)} provider operations across {len(PROVIDER_REGISTRY)} providers")
         return operations
 
     @staticmethod
-    def _convert_dict_schema_to_pydantic(
-        dict_schema: Optional[Dict[str, Any]], schema_name: str
-    ) -> Optional[type[BaseModel]]:
+    def _convert_dict_schema_to_pydantic(dict_schema: Optional[Dict[str, Any]], schema_name: str) -> Optional[type[BaseModel]]:
         """
         Convert Dict-based provider schema to Pydantic BaseModel schema.
 
@@ -285,9 +271,7 @@ class APISourceTool(BaseTool):
                     if "pattern" in validation:
                         description_parts.append(f"Pattern: {validation['pattern']}")
                     if "min" in validation or "max" in validation:
-                        range_str = (
-                            f"Range: {validation.get('min', 'any')}-{validation.get('max', 'any')}"
-                        )
+                        range_str = f"Range: {validation.get('min', 'any')}-{validation.get('max', 'any')}"
                         description_parts.append(range_str)
 
                 full_description = ". ".join(filter(None, description_parts))
@@ -311,9 +295,7 @@ class APISourceTool(BaseTool):
                 **fields,
             )
 
-            logger.debug(
-                f"Created Pydantic schema: {schema_class.__name__} with {len(fields)} fields"
-            )
+            logger.debug(f"Created Pydantic schema: {schema_class.__name__} with {len(fields)} fields")
             return schema_class
 
         except Exception as e:
@@ -481,15 +463,9 @@ class APISourceTool(BaseTool):
     class QuerySchema(BaseModel):
         """Schema for query operation"""
 
-        provider: str = Field(
-            description="API provider name (e.g., 'fred', 'worldbank', 'newsapi', 'census')"
-        )
-        operation: str = Field(
-            description="Provider-specific operation to perform (e.g., 'get_series', 'search_indicators')"
-        )
-        params: Dict[str, Any] = Field(
-            description="Operation-specific parameters as key-value pairs"
-        )
+        provider: str = Field(description="API provider name (e.g., 'fred', 'worldbank', 'newsapi', 'census')")
+        operation: str = Field(description="Provider-specific operation to perform (e.g., 'get_series', 'search_indicators')")
+        params: Dict[str, Any] = Field(description="Operation-specific parameters as key-value pairs")
 
     class ListProvidersSchema(BaseModel):
         """Schema for list_providers operation (no parameters required)"""
@@ -512,11 +488,7 @@ class APISourceTool(BaseTool):
             description="Maximum number of results to return per provider",
         )
 
-    @cache_result_with_strategy(
-        ttl_strategy=lambda self, result, args, kwargs: self._create_query_ttl_strategy()(
-            result, args, kwargs
-        )
-    )
+    @cache_result_with_strategy(ttl_strategy=lambda self, result, args, kwargs: self._create_query_ttl_strategy()(result, args, kwargs))
     @measure_execution_time
     def query(
         self,
@@ -546,17 +518,13 @@ class APISourceTool(BaseTool):
         """
         if provider not in self._providers:
             available = ", ".join(self._providers.keys())
-            raise ProviderNotFoundError(
-                f"Provider '{provider}' not found. Available providers: {available}"
-            )
+            raise ProviderNotFoundError(f"Provider '{provider}' not found. Available providers: {available}")
 
         # Apply query enhancement if enabled
         enhanced_params = params
         if self.config.enable_query_enhancement and query_text:
             try:
-                enhanced_params = self.query_enhancer.auto_complete_params(
-                    provider, operation, params, query_text
-                )
+                enhanced_params = self.query_enhancer.auto_complete_params(provider, operation, params, query_text)
                 if enhanced_params != params:
                     self.logger.debug(f"Enhanced parameters from {params} to {enhanced_params}")
             except Exception as e:
@@ -564,9 +532,7 @@ class APISourceTool(BaseTool):
                 enhanced_params = params
 
         # Determine if fallback should be used
-        use_fallback = (
-            enable_fallback if enable_fallback is not None else self.config.enable_fallback
-        )
+        use_fallback = enable_fallback if enable_fallback is not None else self.config.enable_fallback
 
         if use_fallback:
             # Use fallback strategy
@@ -631,18 +597,12 @@ class APISourceTool(BaseTool):
         """
         if provider not in self._providers:
             available = ", ".join(self._providers.keys())
-            raise ProviderNotFoundError(
-                f"Provider '{provider}' not found. Available providers: {available}"
-            )
+            raise ProviderNotFoundError(f"Provider '{provider}' not found. Available providers: {available}")
 
         provider_instance = self._providers[provider]
         return provider_instance.get_metadata()
 
-    @cache_result_with_strategy(
-        ttl_strategy=lambda self, result, args, kwargs: self._create_search_ttl_strategy()(
-            result, args, kwargs
-        )
-    )
+    @cache_result_with_strategy(ttl_strategy=lambda self, result, args, kwargs: self._create_search_ttl_strategy()(result, args, kwargs))
     @measure_execution_time
     def search(
         self,
@@ -680,10 +640,7 @@ class APISourceTool(BaseTool):
 
         # Analyze query intent
         intent_analysis = self.query_analyzer.analyze_intent(query)
-        self.logger.info(
-            f"Query intent: {intent_analysis['intent_type']} "
-            f"(confidence: {intent_analysis['confidence']:.2f})"
-        )
+        self.logger.info(f"Query intent: {intent_analysis['intent_type']} " f"(confidence: {intent_analysis['confidence']:.2f})")
 
         # Get provider suggestions from intent analysis
         if intent_analysis.get("suggested_providers"):
@@ -766,17 +723,11 @@ class APISourceTool(BaseTool):
                         final_data.extend(data)
 
         # Apply search enhancement if enabled
-        use_enhancement = (
-            enable_enhancement
-            if enable_enhancement is not None
-            else True  # Always enhance search results
-        )
+        use_enhancement = enable_enhancement if enable_enhancement is not None else True  # Always enhance search results
 
         if use_enhancement and isinstance(final_data, list):
             search_opts = search_options or {}
-            enhanced_results = self.search_enhancer.enhance_search_results(
-                query, final_data, search_opts
-            )
+            enhanced_results = self.search_enhancer.enhance_search_results(query, final_data, search_opts)
             final_data = enhanced_results
 
         # Build response
@@ -821,9 +772,13 @@ class APISourceTool(BaseTool):
                 }
 
                 if health_score > 0.7:
-                    report["healthy_providers"] += 1
+                    healthy = report.get("healthy_providers", 0)
+                    if isinstance(healthy, (int, float)):
+                        report["healthy_providers"] = healthy + 1
                 else:
-                    report["degraded_providers"] += 1
+                    degraded = report.get("degraded_providers", 0)
+                    if isinstance(degraded, (int, float)):
+                        report["degraded_providers"] = degraded + 1
 
             except Exception as e:
                 self.logger.warning(f"Failed to get metrics for {provider_name}: {e}")
@@ -833,8 +788,10 @@ class APISourceTool(BaseTool):
                 }
 
         # Add overall health assessment
-        if report["total_providers"] > 0:
-            health_ratio = report["healthy_providers"] / report["total_providers"]
+        total = report.get("total_providers", 0)
+        healthy = report.get("healthy_providers", 0)
+        if isinstance(total, (int, float)) and isinstance(healthy, (int, float)) and total > 0:
+            health_ratio = healthy / total
             if health_ratio >= 0.8:
                 report["overall_status"] = "healthy"
             elif health_ratio >= 0.5:

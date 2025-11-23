@@ -83,7 +83,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize task manager
     try:
-        task_manager = CeleryTaskManager()
+        task_manager = CeleryTaskManager(config={})
         logger.info("Task manager initialized")
     except Exception as e:
         logger.error(f"Failed to initialize task manager: {e}")
@@ -147,9 +147,7 @@ app = FastAPI(
 )
 
 # Configure CORS
-allowed_origins = (
-    settings.cors_allowed_origins.split(",") if settings.cors_allowed_origins else ["*"]
-)
+allowed_origins = settings.cors_allowed_origins.split(",") if settings.cors_allowed_origins else ["*"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -203,19 +201,22 @@ async def execute_task(request: Request):
 
         # Extract required fields
         task_type = data.get("type", "task")
-        mode = data.get("mode", "execute")
-        service = data.get("service", "default")
         user_id = data.get("userId", "anonymous")
         context_data = data.get("context", {})
 
         # Build task context
+        # TaskContext only accepts 'data' and 'task_dir' arguments
+        task_data = {
+            "user_id": user_id,
+            "metadata": context_data.get("metadata", {}),
+            **context_data.get("data", {}),
+        }
+        # Add tools to task_data if needed
+        if "tools" in context_data:
+            task_data["tools"] = context_data["tools"]
         task_context = TaskContext(
-            mode=mode,
-            service=service,
-            user_id=user_id,
-            metadata=context_data.get("metadata", {}),
-            data=context_data.get("data", {}),
-            tools=context_data.get("tools", []),
+            data=task_data,
+            task_dir="./tasks",
         )
 
         # Submit task to queue

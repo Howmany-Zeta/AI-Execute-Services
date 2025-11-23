@@ -72,9 +72,7 @@ class LogicalQuery:
             "predicates": [
                 {
                     "name": p.name,
-                    "arguments": [
-                        arg.name if hasattr(arg, "name") else str(arg) for arg in p.arguments
-                    ],
+                    "arguments": [arg.name if hasattr(arg, "name") else str(arg) for arg in p.arguments],
                 }
                 for p in self.predicates
             ],
@@ -145,13 +143,9 @@ class LogicFormParser:
 
         # Extract predicates
         if "work for" in query.lower() or "works for" in query.lower():
-            logical_query.predicates.append(
-                Predicate(name="WORKS_FOR", arguments=["?person", "?company"])
-            )
+            logical_query.predicates.append(Predicate(name="WORKS_FOR", arguments=["?person", "?company"]))
         if "located in" in query.lower():
-            logical_query.predicates.append(
-                Predicate(name="LOCATED_IN", arguments=["?company", "San Francisco"])
-            )
+            logical_query.predicates.append(Predicate(name="LOCATED_IN", arguments=["?company", "San Francisco"]))
 
         # Extract constraints
         if "in San Francisco" in query or "in san francisco" in query.lower():

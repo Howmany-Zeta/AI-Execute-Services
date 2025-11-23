@@ -28,9 +28,7 @@ class PropertyTransformation(BaseModel):
     Defines how a source column/value is transformed into a target property.
     """
 
-    transformation_type: TransformationType = Field(
-        ..., description="Type of transformation to apply"
-    )
+    transformation_type: TransformationType = Field(..., description="Type of transformation to apply")
 
     source_column: Optional[str] = Field(
         default=None,
@@ -39,9 +37,7 @@ class PropertyTransformation(BaseModel):
 
     target_property: str = Field(..., description="Target property name in entity/relation")
 
-    target_type: Optional[PropertyType] = Field(
-        default=None, description="Target property type (for type_cast)"
-    )
+    target_type: Optional[PropertyType] = Field(default=None, description="Target property type (for type_cast)")
 
     constant_value: Optional[Any] = Field(
         default=None,
@@ -224,9 +220,7 @@ class EntityMapping(BaseModel):
         description="Simple column-to-property mapping (column_name -> property_name)",
     )
 
-    transformations: List[PropertyTransformation] = Field(
-        default_factory=list, description="Property transformations to apply"
-    )
+    transformations: List[PropertyTransformation] = Field(default_factory=list, description="Property transformations to apply")
 
     id_column: Optional[str] = Field(
         default=None,
@@ -241,9 +235,7 @@ class EntityMapping(BaseModel):
             raise ValueError("source_columns cannot be empty")
         return v
 
-    def map_row_to_entity(
-        self, row: Dict[str, Any], entity_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    def map_row_to_entity(self, row: Dict[str, Any], entity_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Map a data row to entity properties
 
@@ -265,10 +257,7 @@ class EntityMapping(BaseModel):
         for transformation in self.transformations:
             try:
                 value = transformation.apply(row)
-                if (
-                    value is not None
-                    or transformation.transformation_type != TransformationType.SKIP
-                ):
+                if value is not None or transformation.transformation_type != TransformationType.SKIP:
                     properties[transformation.target_property] = value
             except Exception as e:
                 # Log warning but continue
@@ -299,9 +288,7 @@ class RelationMapping(BaseModel):
     Maps source data columns to a relation type between entities.
     """
 
-    source_columns: List[str] = Field(
-        ..., description="Source column names to use for this relation"
-    )
+    source_columns: List[str] = Field(..., description="Source column names to use for this relation")
 
     relation_type: str = Field(..., description="Target relation type name")
 
@@ -309,13 +296,9 @@ class RelationMapping(BaseModel):
 
     target_entity_column: str = Field(..., description="Column name containing target entity ID")
 
-    property_mapping: Dict[str, str] = Field(
-        default_factory=dict, description="Simple column-to-property mapping"
-    )
+    property_mapping: Dict[str, str] = Field(default_factory=dict, description="Simple column-to-property mapping")
 
-    transformations: List[PropertyTransformation] = Field(
-        default_factory=list, description="Property transformations to apply"
-    )
+    transformations: List[PropertyTransformation] = Field(default_factory=list, description="Property transformations to apply")
 
     @field_validator("source_columns")
     @classmethod
@@ -348,10 +331,7 @@ class RelationMapping(BaseModel):
         target_id = str(row.get(self.target_entity_column, ""))
 
         if not source_id or not target_id:
-            raise ValueError(
-                f"Missing entity IDs: source={source_id}, target={target_id}. "
-                f"Columns: source={self.source_entity_column}, target={self.target_entity_column}"
-            )
+            raise ValueError(f"Missing entity IDs: source={source_id}, target={target_id}. " f"Columns: source={self.source_entity_column}, target={self.target_entity_column}")
 
         properties = {}
 
@@ -364,10 +344,7 @@ class RelationMapping(BaseModel):
         for transformation in self.transformations:
             try:
                 value = transformation.apply(row)
-                if (
-                    value is not None
-                    or transformation.transformation_type != TransformationType.SKIP
-                ):
+                if value is not None or transformation.transformation_type != TransformationType.SKIP:
                     properties[transformation.target_property] = value
             except Exception as e:
                 # Log warning but continue
@@ -391,19 +368,13 @@ class SchemaMapping(BaseModel):
     Defines how structured data (CSV, JSON) maps to knowledge graph entities and relations.
     """
 
-    entity_mappings: List[EntityMapping] = Field(
-        default_factory=list, description="Entity type mappings"
-    )
+    entity_mappings: List[EntityMapping] = Field(default_factory=list, description="Entity type mappings")
 
-    relation_mappings: List[RelationMapping] = Field(
-        default_factory=list, description="Relation type mappings"
-    )
+    relation_mappings: List[RelationMapping] = Field(default_factory=list, description="Relation type mappings")
 
-    description: Optional[str] = Field(
-        default=None, description="Human-readable description of this mapping"
-    )
+    description: Optional[str] = Field(default=None, description="Human-readable description of this mapping")
 
-    def validate(self) -> List[str]:
+    def validate_mapping(self) -> List[str]:
         """
         Validate mapping consistency
 
@@ -429,35 +400,21 @@ class SchemaMapping(BaseModel):
             # Check transformations
             for j, trans in enumerate(mapping.transformations):
                 if not trans.target_property:
-                    errors.append(
-                        f"Entity mapping {i}, transformation {j}: target_property is required"
-                    )
+                    errors.append(f"Entity mapping {i}, transformation {j}: target_property is required")
 
                 if trans.transformation_type == TransformationType.RENAME:
                     if not trans.source_column:
-                        errors.append(
-                            f"Entity mapping {i}, transformation {j}: "
-                            f"source_column required for rename"
-                        )
+                        errors.append(f"Entity mapping {i}, transformation {j}: " f"source_column required for rename")
 
                 elif trans.transformation_type == TransformationType.TYPE_CAST:
                     if not trans.source_column:
-                        errors.append(
-                            f"Entity mapping {i}, transformation {j}: "
-                            f"source_column required for type_cast"
-                        )
+                        errors.append(f"Entity mapping {i}, transformation {j}: " f"source_column required for type_cast")
                     if not trans.target_type:
-                        errors.append(
-                            f"Entity mapping {i}, transformation {j}: "
-                            f"target_type required for type_cast"
-                        )
+                        errors.append(f"Entity mapping {i}, transformation {j}: " f"target_type required for type_cast")
 
                 elif trans.transformation_type == TransformationType.COMPUTE:
                     if not trans.compute_function:
-                        errors.append(
-                            f"Entity mapping {i}, transformation {j}: "
-                            f"compute_function required for compute"
-                        )
+                        errors.append(f"Entity mapping {i}, transformation {j}: " f"compute_function required for compute")
 
         # Check relation mappings
         relation_type_names = set()
@@ -466,9 +423,7 @@ class SchemaMapping(BaseModel):
                 errors.append(f"Relation mapping {i}: relation_type is required")
 
             if mapping.relation_type in relation_type_names:
-                errors.append(
-                    f"Relation mapping {i}: duplicate relation_type '{mapping.relation_type}'"
-                )
+                errors.append(f"Relation mapping {i}: duplicate relation_type '{mapping.relation_type}'")
             relation_type_names.add(mapping.relation_type)
 
             # Check entity columns
@@ -479,15 +434,9 @@ class SchemaMapping(BaseModel):
 
             # Check that source columns include entity columns
             if mapping.source_entity_column not in mapping.source_columns:
-                errors.append(
-                    f"Relation mapping {i}: source_entity_column '{mapping.source_entity_column}' "
-                    f"must be in source_columns"
-                )
+                errors.append(f"Relation mapping {i}: source_entity_column '{mapping.source_entity_column}' " f"must be in source_columns")
             if mapping.target_entity_column not in mapping.source_columns:
-                errors.append(
-                    f"Relation mapping {i}: target_entity_column '{mapping.target_entity_column}' "
-                    f"must be in source_columns"
-                )
+                errors.append(f"Relation mapping {i}: target_entity_column '{mapping.target_entity_column}' " f"must be in source_columns")
 
         return errors
 
@@ -498,7 +447,7 @@ class SchemaMapping(BaseModel):
         Returns:
             True if mapping is valid
         """
-        return len(self.validate()) == 0
+        return len(self.validate_mapping()) == 0
 
     def get_entity_mapping(self, entity_type: str) -> Optional[EntityMapping]:
         """

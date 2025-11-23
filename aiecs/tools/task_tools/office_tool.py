@@ -81,28 +81,20 @@ class BaseFileSchema(BaseModel):
             raise SecurityError(f"Path traversal attempt detected: {v}")
         # Ensure path is in allowed directories
         base_dir = os.path.abspath(os.getcwd())
-        allowed_dirs = [
-            os.path.abspath(os.path.normpath(d)) for d in ["/tmp", "./data", "./uploads"]
-        ]
-        if not abs_path.startswith(base_dir) and not any(
-            abs_path.startswith(d) for d in allowed_dirs
-        ):
+        allowed_dirs = [os.path.abspath(os.path.normpath(d)) for d in ["/tmp", "./data", "./uploads"]]
+        if not abs_path.startswith(base_dir) and not any(abs_path.startswith(d) for d in allowed_dirs):
             raise SecurityError(f"Path not in allowed directories: {abs_path}")
         # Check extension
         ext = os.path.splitext(abs_path)[1].lower()
         if ext not in _DEFAULT_ALLOWED_EXTENSIONS:
-            raise SecurityError(
-                f"Extension '{ext}' not allowed for '{field.field_name}', expected {_DEFAULT_ALLOWED_EXTENSIONS}"
-            )
+            raise SecurityError(f"Extension '{ext}' not allowed for '{field.field_name}', expected {_DEFAULT_ALLOWED_EXTENSIONS}")
         # Check file existence and size for input paths
         if field.field_name == "file_path":
             if not os.path.isfile(abs_path):
                 raise FileOperationError(f"{field.field_name}: File not found: {abs_path}")
             size_mb = os.path.getsize(abs_path) / (1024 * 1024)
             if size_mb > _DEFAULT_MAX_FILE_SIZE_MB:
-                raise FileOperationError(
-                    f"{field.field_name}: File too large: {size_mb:.1f}MB, max {_DEFAULT_MAX_FILE_SIZE_MB}MB"
-                )
+                raise FileOperationError(f"{field.field_name}: File too large: {size_mb:.1f}MB, max {_DEFAULT_MAX_FILE_SIZE_MB}MB")
         # Check for existing output paths
         elif field.field_name == "output_path" and os.path.exists(abs_path):
             raise FileOperationError(f"{field.field_name}: File already exists: {abs_path}")
@@ -181,7 +173,7 @@ class OfficeTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the office tool"""
 
-        model_config = ConfigDict(env_prefix="OFFICE_TOOL_")
+        model_config = ConfigDict(env_prefix="OFFICE_TOOL_")  # type: ignore[typeddict-unknown-key]
 
         max_file_size_mb: int = Field(default=100, description="Maximum file size in megabytes")
         default_font: str = Field(default="Arial", description="Default font for documents")
@@ -277,9 +269,7 @@ class OfficeTool(BaseTool):
             return ""
         return "".join(char for char in text if ord(char) >= 32 or char in "\n\r\t")
 
-    def _sanitize_table_data(
-        self, table_data: Optional[List[List[str]]]
-    ) -> Optional[List[List[str]]]:
+    def _sanitize_table_data(self, table_data: Optional[List[List[str]]]) -> Optional[List[List[str]]]:
         """
         Sanitize table data to remove harmful content.
 
@@ -407,10 +397,7 @@ class OfficeTool(BaseTool):
             paras = [p.text for p in doc.paragraphs if p.text.strip()]
             tables = None
             if include_tables:
-                tables = [
-                    [[cell.text for cell in row.cells] for row in table.rows]
-                    for table in doc.tables
-                ]
+                tables = [[[cell.text for cell in row.cells] for row in table.rows] for table in doc.tables]
             return {"paragraphs": paras, "tables": tables}
         except ContentValidationError:
             raise
@@ -574,9 +561,7 @@ class OfficeTool(BaseTool):
         except Exception as e:
             raise FileOperationError(f"Failed to read XLSX: {str(e)}")
 
-    def write_xlsx(
-        self, data: List[Dict], output_path: str, sheet_name: str = "Sheet1"
-    ) -> Dict[str, Any]:
+    def write_xlsx(self, data: List[Dict], output_path: str, sheet_name: str = "Sheet1") -> Dict[str, Any]:
         """
         Write content to an XLSX file.
 
@@ -596,9 +581,7 @@ class OfficeTool(BaseTool):
             if not sanitized_data:
                 pd.DataFrame().to_excel(output_path, index=False, sheet_name=sheet_name)
             else:
-                pd.DataFrame(sanitized_data).to_excel(
-                    output_path, index=False, sheet_name=sheet_name
-                )
+                pd.DataFrame(sanitized_data).to_excel(output_path, index=False, sheet_name=sheet_name)
             return {"success": True, "file_path": output_path}
         except Exception as e:
             raise FileOperationError(f"Failed to write XLSX: {str(e)}")

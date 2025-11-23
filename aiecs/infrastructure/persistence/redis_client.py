@@ -38,9 +38,7 @@ class RedisClient:
 
             # Test connection
             await self._client.ping()
-            logger.info(
-                f"Redis client initialized successfully: {redis_host}:{redis_port}/{redis_db}"
-            )
+            logger.info(f"Redis client initialized successfully: {redis_host}:{redis_port}/{redis_db}")
 
         except Exception as e:
             logger.error(f"Failed to initialize Redis client: {e}")
@@ -65,17 +63,17 @@ class RedisClient:
     async def hincrby(self, name: str, key: str, amount: int = 1) -> int:
         """Atomically increment hash field"""
         client = await self.get_client()
-        return await client.hincrby(name, key, amount)
+        return await client.hincrby(name, key, amount)  # type: ignore[misc]
 
     async def hget(self, name: str, key: str) -> Optional[str]:
         """Get hash field value"""
         client = await self.get_client()
-        return await client.hget(name, key)
+        return await client.hget(name, key)  # type: ignore[misc]
 
     async def hgetall(self, name: str) -> dict:
         """Get all hash fields"""
         client = await self.get_client()
-        return await client.hgetall(name)
+        return await client.hgetall(name)  # type: ignore[misc]
 
     async def hset(
         self,
@@ -117,20 +115,17 @@ class RedisClient:
 
         if mapping is not None:
             # Multiple fields mode
-            return await client.hset(name, mapping=mapping)
+            return await client.hset(name, mapping=mapping)  # type: ignore[misc]
         elif key is not None and value is not None:
             # Single field mode
-            return await client.hset(name, key=key, value=value)
+            return await client.hset(name, key=key, value=value)  # type: ignore[misc]
         else:
-            raise ValueError(
-                "Either provide (key, value) or mapping parameter. "
-                f"Got: key={key}, value={value}, mapping={mapping}"
-            )
+            raise ValueError("Either provide (key, value) or mapping parameter. " f"Got: key={key}, value={value}, mapping={mapping}")
 
     async def expire(self, name: str, time: int) -> bool:
         """Set expiration time"""
         client = await self.get_client()
-        return await client.expire(name, time)
+        return await client.expire(name, time)  # type: ignore[misc]
 
     async def exists(self, name: str) -> bool:
         """Check if key exists"""
@@ -151,7 +146,7 @@ class RedisClient:
         """Get Redis server information"""
         try:
             client = await self.get_client()
-            return await client.info(section)
+            return await client.info(section)  # type: ignore[misc]
         except Exception as e:
             logger.error(f"Redis info failed: {e}")
             return {}
@@ -160,7 +155,7 @@ class RedisClient:
         """Delete one or more keys"""
         try:
             client = await self.get_client()
-            return await client.delete(*keys)
+            return await client.delete(*keys)  # type: ignore[misc]
         except Exception as e:
             logger.error(f"Redis delete failed: {e}")
             return 0
@@ -169,7 +164,7 @@ class RedisClient:
         """Set a key-value pair with optional expiration"""
         try:
             client = await self.get_client()
-            return await client.set(key, value, ex=ex)
+            return await client.set(key, value, ex=ex)  # type: ignore[misc]
         except Exception as e:
             logger.error(f"Redis set failed for key {key}: {e}")
             return False
@@ -178,7 +173,7 @@ class RedisClient:
         """Get value by key"""
         try:
             client = await self.get_client()
-            return await client.get(key)
+            return await client.get(key)  # type: ignore[misc]
         except Exception as e:
             logger.error(f"Redis get failed for key {key}: {e}")
             return None

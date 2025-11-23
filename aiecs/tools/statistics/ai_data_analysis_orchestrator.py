@@ -65,7 +65,7 @@ class AIDataAnalysisOrchestrator(BaseTool):
     class Config(BaseModel):
         """Configuration for the AI data analysis orchestrator tool"""
 
-        model_config = ConfigDict(env_prefix="AI_DATA_ORCHESTRATOR_")
+        model_config = ConfigDict(env_prefix="AI_DATA_ORCHESTRATOR_")  # type: ignore[typeddict-unknown-key]
 
         default_mode: str = Field(default="exploratory", description="Default analysis mode to use")
         max_iterations: int = Field(default=10, description="Maximum number of analysis iterations")
@@ -281,15 +281,11 @@ class AIDataAnalysisOrchestrator(BaseTool):
             data = load_result["data"]
 
             # Profile data
-            profile_result = self.foundation_tools["data_profiler"].profile_dataset(
-                data=data, level="comprehensive"
-            )
+            profile_result = self.foundation_tools["data_profiler"].profile_dataset(data=data, level="comprehensive")
 
             # Auto-transform if needed
             if profile_result.get("quality_issues"):
-                transform_result = self.foundation_tools["data_transformer"].auto_transform(
-                    data=data
-                )
+                transform_result = self.foundation_tools["data_transformer"].auto_transform(data=data)
                 data = transform_result["transformed_data"]
 
             # Generate visualizations
@@ -302,16 +298,12 @@ class AIDataAnalysisOrchestrator(BaseTool):
             numeric_cols = data.select_dtypes(include=["number"]).columns.tolist()
             stats_result = {}
             if len(numeric_cols) >= 2:
-                stats_result = self.foundation_tools["statistical_analyzer"].analyze_correlation(
-                    data=data, variables=numeric_cols
-                )
+                stats_result = self.foundation_tools["statistical_analyzer"].analyze_correlation(data=data, variables=numeric_cols)
 
             # Compile results
             results = {
                 "data_profile": profile_result,
-                "transformations_applied": (
-                    transform_result if "transform_result" in locals() else None
-                ),
+                "transformations_applied": (transform_result if "transform_result" in locals() else None),
                 "visualizations": viz_result,
                 "statistical_analysis": stats_result,
                 "data_source": data_source,
@@ -327,9 +319,7 @@ class AIDataAnalysisOrchestrator(BaseTool):
             self.logger.error(f"Error in auto analysis: {e}")
             raise WorkflowError(f"Auto analysis failed: {e}")
 
-    def orchestrate_workflow(
-        self, workflow_steps: List[Dict[str, Any]], data_source: str
-    ) -> Dict[str, Any]:
+    def orchestrate_workflow(self, workflow_steps: List[Dict[str, Any]], data_source: str) -> Dict[str, Any]:
         """
         Orchestrate a custom workflow with specified steps.
 
@@ -359,9 +349,7 @@ class AIDataAnalysisOrchestrator(BaseTool):
 
     # Internal workflow methods
 
-    def _design_workflow(
-        self, question: str, mode: AnalysisMode, data_source: str
-    ) -> Dict[str, Any]:
+    def _design_workflow(self, question: str, mode: AnalysisMode, data_source: str) -> Dict[str, Any]:
         """Design analysis workflow based on question and mode"""
         workflow = {"question": question, "mode": mode.value, "steps": []}
 
@@ -447,9 +435,7 @@ class AIDataAnalysisOrchestrator(BaseTool):
 
         return workflow
 
-    def _execute_workflow(
-        self, workflow: Dict[str, Any], data_source: str, max_iterations: int
-    ) -> Dict[str, Any]:
+    def _execute_workflow(self, workflow: Dict[str, Any], data_source: str, max_iterations: int) -> Dict[str, Any]:
         """Execute workflow steps"""
         results = {"log": [], "data": None, "outputs": {}}
 

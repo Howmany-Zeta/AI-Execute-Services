@@ -52,9 +52,7 @@ def convert_legacy_config(legacy_config: Dict[str, Any]) -> AgentConfiguration:
         return AgentConfiguration(  # type: ignore[call-arg]
             llm_model=converted.get("llm_model"),
             temperature=converted.get("temperature", 0.7),
-            max_tokens=(
-                max_tokens if max_tokens is not None and isinstance(max_tokens, int) else 4096
-            ),
+            max_tokens=(max_tokens if max_tokens is not None and isinstance(max_tokens, int) else 4096),
         )
 
 

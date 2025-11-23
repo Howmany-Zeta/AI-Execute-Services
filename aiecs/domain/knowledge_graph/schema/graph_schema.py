@@ -47,9 +47,7 @@ class GraphSchema(BaseModel):
         description="Dictionary of relation type schemas (key=type name)",
     )
 
-    description: Optional[str] = Field(
-        default=None, description="Human-readable description of this schema"
-    )
+    description: Optional[str] = Field(default=None, description="Human-readable description of this schema")
 
     class Config:
         arbitrary_types_allowed = True
@@ -100,15 +98,9 @@ class GraphSchema(BaseModel):
         # Check if any relation types reference this entity type
         for rel_type in self.relation_types.values():
             if rel_type.source_entity_types and type_name in rel_type.source_entity_types:
-                raise ValueError(
-                    f"Cannot delete entity type '{type_name}': "
-                    f"referenced by relation '{rel_type.name}' as source"
-                )
+                raise ValueError(f"Cannot delete entity type '{type_name}': " f"referenced by relation '{rel_type.name}' as source")
             if rel_type.target_entity_types and type_name in rel_type.target_entity_types:
-                raise ValueError(
-                    f"Cannot delete entity type '{type_name}': "
-                    f"referenced by relation '{rel_type.name}' as target"
-                )
+                raise ValueError(f"Cannot delete entity type '{type_name}': " f"referenced by relation '{rel_type.name}' as target")
 
         del self.entity_types[type_name]
 
@@ -224,15 +216,9 @@ class GraphSchema(BaseModel):
         Returns:
             List of entity types with that property
         """
-        return [
-            entity_type
-            for entity_type in self.entity_types.values()
-            if property_name in entity_type.properties
-        ]
+        return [entity_type for entity_type in self.entity_types.values() if property_name in entity_type.properties]
 
-    def get_relation_types_for_entities(
-        self, source_type: str, target_type: str
-    ) -> List[RelationType]:
+    def get_relation_types_for_entities(self, source_type: str, target_type: str) -> List[RelationType]:
         """
         Get all relation types allowed between two entity types
 
@@ -261,11 +247,7 @@ class GraphSchema(BaseModel):
         return allowed_relations
 
     def __str__(self) -> str:
-        return (
-            f"GraphSchema(version='{self.version}', "
-            f"entity_types={len(self.entity_types)}, "
-            f"relation_types={len(self.relation_types)})"
-        )
+        return f"GraphSchema(version='{self.version}', " f"entity_types={len(self.entity_types)}, " f"relation_types={len(self.relation_types)})"
 
     def __repr__(self) -> str:
         return self.__str__()

@@ -306,9 +306,7 @@ class BaseAPIProvider(ABC):
                             schema = cls.get_operation_schema(cls, operation_name)
                         except (TypeError, AttributeError):
                             # If that fails, we'll need to handle it at runtime
-                            logger.debug(
-                                f"Could not get schema for {operation_name} at class level"
-                            )
+                            logger.debug(f"Could not get schema for {operation_name} at class level")
 
                     operations.append(
                         {
@@ -319,9 +317,7 @@ class BaseAPIProvider(ABC):
                         }
                     )
 
-                    logger.debug(
-                        f"Discovered exposed operation: {operation_name} from {cls.__name__}"
-                    )
+                    logger.debug(f"Discovered exposed operation: {operation_name} from {cls.__name__}")
 
         except Exception as e:
             logger.warning(f"Error discovering exposed operations for {cls.__name__}: {e}")
@@ -347,9 +343,7 @@ class BaseAPIProvider(ABC):
         # Default implementation: no validation
         return {"data": raw_data, "validation_warnings": [], "statistics": {}}
 
-    def calculate_data_quality(
-        self, operation: str, data: Any, response_time_ms: float
-    ) -> Dict[str, Any]:
+    def calculate_data_quality(self, operation: str, data: Any, response_time_ms: float) -> Dict[str, Any]:
         """
         Calculate quality metadata for the response.
 
@@ -363,7 +357,7 @@ class BaseAPIProvider(ABC):
         Returns:
             Quality metadata dictionary
         """
-        quality = {
+        quality: Dict[str, Any] = {
             "score": 0.7,  # Default quality score
             "completeness": 1.0,  # Assume complete unless validated otherwise
             "freshness_hours": None,  # Unknown freshness
@@ -373,9 +367,13 @@ class BaseAPIProvider(ABC):
 
         # Adjust score based on response time
         if response_time_ms < 500:
-            quality["score"] = min(quality["score"] + 0.1, 1.0)
+            score = quality.get("score", 0.7)
+            if isinstance(score, (int, float)):
+                quality["score"] = min(score + 0.1, 1.0)
         elif response_time_ms > 5000:
-            quality["score"] = max(quality["score"] - 0.1, 0.0)
+            score = quality.get("score", 0.7)
+            if isinstance(score, (int, float)):
+                quality["score"] = max(score - 0.1, 0.0)
 
         # Check if data is empty
         if data is None:
@@ -383,18 +381,26 @@ class BaseAPIProvider(ABC):
             quality["score"] = 0.0
         elif isinstance(data, list) and len(data) == 0:
             quality["completeness"] = 0.0
-            quality["score"] = max(quality["score"] - 0.3, 0.0)
+            score = quality.get("score", 0.7)
+            if isinstance(score, (int, float)):
+                quality["score"] = max(score - 0.3, 0.0)
 
         return quality
 
     def _update_stats(self, success: bool):
         """Update request statistics"""
         with self.stats_lock:
-            self.stats["total_requests"] += 1
+            total = self.stats.get("total_requests", 0)
+            if isinstance(total, (int, float)):
+                self.stats["total_requests"] = total + 1
             if success:
-                self.stats["successful_requests"] += 1
+                successful = self.stats.get("successful_requests", 0)
+                if isinstance(successful, (int, float)):
+                    self.stats["successful_requests"] = successful + 1
             else:
-                self.stats["failed_requests"] += 1
+                failed = self.stats.get("failed_requests", 0)
+                if isinstance(failed, (int, float)):
+                    self.stats["failed_requests"] = failed + 1
             self.stats["last_request_time"] = datetime.utcnow().isoformat()
 
     def _format_response(
@@ -475,11 +481,7 @@ class BaseAPIProvider(ABC):
                 date_fields = ["date", "observation_date", "timestamp"]
                 for date_field in date_fields:
                     if date_field in data[0]:
-                        dates = [
-                            item.get(date_field)
-                            for item in data
-                            if date_field in item and item.get(date_field)
-                        ]
+                        dates = [item.get(date_field) for item in data if date_field in item and item.get(date_field)]
                         if dates:
                             try:
                                 # Sort to get earliest and latest
@@ -546,10 +548,7 @@ class BaseAPIProvider(ABC):
         if operation not in self.supported_operations:
             available_ops = ", ".join(self.supported_operations)
             schema = self.get_operation_schema(operation)
-            error_msg = (
-                f"Operation '{operation}' not supported by {self.name}.\n"
-                f"Supported operations: {available_ops}"
-            )
+            error_msg = f"Operation '{operation}' not supported by {self.name}.\n" f"Supported operations: {available_ops}"
             if schema:
                 error_msg += f"\nSee get_operation_schema('{operation}') for details"
             raise ValueError(error_msg)
@@ -562,11 +561,7 @@ class BaseAPIProvider(ABC):
 
             if schema and "parameters" in schema:
                 # Add helpful parameter information
-                required_params = [
-                    name
-                    for name, info in schema["parameters"].items()
-                    if info.get("required", False)
-                ]
+                required_params = [name for name, info in schema["parameters"].items() if info.get("required", False)]
                 if required_params:
                     enhanced_error += f"\nRequired parameters: {', '.join(required_params)}"
 
@@ -581,10 +576,7 @@ class BaseAPIProvider(ABC):
         wait_start = time.time()
         if not self.rate_limiter.wait(tokens=1, timeout=30):
             self.metrics.record_request(success=False, response_time_ms=0, error_type="rate_limit")
-            raise Exception(
-                f"Rate limit exceeded for {self.name}. "
-                "Please try again later or increase rate limits in config."
-            )
+            raise Exception(f"Rate limit exceeded for {self.name}. " "Please try again later or increase rate limits in config.")
 
         # Track rate limit wait time
         wait_time_ms = (time.time() - wait_start) * 1000
@@ -624,10 +616,7 @@ class BaseAPIProvider(ABC):
             # Update legacy stats
             self._update_stats(success=True)
 
-            self.logger.info(
-                f"Successfully executed {self.name}.{operation} "
-                f"in {response_time_ms:.0f}ms ({record_count} records)"
-            )
+            self.logger.info(f"Successfully executed {self.name}.{operation} " f"in {response_time_ms:.0f}ms ({record_count} records)")
 
             return result
         else:
@@ -647,11 +636,7 @@ class BaseAPIProvider(ABC):
             self._update_stats(success=False)
 
             # Build comprehensive error message
-            error_msg = (
-                f"Failed to execute {self.name}.{operation} after "
-                f"{retry_info['attempts']} attempts.\n"
-                f"Error: {error_info['message']}"
-            )
+            error_msg = f"Failed to execute {self.name}.{operation} after " f"{retry_info['attempts']} attempts.\n" f"Error: {error_info['message']}"
 
             # Add recovery suggestions
             if retry_info.get("recovery_suggestions"):

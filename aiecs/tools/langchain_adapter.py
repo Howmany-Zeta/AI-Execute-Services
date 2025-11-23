@@ -29,8 +29,8 @@ except ImportError:
     class LangchainBaseTool:
         pass
 
-    CallbackManagerForToolRun = None
-    AsyncCallbackManagerForToolRun = None
+    CallbackManagerForToolRun = None  # type: ignore[misc]
+    AsyncCallbackManagerForToolRun = None  # type: ignore[misc]
     LANGCHAIN_AVAILABLE = False
 
 from aiecs.tools.base_tool import BaseTool
@@ -81,9 +81,7 @@ class LangchainToolAdapter(LangchainBaseTool):
         """
         # Construct tool name and description
         tool_name = f"{base_tool_name}_{operation_name}"
-        tool_description = (
-            description or f"Execute {operation_name} operation from {base_tool_name} tool"
-        )
+        tool_description = description or f"Execute {operation_name} operation from {base_tool_name} tool"
 
         # Initialize parent class with all required fields
         super().__init__(
@@ -195,14 +193,10 @@ class ToolRegistry:
                     operations.append(operation_info)
                     logger.debug(f"Added provider operation: {provider_op['name']}")
 
-                logger.info(
-                    f"Discovered {len(provider_operations)} provider operations for {base_tool_class.__name__}"
-                )
+                logger.info(f"Discovered {len(provider_operations)} provider operations for {base_tool_class.__name__}")
 
             except Exception as e:
-                logger.warning(
-                    f"Error discovering provider operations for {base_tool_class.__name__}: {e}"
-                )
+                logger.warning(f"Error discovering provider operations for {base_tool_class.__name__}: {e}")
 
         return operations
 
@@ -226,19 +220,13 @@ class ToolRegistry:
         # 1. Check class-level schemas (e.g., ChartTool)
         for attr_name in dir(base_tool_class):
             attr = getattr(base_tool_class, attr_name)
-            if (
-                isinstance(attr, type)
-                and issubclass(attr, BaseModel)
-                and attr.__name__.endswith("Schema")
-            ):
+            if isinstance(attr, type) and issubclass(attr, BaseModel) and attr.__name__.endswith("Schema"):
                 # Normalize: remove 'Schema' suffix, convert to lowercase,
                 # remove underscores
                 schema_base_name = attr.__name__.replace("Schema", "")
                 normalized_name = schema_base_name.replace("_", "").lower()
                 schemas[normalized_name] = attr
-                logger.debug(
-                    f"Found class-level schema {attr.__name__} -> normalized: {normalized_name}"
-                )
+                logger.debug(f"Found class-level schema {attr.__name__} -> normalized: {normalized_name}")
 
         # 2. Check module-level schemas (e.g., ImageTool)
         tool_module = inspect.getmodule(base_tool_class)
@@ -247,19 +235,13 @@ class ToolRegistry:
                 if attr_name.startswith("_"):
                     continue
                 attr = getattr(tool_module, attr_name)
-                if (
-                    isinstance(attr, type)
-                    and issubclass(attr, BaseModel)
-                    and attr.__name__.endswith("Schema")
-                ):
+                if isinstance(attr, type) and issubclass(attr, BaseModel) and attr.__name__.endswith("Schema"):
                     # Skip if already found at class level
                     schema_base_name = attr.__name__.replace("Schema", "")
                     normalized_name = schema_base_name.replace("_", "").lower()
                     if normalized_name not in schemas:
                         schemas[normalized_name] = attr
-                        logger.debug(
-                            f"Found module-level schema {attr.__name__} -> normalized: {normalized_name}"
-                        )
+                        logger.debug(f"Found module-level schema {attr.__name__} -> normalized: {normalized_name}")
 
         # Get all public methods
         for method_name in dir(base_tool_class):
@@ -286,17 +268,13 @@ class ToolRegistry:
             matching_schema = schemas.get(normalized_method_name)
 
             if matching_schema:
-                logger.debug(
-                    f"Matched method {method_name} with manual schema {matching_schema.__name__}"
-                )
+                logger.debug(f"Matched method {method_name} with manual schema {matching_schema.__name__}")
             else:
                 # Auto-generate schema if not found
                 auto_schema = generate_schema_from_method(method, method_name)
                 if auto_schema:
                     matching_schema = auto_schema
-                    logger.debug(
-                        f"Auto-generated schema for method {method_name}: {auto_schema.__name__}"
-                    )
+                    logger.debug(f"Auto-generated schema for method {method_name}: {auto_schema.__name__}")
                 else:
                     logger.debug(f"No schema found or generated for method {method_name}")
 
@@ -338,7 +316,10 @@ class ToolRegistry:
             if operation_name == "read_data":
                 enhanced_desc = "Read and analyze data files in multiple formats (CSV, Excel, JSON, Parquet, etc.). Returns data structure summary, preview, and optional export functionality."
             elif operation_name == "visualize":
-                enhanced_desc = "Create data visualizations including histograms, scatter plots, bar charts, line charts, heatmaps, and pair plots. Supports customizable styling, colors, and high-resolution output."
+                enhanced_desc = (
+                    "Create data visualizations including histograms, scatter plots, bar charts, line charts, "
+                    "heatmaps, and pair plots. Supports customizable styling, colors, and high-resolution output."
+                )
             elif operation_name == "export_data":
                 enhanced_desc = "Export data to various formats (JSON, CSV, HTML, Excel, Markdown) with optional variable selection and path customization."
         elif base_tool_name == "pandas":
@@ -351,12 +332,8 @@ class ToolRegistry:
             try:
                 fields = schema.__fields__ if hasattr(schema, "__fields__") else {}
                 if fields:
-                    required_params = [
-                        name for name, field in fields.items() if field.is_required()
-                    ]
-                    optional_params = [
-                        name for name, field in fields.items() if not field.is_required()
-                    ]
+                    required_params = [name for name, field in fields.items() if field.is_required()]
+                    optional_params = [name for name, field in fields.items() if not field.is_required()]
 
                     param_desc = ""
                     if required_params:
@@ -439,9 +416,7 @@ class ToolRegistry:
             except Exception as e:
                 logger.error(f"Failed to create Langchain tools for {tool_name}: {e}")
 
-        logger.info(
-            f"Created total {len(all_tools)} Langchain tools from {len(tool_infos)} base tools"
-        )
+        logger.info(f"Created total {len(all_tools)} Langchain tools from {len(tool_infos)} base tools")
         return all_tools
 
     def get_tool(self, name: str) -> Optional[LangchainToolAdapter]:
@@ -534,7 +509,9 @@ def check_langchain_compatibility() -> Dict[str, Any]:
                     "operations": [op["name"] for op in operations],
                 }
             )
-            result["total_operations"] += len(operations)
+            total_ops = result.get("total_operations", 0)
+            if isinstance(total_ops, (int, float)):
+                result["total_operations"] = total_ops + len(operations)
 
         except Exception as e:
             result["incompatible_tools"].append({"name": tool_name, "error": str(e)})

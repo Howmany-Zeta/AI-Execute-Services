@@ -21,9 +21,7 @@ class DataValidator:
     """
 
     @staticmethod
-    def detect_outliers(
-        values: List[float], method: str = "iqr", threshold: float = 1.5
-    ) -> List[int]:
+    def detect_outliers(values: List[float], method: str = "iqr", threshold: float = 1.5) -> List[int]:
         """
         Detect outliers in numeric data.
 
@@ -123,9 +121,7 @@ class DataValidator:
         if expected_frequency is None:
             # Estimate from first few intervals
             if len(dates) >= 3:
-                intervals = [
-                    (dates[i + 1][1] - dates[i][1]).days for i in range(min(3, len(dates) - 1))
-                ]
+                intervals = [(dates[i + 1][1] - dates[i][1]).days for i in range(min(3, len(dates) - 1))]
                 avg_interval = sum(intervals) / len(intervals)
 
                 if avg_interval <= 2:
@@ -148,7 +144,7 @@ class DataValidator:
             "annual": 365,
         }
 
-        expected_gap_days = frequency_gaps.get(expected_frequency, 31)
+        expected_gap_days = frequency_gaps.get(expected_frequency or "monthly", 31)
         tolerance = expected_gap_days * 0.5  # 50% tolerance
 
         # Check for gaps

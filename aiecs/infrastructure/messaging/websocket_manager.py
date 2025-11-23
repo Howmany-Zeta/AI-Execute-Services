@@ -200,9 +200,7 @@ class WebSocketManager:
         confirmation_future = asyncio.Future()
 
         # Register callback
-        self.callback_registry[callback_id] = lambda confirmation: confirmation_future.set_result(
-            confirmation
-        )
+        self.callback_registry[callback_id] = lambda confirmation: confirmation_future.set_result(confirmation)
 
         # Prepare notification data
         notification_data = {

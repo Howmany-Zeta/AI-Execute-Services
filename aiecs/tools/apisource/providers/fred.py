@@ -63,26 +63,15 @@ class FREDProvider(BaseAPIProvider):
 
         if operation == "get_series" or operation == "get_series_info":
             if "series_id" not in params:
-                return False, (
-                    "Missing required parameter: series_id\n"
-                    "Example: {'series_id': 'GDP'}\n"
-                    "Use search_series operation to find valid series IDs"
-                )
+                return False, ("Missing required parameter: series_id\n" "Example: {'series_id': 'GDP'}\n" "Use search_series operation to find valid series IDs")
 
         elif operation == "get_series_observations":
             if "series_id" not in params:
-                return False, (
-                    "Missing required parameter: series_id\n"
-                    "Example: {'series_id': 'GDP', 'observation_start': '2020-01-01'}\n"
-                    "Use search_series to find valid series IDs"
-                )
+                return False, ("Missing required parameter: series_id\n" "Example: {'series_id': 'GDP', 'observation_start': '2020-01-01'}\n" "Use search_series to find valid series IDs")
 
         elif operation == "search_series":
             if "search_text" not in params:
-                return False, (
-                    "Missing required parameter: search_text\n"
-                    "Example: {'search_text': 'gdp', 'limit': 10}"
-                )
+                return False, ("Missing required parameter: search_text\n" "Example: {'search_text': 'gdp', 'limit': 10}")
 
         return True, None
 
@@ -218,17 +207,12 @@ class FREDProvider(BaseAPIProvider):
         """Fetch data from FRED API"""
 
         if not REQUESTS_AVAILABLE:
-            raise ImportError(
-                "requests library is required for FRED provider. Install with: pip install requests"
-            )
+            raise ImportError("requests library is required for FRED provider. Install with: pip install requests")
 
         # Get API key
         api_key = self._get_api_key("FRED_API_KEY")
         if not api_key:
-            raise ValueError(
-                "FRED API key not found. Set FRED_API_KEY environment variable or "
-                "provide 'api_key' in config"
-            )
+            raise ValueError("FRED API key not found. Set FRED_API_KEY environment variable or " "provide 'api_key' in config")
 
         # Build endpoint based on operation
         if operation == "get_series" or operation == "get_series_observations":
@@ -471,17 +455,12 @@ class FREDProvider(BaseAPIProvider):
         if operation in ["get_series", "get_series_observations"]:
             if isinstance(raw_data, list) and len(raw_data) > 0:
                 # Check for missing values (FRED uses '.')
-                completeness_info = self.validator.check_data_completeness(
-                    raw_data, "value", [".", "NA"]
-                )
+                completeness_info = self.validator.check_data_completeness(raw_data, "value", [".", "NA"])
 
                 result["statistics"]["completeness"] = completeness_info
 
                 if completeness_info["missing_count"] > 0:
-                    result["validation_warnings"].append(
-                        f"{completeness_info['missing_count']} missing values detected "
-                        f"({completeness_info['completeness']:.1%} complete)"
-                    )
+                    result["validation_warnings"].append(f"{completeness_info['missing_count']} missing values detected " f"({completeness_info['completeness']:.1%} complete)")
 
                 # Extract numeric values for outlier detection
                 numeric_values = []
@@ -495,14 +474,10 @@ class FREDProvider(BaseAPIProvider):
 
                 if len(numeric_values) >= 4:
                     # Detect outliers
-                    outlier_indices = self.validator.detect_outliers(
-                        numeric_values, method="iqr", threshold=3.0
-                    )
+                    outlier_indices = self.validator.detect_outliers(numeric_values, method="iqr", threshold=3.0)
 
                     if outlier_indices:
-                        result["validation_warnings"].append(
-                            f"{len(outlier_indices)} potential outliers detected"
-                        )
+                        result["validation_warnings"].append(f"{len(outlier_indices)} potential outliers detected")
                         result["statistics"]["outliers_count"] = len(outlier_indices)
 
                     # Calculate value range
@@ -513,16 +488,12 @@ class FREDProvider(BaseAPIProvider):
                 # Detect time gaps
                 time_gaps = self.validator.detect_time_gaps(raw_data, "date")
                 if time_gaps:
-                    result["validation_warnings"].append(
-                        f"{len(time_gaps)} time gaps detected in series"
-                    )
+                    result["validation_warnings"].append(f"{len(time_gaps)} time gaps detected in series")
                     result["statistics"]["time_gaps"] = len(time_gaps)
 
         return result
 
-    def calculate_data_quality(
-        self, operation: str, data: Any, response_time_ms: float
-    ) -> Dict[str, Any]:
+    def calculate_data_quality(self, operation: str, data: Any, response_time_ms: float) -> Dict[str, Any]:
         """Calculate quality metadata specific to FRED data"""
 
         # Get base quality from parent

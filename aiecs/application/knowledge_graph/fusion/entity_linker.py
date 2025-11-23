@@ -101,9 +101,7 @@ class EntityLinker:
 
         return link_result
 
-    async def link_entities(
-        self, new_entities: List[Entity], candidate_limit: int = 10
-    ) -> List["LinkResult"]:
+    async def link_entities(self, new_entities: List[Entity], candidate_limit: int = 10) -> List["LinkResult"]:
         """
         Link multiple entities in batch
 
@@ -273,12 +271,7 @@ class EntityLinker:
 
     def _get_entity_name(self, entity: Entity) -> str:
         """Extract entity name from properties"""
-        return (
-            entity.properties.get("name")
-            or entity.properties.get("title")
-            or entity.properties.get("text")
-            or ""
-        )
+        return entity.properties.get("name") or entity.properties.get("title") or entity.properties.get("text") or ""
 
     def _name_similarity(self, name1: str, name2: str) -> float:
         """
@@ -337,7 +330,5 @@ class LinkResult:
 
     def __repr__(self) -> str:
         if self.linked:
-            return (
-                f"LinkResult(linked=True, type={self.link_type}, similarity={self.similarity:.2f})"
-            )
+            return f"LinkResult(linked=True, type={self.link_type}, similarity={self.similarity:.2f})"
         return "LinkResult(linked=False)"

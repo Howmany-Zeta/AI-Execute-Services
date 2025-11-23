@@ -66,9 +66,7 @@ class PathPattern(BaseModel):
         description="Maximum path length (number of hops)",
     )
 
-    allow_cycles: bool = Field(
-        default=False, description="Whether to allow revisiting nodes (cycles)"
-    )
+    allow_cycles: bool = Field(default=False, description="Whether to allow revisiting nodes (cycles)")
 
     required_relation_sequence: Optional[List[str]] = Field(
         default=None,

@@ -110,14 +110,9 @@ class NEREntityExtractor(EntityExtractor):
 
             self.nlp: Language = spacy.load(model, disable=disable_components)
         except OSError as e:
-            raise RuntimeError(
-                f"spaCy model '{model}' not found. "
-                f"Install it with: python -m spacy download {model}"
-            ) from e
+            raise RuntimeError(f"spaCy model '{model}' not found. " f"Install it with: python -m spacy download {model}") from e
 
-    async def extract_entities(
-        self, text: str, entity_types: Optional[List[str]] = None, **kwargs
-    ) -> List[Entity]:
+    async def extract_entities(self, text: str, entity_types: Optional[List[str]] = None, **kwargs) -> List[Entity]:
         """
         Extract entities from text using spaCy NER
 

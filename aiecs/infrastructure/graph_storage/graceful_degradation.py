@@ -198,10 +198,7 @@ class GracefulDegradationStore:
 
                 # Switch to fallback if threshold reached
                 if self.failure_count >= self.max_failures:
-                    logger.warning(
-                        f"Primary store failed {self.failure_count} times, "
-                        f"switching to fallback"
-                    )
+                    logger.warning(f"Primary store failed {self.failure_count} times, " f"switching to fallback")
                     self.status.primary_available = False
                     self.status.mode = DegradationMode.DEGRADED
 
@@ -213,10 +210,7 @@ class GracefulDegradationStore:
                         logger.error(f"Fallback store also failed: {fallback_error}")
                         self.status.fallback_available = False
                         self.status.mode = DegradationMode.FAILED
-                        raise GraphStoreError(
-                            f"Both primary and fallback stores failed. "
-                            f"Primary: {e}, Fallback: {fallback_error}"
-                        )
+                        raise GraphStoreError(f"Both primary and fallback stores failed. " f"Primary: {e}, Fallback: {fallback_error}")
                 else:
                     # No fallback available, raise original error
                     raise
@@ -237,21 +231,15 @@ class GracefulDegradationStore:
     # Delegate all GraphStore methods with fallback
     async def add_entity(self, entity):
         """Add entity with fallback"""
-        return await self._execute_with_fallback(
-            "add_entity", lambda store, e: store.add_entity(e), entity
-        )
+        return await self._execute_with_fallback("add_entity", lambda store, e: store.add_entity(e), entity)
 
     async def get_entity(self, entity_id: str):
         """Get entity with fallback"""
-        return await self._execute_with_fallback(
-            "get_entity", lambda store, eid: store.get_entity(eid), entity_id
-        )
+        return await self._execute_with_fallback("get_entity", lambda store, eid: store.get_entity(eid), entity_id)
 
     async def add_relation(self, relation):
         """Add relation with fallback"""
-        return await self._execute_with_fallback(
-            "add_relation", lambda store, r: store.add_relation(r), relation
-        )
+        return await self._execute_with_fallback("add_relation", lambda store, r: store.add_relation(r), relation)
 
     async def get_relation(self, relation_id: str):
         """Get relation with fallback"""

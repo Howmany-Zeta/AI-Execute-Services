@@ -185,10 +185,7 @@ class EnhancedRetryPolicy:
 
                 # Calculate delay and wait
                 delay = self.calculate_delay(attempt, error_type)
-                logger.warning(
-                    f"Attempt {attempt + 1} failed ({error_type.value}). "
-                    f"Retrying in {delay:.2f}s..."
-                )
+                logger.warning(f"Attempt {attempt + 1} failed ({error_type.value}). " f"Retrying in {delay:.2f}s...")
                 await asyncio.sleep(delay)
 
         # All retries exhausted

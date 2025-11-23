@@ -169,10 +169,7 @@ ROLE_TEMPLATES = {
     "developer": {
         "role_name": "developer",
         "goal": "Write clean, efficient, and maintainable code",
-        "backstory": (
-            "You are an experienced software developer with expertise in "
-            "multiple programming languages and best practices"
-        ),
+        "backstory": ("You are an experienced software developer with expertise in " "multiple programming languages and best practices"),
         "domain_knowledge": "Software development, design patterns, testing, debugging",
         "temperature": 0.3,
     },

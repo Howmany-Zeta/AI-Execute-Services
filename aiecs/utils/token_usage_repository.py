@@ -9,9 +9,7 @@ logger = logging.getLogger(__name__)
 class TokenUsageRepository:
     """Encapsulates all Redis operations related to user token usage"""
 
-    def _get_key_for_current_period(
-        self, user_id: str, cycle_start_date: Optional[str] = None
-    ) -> str:
+    def _get_key_for_current_period(self, user_id: str, cycle_start_date: Optional[str] = None) -> str:
         """
         Generate Redis key for current billing period
 
@@ -54,9 +52,7 @@ class TokenUsageRepository:
             # Use HINCRBY for atomic increment
             client = await get_redis_client()
             await client.hincrby(redis_key, "prompt_tokens", prompt_tokens)
-            logger.info(
-                f"[Repository] User '{user_id}' prompt tokens incremented by {prompt_tokens} in key '{redis_key}'."
-            )
+            logger.info(f"[Repository] User '{user_id}' prompt tokens incremented by {prompt_tokens} in key '{redis_key}'.")
         except Exception as e:
             logger.error(f"Failed to increment prompt tokens for user {user_id}: {e}")
             raise
@@ -84,9 +80,7 @@ class TokenUsageRepository:
             # Use HINCRBY for atomic increment
             client = await get_redis_client()
             await client.hincrby(redis_key, "completion_tokens", completion_tokens)
-            logger.info(
-                f"[Repository] User '{user_id}' completion tokens incremented by {completion_tokens} in key '{redis_key}'."
-            )
+            logger.info(f"[Repository] User '{user_id}' completion tokens incremented by {completion_tokens} in key '{redis_key}'.")
         except Exception as e:
             logger.error(f"Failed to increment completion tokens for user {user_id}: {e}")
             raise
@@ -114,9 +108,7 @@ class TokenUsageRepository:
             # Use HINCRBY for atomic increment
             client = await get_redis_client()
             await client.hincrby(redis_key, "total_tokens", total_tokens)
-            logger.info(
-                f"[Repository] User '{user_id}' total usage incremented by {total_tokens} tokens in key '{redis_key}'."
-            )
+            logger.info(f"[Repository] User '{user_id}' total usage incremented by {total_tokens} tokens in key '{redis_key}'.")
         except Exception as e:
             logger.error(f"Failed to increment total tokens for user {user_id}: {e}")
             raise
@@ -165,16 +157,12 @@ class TokenUsageRepository:
 
             await pipe.execute()
 
-            logger.info(
-                f"[Repository] User '{user_id}' detailed usage updated: prompt={prompt_tokens}, completion={completion_tokens}, total={total_tokens} in key '{redis_key}'."
-            )
+            logger.info(f"[Repository] User '{user_id}' detailed usage updated: prompt={prompt_tokens}, completion={completion_tokens}, total={total_tokens} in key '{redis_key}'.")
         except Exception as e:
             logger.error(f"Failed to increment detailed usage for user {user_id}: {e}")
             raise
 
-    async def get_usage_stats(
-        self, user_id: str, cycle_start_date: Optional[str] = None
-    ) -> Dict[str, int]:
+    async def get_usage_stats(self, user_id: str, cycle_start_date: Optional[str] = None) -> Dict[str, int]:
         """
         Get token usage statistics for specified user
 
@@ -240,9 +228,7 @@ class TokenUsageRepository:
             logger.error(f"Failed to reset usage for user {user_id}: {e}")
             raise
 
-    async def set_usage_limit(
-        self, user_id: str, limit: int, cycle_start_date: Optional[str] = None
-    ):
+    async def set_usage_limit(self, user_id: str, limit: int, cycle_start_date: Optional[str] = None):
         """
         Set token usage limit for user
 
@@ -258,17 +244,13 @@ class TokenUsageRepository:
 
         try:
             client = await get_redis_client()
-            await client.hset(redis_key, {"usage_limit": str(limit)})
-            logger.info(
-                f"[Repository] Set usage limit {limit} for user '{user_id}' in key '{redis_key}'."
-            )
+            await client.hset(redis_key, key="usage_limit", value=str(limit))
+            logger.info(f"[Repository] Set usage limit {limit} for user '{user_id}' in key '{redis_key}'.")
         except Exception as e:
             logger.error(f"Failed to set usage limit for user {user_id}: {e}")
             raise
 
-    async def check_usage_limit(
-        self, user_id: str, cycle_start_date: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def check_usage_limit(self, user_id: str, cycle_start_date: Optional[str] = None) -> Dict[str, Any]:
         """
         Check if user has exceeded usage limit
 

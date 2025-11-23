@@ -139,7 +139,7 @@ class ContentInsertionTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the content insertion tool"""
 
-        model_config = ConfigDict(env_prefix="CONTENT_INSERT_")
+        model_config = ConfigDict(env_prefix="CONTENT_INSERT_")  # type: ignore[typeddict-unknown-key]
 
         temp_dir: str = Field(
             default=os.path.join(tempfile.gettempdir(), "content_insertion"),
@@ -149,9 +149,7 @@ class ContentInsertionTool(BaseTool):
             default=os.path.join(tempfile.gettempdir(), "document_assets"),
             description="Directory for document assets",
         )
-        max_image_size: int = Field(
-            default=10 * 1024 * 1024, description="Maximum image size in bytes"
-        )
+        max_image_size: int = Field(default=10 * 1024 * 1024, description="Maximum image size in bytes")
         max_chart_size: Tuple[int, int] = Field(
             default=(1200, 800),
             description="Maximum chart size in pixels (width, height)",
@@ -234,13 +232,9 @@ class ContentInsertionTool(BaseTool):
         chart_data: Dict[str, Any] = Field(description="Data for chart generation")
         chart_type: ChartType = Field(description="Type of chart to create")
         position: Dict[str, Any] = Field(description="Position to insert chart")
-        chart_config: Optional[Dict[str, Any]] = Field(
-            default=None, description="Chart configuration"
-        )
+        chart_config: Optional[Dict[str, Any]] = Field(default=None, description="Chart configuration")
         caption: Optional[str] = Field(default=None, description="Chart caption")
-        reference_id: Optional[str] = Field(
-            default=None, description="Reference ID for cross-referencing"
-        )
+        reference_id: Optional[str] = Field(default=None, description="Reference ID for cross-referencing")
 
     class InsertTableSchema(BaseModel):
         """Schema for insert_table operation"""
@@ -251,9 +245,7 @@ class ContentInsertionTool(BaseTool):
         table_style: TableStyle = Field(default=TableStyle.DEFAULT, description="Table styling")
         headers: Optional[List[str]] = Field(default=None, description="Table headers")
         caption: Optional[str] = Field(default=None, description="Table caption")
-        reference_id: Optional[str] = Field(
-            default=None, description="Reference ID for cross-referencing"
-        )
+        reference_id: Optional[str] = Field(default=None, description="Reference ID for cross-referencing")
 
     class InsertImageSchema(BaseModel):
         """Schema for insert_image operation"""
@@ -261,17 +253,11 @@ class ContentInsertionTool(BaseTool):
         document_path: str = Field(description="Path to target document")
         image_source: str = Field(description="Image source (path, URL, or base64)")
         position: Dict[str, Any] = Field(description="Position to insert image")
-        image_config: Optional[Dict[str, Any]] = Field(
-            default=None, description="Image configuration"
-        )
-        alignment: ImageAlignment = Field(
-            default=ImageAlignment.CENTER, description="Image alignment"
-        )
+        image_config: Optional[Dict[str, Any]] = Field(default=None, description="Image configuration")
+        alignment: ImageAlignment = Field(default=ImageAlignment.CENTER, description="Image alignment")
         caption: Optional[str] = Field(default=None, description="Image caption")
         alt_text: Optional[str] = Field(default=None, description="Alternative text")
-        reference_id: Optional[str] = Field(
-            default=None, description="Reference ID for cross-referencing"
-        )
+        reference_id: Optional[str] = Field(default=None, description="Reference ID for cross-referencing")
 
     class InsertMediaSchema(BaseModel):
         """Schema for insert_media operation"""
@@ -280,9 +266,7 @@ class ContentInsertionTool(BaseTool):
         media_source: str = Field(description="Media source (path or URL)")
         media_type: ContentType = Field(description="Type of media content")
         position: Dict[str, Any] = Field(description="Position to insert media")
-        media_config: Optional[Dict[str, Any]] = Field(
-            default=None, description="Media configuration"
-        )
+        media_config: Optional[Dict[str, Any]] = Field(default=None, description="Media configuration")
         caption: Optional[str] = Field(default=None, description="Media caption")
 
     class InsertInteractiveSchema(BaseModel):
@@ -332,14 +316,10 @@ class ContentInsertionTool(BaseTool):
             chart_result = self._generate_chart(chart_data, chart_type, chart_config)
 
             # Process chart for document insertion
-            processed_chart = self._process_chart_for_document(
-                chart_result, document_path, chart_config
-            )
+            processed_chart = self._process_chart_for_document(chart_result, document_path, chart_config)
 
             # Generate chart markup
-            chart_markup = self._generate_chart_markup(
-                processed_chart, caption, reference_id, chart_config
-            )
+            chart_markup = self._generate_chart_markup(processed_chart, caption, reference_id, chart_config)
 
             # Insert chart into document
             self._insert_content_at_position(document_path, chart_markup, position)
@@ -418,9 +398,7 @@ class ContentInsertionTool(BaseTool):
             processed_table = self._process_table_data(table_data, headers)
 
             # Generate table markup
-            table_markup = self._generate_table_markup(
-                processed_table, table_style, caption, reference_id
-            )
+            table_markup = self._generate_table_markup(processed_table, table_style, caption, reference_id)
 
             # Insert table into document
             self._insert_content_at_position(document_path, table_markup, position)
@@ -498,14 +476,10 @@ class ContentInsertionTool(BaseTool):
             self.logger.info(f"Inserting image {insertion_id} into: {document_path}")
 
             # Process image
-            processed_image = self._process_image_for_document(
-                image_source, image_config, document_path
-            )
+            processed_image = self._process_image_for_document(image_source, image_config, document_path)
 
             # Generate image markup
-            image_markup = self._generate_image_markup(
-                processed_image, alignment, caption, alt_text, reference_id
-            )
+            image_markup = self._generate_image_markup(processed_image, alignment, caption, alt_text, reference_id)
 
             # Insert image into document
             self._insert_content_at_position(document_path, image_markup, position)
@@ -580,14 +554,10 @@ class ContentInsertionTool(BaseTool):
             self.logger.info(f"Inserting {media_type} media {insertion_id} into: {document_path}")
 
             # Process media
-            processed_media = self._process_media_for_document(
-                media_source, media_type, media_config
-            )
+            processed_media = self._process_media_for_document(media_source, media_type, media_config)
 
             # Generate media markup
-            media_markup = self._generate_media_markup(
-                processed_media, media_type, caption, media_config
-            )
+            media_markup = self._generate_media_markup(processed_media, media_type, caption, media_config)
 
             # Insert media into document
             self._insert_content_at_position(document_path, media_markup, position)
@@ -640,9 +610,7 @@ class ContentInsertionTool(BaseTool):
             start_time = datetime.now()
             insertion_id = str(uuid.uuid4())
 
-            self.logger.info(
-                f"Inserting {element_type} element {insertion_id} into: {document_path}"
-            )
+            self.logger.info(f"Inserting {element_type} element {insertion_id} into: {document_path}")
 
             # Generate interactive element markup
             element_markup = self._generate_interactive_element_markup(element_type, element_config)
@@ -725,9 +693,7 @@ class ContentInsertionTool(BaseTool):
         except Exception as e:
             raise ContentInsertionError(f"Failed to insert citation: {str(e)}")
 
-    def batch_insert_content(
-        self, document_path: str, content_items: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    def batch_insert_content(self, document_path: str, content_items: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Insert multiple content items in batch
 
@@ -772,7 +738,9 @@ class ContentInsertionTool(BaseTool):
                         raise ContentInsertionError(f"Unsupported content type: {content_type}")
 
                     results["insertion_results"].append(result)
-                    results["successful_insertions"] += 1
+                    successful = results.get("successful_insertions", 0)
+                    if isinstance(successful, (int, float)):
+                        results["successful_insertions"] = successful + 1
 
                 except Exception as e:
                     error_info = {
@@ -781,7 +749,9 @@ class ContentInsertionTool(BaseTool):
                         "error": str(e),
                     }
                     results["errors"].append(error_info)
-                    results["failed_insertions"] += 1
+                    failed = results.get("failed_insertions", 0)
+                    if isinstance(failed, (int, float)):
+                        results["failed_insertions"] = failed + 1
                     self.logger.warning(f"Failed to insert item {i}: {e}")
 
             results["batch_metadata"] = {
@@ -790,9 +760,7 @@ class ContentInsertionTool(BaseTool):
                 "duration": (datetime.now() - start_time).total_seconds(),
             }
 
-            self.logger.info(
-                f"Batch insertion {batch_id} completed: {results['successful_insertions']}/{results['total_items']} successful"
-            )
+            self.logger.info(f"Batch insertion {batch_id} completed: {results['successful_insertions']}/{results['total_items']} successful")
             return results
 
         except Exception as e:
@@ -1116,9 +1084,7 @@ class ContentInsertionTool(BaseTool):
 
         return markup
 
-    def _generate_interactive_element_markup(
-        self, element_type: ContentType, config: Dict[str, Any]
-    ) -> str:
+    def _generate_interactive_element_markup(self, element_type: ContentType, config: Dict[str, Any]) -> str:
         """Generate markup for interactive elements"""
         if element_type == ContentType.BUTTON:
             text = config.get("text", "Button")
@@ -1188,9 +1154,7 @@ class ContentInsertionTool(BaseTool):
         return f"[{author}]"
 
     # Content insertion methods
-    def _insert_content_at_position(
-        self, document_path: str, content: str, position: Dict[str, Any]
-    ):
+    def _insert_content_at_position(self, document_path: str, content: str, position: Dict[str, Any]):
         """Insert content at specified position in document"""
         try:
             with open(document_path, "r", encoding="utf-8") as f:
@@ -1231,9 +1195,7 @@ class ContentInsertionTool(BaseTool):
         except Exception as e:
             raise ContentInsertionError(f"Failed to insert content: {str(e)}")
 
-    def _register_content_reference(
-        self, reference_id: str, content_type: str, metadata: Dict[str, Any]
-    ):
+    def _register_content_reference(self, reference_id: str, content_type: str, metadata: Dict[str, Any]):
         """Register content for cross-referencing"""
         self._content_registry[reference_id] = {
             "type": content_type,
@@ -1298,9 +1260,7 @@ class ContentInsertionTool(BaseTool):
                 image_info = image_tool.load(image_path)
                 # For now, just log the optimization - actual optimization
                 # would require more complex logic
-                self.logger.info(
-                    f"Image optimization requested for: {image_path}, size: {image_info.get('size')}"
-                )
+                self.logger.info(f"Image optimization requested for: {image_path}, size: {image_info.get('size')}")
             except Exception as e:
                 self.logger.warning(f"Failed to optimize image: {e}")
 
@@ -1313,11 +1273,7 @@ class ContentInsertionTool(BaseTool):
                 # Apply resize if specified
                 if "resize" in config:
                     resize_params = config["resize"]
-                    if (
-                        isinstance(resize_params, dict)
-                        and "width" in resize_params
-                        and "height" in resize_params
-                    ):
+                    if isinstance(resize_params, dict) and "width" in resize_params and "height" in resize_params:
                         # Note: ImageTool.resize method would need to be called here
                         # For now, just log the resize request
                         self.logger.info(f"Resize requested: {resize_params}")

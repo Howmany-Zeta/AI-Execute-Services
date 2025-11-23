@@ -69,9 +69,7 @@ class GraphSearchInput(BaseModel):
         description="Natural language query (converted to embedding for vector/hybrid search)",
     )
 
-    query_embedding: Optional[List[float]] = Field(
-        None, description="Query vector embedding (for vector/hybrid search)"
-    )
+    query_embedding: Optional[List[float]] = Field(None, description="Query vector embedding (for vector/hybrid search)")
 
     seed_entity_ids: Optional[List[str]] = Field(
         None,
@@ -146,20 +144,14 @@ class GraphSearchInput(BaseModel):
 
     rerank_strategy: Optional[str] = Field(
         default="text",
-        description=(
-            "Reranking strategy: 'text' (text similarity), 'semantic' (embeddings), "
-            "'structural' (graph importance), 'hybrid' (all signals)"
-        ),
+        description=("Reranking strategy: 'text' (text similarity), 'semantic' (embeddings), " "'structural' (graph importance), 'hybrid' (all signals)"),
     )
 
     rerank_top_k: Optional[int] = Field(
         default=None,
         ge=1,
         le=500,
-        description=(
-            "Top-K results to fetch before reranking (for performance). "
-            "If None, uses max_results. Should be >= max_results."
-        ),
+        description=("Top-K results to fetch before reranking (for performance). " "If None, uses max_results. Should be >= max_results."),
     )
 
 
@@ -429,14 +421,10 @@ class GraphSearchTool(BaseTool):
                 results = await self._pagerank_search(seed_entity_ids, initial_max_results)
 
             elif mode == SearchModeEnum.MULTIHOP:
-                results = await self._multihop_search(
-                    seed_entity_ids, max_depth, initial_max_results
-                )
+                results = await self._multihop_search(seed_entity_ids, max_depth, initial_max_results)
 
             elif mode == SearchModeEnum.FILTERED:
-                results = await self._filtered_search(
-                    entity_type, property_filters, initial_max_results
-                )
+                results = await self._filtered_search(entity_type, property_filters, initial_max_results)
 
             elif mode == SearchModeEnum.TRAVERSE:
                 results = await self._traverse_search(
@@ -576,16 +564,12 @@ class GraphSearchTool(BaseTool):
             for entity, score in raw_results
         ]
 
-    async def _pagerank_search(
-        self, seed_entity_ids: Optional[List[str]], max_results: int
-    ) -> List[Dict[str, Any]]:
+    async def _pagerank_search(self, seed_entity_ids: Optional[List[str]], max_results: int) -> List[Dict[str, Any]]:
         """Perform PageRank search"""
         if not seed_entity_ids:
             return []
 
-        raw_results = await self.pagerank_strategy.retrieve(
-            seed_entity_ids=seed_entity_ids, max_results=max_results
-        )
+        raw_results = await self.pagerank_strategy.retrieve(seed_entity_ids=seed_entity_ids, max_results=max_results)
 
         return [
             {
@@ -685,9 +669,7 @@ class GraphSearchTool(BaseTool):
                         }
 
         # Sort by score and take top results
-        sorted_entities = sorted(all_entities.values(), key=lambda x: x["score"], reverse=True)[
-            :max_results
-        ]
+        sorted_entities = sorted(all_entities.values(), key=lambda x: x["score"], reverse=True)[:max_results]
 
         return [
             {
@@ -785,9 +767,7 @@ class GraphSearchTool(BaseTool):
         await self._initialize()
         if query and not query_embedding:
             query_embedding = [0.1] * 128  # Placeholder
-        results = await self._vector_search(
-            query_embedding, entity_type, max_results, vector_threshold
-        )
+        results = await self._vector_search(query_embedding, entity_type, max_results, vector_threshold)
         return {
             "success": True,
             "mode": "vector",
@@ -846,9 +826,7 @@ class GraphSearchTool(BaseTool):
             "results": results,
         }
 
-    async def pagerank_search(
-        self, seed_entity_ids: List[str], max_results: int = 10
-    ) -> Dict[str, Any]:
+    async def pagerank_search(self, seed_entity_ids: List[str], max_results: int = 10) -> Dict[str, Any]:
         """PageRank search (public method for ToolExecutor)"""
         await self._initialize()
         results = await self._pagerank_search(seed_entity_ids, max_results)
@@ -900,9 +878,7 @@ class GraphSearchTool(BaseTool):
     ) -> Dict[str, Any]:
         """Pattern-based traversal (public method for ToolExecutor)"""
         await self._initialize()
-        results = await self._traverse_search(
-            seed_entity_ids, relation_types, max_depth, max_results
-        )
+        results = await self._traverse_search(seed_entity_ids, relation_types, max_depth, max_results)
         return {
             "success": True,
             "mode": "traverse",

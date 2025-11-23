@@ -205,9 +205,7 @@ class PatternMatcher:
             List of pattern matches
         """
         # Match required patterns first
-        required_matches = await self.match_multiple_patterns(
-            required_patterns, start_entity_id, max_matches
-        )
+        required_matches = await self.match_multiple_patterns(required_patterns, start_entity_id, max_matches)
 
         if not optional_patterns:
             return required_matches

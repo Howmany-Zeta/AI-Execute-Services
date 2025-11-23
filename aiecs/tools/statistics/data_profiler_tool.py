@@ -66,11 +66,9 @@ class DataProfilerTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the data profiler tool"""
 
-        model_config = ConfigDict(env_prefix="DATA_PROFILER_")
+        model_config = ConfigDict(env_prefix="DATA_PROFILER_")  # type: ignore[typeddict-unknown-key]
 
-        default_profile_level: str = Field(
-            default="standard", description="Default profiling depth level"
-        )
+        default_profile_level: str = Field(default="standard", description="Default profiling depth level")
         outlier_std_threshold: float = Field(
             default=3.0,
             description="Standard deviation threshold for outlier detection",
@@ -143,23 +141,15 @@ class DataProfilerTool(BaseTool):
         """Schema for profile_dataset operation"""
 
         data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(description="Data to profile")
-        level: ProfileLevel = Field(
-            default=ProfileLevel.STANDARD, description="Profiling depth level"
-        )
-        checks: Optional[List[DataQualityCheck]] = Field(
-            default=None, description="Specific quality checks to perform"
-        )
-        generate_visualizations: bool = Field(
-            default=False, description="Generate visualization data"
-        )
+        level: ProfileLevel = Field(default=ProfileLevel.STANDARD, description="Profiling depth level")
+        checks: Optional[List[DataQualityCheck]] = Field(default=None, description="Specific quality checks to perform")
+        generate_visualizations: bool = Field(default=False, description="Generate visualization data")
 
     class DetectQualityIssuesSchema(BaseModel):
         """Schema for detect_quality_issues operation"""
 
         data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(description="Data to check")
-        checks: Optional[List[DataQualityCheck]] = Field(
-            default=None, description="Specific checks to perform"
-        )
+        checks: Optional[List[DataQualityCheck]] = Field(default=None, description="Specific checks to perform")
 
     class RecommendPreprocessingSchema(BaseModel):
         """Schema for recommend_preprocessing operation"""
@@ -292,9 +282,7 @@ class DataProfilerTool(BaseTool):
             quality_issues = self._detect_quality_issues(df, None)
 
             # Generate recommendations
-            recommendations = self._generate_recommendations(
-                df, quality_issues, ProfileLevel.COMPREHENSIVE
-            )
+            recommendations = self._generate_recommendations(df, quality_issues, ProfileLevel.COMPREHENSIVE)
 
             # Add task-specific recommendations
             if target_column and target_column in df.columns:
@@ -339,9 +327,7 @@ class DataProfilerTool(BaseTool):
             "categorical_columns": len(categorical_cols),
             "memory_usage_mb": df.memory_usage(deep=True).sum() / (1024 * 1024),
             "missing_cells": df.isnull().sum().sum(),
-            "missing_percentage": (
-                (df.isnull().sum().sum() / (len(df) * len(df.columns)) * 100) if len(df) > 0 else 0
-            ),
+            "missing_percentage": ((df.isnull().sum().sum() / (len(df) * len(df.columns)) * 100) if len(df) > 0 else 0),
             "duplicate_rows": df.duplicated().sum(),
             "duplicate_percentage": ((df.duplicated().sum() / len(df) * 100) if len(df) > 0 else 0),
         }
@@ -355,9 +341,7 @@ class DataProfilerTool(BaseTool):
                 "name": col,
                 "dtype": str(df[col].dtype),
                 "missing_count": df[col].isnull().sum(),
-                "missing_percentage": (
-                    (df[col].isnull().sum() / len(df) * 100) if len(df) > 0 else 0
-                ),
+                "missing_percentage": ((df[col].isnull().sum() / len(df) * 100) if len(df) > 0 else 0),
                 "unique_count": df[col].nunique(),
                 "unique_percentage": ((df[col].nunique() / len(df) * 100) if len(df) > 0 else 0),
             }
@@ -416,15 +400,11 @@ class DataProfilerTool(BaseTool):
         if level in [ProfileLevel.COMPREHENSIVE, ProfileLevel.DEEP]:
             # Add top categories
             top_n = min(10, len(value_counts))
-            profile["top_categories"] = {
-                str(k): int(v) for k, v in value_counts.head(top_n).items()
-            }
+            profile["top_categories"] = {str(k): int(v) for k, v in value_counts.head(top_n).items()}
 
         return profile
 
-    def _detect_quality_issues(
-        self, df: pd.DataFrame, checks: Optional[List[DataQualityCheck]]
-    ) -> Dict[str, List[Dict[str, Any]]]:
+    def _detect_quality_issues(self, df: pd.DataFrame, checks: Optional[List[DataQualityCheck]]) -> Dict[str, List[Dict[str, Any]]]:
         """Detect data quality issues"""
         issues = {
             "missing_values": [],
@@ -449,11 +429,7 @@ class DataProfilerTool(BaseTool):
                         {
                             "column": col,
                             "missing_percentage": missing_pct,
-                            "severity": (
-                                "high"
-                                if missing_pct > self.config.missing_threshold * 100
-                                else "medium"
-                            ),
+                            "severity": ("high" if missing_pct > self.config.missing_threshold * 100 else "medium"),
                         }
                     )
 
@@ -543,9 +519,7 @@ class DataProfilerTool(BaseTool):
                     {
                         "action": "impute_missing",
                         "column": issue["column"],
-                        "method": (
-                            "mean" if df[issue["column"]].dtype in ["int64", "float64"] else "mode"
-                        ),
+                        "method": ("mean" if df[issue["column"]].dtype in ["int64", "float64"] else "mode"),
                         "reason": f"Moderate missing percentage ({issue['missing_percentage']:.2f}%)",
                         "priority": "high",
                     }
@@ -586,9 +560,7 @@ class DataProfilerTool(BaseTool):
 
         return recommendations
 
-    def _generate_task_recommendations(
-        self, df: pd.DataFrame, target_column: str
-    ) -> List[Dict[str, Any]]:
+    def _generate_task_recommendations(self, df: pd.DataFrame, target_column: str) -> List[Dict[str, Any]]:
         """Generate task-specific recommendations"""
         recommendations = []
 
@@ -610,9 +582,7 @@ class DataProfilerTool(BaseTool):
 
         return recommendations
 
-    def _prioritize_recommendations(
-        self, recommendations: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    def _prioritize_recommendations(self, recommendations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Prioritize recommendations by importance"""
         priority_order = {"high": 0, "medium": 1, "low": 2, "info": 3}
         return sorted(
@@ -650,9 +620,6 @@ class DataProfilerTool(BaseTool):
         # Categorical distributions
         categorical_cols = df.select_dtypes(include=["object", "category"]).columns
         if len(categorical_cols) > 0:
-            viz_data["categorical_distributions"] = {
-                col: df[col].value_counts().head(10).to_dict()
-                for col in categorical_cols[:5]  # Limit to first 5
-            }
+            viz_data["categorical_distributions"] = {col: df[col].value_counts().head(10).to_dict() for col in categorical_cols[:5]}  # Limit to first 5
 
         return viz_data

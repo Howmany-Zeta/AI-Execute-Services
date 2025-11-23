@@ -69,15 +69,9 @@ class SchemaManager:
         # Initialize caches
         self._enable_cache = enable_cache
         if enable_cache:
-            self._entity_type_cache: LRUCache[EntityType] = LRUCache(
-                max_size=cache_size, ttl_seconds=ttl_seconds
-            )
-            self._relation_type_cache: LRUCache[RelationType] = LRUCache(
-                max_size=cache_size, ttl_seconds=ttl_seconds
-            )
-            self._property_cache: LRUCache[PropertySchema] = LRUCache(
-                max_size=cache_size, ttl_seconds=ttl_seconds
-            )
+            self._entity_type_cache: LRUCache[EntityType] = LRUCache(max_size=cache_size, ttl_seconds=ttl_seconds)
+            self._relation_type_cache: LRUCache[RelationType] = LRUCache(max_size=cache_size, ttl_seconds=ttl_seconds)
+            self._property_cache: LRUCache[PropertySchema] = LRUCache(max_size=cache_size, ttl_seconds=ttl_seconds)
         else:
             self._entity_type_cache = None
             self._relation_type_cache = None
@@ -407,12 +401,8 @@ class SchemaManager:
             return {"entity_types": 0, "relation_types": 0, "properties": 0}
 
         return {
-            "entity_types": (
-                self._entity_type_cache.cleanup_expired() if self._entity_type_cache else 0
-            ),
-            "relation_types": (
-                self._relation_type_cache.cleanup_expired() if self._relation_type_cache else 0
-            ),
+            "entity_types": (self._entity_type_cache.cleanup_expired() if self._entity_type_cache else 0),
+            "relation_types": (self._relation_type_cache.cleanup_expired() if self._relation_type_cache else 0),
             "properties": (self._property_cache.cleanup_expired() if self._property_cache else 0),
         }
 
@@ -433,12 +423,8 @@ class SchemaManager:
 
         return {
             "enabled": True,
-            "entity_types": (
-                self._entity_type_cache.get_stats() if self._entity_type_cache else {}
-            ),
-            "relation_types": (
-                self._relation_type_cache.get_stats() if self._relation_type_cache else {}
-            ),
+            "entity_types": (self._entity_type_cache.get_stats() if self._entity_type_cache else {}),
+            "relation_types": (self._relation_type_cache.get_stats() if self._relation_type_cache else {}),
             "properties": (self._property_cache.get_stats() if self._property_cache else {}),
         }
 

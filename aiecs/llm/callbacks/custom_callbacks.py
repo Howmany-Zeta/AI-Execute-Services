@@ -32,9 +32,7 @@ class RedisTokenCallbackHandler(CustomAsyncCallbackHandler):
         self.start_time = time.time()
         self.messages = messages
 
-        logger.info(
-            f"[Callback] LLM call started for user '{self.user_id}' with {len(messages)} messages"
-        )
+        logger.info(f"[Callback] LLM call started for user '{self.user_id}' with {len(messages)} messages")
 
     async def on_llm_end(self, response: dict, **kwargs: Any) -> None:
         """Triggered when LLM call ends successfully"""
@@ -44,24 +42,18 @@ class RedisTokenCallbackHandler(CustomAsyncCallbackHandler):
                 import time
 
                 call_duration = time.time() - self.start_time
-                logger.info(
-                    f"[Callback] LLM call completed for user '{self.user_id}' in {call_duration:.2f}s"
-                )
+                logger.info(f"[Callback] LLM call completed for user '{self.user_id}' in {call_duration:.2f}s")
 
             # Extract token usage from response dictionary
             tokens_used = response.get("tokens_used")
 
             if tokens_used and tokens_used > 0:
                 # Delegate recording work to repository
-                await token_usage_repo.increment_total_usage(
-                    self.user_id, tokens_used, self.cycle_start_date
-                )
+                await token_usage_repo.increment_total_usage(self.user_id, tokens_used, self.cycle_start_date)
 
                 logger.info(f"[Callback] Recorded {tokens_used} tokens for user '{self.user_id}'")
             else:
-                logger.warning(
-                    f"[Callback] No token usage data available for user '{self.user_id}'"
-                )
+                logger.warning(f"[Callback] No token usage data available for user '{self.user_id}'")
 
         except Exception as e:
             logger.error(f"[Callback] Failed to record token usage for user '{self.user_id}': {e}")
@@ -73,9 +65,7 @@ class RedisTokenCallbackHandler(CustomAsyncCallbackHandler):
             import time
 
             call_duration = time.time() - self.start_time
-            logger.error(
-                f"[Callback] LLM call failed for user '{self.user_id}' after {call_duration:.2f}s: {error}"
-            )
+            logger.error(f"[Callback] LLM call failed for user '{self.user_id}' after {call_duration:.2f}s: {error}")
         else:
             logger.error(f"[Callback] LLM call failed for user '{self.user_id}': {error}")
 
@@ -105,9 +95,7 @@ class DetailedRedisTokenCallbackHandler(CustomAsyncCallbackHandler):
         # Estimate input token count
         self.prompt_tokens = self._estimate_prompt_tokens(messages)
 
-        logger.info(
-            f"[DetailedCallback] LLM call started for user '{self.user_id}' with estimated {self.prompt_tokens} prompt tokens"
-        )
+        logger.info(f"[DetailedCallback] LLM call started for user '{self.user_id}' with estimated {self.prompt_tokens} prompt tokens")
 
     async def on_llm_end(self, response: dict, **kwargs: Any) -> None:
         """Triggered when LLM call ends successfully"""
@@ -117,9 +105,7 @@ class DetailedRedisTokenCallbackHandler(CustomAsyncCallbackHandler):
                 import time
 
                 call_duration = time.time() - self.start_time
-                logger.info(
-                    f"[DetailedCallback] LLM call completed for user '{self.user_id}' in {call_duration:.2f}s"
-                )
+                logger.info(f"[DetailedCallback] LLM call completed for user '{self.user_id}' in {call_duration:.2f}s")
 
             # Extract detailed token information from response
             prompt_tokens, completion_tokens = self._extract_detailed_tokens(response)
@@ -137,18 +123,12 @@ class DetailedRedisTokenCallbackHandler(CustomAsyncCallbackHandler):
                     self.cycle_start_date,
                 )
 
-                logger.info(
-                    f"[DetailedCallback] Recorded detailed tokens for user '{self.user_id}': prompt={prompt_tokens}, completion={completion_tokens}"
-                )
+                logger.info(f"[DetailedCallback] Recorded detailed tokens for user '{self.user_id}': prompt={prompt_tokens}, completion={completion_tokens}")
             else:
-                logger.warning(
-                    f"[DetailedCallback] No detailed token usage data available for user '{self.user_id}'"
-                )
+                logger.warning(f"[DetailedCallback] No detailed token usage data available for user '{self.user_id}'")
 
         except Exception as e:
-            logger.error(
-                f"[DetailedCallback] Failed to record detailed token usage for user '{self.user_id}': {e}"
-            )
+            logger.error(f"[DetailedCallback] Failed to record detailed token usage for user '{self.user_id}': {e}")
             # Don't re-raise exception to avoid affecting main LLM call flow
 
     async def on_llm_error(self, error: Exception, **kwargs: Any) -> None:
@@ -157,9 +137,7 @@ class DetailedRedisTokenCallbackHandler(CustomAsyncCallbackHandler):
             import time
 
             call_duration = time.time() - self.start_time
-            logger.error(
-                f"[DetailedCallback] LLM call failed for user '{self.user_id}' after {call_duration:.2f}s: {error}"
-            )
+            logger.error(f"[DetailedCallback] LLM call failed for user '{self.user_id}' after {call_duration:.2f}s: {error}")
         else:
             logger.error(f"[DetailedCallback] LLM call failed for user '{self.user_id}': {error}")
 
@@ -219,9 +197,7 @@ class CompositeCallbackHandler(CustomAsyncCallbackHandler):
             try:
                 await handler.on_llm_start(messages, **kwargs)
             except Exception as e:
-                logger.error(
-                    f"Error in callback handler {type(handler).__name__}.on_llm_start: {e}"
-                )
+                logger.error(f"Error in callback handler {type(handler).__name__}.on_llm_start: {e}")
 
     async def on_llm_end(self, response: dict, **kwargs: Any) -> None:
         """Execute end callbacks for all handlers"""
@@ -237,22 +213,16 @@ class CompositeCallbackHandler(CustomAsyncCallbackHandler):
             try:
                 await handler.on_llm_error(error, **kwargs)
             except Exception as e:
-                logger.error(
-                    f"Error in callback handler {type(handler).__name__}.on_llm_error: {e}"
-                )
+                logger.error(f"Error in callback handler {type(handler).__name__}.on_llm_error: {e}")
 
 
 # Convenience functions for creating common callback handlers
-def create_token_callback(
-    user_id: str, cycle_start_date: Optional[str] = None
-) -> RedisTokenCallbackHandler:
+def create_token_callback(user_id: str, cycle_start_date: Optional[str] = None) -> RedisTokenCallbackHandler:
     """Create a basic token recording callback handler"""
     return RedisTokenCallbackHandler(user_id, cycle_start_date)
 
 
-def create_detailed_token_callback(
-    user_id: str, cycle_start_date: Optional[str] = None
-) -> DetailedRedisTokenCallbackHandler:
+def create_detailed_token_callback(user_id: str, cycle_start_date: Optional[str] = None) -> DetailedRedisTokenCallbackHandler:
     """Create a detailed token recording callback handler"""
     return DetailedRedisTokenCallbackHandler(user_id, cycle_start_date)
 

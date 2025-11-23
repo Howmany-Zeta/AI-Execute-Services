@@ -99,7 +99,7 @@ class ScraperTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the scraper tool"""
 
-        model_config = ConfigDict(env_prefix="SCRAPER_TOOL_")
+        model_config = ConfigDict(env_prefix="SCRAPER_TOOL_")  # type: ignore[typeddict-unknown-key]
 
         user_agent: str = Field(
             default="PythonMiddlewareScraper/2.0",
@@ -192,9 +192,7 @@ class ScraperTool(BaseTool):
                         writer = csv.writer(f)
                         writer.writerow(content.keys())
                         writer.writerow(content.values())
-                    elif isinstance(content, list) and all(
-                        isinstance(item, dict) for item in content
-                    ):
+                    elif isinstance(content, list) and all(isinstance(item, dict) for item in content):
                         if content:
                             writer = csv.DictWriter(f, fieldnames=content[0].keys())
                             writer.writeheader()
@@ -267,9 +265,7 @@ class ScraperTool(BaseTool):
                 kwargs["data"] = data
 
             if async_mode:
-                async with httpx.AsyncClient(
-                    verify=verify_ssl if verify_ssl is not None else True
-                ) as client:
+                async with httpx.AsyncClient(verify=verify_ssl if verify_ssl is not None else True) as client:
                     method_fn = getattr(client, method.value)
                     resp = await method_fn(str(url), **kwargs)
             else:
@@ -280,9 +276,7 @@ class ScraperTool(BaseTool):
             try:
                 resp.raise_for_status()
             except httpx.HTTPStatusError as e:
-                raise HttpError(
-                    f"HTTP {e.response.status_code}: {e.response.reason_phrase} for {url}"
-                )
+                raise HttpError(f"HTTP {e.response.status_code}: {e.response.reason_phrase} for {url}")
 
             if len(resp.content) > self.config.max_content_length:
                 raise HttpError(f"Response content too large: {len(resp.content)} bytes")
@@ -496,9 +490,7 @@ class ScraperTool(BaseTool):
         try:
             if engine == RenderEngine.PLAYWRIGHT:
                 if not self.config.playwright_available:
-                    raise RenderingError(
-                        "Playwright is not available. Install with 'pip install playwright'"
-                    )
+                    raise RenderingError("Playwright is not available. Install with 'pip install playwright'")
                 result = await self._render_with_playwright(
                     url,
                     wait_time,
@@ -508,9 +500,7 @@ class ScraperTool(BaseTool):
                     screenshot_path,
                 )
             else:
-                raise RenderingError(
-                    f"Unsupported rendering engine: {engine}. Only PLAYWRIGHT is supported."
-                )
+                raise RenderingError(f"Unsupported rendering engine: {engine}. Only PLAYWRIGHT is supported.")
             if output_format and output_path:
                 await self._save_output(result, output_path, output_format)
                 result["saved_to"] = output_path
@@ -677,25 +667,19 @@ class ScraperTool(BaseTool):
             results = []
             for element in elements:
                 if extract_attr:
-                    value = (
-                        element.get(extract_attr)
-                        if hasattr(element, "get")
-                        else element.get(extract_attr)
-                    )
+                    value = element.get(extract_attr) if hasattr(element, "get") else element.get(extract_attr)
                     if value is not None:
                         results.append(value)
                 elif extract_text:
-                    if hasattr(element, "text_content") and callable(
-                        getattr(element, "text_content")
-                    ):
+                    if hasattr(element, "text_content") and callable(getattr(element, "text_content")):
                         # lxml element
-                        text = element.text_content()
+                        text = element.text_content()  # type: ignore[misc]
                     else:
                         # BeautifulSoup element
-                        text = element.get_text()
+                        text = element.get_text()  # type: ignore[misc]
 
-                    if text and text.strip():
-                        results.append(text.strip())
+                    if text and text.strip():  # type: ignore[misc]
+                        results.append(text.strip())  # type: ignore[misc]
             return {
                 "selector": selector,
                 "selector_type": selector_type,

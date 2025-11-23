@@ -341,9 +341,4 @@ JSON output:"""
 
     def _get_entity_name(self, entity: Entity) -> str:
         """Extract entity name from properties"""
-        return (
-            entity.properties.get("name")
-            or entity.properties.get("title")
-            or entity.properties.get("text")
-            or f"{entity.entity_type}_{entity.id[:8]}"
-        )
+        return entity.properties.get("name") or entity.properties.get("title") or entity.properties.get("text") or f"{entity.entity_type}_{entity.id[:8]}"

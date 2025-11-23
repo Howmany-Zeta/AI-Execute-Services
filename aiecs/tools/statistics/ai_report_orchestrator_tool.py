@@ -67,7 +67,7 @@ class AIReportOrchestratorTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the AI report orchestrator tool"""
 
-        model_config = ConfigDict(env_prefix="AI_REPORT_ORCHESTRATOR_")
+        model_config = ConfigDict(env_prefix="AI_REPORT_ORCHESTRATOR_")  # type: ignore[typeddict-unknown-key]
 
         default_report_type: str = Field(
             default="business_report",
@@ -130,12 +130,8 @@ class AIReportOrchestratorTool(BaseTool):
 
         analysis_results: Dict[str, Any] = Field(description="Analysis results to include")
         insights: Optional[Dict[str, Any]] = Field(default=None, description="Generated insights")
-        report_type: ReportType = Field(
-            default=ReportType.BUSINESS_REPORT, description="Type of report"
-        )
-        output_format: ReportFormat = Field(
-            default=ReportFormat.MARKDOWN, description="Output format"
-        )
+        report_type: ReportType = Field(default=ReportType.BUSINESS_REPORT, description="Type of report")
+        output_format: ReportFormat = Field(default=ReportFormat.MARKDOWN, description="Output format")
         title: Optional[str] = Field(default=None, description="Report title")
         include_code: bool = Field(default=False, description="Include code snippets")
 
@@ -181,18 +177,14 @@ class AIReportOrchestratorTool(BaseTool):
                 - metadata: Report metadata
         """
         try:
-            self.logger.info(
-                f"Generating {report_type.value} report in {output_format.value} format"
-            )
+            self.logger.info(f"Generating {report_type.value} report in {output_format.value} format")
 
             # Generate report title
             if title is None:
                 title = self._generate_title(report_type, analysis_results)
 
             # Build report sections
-            sections = self._build_report_sections(
-                analysis_results, insights, report_type, include_code
-            )
+            sections = self._build_report_sections(analysis_results, insights, report_type, include_code)
 
             # Compile report content
             report_content = self._compile_report(title, sections, report_type)
@@ -361,16 +353,11 @@ class AIReportOrchestratorTool(BaseTool):
         )
 
         # Statistical Analysis (for technical reports)
-        if (
-            report_type == ReportType.TECHNICAL_REPORT
-            and "statistical_analysis" in analysis_results
-        ):
+        if report_type == ReportType.TECHNICAL_REPORT and "statistical_analysis" in analysis_results:
             sections.append(
                 {
                     "title": "Statistical Analysis",
-                    "content": self._generate_statistics_section(
-                        analysis_results.get("statistical_analysis", {})
-                    ),
+                    "content": self._generate_statistics_section(analysis_results.get("statistical_analysis", {})),
                 }
             )
 
@@ -423,9 +410,7 @@ class AIReportOrchestratorTool(BaseTool):
         summary = data_profile.get("summary", {})
 
         if summary:
-            lines.append(
-                f"This report presents a comprehensive analysis of a dataset containing {summary.get('rows', 'N/A')} rows and {summary.get('columns', 'N/A')} columns."
-            )
+            lines.append(f"This report presents a comprehensive analysis of a dataset containing {summary.get('rows', 'N/A')} rows and {summary.get('columns', 'N/A')} columns.")
 
             missing_pct = summary.get("missing_percentage", 0)
             if missing_pct > 0:
@@ -492,9 +477,7 @@ class AIReportOrchestratorTool(BaseTool):
         if "findings" in analysis_results:
             findings = analysis_results["findings"]
             for i, finding in enumerate(findings[:10], 1):
-                lines.append(
-                    f"{i}. **{finding.get('title', 'Finding')}**: {finding.get('description', 'No description')}"
-                )
+                lines.append(f"{i}. **{finding.get('title', 'Finding')}**: {finding.get('description', 'No description')}")
 
         # Add insights if available
         if insights and "insights" in insights:
@@ -502,9 +485,7 @@ class AIReportOrchestratorTool(BaseTool):
             if insight_list and not lines:
                 lines.append("**Key Insights:**")
             for insight in insight_list:
-                lines.append(
-                    f"- {insight.get('title', 'Insight')}: {insight.get('description', '')}"
-                )
+                lines.append(f"- {insight.get('title', 'Insight')}: {insight.get('description', '')}")
 
         return "\n".join(lines) if lines else "No significant findings to report."
 
@@ -513,9 +494,7 @@ class AIReportOrchestratorTool(BaseTool):
         lines = ["**Statistical Analysis Results:**", ""]
 
         if "correlation_matrix" in stats_results:
-            lines.append(
-                "Correlation analysis was performed to identify relationships between variables."
-            )
+            lines.append("Correlation analysis was performed to identify relationships between variables.")
 
         if "hypothesis_tests" in stats_results:
             lines.append("Hypothesis testing was conducted to validate statistical significance.")
@@ -586,13 +565,9 @@ class AIReportOrchestratorTool(BaseTool):
 
         if insights:
             total_insights = insights.get("total_insights", 0)
-            lines.append(
-                f"A total of {total_insights} insights were generated through systematic analysis."
-            )
+            lines.append(f"A total of {total_insights} insights were generated through systematic analysis.")
 
-        lines.append(
-            "\nThe findings and recommendations presented in this report should be carefully considered in the context of your specific business objectives and constraints."
-        )
+        lines.append("\nThe findings and recommendations presented in this report should be carefully considered in the context of your specific business objectives and constraints.")
 
         return "\n".join(lines)
 
@@ -646,9 +621,7 @@ class AIReportOrchestratorTool(BaseTool):
         else:
             # For PDF and Word, return markdown (would need additional
             # libraries for conversion)
-            self.logger.warning(
-                f"Format {output_format.value} not fully implemented, returning markdown"
-            )
+            self.logger.warning(f"Format {output_format.value} not fully implemented, returning markdown")
             return content
 
     def _markdown_to_html(self, markdown_content: str) -> str:

@@ -22,10 +22,10 @@ try:
     LOGIC_PARSER_AVAILABLE = True
 except ImportError:
     LOGIC_PARSER_AVAILABLE = False
-    LogicQueryParser = None
-    ParserError = None
-    QueryPlan = None
-    GraphStore = None
+    LogicQueryParser = None  # type: ignore[misc]
+    ParserError = None  # type: ignore[misc]
+    QueryPlan = None  # type: ignore[misc]
+    GraphStore = None  # type: ignore[misc]
 
 
 class LogicQueryIntegration:
@@ -147,14 +147,8 @@ class LogicQueryIntegration:
                         "step_id": step.step_id,
                         "operation": step.operation,
                         "description": step.description,
-                        "entity_type": (
-                            step.query.entity_type if hasattr(step.query, "entity_type") else None
-                        ),
-                        "relation_type": (
-                            step.query.relation_type
-                            if hasattr(step.query, "relation_type")
-                            else None
-                        ),
+                        "entity_type": (step.query.entity_type if hasattr(step.query, "entity_type") else None),
+                        "relation_type": (step.query.relation_type if hasattr(step.query, "relation_type") else None),
                     }
                     for step in plan_result.steps
                 ],

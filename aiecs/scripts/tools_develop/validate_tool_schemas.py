@@ -68,17 +68,9 @@ class SchemaQualityMetrics:
 
     def get_scores(self) -> Dict[str, float]:
         """计算质量分数"""
-        generation_rate = (
-            (self.schemas_generated / self.total_methods * 100) if self.total_methods > 0 else 0
-        )
-        description_rate = (
-            (self.fields_with_meaningful_descriptions / self.total_fields * 100)
-            if self.total_fields > 0
-            else 0
-        )
-        type_coverage = (
-            (self.fields_with_types / self.total_fields * 100) if self.total_fields > 0 else 0
-        )
+        generation_rate = (self.schemas_generated / self.total_methods * 100) if self.total_methods > 0 else 0
+        description_rate = (self.fields_with_meaningful_descriptions / self.total_fields * 100) if self.total_fields > 0 else 0
+        type_coverage = (self.fields_with_types / self.total_fields * 100) if self.total_fields > 0 else 0
 
         return {
             "generation_rate": generation_rate,
@@ -88,9 +80,7 @@ class SchemaQualityMetrics:
         }
 
 
-def validate_schema_quality(
-    schema: Type[BaseModel], method: callable, method_name: str
-) -> List[str]:
+def validate_schema_quality(schema: Type[BaseModel], method: callable, method_name: str) -> List[str]:
     """
     验证单个 Schema 的质量
 
@@ -132,11 +122,7 @@ def find_manual_schema(tool_class: Type, method_name: str) -> Optional[Type[Base
     # 1. 检查类级别的 schemas
     for attr_name in dir(tool_class):
         attr = getattr(tool_class, attr_name)
-        if (
-            isinstance(attr, type)
-            and issubclass(attr, BaseModel)
-            and attr.__name__.endswith("Schema")
-        ):
+        if isinstance(attr, type) and issubclass(attr, BaseModel) and attr.__name__.endswith("Schema"):
             # 标准化：移除 'Schema' 后缀，转小写，移除下划线
             schema_base_name = attr.__name__.replace("Schema", "")
             normalized_name = schema_base_name.replace("_", "").lower()
@@ -151,11 +137,7 @@ def find_manual_schema(tool_class: Type, method_name: str) -> Optional[Type[Base
             if attr_name.startswith("_"):
                 continue
             attr = getattr(tool_module, attr_name)
-            if (
-                isinstance(attr, type)
-                and issubclass(attr, BaseModel)
-                and attr.__name__.endswith("Schema")
-            ):
+            if isinstance(attr, type) and issubclass(attr, BaseModel) and attr.__name__.endswith("Schema"):
                 schema_base_name = attr.__name__.replace("Schema", "")
                 normalized_name = schema_base_name.replace("_", "").lower()
                 if normalized_name not in schemas:
@@ -217,9 +199,7 @@ def analyze_tool_schemas(tool_name: str, tool_class: Type) -> Dict[str, Any]:
             # 统计字段
             for field_name, field_info in schema.model_fields.items():
                 has_type = field_info.annotation is not None
-                has_meaningful_desc = (
-                    field_info.description and field_info.description != f"Parameter {field_name}"
-                )
+                has_meaningful_desc = field_info.description and field_info.description != f"Parameter {field_name}"
                 metrics.add_field(has_type, has_meaningful_desc)
 
             # 记录问题
@@ -295,9 +275,7 @@ def print_tool_report(
             print("\n  示例 Schema:")
             for method_info in methods_with_schema[:2]:
                 schema = method_info["schema"]
-                schema_type_label = (
-                    "🔧 手动定义" if method_info.get("schema_type") == "manual" else "🤖 自动生成"
-                )
+                schema_type_label = "🔧 手动定义" if method_info.get("schema_type") == "manual" else "🤖 自动生成"
                 print(f"\n    {method_info['name']} → {schema.__name__} [{schema_type_label}]")
                 print(f"      描述: {schema.__doc__}")
                 print("      字段:")
@@ -354,9 +332,7 @@ def validate_schemas(
         total_methods = sum(r["metrics"].total_methods for r in all_results.values())
         total_generated = sum(r["metrics"].schemas_generated for r in all_results.values())
         total_fields = sum(r["metrics"].total_fields for r in all_results.values())
-        total_meaningful = sum(
-            r["metrics"].fields_with_meaningful_descriptions for r in all_results.values()
-        )
+        total_meaningful = sum(r["metrics"].fields_with_meaningful_descriptions for r in all_results.values())
 
         overall_generation = (total_generated / total_methods * 100) if total_methods > 0 else 0
         overall_description = (total_meaningful / total_fields * 100) if total_fields > 0 else 0

@@ -85,7 +85,7 @@ class DataTransformerTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the data transformer tool"""
 
-        model_config = ConfigDict(env_prefix="DATA_TRANSFORMER_")
+        model_config = ConfigDict(env_prefix="DATA_TRANSFORMER_")  # type: ignore[typeddict-unknown-key]
 
         outlier_std_threshold: float = Field(
             default=3.0,
@@ -156,16 +156,12 @@ class DataTransformerTool(BaseTool):
 
         data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(description="Data to transform")
         target_column: Optional[str] = Field(default=None, description="Target column name")
-        task_type: Optional[str] = Field(
-            default=None, description="Task type: classification or regression"
-        )
+        task_type: Optional[str] = Field(default=None, description="Task type: classification or regression")
 
     class HandleMissingValuesSchema(BaseModel):
         """Schema for handle_missing_values operation"""
 
-        data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(
-            description="Data with missing values"
-        )
+        data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(description="Data with missing values")
         strategy: MissingValueStrategy = Field(
             default=MissingValueStrategy.MEAN,
             description="Strategy for handling missing values",
@@ -217,9 +213,7 @@ class DataTransformerTool(BaseTool):
                 columns = transform.get("columns")
                 params = transform.get("params", {})
 
-                self.logger.info(
-                    f"Applying transformation {i+1}/{len(transformations)}: {trans_type}"
-                )
+                self.logger.info(f"Applying transformation {i+1}/{len(transformations)}: {trans_type}")
 
                 # Apply transformation
                 df = self._apply_single_transformation(df, trans_type, columns, params)
@@ -557,9 +551,7 @@ class DataTransformerTool(BaseTool):
 
         return transformations
 
-    def _calculate_quality_improvement(
-        self, original_df: pd.DataFrame, transformed_df: pd.DataFrame
-    ) -> Dict[str, Any]:
+    def _calculate_quality_improvement(self, original_df: pd.DataFrame, transformed_df: pd.DataFrame) -> Dict[str, Any]:
         """Calculate quality improvement metrics"""
         return {
             "missing_before": int(original_df.isnull().sum().sum()),

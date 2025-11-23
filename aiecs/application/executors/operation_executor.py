@@ -48,9 +48,7 @@ class OperationExecutor:
         Execute a single operation (tool_name.operation_name)
         """
         if "." not in operation_spec:
-            raise ValueError(
-                f"Invalid operation spec: {operation_spec}, expected 'tool_name.operation_name'"
-            )
+            raise ValueError(f"Invalid operation spec: {operation_spec}, expected 'tool_name.operation_name'")
 
         tool_name, operation_name = operation_spec.split(".", 1)
 
@@ -145,9 +143,7 @@ class OperationExecutor:
 
         return results
 
-    def _process_param_references(
-        self, params: Dict[str, Any], results: List[TaskStepResult]
-    ) -> Dict[str, Any]:
+    def _process_param_references(self, params: Dict[str, Any], results: List[TaskStepResult]) -> Dict[str, Any]:
         """
         Process parameter references, such as $result[0] in operation parameters
         """
@@ -214,9 +210,7 @@ class OperationExecutor:
             if self.config.get("enable_cache", True):
                 user_id = params.get("user_id", "anonymous")
                 task_id = params.get("task_id", "none")
-                cache_key = self.execution_utils.generate_cache_key(
-                    "tool_call", user_id, task_id, (), params
-                )
+                cache_key = self.execution_utils.generate_cache_key("tool_call", user_id, task_id, (), params)
                 cached_result = self.execution_utils.get_from_cache(cache_key)
                 if cached_result is not None:
                     return cached_result
@@ -281,9 +275,7 @@ class OperationExecutor:
 
         return tool_calls
 
-    async def execute_parallel_operations(
-        self, operations: List[Dict[str, Any]]
-    ) -> List[TaskStepResult]:
+    async def execute_parallel_operations(self, operations: List[Dict[str, Any]]) -> List[TaskStepResult]:
         """
         Execute multiple operations in parallel
         """

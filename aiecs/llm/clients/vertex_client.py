@@ -64,18 +64,12 @@ class VertexAIClient(BaseLLMClient):
                         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
                         self.logger.info(f"Using Google Cloud credentials from: {credentials_path}")
                     else:
-                        self.logger.warning(
-                            f"Google Cloud credentials file not found: {credentials_path}"
-                        )
-                        raise ProviderNotAvailableError(
-                            f"Google Cloud credentials file not found: {credentials_path}"
-                        )
+                        self.logger.warning(f"Google Cloud credentials file not found: {credentials_path}")
+                        raise ProviderNotAvailableError(f"Google Cloud credentials file not found: {credentials_path}")
                 elif "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
                     self.logger.info("Using Google Cloud credentials from environment variable")
                 else:
-                    self.logger.warning(
-                        "No Google Cloud credentials configured. Using default authentication."
-                    )
+                    self.logger.warning("No Google Cloud credentials configured. Using default authentication.")
 
                 # Initialize Vertex AI
                 vertexai.init(
@@ -83,9 +77,7 @@ class VertexAIClient(BaseLLMClient):
                     location=getattr(self.settings, "vertex_location", "us-central1"),
                 )
                 self._initialized = True
-                self.logger.info(
-                    f"Vertex AI initialized for project {self.settings.vertex_project_id}"
-                )
+                self.logger.info(f"Vertex AI initialized for project {self.settings.vertex_project_id}")
 
             except Exception as e:
                 raise ProviderNotAvailableError(f"Failed to initialize Vertex AI: {str(e)}")
@@ -174,41 +166,31 @@ class VertexAIClient(BaseLLMClient):
                 # support
                 if hasattr(response, "candidates") and response.candidates:
                     candidate = response.candidates[0]
-                    self.logger.debug(
-                        f"Candidate finish_reason: {getattr(candidate, 'finish_reason', 'unknown')}"
-                    )
+                    self.logger.debug(f"Candidate finish_reason: {getattr(candidate, 'finish_reason', 'unknown')}")
 
                     # Handle multi-part content
                     if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
                         try:
                             # Extract text from all parts
-                            text_parts = []
+                            text_parts: List[str] = []
                             for part in candidate.content.parts:
                                 if hasattr(part, "text") and part.text:
-                                    text_parts.append(part.text)
+                                    text_parts.append(str(part.text))
 
                             if text_parts:
                                 # Log part count for monitoring
                                 part_count = len(text_parts)
-                                self.logger.info(
-                                    f"📊 Vertex AI response: {part_count} parts detected"
-                                )
+                                self.logger.info(f"📊 Vertex AI response: {part_count} parts detected")
 
                                 # Update statistics
                                 self._part_count_stats["total_responses"] += 1
-                                self._part_count_stats["part_counts"][part_count] = (
-                                    self._part_count_stats["part_counts"].get(part_count, 0) + 1
-                                )
+                                self._part_count_stats["part_counts"][part_count] = self._part_count_stats["part_counts"].get(part_count, 0) + 1
                                 self._part_count_stats["last_part_count"] = part_count
 
                                 # Log statistics if significant variation
                                 # detected
-                                if part_count != self._part_count_stats.get(
-                                    "last_part_count", part_count
-                                ):
-                                    self.logger.warning(
-                                        f"⚠️ Part count variation detected: {part_count} parts (previous: {self._part_count_stats.get('last_part_count', 'unknown')})"
-                                    )
+                                if part_count != self._part_count_stats.get("last_part_count", part_count):
+                                    self.logger.warning(f"⚠️ Part count variation detected: {part_count} parts (previous: {self._part_count_stats.get('last_part_count', 'unknown')})")
 
                                 # Handle multi-part response format
                                 if len(text_parts) > 1:
@@ -220,23 +202,20 @@ class VertexAIClient(BaseLLMClient):
                                     processed_parts = []
                                     fixed_count = 0
 
-                                    for i, part in enumerate(text_parts):
+                                    for i, part_raw in enumerate(text_parts):
                                         # Check for thinking content that needs
                                         # formatting
                                         needs_thinking_format = False
+                                        # Ensure part is a string
+                                        part: str = str(part_raw) if not isinstance(part_raw, str) else part_raw
 
-                                        if "<thinking>" in part and "</thinking>" not in part:
+                                        if "<thinking>" in part and "</thinking>" not in part:  # type: ignore[operator]
                                             # Incomplete <thinking> tag: add
                                             # closing tag
-                                            part = part + "\n</thinking>"
+                                            part = part + "\n</thinking>"  # type: ignore[operator]
                                             needs_thinking_format = True
-                                            self.logger.debug(
-                                                f"  Part {i+1}: Incomplete <thinking> tag fixed"
-                                            )
-                                        elif (
-                                            part.startswith("thinking")
-                                            and "</thinking>" not in part
-                                        ):
+                                            self.logger.debug(f"  Part {i+1}: Incomplete <thinking> tag fixed")
+                                        elif part.startswith("thinking") and "</thinking>" not in part:  # type: ignore[operator]
                                             # thinking\n format: convert to
                                             # <thinking>...</thinking>
                                             if part.startswith("thinking\n"):
@@ -250,9 +229,7 @@ class VertexAIClient(BaseLLMClient):
 
                                             part = f"<thinking>\n{content}\n</thinking>"
                                             needs_thinking_format = True
-                                            self.logger.debug(
-                                                f"  Part {i+1}: thinking\\n format converted to <thinking> tags"
-                                            )
+                                            self.logger.debug(f"  Part {i+1}: thinking\\n format converted to <thinking> tags")
 
                                         if needs_thinking_format:
                                             fixed_count += 1
@@ -263,13 +240,9 @@ class VertexAIClient(BaseLLMClient):
                                     content = "\n".join(processed_parts)
 
                                     if fixed_count > 0:
-                                        self.logger.info(
-                                            f"✅ Multi-part response merged: {len(text_parts)} parts, {fixed_count} incomplete tags fixed, order preserved"
-                                        )
+                                        self.logger.info(f"✅ Multi-part response merged: {len(text_parts)} parts, {fixed_count} incomplete tags fixed, order preserved")
                                     else:
-                                        self.logger.info(
-                                            f"✅ Multi-part response merged: {len(text_parts)} parts, order preserved"
-                                        )
+                                        self.logger.info(f"✅ Multi-part response merged: {len(text_parts)} parts, order preserved")
                                 else:
                                     # Single part response - use as is
                                     content = text_parts[0]
@@ -277,26 +250,20 @@ class VertexAIClient(BaseLLMClient):
                             else:
                                 self.logger.warning("No text content found in multi-part response")
                         except Exception as part_error:
-                            self.logger.error(
-                                f"Failed to extract content from multi-part response: {str(part_error)}"
-                            )
+                            self.logger.error(f"Failed to extract content from multi-part response: {str(part_error)}")
 
                     # If still no content, check finish reason
                     if not content:
                         if hasattr(candidate, "finish_reason"):
                             if candidate.finish_reason == "MAX_TOKENS":
                                 content = "[Response truncated due to token limit - consider increasing max_tokens for Gemini 2.5 models]"
-                                self.logger.warning(
-                                    "Response truncated due to MAX_TOKENS - Gemini 2.5 uses thinking tokens"
-                                )
+                                self.logger.warning("Response truncated due to MAX_TOKENS - Gemini 2.5 uses thinking tokens")
                             elif candidate.finish_reason in [
                                 "SAFETY",
                                 "RECITATION",
                             ]:
                                 content = "[Response blocked by safety filters or content policy]"
-                                self.logger.warning(
-                                    f"Response blocked by safety filters: {candidate.finish_reason}"
-                                )
+                                self.logger.warning(f"Response blocked by safety filters: {candidate.finish_reason}")
                             else:
                                 content = f"[Response error: Cannot get response text - {candidate.finish_reason}]"
                         else:
@@ -348,7 +315,7 @@ class VertexAIClient(BaseLLMClient):
                 )
             raise
 
-    async def stream_text(
+    async def stream_text(  # type: ignore[override]
         self,
         messages: List[LLMMessage],
         model: Optional[str] = None,
@@ -381,14 +348,8 @@ class VertexAIClient(BaseLLMClient):
             part_counts = list(stats["part_counts"].keys())
             stats["variation_analysis"] = {
                 "unique_part_counts": len(part_counts),
-                "most_common_count": (
-                    max(stats["part_counts"].items(), key=lambda x: x[1])[0]
-                    if stats["part_counts"]
-                    else None
-                ),
-                "part_count_range": (
-                    f"{min(part_counts)}-{max(part_counts)}" if part_counts else "N/A"
-                ),
+                "most_common_count": (max(stats["part_counts"].items(), key=lambda x: x[1])[0] if stats["part_counts"] else None),
+                "part_count_range": (f"{min(part_counts)}-{max(part_counts)}" if part_counts else "N/A"),
                 # 0-1, higher is more stable
                 "stability_score": 1.0 - (len(part_counts) - 1) / max(stats["total_responses"], 1),
             }

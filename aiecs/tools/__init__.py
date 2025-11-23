@@ -211,9 +211,7 @@ def _auto_discover_tools():
 
                     # Pattern 2: register_tool("name")(ClassName) function call
                     # syntax
-                    function_pattern = (
-                        r'register_tool\([\'"]([^\'"]+)[\'"]\)\([A-Za-z_][A-Za-z0-9_]*\)'
-                    )
+                    function_pattern = r'register_tool\([\'"]([^\'"]+)[\'"]\)\([A-Za-z_][A-Za-z0-9_]*\)'
                     function_matches = re.findall(function_pattern, content)
 
                     # Combine all matches

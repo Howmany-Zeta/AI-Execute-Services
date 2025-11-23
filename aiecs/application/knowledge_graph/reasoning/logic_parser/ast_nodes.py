@@ -34,11 +34,11 @@ try:
     QUERY_PLAN_AVAILABLE = True
 except ImportError:
     QUERY_PLAN_AVAILABLE = False
-    QueryPlan = None
-    QueryStep = None
-    QueryOperation = None
-    GraphQuery = None
-    QueryType = None
+    QueryPlan = None  # type: ignore[misc]
+    QueryStep = None  # type: ignore[misc]
+    QueryOperation = None  # type: ignore[misc]
+    GraphQuery = None  # type: ignore[misc]
+    QueryType = None  # type: ignore[misc]
 
 # Placeholder for ValidationError (will be defined in error_handler.py)
 
@@ -180,9 +180,7 @@ class QueryNode(ASTNode):
         for i, traversal in enumerate(self.traversals, start=2):
             step_id = f"step_{i}"
             depends_on = [f"step_{i-1}"]  # Each step depends on previous
-            traversal_step = traversal.to_query_step(
-                context, step_id=step_id, depends_on=depends_on
-            )
+            traversal_step = traversal.to_query_step(context, step_id=step_id, depends_on=depends_on)
             steps.append(traversal_step)
 
         return steps

@@ -111,15 +111,9 @@ class ReasoningEngine:
 
             logger = logging.getLogger(__name__)
 
-            trace.append(
-                f"WARNING: Query plan returned no evidence. Plan had {len(plan.steps)} steps."
-            )
+            trace.append(f"WARNING: Query plan returned no evidence. Plan had {len(plan.steps)} steps.")
             trace.append(f"Plan steps: {[s.step_id + ':' + s.operation.value for s in plan.steps]}")
-            logger.warning(
-                f"Query plan returned no evidence. "
-                f"Plan ID: {plan.plan_id}, Steps: {len(plan.steps)}, "
-                f"Query: {query}, Context: {context}"
-            )
+            logger.warning(f"Query plan returned no evidence. " f"Plan ID: {plan.plan_id}, Steps: {len(plan.steps)}, " f"Query: {query}, Context: {context}")
 
             trace.append(f"FALLBACK: Trying direct traversal from {context['start_entity_id']}")
             start_id = context["start_entity_id"]
@@ -135,16 +129,10 @@ class ReasoningEngine:
                 )
 
                 if paths:
-                    path_evidence = await self.collect_evidence_from_paths(
-                        paths, source="direct_traversal_fallback"
-                    )
+                    path_evidence = await self.collect_evidence_from_paths(paths, source="direct_traversal_fallback")
                     evidence.extend(path_evidence)
-                    trace.append(
-                        f"FALLBACK SUCCESS: Found {len(path_evidence)} evidence pieces from direct traversal"
-                    )
-                    logger.info(
-                        f"Fallback traversal succeeded: {len(path_evidence)} evidence pieces from {start_id}"
-                    )
+                    trace.append(f"FALLBACK SUCCESS: Found {len(path_evidence)} evidence pieces from direct traversal")
+                    logger.info(f"Fallback traversal succeeded: {len(path_evidence)} evidence pieces from {start_id}")
                 else:
                     trace.append(f"FALLBACK FAILED: No paths found from {start_id}")
                     logger.warning(f"Fallback traversal found no paths from {start_id}")
@@ -208,17 +196,11 @@ class ReasoningEngine:
 
         # Filter by relation types if specified
         if relation_types:
-            paths = [
-                path
-                for path in paths
-                if all(rel.relation_type in relation_types for rel in path.edges)
-            ]
+            paths = [path for path in paths if all(rel.relation_type in relation_types for rel in path.edges)]
 
         return paths[:max_paths]
 
-    async def collect_evidence_from_paths(
-        self, paths: List[Path], source: str = "path_finding"
-    ) -> List[Evidence]:
+    async def collect_evidence_from_paths(self, paths: List[Path], source: str = "path_finding") -> List[Evidence]:
         """
         Collect evidence from paths
 
@@ -258,9 +240,7 @@ class ReasoningEngine:
 
         return evidence_list
 
-    def rank_evidence(
-        self, evidence: List[Evidence], ranking_method: str = "combined_score"
-    ) -> List[Evidence]:
+    def rank_evidence(self, evidence: List[Evidence], ranking_method: str = "combined_score") -> List[Evidence]:
         """
         Rank evidence by relevance
 
@@ -313,9 +293,7 @@ class ReasoningEngine:
 
         return "".join(parts)
 
-    async def _execute_plan_with_evidence(
-        self, plan: QueryPlan, trace: List[str]
-    ) -> List[Evidence]:
+    async def _execute_plan_with_evidence(self, plan: QueryPlan, trace: List[str]) -> List[Evidence]:
         """Execute query plan and collect evidence"""
         import logging
 
@@ -336,9 +314,7 @@ class ReasoningEngine:
             for step_id in step_ids:
                 try:
                     step = next(s for s in plan.steps if s.step_id == step_id)
-                    trace.append(
-                        f"  Executing {step_id}: {step.operation.value} - {step.description}"
-                    )
+                    trace.append(f"  Executing {step_id}: {step.operation.value} - {step.description}")
 
                     # Execute step
                     step_evidence = await self._execute_step(step, step_results)
@@ -367,9 +343,7 @@ class ReasoningEngine:
 
         return all_evidence
 
-    async def _execute_step(
-        self, step: QueryStep, previous_results: Dict[str, Any]
-    ) -> List[Evidence]:
+    async def _execute_step(self, step: QueryStep, previous_results: Dict[str, Any]) -> List[Evidence]:
         """Execute a single query step"""
         query = step.query
         evidence = []
@@ -432,13 +406,9 @@ class ReasoningEngine:
                         dep_evidence = previous_results[dep_id]
                         extracted_ids = [e.id for ev in dep_evidence for e in ev.entities]
                         start_ids.extend(extracted_ids)
-                        logger.debug(
-                            f"TRAVERSAL: Extracted {len(extracted_ids)} entity IDs from step {dep_id}"
-                        )
+                        logger.debug(f"TRAVERSAL: Extracted {len(extracted_ids)} entity IDs from step {dep_id}")
                     else:
-                        logger.warning(
-                            f"TRAVERSAL: Dependent step {dep_id} not found in previous_results"
-                        )
+                        logger.warning(f"TRAVERSAL: Dependent step {dep_id} not found in previous_results")
             else:
                 logger.warning("TRAVERSAL: No entity_id and no dependencies. Cannot traverse.")
 
@@ -463,13 +433,9 @@ class ReasoningEngine:
                         logger.debug(f"TRAVERSAL: Found {len(paths)} paths from {start_id}")
 
                         # Convert paths to evidence
-                        path_evidence = await self.collect_evidence_from_paths(
-                            paths, source=step.step_id
-                        )
+                        path_evidence = await self.collect_evidence_from_paths(paths, source=step.step_id)
                         evidence.extend(path_evidence)
-                        logger.debug(
-                            f"TRAVERSAL: Collected {len(path_evidence)} evidence from {start_id}"
-                        )
+                        logger.debug(f"TRAVERSAL: Collected {len(path_evidence)} evidence from {start_id}")
                     except Exception as e:
                         logger.error(
                             f"TRAVERSAL: Error traversing from {start_id}: {str(e)}",
@@ -491,9 +457,7 @@ class ReasoningEngine:
 
         return evidence
 
-    def _rank_and_filter_evidence(
-        self, evidence: List[Evidence], max_evidence: int
-    ) -> List[Evidence]:
+    def _rank_and_filter_evidence(self, evidence: List[Evidence], max_evidence: int) -> List[Evidence]:
         """Rank and filter evidence to top N"""
         # Rank by combined score
         ranked = self.rank_evidence(evidence, ranking_method="combined_score")

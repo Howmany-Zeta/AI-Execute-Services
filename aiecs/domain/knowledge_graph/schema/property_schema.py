@@ -58,32 +58,22 @@ class PropertySchema(BaseModel):
         description="Property name (must be unique within entity/relation type)",
     )
 
-    property_type: PropertyType = Field(
-        default=PropertyType.STRING, description="Data type of the property"
-    )
+    property_type: PropertyType = Field(default=PropertyType.STRING, description="Data type of the property")
 
     required: bool = Field(default=False, description="Whether this property is required")
 
-    description: Optional[str] = Field(
-        default=None, description="Human-readable description of the property"
-    )
+    description: Optional[str] = Field(default=None, description="Human-readable description of the property")
 
-    default: Optional[Any] = Field(
-        default=None, description="Default value if property is not provided"
-    )
+    default: Optional[Any] = Field(default=None, description="Default value if property is not provided")
 
     allowed_values: Optional[List[Any]] = Field(
         default=None,
         description="List of allowed values (for enum-like properties)",
     )
 
-    min_value: Optional[float] = Field(
-        default=None, description="Minimum value (for numeric types)"
-    )
+    min_value: Optional[float] = Field(default=None, description="Minimum value (for numeric types)")
 
-    max_value: Optional[float] = Field(
-        default=None, description="Maximum value (for numeric types)"
-    )
+    max_value: Optional[float] = Field(default=None, description="Maximum value (for numeric types)")
 
     class Config:
         use_enum_values = True
@@ -134,9 +124,7 @@ class PropertySchema(BaseModel):
         # Allowed values validation
         if self.allowed_values is not None:
             if value not in self.allowed_values:
-                raise ValueError(
-                    f"Property '{self.name}' value must be one of {self.allowed_values}, got {value}"
-                )
+                raise ValueError(f"Property '{self.name}' value must be one of {self.allowed_values}, got {value}")
 
         # Range validation for numeric types
         if self.property_type in (PropertyType.INTEGER, PropertyType.FLOAT):

@@ -97,7 +97,7 @@ class SmartErrorHandler:
                 - retry_info: retry attempt information
         """
         last_error = None
-        retry_info = {"attempts": 0, "errors": [], "recovery_suggestions": []}
+        retry_info: Dict[str, Any] = {"attempts": 0, "errors": [], "recovery_suggestions": []}
 
         for attempt in range(self.max_retries):
             retry_info["attempts"] = attempt + 1
@@ -108,10 +108,7 @@ class SmartErrorHandler:
 
                 # Success!
                 if attempt > 0:
-                    logger.info(
-                        f"{provider_name}.{operation_name} succeeded after "
-                        f"{attempt + 1} attempts"
-                    )
+                    logger.info(f"{provider_name}.{operation_name} succeeded after " f"{attempt + 1} attempts")
 
                 return {
                     "success": True,
@@ -139,17 +136,11 @@ class SmartErrorHandler:
                 is_last_attempt = attempt == self.max_retries - 1
 
                 if not is_retryable:
-                    logger.warning(
-                        f"{provider_name}.{operation_name} failed with non-retryable "
-                        f"error: {error_type}"
-                    )
+                    logger.warning(f"{provider_name}.{operation_name} failed with non-retryable " f"error: {error_type}")
                     break
 
                 if is_last_attempt:
-                    logger.error(
-                        f"{provider_name}.{operation_name} failed after "
-                        f"{self.max_retries} attempts"
-                    )
+                    logger.error(f"{provider_name}.{operation_name} failed after " f"{self.max_retries} attempts")
                     break
 
                 # Calculate wait time with exponential backoff
@@ -158,17 +149,16 @@ class SmartErrorHandler:
                     self.max_delay,
                 )
 
-                logger.info(
-                    f"{provider_name}.{operation_name} attempt {attempt + 1} failed "
-                    f"({error_type}), retrying in {wait_time:.1f}s..."
-                )
+                logger.info(f"{provider_name}.{operation_name} attempt {attempt + 1} failed " f"({error_type}), retrying in {wait_time:.1f}s...")
 
                 time.sleep(wait_time)
 
         # All retries exhausted or non-retryable error
-        retry_info["recovery_suggestions"] = self._generate_recovery_suggestions(
-            last_error, operation_name, provider_name
-        )
+        if last_error is None:
+            # This should never happen, but handle it gracefully
+            last_error = Exception("Unknown error occurred")
+
+        retry_info["recovery_suggestions"] = self._generate_recovery_suggestions(last_error, operation_name, provider_name)
 
         return {
             "success": False,
@@ -273,9 +263,7 @@ class SmartErrorHandler:
 
         return details
 
-    def _generate_recovery_suggestions(
-        self, error: Exception, operation_name: str, provider_name: str
-    ) -> List[str]:
+    def _generate_recovery_suggestions(self, error: Exception, operation_name: str, provider_name: str) -> List[str]:
         """
         Generate actionable recovery suggestions for the error.
 

@@ -5,7 +5,7 @@ Orchestrates the full document-to-graph conversion pipeline.
 """
 
 import asyncio
-from typing import List, Optional, Dict, Any, Callable
+from typing import List, Optional, Dict, Any, Callable, cast
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -142,9 +142,7 @@ class GraphBuilder:
         self.entity_deduplicator = EntityDeduplicator() if enable_deduplication else None
         self.entity_linker = EntityLinker(graph_store) if enable_linking else None
         self.relation_deduplicator = RelationDeduplicator() if enable_deduplication else None
-        self.relation_validator = (
-            RelationValidator(schema) if enable_validation and schema else None
-        )
+        self.relation_validator = RelationValidator(schema) if enable_validation and schema else None
 
     async def build_from_text(
         self,
@@ -220,9 +218,7 @@ class GraphBuilder:
             valid_relations = relations
             if self.enable_validation and self.relation_validator and relations:
                 self._report_progress("Validating relations", 0.7)
-                valid_relations = self.relation_validator.filter_valid_relations(
-                    relations, all_entities
-                )
+                valid_relations = self.relation_validator.filter_valid_relations(relations, all_entities)
                 invalid_count = len(relations) - len(valid_relations)
                 if invalid_count > 0:
                     result.warnings.append(f"{invalid_count} relations failed validation")
@@ -316,14 +312,14 @@ class GraphBuilder:
                     error_result.errors.append(str(result))
                     results[i] = error_result
 
-            return results
+            return cast(List[BuildResult], results)
         else:
             # Process sequentially
-            results = []
+            sequential_results: List[BuildResult] = []
             for text, source in zip(texts, sources):
                 result = await self.build_from_text(text, source)
-                results.append(result)
-            return results
+                sequential_results.append(result)
+            return sequential_results
 
     def _report_progress(self, message: str, progress: float):
         """

@@ -73,11 +73,7 @@ class BaseTool:
         """
         for attr_name in dir(self.__class__):
             attr = getattr(self.__class__, attr_name)
-            if (
-                isinstance(attr, type)
-                and issubclass(attr, BaseModel)
-                and attr.__name__.endswith("Schema")
-            ):
+            if isinstance(attr, type) and issubclass(attr, BaseModel) and attr.__name__.endswith("Schema"):
                 op_name = attr.__name__.replace("Schema", "").lower()
                 self._schemas[op_name] = attr
 
@@ -105,9 +101,7 @@ class BaseTool:
         """
         sanitized = {}
         for k, v in kwargs.items():
-            if isinstance(v, str) and re.search(
-                r"(\bSELECT\b|\bINSERT\b|--|;|/\*)", v, re.IGNORECASE
-            ):
+            if isinstance(v, str) and re.search(r"(\bSELECT\b|\bINSERT\b|--|;|/\*)", v, re.IGNORECASE):
                 raise SecurityError(f"Input parameter '{k}' contains potentially malicious content")
             sanitized[k] = v
         return sanitized

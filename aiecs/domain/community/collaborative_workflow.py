@@ -97,6 +97,7 @@ class CollaborativeWorkflowEngine:
             session_leader=session_leader_id,
             purpose=purpose,
             session_type=session_type,
+            ended_at=None,
             agenda=agenda or [],
             metadata=session_config or {},
         )

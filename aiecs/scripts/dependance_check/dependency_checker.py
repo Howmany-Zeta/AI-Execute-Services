@@ -73,9 +73,7 @@ class DependencyChecker:
         )
         return logging.getLogger(__name__)
 
-    def check_system_command(
-        self, command: str, version_flag: str = "--version"
-    ) -> DependencyStatus:
+    def check_system_command(self, command: str, version_flag: str = "--version") -> DependencyStatus:
         """Check if a system command is available."""
         try:
             result = subprocess.run(
@@ -137,10 +135,10 @@ class DependencyChecker:
 
     def check_image_tool_dependencies(self) -> ToolDependencies:
         """Check dependencies for Image Tool."""
-        system_deps = []
-        python_deps = []
-        model_deps = []
-        optional_deps = []
+        system_deps: List[str] = []
+        python_deps: List[str] = []
+        model_deps: List[str] = []
+        optional_deps: List[str] = []
 
         # Tesseract OCR
         tesseract_status = self.check_system_command("tesseract")
@@ -218,10 +216,10 @@ class DependencyChecker:
 
     def check_classfire_tool_dependencies(self) -> ToolDependencies:
         """Check dependencies for ClassFire Tool."""
-        system_deps = []
-        python_deps = []
-        model_deps = []
-        optional_deps = []
+        system_deps: List[str] = []
+        python_deps: List[str] = []
+        model_deps: List[str] = []
+        optional_deps: List[str] = []
 
         # Python packages
         python_packages = [
@@ -319,10 +317,10 @@ class DependencyChecker:
 
     def check_office_tool_dependencies(self) -> ToolDependencies:
         """Check dependencies for Office Tool."""
-        system_deps = []
-        python_deps = []
-        model_deps = []
-        optional_deps = []
+        system_deps: List[str] = []
+        python_deps: List[str] = []
+        model_deps: List[str] = []
+        optional_deps: List[str] = []
 
         # Java Runtime Environment
         java_status = self.check_system_command("java", "-version")
@@ -383,10 +381,10 @@ class DependencyChecker:
 
     def check_stats_tool_dependencies(self) -> ToolDependencies:
         """Check dependencies for Stats Tool."""
-        system_deps = []
-        python_deps = []
-        model_deps = []
-        optional_deps = []
+        system_deps: List[str] = []
+        python_deps: List[str] = []
+        model_deps: List[str] = []
+        optional_deps: List[str] = []
 
         # pyreadstat system dependencies
         pyreadstat_status = self._check_pyreadstat_system_deps()
@@ -447,10 +445,10 @@ class DependencyChecker:
 
     def check_report_tool_dependencies(self) -> ToolDependencies:
         """Check dependencies for Report Tool."""
-        system_deps = []
-        python_deps = []
-        model_deps = []
-        optional_deps = []
+        system_deps: List[str] = []
+        python_deps: List[str] = []
+        model_deps: List[str] = []
+        optional_deps: List[str] = []
 
         # WeasyPrint system dependencies
         weasyprint_status = self._check_weasyprint_system_deps()
@@ -513,10 +511,10 @@ class DependencyChecker:
 
     def check_scraper_tool_dependencies(self) -> ToolDependencies:
         """Check dependencies for Scraper Tool."""
-        system_deps = []
-        python_deps = []
-        model_deps = []
-        optional_deps = []
+        system_deps: List[str] = []
+        python_deps: List[str] = []
+        model_deps: List[str] = []
+        optional_deps: List[str] = []
 
         # Playwright browsers
         playwright_status = self._check_playwright_browsers()
@@ -617,7 +615,7 @@ class DependencyChecker:
     def _check_transformers_model(self, model: str) -> DependencyStatus:
         """Check if a Transformers model is available."""
         try:
-            from transformers import pipeline
+            from transformers import pipeline  # type: ignore[import-not-found]
 
             # Try to load the model (this will download if not present)
             pipeline("summarization", model=model)  # Just checking if it loads
@@ -813,11 +811,7 @@ class DependencyChecker:
             if tool_deps.system_deps:
                 report.append("📦 System Dependencies:")
                 for dep in tool_deps.system_deps:
-                    status_icon = (
-                        "✅"
-                        if dep.status == DependencyStatus.AVAILABLE
-                        else "❌" if dep.is_critical else "⚠️"
-                    )
+                    status_icon = "✅" if dep.status == DependencyStatus.AVAILABLE else "❌" if dep.is_critical else "⚠️"
                     report.append(f"  {status_icon} {dep.name}: {dep.status.value}")
                     if dep.status != DependencyStatus.AVAILABLE:
                         total_issues += 1
@@ -848,11 +842,7 @@ class DependencyChecker:
             if tool_deps.model_deps:
                 report.append("🤖 Model Dependencies:")
                 for dep in tool_deps.model_deps:
-                    status_icon = (
-                        "✅"
-                        if dep.status == DependencyStatus.AVAILABLE
-                        else "❌" if dep.is_critical else "⚠️"
-                    )
+                    status_icon = "✅" if dep.status == DependencyStatus.AVAILABLE else "❌" if dep.is_critical else "⚠️"
                     report.append(f"  {status_icon} {dep.name}: {dep.status.value}")
                     if dep.status != DependencyStatus.AVAILABLE:
                         total_issues += 1
@@ -920,10 +910,7 @@ def main():
 
     # Return exit code based on critical issues
     critical_issues = sum(
-        1
-        for tool_deps in tools.values()
-        for dep in tool_deps.system_deps + tool_deps.python_deps + tool_deps.model_deps
-        if dep.status != DependencyStatus.AVAILABLE and dep.is_critical
+        1 for tool_deps in tools.values() for dep in tool_deps.system_deps + tool_deps.python_deps + tool_deps.model_deps if dep.status != DependencyStatus.AVAILABLE and dep.is_critical
     )
 
     if critical_issues == 0:

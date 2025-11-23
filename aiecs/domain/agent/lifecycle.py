@@ -195,10 +195,7 @@ class AgentLifecycleManager:
                     }
                 )
 
-        logger.info(
-            f"Shutdown all agents: {len(results['success'])} succeeded, "
-            f"{len(results['failed'])} failed"
-        )
+        logger.info(f"Shutdown all agents: {len(results['success'])} succeeded, " f"{len(results['failed'])} failed")
 
         return results
 
@@ -235,9 +232,7 @@ class AgentLifecycleManager:
             },
         }
 
-    def list_agent_statuses(
-        self, agent_type: Optional[str] = None, state: Optional[str] = None
-    ) -> "List[Dict[str, Any]]":
+    def list_agent_statuses(self, agent_type: Optional[str] = None, state: Optional[str] = None) -> "List[Dict[str, Any]]":
         """
         List agent statuses with optional filtering.
 

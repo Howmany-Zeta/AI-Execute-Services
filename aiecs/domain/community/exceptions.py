@@ -5,11 +5,13 @@ Defines community-specific exception classes with clear error messages
 and recovery suggestions.
 """
 
+from typing import Optional
+
 
 class CommunityException(Exception):
     """Base exception for community-related errors."""
 
-    def __init__(self, message: str, recovery_suggestion: str = None):
+    def __init__(self, message: str, recovery_suggestion: Optional[str] = None):
         """
         Initialize community exception.
 
@@ -88,7 +90,7 @@ class AccessDeniedError(CommunityException):
 class MembershipError(CommunityException):
     """Raised when there's an issue with community membership."""
 
-    def __init__(self, message: str, agent_id: str = None):
+    def __init__(self, message: str, agent_id: Optional[str] = None):
         super().__init__(message, "Check membership status and community requirements.")
         self.agent_id = agent_id
 
@@ -96,7 +98,7 @@ class MembershipError(CommunityException):
 class VotingError(CommunityException):
     """Raised when there's an issue with voting."""
 
-    def __init__(self, message: str, decision_id: str = None):
+    def __init__(self, message: str, decision_id: Optional[str] = None):
         super().__init__(
             message,
             "Verify voting is open and you are eligible to vote on this decision.",
@@ -107,7 +109,7 @@ class VotingError(CommunityException):
 class GovernanceError(CommunityException):
     """Raised when there's an issue with community governance."""
 
-    def __init__(self, message: str, community_id: str = None):
+    def __init__(self, message: str, community_id: Optional[str] = None):
         super().__init__(message, "Review community governance rules and requirements.")
         self.community_id = community_id
 
@@ -115,7 +117,7 @@ class GovernanceError(CommunityException):
 class CollaborationError(CommunityException):
     """Raised when there's an issue with collaboration."""
 
-    def __init__(self, message: str, session_id: str = None):
+    def __init__(self, message: str, session_id: Optional[str] = None):
         super().__init__(message, "Check session status and participant availability.")
         self.session_id = session_id
 
@@ -135,7 +137,11 @@ class CommunityInitializationError(CommunityException):
 class CommunityValidationError(CommunityException):
     """Raised when community validation fails."""
 
-    def __init__(self, field_or_message: str, reason: str = None):
+    def __init__(self, field_or_message: str, reason: Optional[str] = None):
+        # Initialize attributes first
+        self.field: Optional[str]
+        self.reason: Optional[str]
+
         if reason:
             # Two-argument form: field and reason
             message = f"Validation error for {field_or_message}: {reason}"
@@ -153,7 +159,7 @@ class CommunityValidationError(CommunityException):
 class QuorumNotMetError(CommunityException):
     """Raised when quorum is not met for a decision."""
 
-    def __init__(self, required: int, actual: int, decision_id: str = None):
+    def __init__(self, required: int, actual: int, decision_id: Optional[str] = None):
         super().__init__(
             f"Quorum not met: {actual} votes cast, {required} required",
             "Encourage more members to participate in voting.",

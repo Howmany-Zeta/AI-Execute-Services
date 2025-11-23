@@ -333,9 +333,7 @@ class ASTValidator:
     # Helper Validation Methods
     # ========================================================================
 
-    def validate_entity_type(
-        self, entity_type: str, line: int, column: int
-    ) -> List[ValidationError]:
+    def validate_entity_type(self, entity_type: str, line: int, column: int) -> List[ValidationError]:
         """
         Validate that an entity type exists in the schema
 
@@ -378,9 +376,7 @@ class ASTValidator:
 
         return errors
 
-    def validate_relation_type(
-        self, relation_type: str, line: int, column: int
-    ) -> List[ValidationError]:
+    def validate_relation_type(self, relation_type: str, line: int, column: int) -> List[ValidationError]:
         """
         Validate that a relation type exists in the schema
 
@@ -423,9 +419,7 @@ class ASTValidator:
 
         return errors
 
-    def validate_property(
-        self, entity_type: str, property_path: str, line: int, column: int
-    ) -> List[ValidationError]:
+    def validate_property(self, entity_type: str, property_path: str, line: int, column: int) -> List[ValidationError]:
         """
         Validate that a property exists in an entity type
 
@@ -465,9 +459,7 @@ class ASTValidator:
 
             suggestion = None
             if available_props:
-                suggestion = (
-                    f"Available properties for {entity_type}: {', '.join(available_props[:5])}"
-                )
+                suggestion = f"Available properties for {entity_type}: {', '.join(available_props[:5])}"
                 if len(available_props) > 5:
                     suggestion += f" (and {len(available_props) - 5} more)"
 
@@ -565,8 +557,7 @@ class ASTValidator:
                             ValidationError(
                                 line=line,
                                 column=column,
-                                message=f"Property '{property_path}' expects {expected_type.__name__} values, "
-                                f"but list contains {type(item).__name__}",
+                                message=f"Property '{property_path}' expects {expected_type.__name__} values, " f"but list contains {type(item).__name__}",
                                 suggestion=f"Ensure all list values are {expected_type.__name__}",
                             )
                         )
@@ -579,8 +570,7 @@ class ASTValidator:
                 ValidationError(
                     line=line,
                     column=column,
-                    message=f"Property '{property_path}' expects {expected_type.__name__} value, "
-                    f"got {type(value).__name__}",
+                    message=f"Property '{property_path}' expects {expected_type.__name__} value, " f"got {type(value).__name__}",
                     suggestion=f"Use a {expected_type.__name__} value",
                 )
             )
@@ -619,9 +609,7 @@ class ASTValidator:
             return errors  # Relation type error already reported
 
         # Check if relation has endpoint constraints
-        if not hasattr(relation_schema, "source_entity_types") or not hasattr(
-            relation_schema, "target_entity_types"
-        ):
+        if not hasattr(relation_schema, "source_entity_types") or not hasattr(relation_schema, "target_entity_types"):
             return errors
 
         source_types = relation_schema.source_entity_types

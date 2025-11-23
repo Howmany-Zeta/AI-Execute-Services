@@ -124,9 +124,7 @@ class RelationDeduplicator:
         max_weight = max(r.weight for r in relations)
 
         # Take highest confidence (if present in properties)
-        confidences = [
-            r.properties.get("_extraction_confidence", 0.5) for r in relations if r.properties
-        ]
+        confidences = [r.properties.get("_extraction_confidence", 0.5) for r in relations if r.properties]
         if confidences:
             merged_properties["_extraction_confidence"] = max(confidences)
 
@@ -182,8 +180,4 @@ class RelationDeduplicator:
         Returns:
             True if relations are duplicates
         """
-        return (
-            r1.source_id == r2.source_id
-            and r1.target_id == r2.target_id
-            and r1.relation_type == r2.relation_type
-        )
+        return r1.source_id == r2.source_id and r1.target_id == r2.target_id and r1.relation_type == r2.relation_type

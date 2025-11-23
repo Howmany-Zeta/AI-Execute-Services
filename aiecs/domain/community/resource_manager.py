@@ -99,9 +99,7 @@ class ResourceManager:
         )
 
         # Update indexes
-        await self._update_resource_indexes(
-            resource_id, tags or [], ResourceType.KNOWLEDGE, owner_member_id
-        )
+        await self._update_resource_indexes(resource_id, tags or [], ResourceType.KNOWLEDGE, owner_member_id)
 
         # Create relationships
         if related_resources:
@@ -155,9 +153,7 @@ class ResourceManager:
         )
 
         # Update indexes
-        await self._update_resource_indexes(
-            resource_id, tags or [], ResourceType.TOOL, owner_member_id
-        )
+        await self._update_resource_indexes(resource_id, tags or [], ResourceType.TOOL, owner_member_id)
 
         logger.info(f"Created tool resource: {tool_name} ({resource_id})")
         return resource_id
@@ -210,9 +206,7 @@ class ResourceManager:
         )
 
         # Update indexes
-        await self._update_resource_indexes(
-            resource_id, tags or [], ResourceType.EXPERIENCE, owner_member_id
-        )
+        await self._update_resource_indexes(resource_id, tags or [], ResourceType.EXPERIENCE, owner_member_id)
 
         logger.info(f"Created experience resource: {experience_title} ({resource_id})")
         return resource_id
@@ -271,9 +265,7 @@ class ResourceManager:
 
             # Text search in resource content
             if query:
-                searchable_text = (
-                    f"{resource.name} {resource.description or ''} {json.dumps(resource.content)}"
-                )
+                searchable_text = f"{resource.name} {resource.description or ''} {json.dumps(resource.content)}"
                 if query.lower() not in searchable_text.lower():
                     continue
 
@@ -419,9 +411,7 @@ class ResourceManager:
             self.owner_index[owner_id] = set()
         self.owner_index[owner_id].add(resource_id)
 
-    async def _create_resource_relationships(
-        self, resource_id: str, related_resource_ids: List[str]
-    ) -> None:
+    async def _create_resource_relationships(self, resource_id: str, related_resource_ids: List[str]) -> None:
         """Create relationships between resources."""
         if resource_id not in self.resource_relationships:
             self.resource_relationships[resource_id] = {

@@ -146,7 +146,7 @@ class QuickDependencyChecker:
 
     def get_installation_commands(self) -> Dict[str, List[str]]:
         """Get installation commands for missing dependencies."""
-        commands = {"system": [], "python": [], "models": []}
+        commands: Dict[str, List[str]] = {"system": [], "python": [], "models": []}
 
         # System dependencies
         if self.system == "linux":

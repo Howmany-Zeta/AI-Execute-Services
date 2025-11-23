@@ -26,11 +26,7 @@ class TracingManager:
         # available
         self.jaeger_host = jaeger_host or os.getenv("JAEGER_AGENT_HOST", "jaeger")
         self.jaeger_port = jaeger_port or int(os.getenv("JAEGER_AGENT_PORT", "6831"))
-        self.enable_tracing = (
-            enable_tracing
-            if enable_tracing is not None
-            else os.getenv("JAEGER_ENABLE_TRACING", "true").lower() == "true"
-        )
+        self.enable_tracing = enable_tracing if enable_tracing is not None else os.getenv("JAEGER_ENABLE_TRACING", "true").lower() == "true"
         self.tracer = None
 
         if self.enable_tracing:
@@ -55,9 +51,7 @@ class TracingManager:
                 validate=True,
             )
             self.tracer = config.initialize_tracer()
-            logger.info(
-                f"Jaeger tracer initialized for service '{self.service_name}' at {self.jaeger_host}:{self.jaeger_port}"
-            )
+            logger.info(f"Jaeger tracer initialized for service '{self.service_name}' at {self.jaeger_host}:{self.jaeger_port}")
         except Exception as e:
             logger.warning(f"Failed to initialize Jaeger tracer: {e}")
             self.tracer = None

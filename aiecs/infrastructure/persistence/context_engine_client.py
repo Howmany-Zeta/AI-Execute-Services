@@ -115,10 +115,7 @@ def get_context_engine() -> Optional["ContextEngine"]:
             logger.warning("ContextEngine not available")
     """
     if not _initialized:
-        logger.warning(
-            "ContextEngine not initialized. Call initialize_context_engine() "
-            "during application startup."
-        )
+        logger.warning("ContextEngine not initialized. Call initialize_context_engine() " "during application startup.")
     return _global_context_engine
 
 

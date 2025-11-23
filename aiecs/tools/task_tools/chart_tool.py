@@ -45,7 +45,7 @@ class ChartTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the chart tool"""
 
-        model_config = ConfigDict(env_prefix="CHART_TOOL_")
+        model_config = ConfigDict(env_prefix="CHART_TOOL_")  # type: ignore[typeddict-unknown-key]
 
         export_dir: str = Field(
             default=os.path.join(tempfile.gettempdir(), "chart_exports"),
@@ -77,12 +77,8 @@ class ChartTool(BaseTool):
 
         file_path: str = Field(description="Path to the data file")
         nrows: Optional[int] = Field(default=None, description="Number of rows to read")
-        sheet_name: Optional[Union[str, int]] = Field(
-            default=0, description="Sheet name or index for Excel files"
-        )
-        export_format: Optional[ExportFormat] = Field(
-            default=None, description="Format to export results in"
-        )
+        sheet_name: Optional[Union[str, int]] = Field(default=0, description="Sheet name or index for Excel files")
+        export_format: Optional[ExportFormat] = Field(default=None, description="Format to export results in")
         export_path: Optional[str] = Field(default=None, description="Path to export results to")
 
         @field_validator("file_path")
@@ -112,16 +108,10 @@ class ChartTool(BaseTool):
             description="List of variables to include in the visualization",
         )
         title: Optional[str] = Field(default=None, description="Title for the visualization")
-        figsize: Optional[Tuple[int, int]] = Field(
-            default=None, description="Figure size (width, height) in inches"
-        )
-        output_path: Optional[str] = Field(
-            default=None, description="Path to save the visualization"
-        )
+        figsize: Optional[Tuple[int, int]] = Field(default=None, description="Figure size (width, height) in inches")
+        output_path: Optional[str] = Field(default=None, description="Path to save the visualization")
         dpi: Optional[int] = Field(default=None, description="DPI for the visualization")
-        export_format: Optional[ExportFormat] = Field(
-            default=None, description="Format to export results in"
-        )
+        export_format: Optional[ExportFormat] = Field(default=None, description="Format to export results in")
         export_path: Optional[str] = Field(default=None, description="Path to export results to")
 
         @field_validator("file_path")
@@ -147,12 +137,8 @@ class ChartTool(BaseTool):
             description="List of variables to include in the export",
         )
         format: ExportFormat = Field(description="Format to export data in")
-        export_path: Optional[str] = Field(
-            default=None, description="Path to save the exported data"
-        )
-        export_format: Optional[ExportFormat] = Field(
-            default=None, description="Format to export results in"
-        )
+        export_path: Optional[str] = Field(default=None, description="Path to save the exported data")
+        export_format: Optional[ExportFormat] = Field(default=None, description="Format to export results in")
 
         @field_validator("file_path")
         @classmethod
@@ -301,9 +287,7 @@ class ChartTool(BaseTool):
                     if isinstance(value, pd.DataFrame):
                         html_content += value.to_html()
                     elif isinstance(value, dict):
-                        html_content += (
-                            "<table border='1'><tr><th>Parameter</th><th>Value</th></tr>"
-                        )
+                        html_content += "<table border='1'><tr><th>Parameter</th><th>Value</th></tr>"
                         for k, v in value.items():
                             html_content += f"<tr><td>{k}</td><td>{v}</td></tr>"
                         html_content += "</table>"
@@ -449,13 +433,9 @@ class ChartTool(BaseTool):
         available_columns = set(df.columns)
         missing = [col for col in variables if col not in available_columns]
         if missing:
-            raise ValueError(
-                f"Variables not found in dataset: {', '.join(missing)}. Available columns: {list(available_columns)}"
-            )
+            raise ValueError(f"Variables not found in dataset: {', '.join(missing)}. Available columns: {list(available_columns)}")
 
-    def _to_json_serializable(
-        self, result: Union[pd.DataFrame, pd.Series, Dict]
-    ) -> Union[List[Dict], Dict]:
+    def _to_json_serializable(self, result: Union[pd.DataFrame, pd.Series, Dict]) -> Union[List[Dict], Dict]:
         """
         Convert result to JSON serializable format
 
@@ -521,9 +501,7 @@ class ChartTool(BaseTool):
         # Check file extension
         ext = os.path.splitext(file_path)[1].lower()
         if ext not in self.config.allowed_extensions:
-            raise ValueError(
-                f"Extension '{ext}' not allowed. Supported formats: {', '.join(self.config.allowed_extensions)}"
-            )
+            raise ValueError(f"Extension '{ext}' not allowed. Supported formats: {', '.join(self.config.allowed_extensions)}")
 
         # Load data
         df = self._load_data(file_path, nrows, sheet_name)
@@ -591,9 +569,7 @@ class ChartTool(BaseTool):
         # Check file extension
         ext = os.path.splitext(file_path)[1].lower()
         if ext not in self.config.allowed_extensions:
-            raise ValueError(
-                f"Extension '{ext}' not allowed. Supported formats: {', '.join(self.config.allowed_extensions)}"
-            )
+            raise ValueError(f"Extension '{ext}' not allowed. Supported formats: {', '.join(self.config.allowed_extensions)}")
 
         # Load data
         df = self._load_data(file_path)
@@ -672,9 +648,7 @@ class ChartTool(BaseTool):
         # Check file extension
         ext = os.path.splitext(file_path)[1].lower()
         if ext not in self.config.allowed_extensions:
-            raise ValueError(
-                f"Extension '{ext}' not allowed. Supported formats: {', '.join(self.config.allowed_extensions)}"
-            )
+            raise ValueError(f"Extension '{ext}' not allowed. Supported formats: {', '.join(self.config.allowed_extensions)}")
 
         # Load data
         df = self._load_data(file_path)

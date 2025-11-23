@@ -66,9 +66,7 @@ class Path(BaseModel):
         # Check edge count
         if len(v) != len(nodes) - 1:
             if len(v) > 0:  # Only raise error if edges are provided
-                raise ValueError(
-                    f"Number of edges ({len(v)}) must be len(nodes) - 1 ({len(nodes) - 1})"
-                )
+                raise ValueError(f"Number of edges ({len(v)}) must be len(nodes) - 1 ({len(nodes) - 1})")
 
         # Validate edge connectivity (if we have edges)
         for i, edge in enumerate(v):
@@ -77,16 +75,10 @@ class Path(BaseModel):
                 expected_target = nodes[i + 1].id
 
                 if edge.source_id != expected_source:
-                    raise ValueError(
-                        f"Edge {i} source_id ({edge.source_id}) doesn't match "
-                        f"node {i} id ({expected_source})"
-                    )
+                    raise ValueError(f"Edge {i} source_id ({edge.source_id}) doesn't match " f"node {i} id ({expected_source})")
 
                 if edge.target_id != expected_target:
-                    raise ValueError(
-                        f"Edge {i} target_id ({edge.target_id}) doesn't match "
-                        f"node {i+1} id ({expected_target})"
-                    )
+                    raise ValueError(f"Edge {i} target_id ({edge.target_id}) doesn't match " f"node {i+1} id ({expected_target})")
 
         return v
 

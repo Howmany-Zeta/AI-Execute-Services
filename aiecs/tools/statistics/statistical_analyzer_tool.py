@@ -59,7 +59,7 @@ class StatisticalAnalyzerTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the statistical analyzer tool"""
 
-        model_config = ConfigDict(env_prefix="STATISTICAL_ANALYZER_")
+        model_config = ConfigDict(env_prefix="STATISTICAL_ANALYZER_")  # type: ignore[typeddict-unknown-key]
 
         significance_level: float = Field(
             default=0.05,
@@ -115,9 +115,7 @@ class StatisticalAnalyzerTool(BaseTool):
     class TestHypothesisSchema(BaseModel):
         """Schema for test_hypothesis operation"""
 
-        data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(
-            description="Data for hypothesis testing"
-        )
+        data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(description="Data for hypothesis testing")
         test_type: str = Field(description="Type of test: t_test, anova, chi_square")
         variables: Dict[str, Any] = Field(description="Variables for testing")
 
@@ -132,9 +130,7 @@ class StatisticalAnalyzerTool(BaseTool):
     class AnalyzeCorrelationSchema(BaseModel):
         """Schema for analyze_correlation operation"""
 
-        data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(
-            description="Data for correlation analysis"
-        )
+        data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(description="Data for correlation analysis")
         variables: Optional[List[str]] = Field(default=None, description="Variables to analyze")
         method: str = Field(default="pearson", description="Correlation method")
 

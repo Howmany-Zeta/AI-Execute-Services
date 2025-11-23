@@ -52,9 +52,7 @@ class XAIClient(BaseLLMClient):
     def _get_api_key(self) -> str:
         """Get API key with backward compatibility"""
         # Support both xai_api_key and grok_api_key for backward compatibility
-        api_key = getattr(self.settings, "xai_api_key", None) or getattr(
-            self.settings, "grok_api_key", None
-        )
+        api_key = getattr(self.settings, "xai_api_key", None) or getattr(self.settings, "grok_api_key", None)
         if not api_key:
             raise ProviderNotAvailableError("xAI API key not configured")
         return api_key
@@ -131,7 +129,7 @@ class XAIClient(BaseLLMClient):
             logger.error(f"xAI API error: {str(e)}")
             raise
 
-    async def stream_text(
+    async def stream_text(  # type: ignore[override]
         self,
         messages: List[LLMMessage],
         model: Optional[str] = None,

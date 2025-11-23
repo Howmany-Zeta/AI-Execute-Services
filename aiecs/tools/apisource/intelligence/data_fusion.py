@@ -9,7 +9,7 @@ Intelligently merges results from multiple API providers:
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 logger = logging.getLogger(__name__)
 
@@ -100,11 +100,7 @@ class DataFusionEngine:
             "total_providers_queried": len(results),
             "selected_provider": best_result.get("provider"),
             "quality_score": get_quality_score(best_result),
-            "alternative_providers": [
-                r.get("provider")
-                for r in results
-                if r.get("provider") != best_result.get("provider")
-            ],
+            "alternative_providers": [r.get("provider") for r in results if r.get("provider") != best_result.get("provider")],
         }
 
         return best_result
@@ -119,7 +115,7 @@ class DataFusionEngine:
         Returns:
             Merged result with all data
         """
-        merged = {
+        merged: Dict[str, Any] = {
             "operation": "multi_provider_search",
             "data": [],
             "metadata": {
@@ -164,7 +160,9 @@ class DataFusionEngine:
                 merged["data"].append(enriched_data)
 
             # Record source info
-            merged["metadata"]["fusion_info"]["sources"].append(
+            fusion_info = cast(Dict[str, Any], merged["metadata"]["fusion_info"])
+            sources = cast(List[Dict[str, Any]], fusion_info["sources"])
+            sources.append(
                 {
                     "provider": provider,
                     "operation": result.get("operation"),
@@ -193,9 +191,7 @@ class DataFusionEngine:
 
         # Update strategy in metadata
         consensus["metadata"]["fusion_info"]["strategy"] = self.STRATEGY_CONSENSUS
-        consensus["metadata"]["fusion_info"][
-            "note"
-        ] = "Consensus strategy currently uses best quality baseline"
+        consensus["metadata"]["fusion_info"]["note"] = "Consensus strategy currently uses best quality baseline"
 
         return consensus
 
@@ -246,9 +242,7 @@ class DataFusionEngine:
 
         return is_duplicate, similarity
 
-    def _check_text_similarity(
-        self, data1: Dict[str, Any], data2: Dict[str, Any]
-    ) -> Tuple[bool, float]:
+    def _check_text_similarity(self, data1: Dict[str, Any], data2: Dict[str, Any]) -> Tuple[bool, float]:
         """
         Check text similarity for title/name fields.
 
@@ -323,9 +317,14 @@ class DataFusionEngine:
         elif resolution_strategy == "average":
             # Average numeric values
             try:
-                numeric_values = [
-                    float(v.get("value")) for v in values if v.get("value") is not None
-                ]
+                numeric_values = []
+                for v in values:
+                    value = v.get("value")
+                    if value is not None:
+                        try:
+                            numeric_values.append(float(value))
+                        except (ValueError, TypeError):
+                            continue
                 if numeric_values:
                     return sum(numeric_values) / len(numeric_values)
             except (ValueError, TypeError):

@@ -158,9 +158,7 @@ def format_key_value_pairs(
     return "\n".join(lines)
 
 
-def inject_context_in_prompt(
-    prompt: str, context: Dict[str, Any], context_marker: str = "{context}"
-) -> str:
+def inject_context_in_prompt(prompt: str, context: Dict[str, Any], context_marker: str = "{context}") -> str:
     """
     Inject context into prompt at marker position.
 

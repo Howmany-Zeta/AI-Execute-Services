@@ -62,18 +62,12 @@ class AIDocumentOrchestrator(BaseTool):
     class Config(BaseModel):
         """Configuration for the AI document orchestrator tool"""
 
-        model_config = ConfigDict(env_prefix="AI_DOC_ORCHESTRATOR_")
+        model_config = ConfigDict(env_prefix="AI_DOC_ORCHESTRATOR_")  # type: ignore[typeddict-unknown-key]
 
         default_ai_provider: str = Field(default="openai", description="Default AI provider to use")
-        max_chunk_size: int = Field(
-            default=4000, description="Maximum chunk size for AI processing"
-        )
-        max_concurrent_requests: int = Field(
-            default=5, description="Maximum concurrent AI requests"
-        )
-        default_temperature: float = Field(
-            default=0.1, description="Default temperature for AI model"
-        )
+        max_chunk_size: int = Field(default=4000, description="Maximum chunk size for AI processing")
+        max_concurrent_requests: int = Field(default=5, description="Maximum concurrent AI requests")
+        default_temperature: float = Field(default=0.1, description="Default temperature for AI model")
         max_tokens: int = Field(default=2000, description="Maximum tokens for AI response")
         timeout: int = Field(default=60, description="Timeout in seconds for AI operations")
 
@@ -130,11 +124,17 @@ class AIDocumentOrchestrator(BaseTool):
             },
             ProcessingMode.EXTRACT_INFO: {
                 "system_prompt": "You are an expert information extractor. Extract specific information from documents.",
-                "user_prompt_template": "Extract the following information from the document:\n{extraction_criteria}\n\nDocument content:\n{content}\n\nProvide the extracted information in a structured format.",
+                "user_prompt_template": (
+                    "Extract the following information from the document:\n{extraction_criteria}\n\n" "Document content:\n{content}\n\nProvide the extracted information in a structured format."
+                ),
             },
             ProcessingMode.ANALYZE: {
                 "system_prompt": "You are an expert document analyzer. Provide thorough analysis of document content.",
-                "user_prompt_template": "Analyze the following document content and provide insights:\n\n{content}\n\nInclude analysis of:\n- Main themes and topics\n- Key findings\n- Important details\n- Overall structure and organization",
+                "user_prompt_template": (
+                    "Analyze the following document content and provide insights:\n\n{content}\n\n"
+                    "Include analysis of:\n- Main themes and topics\n- Key findings\n- Important details\n"
+                    "- Overall structure and organization"
+                ),
             },
             ProcessingMode.TRANSLATE: {
                 "system_prompt": "You are an expert translator. Provide accurate translations while preserving meaning and context.",
@@ -142,11 +142,19 @@ class AIDocumentOrchestrator(BaseTool):
             },
             ProcessingMode.CLASSIFY: {
                 "system_prompt": "You are an expert document classifier. Classify documents accurately based on their content.",
-                "user_prompt_template": "Classify the following document content into the appropriate categories:\n\nCategories: {categories}\n\nDocument content:\n{content}\n\nProvide the classification with confidence scores and reasoning.",
+                "user_prompt_template": (
+                    "Classify the following document content into the appropriate categories:\n\n"
+                    "Categories: {categories}\n\nDocument content:\n{content}\n\n"
+                    "Provide the classification with confidence scores and reasoning."
+                ),
             },
             ProcessingMode.ANSWER_QUESTIONS: {
                 "system_prompt": "You are an expert document analyst. Answer questions based on document content accurately.",
-                "user_prompt_template": "Based on the following document content, answer these questions:\n\nQuestions:\n{questions}\n\nDocument content:\n{content}\n\nProvide clear, accurate answers with references to the relevant parts of the document.",
+                "user_prompt_template": (
+                    "Based on the following document content, answer these questions:\n\nQuestions:\n{questions}\n\n"
+                    "Document content:\n{content}\n\nProvide clear, accurate answers with references to the "
+                    "relevant parts of the document."
+                ),
             },
             ProcessingMode.CUSTOM: {
                 "system_prompt": "You are an expert document analyst. Follow the custom instructions provided.",
@@ -161,15 +169,9 @@ class AIDocumentOrchestrator(BaseTool):
         source: str = Field(description="URL or file path to the document")
         processing_mode: ProcessingMode = Field(description="AI processing mode to apply")
         ai_provider: Optional[AIProvider] = Field(default=None, description="AI provider to use")
-        processing_params: Optional[Dict[str, Any]] = Field(
-            default=None, description="Additional processing parameters"
-        )
-        parse_params: Optional[Dict[str, Any]] = Field(
-            default=None, description="Document parsing parameters"
-        )
-        ai_params: Optional[Dict[str, Any]] = Field(
-            default=None, description="AI provider parameters"
-        )
+        processing_params: Optional[Dict[str, Any]] = Field(default=None, description="Additional processing parameters")
+        parse_params: Optional[Dict[str, Any]] = Field(default=None, description="Document parsing parameters")
+        ai_params: Optional[Dict[str, Any]] = Field(default=None, description="AI provider parameters")
 
     class BatchProcessSchema(BaseModel):
         """Schema for batch_process_documents operation"""
@@ -177,21 +179,15 @@ class AIDocumentOrchestrator(BaseTool):
         sources: List[str] = Field(description="List of URLs or file paths")
         processing_mode: ProcessingMode = Field(description="AI processing mode to apply")
         ai_provider: Optional[AIProvider] = Field(default=None, description="AI provider to use")
-        processing_params: Optional[Dict[str, Any]] = Field(
-            default=None, description="Additional processing parameters"
-        )
-        max_concurrent: Optional[int] = Field(
-            default=None, description="Maximum concurrent processing"
-        )
+        processing_params: Optional[Dict[str, Any]] = Field(default=None, description="Additional processing parameters")
+        max_concurrent: Optional[int] = Field(default=None, description="Maximum concurrent processing")
 
     class AnalyzeDocumentSchema(BaseModel):
         """Schema for analyze_document operation (AI-first approach)"""
 
         source: str = Field(description="URL or file path to the document")
         analysis_type: str = Field(description="Type of analysis to perform")
-        custom_prompt: Optional[str] = Field(
-            default=None, description="Custom AI prompt for analysis"
-        )
+        custom_prompt: Optional[str] = Field(default=None, description="Custom AI prompt for analysis")
         ai_provider: Optional[AIProvider] = Field(default=None, description="AI provider to use")
 
     def process_document(
@@ -370,9 +366,7 @@ class AIDocumentOrchestrator(BaseTool):
                 prompt = f"Perform {analysis_type} analysis on the following document:\n\n{content}"
 
             # Process with AI
-            ai_result = self._call_ai_provider(
-                prompt, ai_provider or self.config.default_ai_provider, {}
-            )
+            ai_result = self._call_ai_provider(prompt, ai_provider or self.config.default_ai_provider, {})
 
             return {
                 "source": source,
@@ -398,9 +392,7 @@ class AIDocumentOrchestrator(BaseTool):
         except Exception as e:
             raise ProcessingError(f"Document parsing failed: {str(e)}")
 
-    def _prepare_content_for_ai(
-        self, parsed_result: Dict[str, Any], processing_mode: ProcessingMode
-    ) -> str:
+    def _prepare_content_for_ai(self, parsed_result: Dict[str, Any], processing_mode: ProcessingMode) -> str:
         """Prepare parsed content for AI processing"""
         content = parsed_result.get("content", "")
 
@@ -464,9 +456,7 @@ class AIDocumentOrchestrator(BaseTool):
 
         return formatted_prompt
 
-    def _call_ai_provider(
-        self, prompt: str, ai_provider: AIProvider, ai_params: Dict[str, Any]
-    ) -> str:
+    def _call_ai_provider(self, prompt: str, ai_provider: AIProvider, ai_params: Dict[str, Any]) -> str:
         """Call AI provider with prompt"""
         try:
             if self.aiecs_client:
@@ -474,10 +464,13 @@ class AIDocumentOrchestrator(BaseTool):
                 from aiecs.domain.task.task_context import TaskContext
 
                 task_context = TaskContext(
-                    task_id=f"doc_processing_{datetime.now().timestamp()}",
-                    task_type="document_processing",
-                    input_data={"prompt": prompt},
-                    metadata=ai_params,
+                    data={
+                        "task_id": f"doc_processing_{datetime.now().timestamp()}",
+                        "task_type": "document_processing",
+                        "input_data": {"prompt": prompt},
+                        "metadata": ai_params,
+                    },
+                    task_dir="./tasks",
                 )
 
                 # This would need to be adapted based on actual AIECS API
@@ -490,9 +483,7 @@ class AIDocumentOrchestrator(BaseTool):
         except Exception as e:
             raise AIProviderError(f"AI provider call failed: {str(e)}")
 
-    def _direct_ai_call(
-        self, prompt: str, ai_provider: AIProvider, ai_params: Dict[str, Any]
-    ) -> str:
+    def _direct_ai_call(self, prompt: str, ai_provider: AIProvider, ai_params: Dict[str, Any]) -> str:
         """Direct AI provider call (fallback)"""
         # This is a placeholder for direct AI provider integration
         # In a real implementation, you would integrate with specific AI APIs
@@ -553,9 +544,7 @@ class AIDocumentOrchestrator(BaseTool):
 
         return result
 
-    def _validate_extracted_info(
-        self, result: Dict[str, Any], params: Dict[str, Any]
-    ) -> Dict[str, str]:
+    def _validate_extracted_info(self, result: Dict[str, Any], params: Dict[str, Any]) -> Dict[str, str]:
         """Validate extracted information"""
         # Placeholder for validation logic
         return {"status": "validated", "notes": "Validation completed"}

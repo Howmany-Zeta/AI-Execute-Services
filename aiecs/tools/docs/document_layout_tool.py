@@ -124,7 +124,7 @@ class DocumentLayoutTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the document layout tool"""
 
-        model_config = ConfigDict(env_prefix="DOC_LAYOUT_")
+        model_config = ConfigDict(env_prefix="DOC_LAYOUT_")  # type: ignore[typeddict-unknown-key]
 
         temp_dir: str = Field(
             default=os.path.join(tempfile.gettempdir(), "document_layouts"),
@@ -198,21 +198,15 @@ class DocumentLayoutTool(BaseTool):
         document_path: str = Field(description="Path to document")
         num_columns: int = Field(description="Number of columns")
         column_gap: float = Field(default=1.0, description="Gap between columns (cm)")
-        column_widths: Optional[List[float]] = Field(
-            default=None, description="Custom column widths"
-        )
+        column_widths: Optional[List[float]] = Field(default=None, description="Custom column widths")
         balance_columns: bool = Field(default=True, description="Balance column heights")
 
     class SetupHeadersFootersSchema(BaseModel):
         """Schema for setup_headers_footers operation"""
 
         document_path: str = Field(description="Path to document")
-        header_config: Optional[Dict[str, Any]] = Field(
-            default=None, description="Header configuration"
-        )
-        footer_config: Optional[Dict[str, Any]] = Field(
-            default=None, description="Footer configuration"
-        )
+        header_config: Optional[Dict[str, Any]] = Field(default=None, description="Header configuration")
+        footer_config: Optional[Dict[str, Any]] = Field(default=None, description="Footer configuration")
         page_numbering: bool = Field(default=True, description="Include page numbering")
         numbering_style: str = Field(default="numeric", description="Page numbering style")
 
@@ -221,21 +215,15 @@ class DocumentLayoutTool(BaseTool):
 
         document_path: str = Field(description="Path to document")
         break_type: BreakType = Field(description="Type of break to insert")
-        position: Optional[Dict[str, Any]] = Field(
-            default=None, description="Position to insert break"
-        )
-        break_options: Optional[Dict[str, Any]] = Field(
-            default=None, description="Break-specific options"
-        )
+        position: Optional[Dict[str, Any]] = Field(default=None, description="Position to insert break")
+        break_options: Optional[Dict[str, Any]] = Field(default=None, description="Break-specific options")
 
     class ConfigureTypographySchema(BaseModel):
         """Schema for configure_typography operation"""
 
         document_path: str = Field(description="Path to document")
         font_config: Dict[str, Any] = Field(description="Font configuration")
-        spacing_config: Optional[Dict[str, Any]] = Field(
-            default=None, description="Spacing configuration"
-        )
+        spacing_config: Optional[Dict[str, Any]] = Field(default=None, description="Spacing configuration")
         alignment: Optional[AlignmentType] = Field(default=None, description="Text alignment")
 
     def set_page_layout(
@@ -334,9 +322,7 @@ class DocumentLayoutTool(BaseTool):
             start_time = datetime.now()
             operation_id = str(uuid.uuid4())
 
-            self.logger.info(
-                f"Creating {num_columns}-column layout {operation_id} for: {document_path}"
-            )
+            self.logger.info(f"Creating {num_columns}-column layout {operation_id} for: {document_path}")
 
             # Validate parameters
             if num_columns < 1:
@@ -345,9 +331,7 @@ class DocumentLayoutTool(BaseTool):
                 raise LayoutConfigurationError("Column widths count must match number of columns")
 
             # Calculate column configuration
-            column_config = self._calculate_column_configuration(
-                num_columns, column_gap, column_widths, balance_columns
-            )
+            column_config = self._calculate_column_configuration(num_columns, column_gap, column_widths, balance_columns)
 
             # Apply multi-column layout
             self._apply_multi_column_layout(document_path, column_config)
@@ -397,14 +381,10 @@ class DocumentLayoutTool(BaseTool):
             self.logger.info(f"Setting up headers/footers {operation_id} for: {document_path}")
 
             # Process header configuration
-            processed_header = self._process_header_footer_config(
-                header_config, "header", page_numbering, numbering_style
-            )
+            processed_header = self._process_header_footer_config(header_config, "header", page_numbering, numbering_style)
 
             # Process footer configuration
-            processed_footer = self._process_header_footer_config(
-                footer_config, "footer", page_numbering, numbering_style
-            )
+            processed_footer = self._process_header_footer_config(footer_config, "footer", page_numbering, numbering_style)
 
             # Apply headers and footers
             self._apply_headers_footers(document_path, processed_header, processed_footer)
@@ -506,9 +486,7 @@ class DocumentLayoutTool(BaseTool):
             self.logger.info(f"Configuring typography {operation_id} for: {document_path}")
 
             # Process typography configuration
-            typography_config = self._process_typography_config(
-                font_config, spacing_config, alignment
-            )
+            typography_config = self._process_typography_config(font_config, spacing_config, alignment)
 
             # Apply typography settings
             self._apply_typography_settings(document_path, typography_config)
@@ -557,14 +535,10 @@ class DocumentLayoutTool(BaseTool):
             current_layout = self._analyze_current_layout(document_path)
 
             # Generate optimization recommendations
-            optimization_plan = self._generate_optimization_plan(
-                current_layout, content_analysis, optimization_goals
-            )
+            optimization_plan = self._generate_optimization_plan(current_layout, content_analysis, optimization_goals)
 
             # Apply optimizations
-            optimization_results = self._apply_layout_optimizations(
-                document_path, optimization_plan
-            )
+            optimization_results = self._apply_layout_optimizations(document_path, optimization_plan)
 
             operation_info = {
                 "operation_id": operation_id,
@@ -595,9 +569,7 @@ class DocumentLayoutTool(BaseTool):
         """
         return {
             "presets": list(self.layout_presets.keys()),
-            "preset_details": {
-                name: preset.get("description", "") for name, preset in self.layout_presets.items()
-            },
+            "preset_details": {name: preset.get("description", "") for name, preset in self.layout_presets.items()},
         }
 
     def get_layout_operations(self) -> List[Dict[str, Any]]:
@@ -881,9 +853,7 @@ class DocumentLayoutTool(BaseTool):
         else:  # numeric
             return "{page}"
 
-    def _generate_break_markup(
-        self, break_type: BreakType, options: Optional[Dict[str, Any]]
-    ) -> str:
+    def _generate_break_markup(self, break_type: BreakType, options: Optional[Dict[str, Any]]) -> str:
         """Generate break markup based on type"""
         if break_type == BreakType.PAGE_BREAK:
             return "\n<!-- PAGE BREAK -->\n\\newpage\n"
@@ -1021,11 +991,9 @@ class DocumentLayoutTool(BaseTool):
 
         return plan
 
-    def _apply_layout_optimizations(
-        self, document_path: str, optimization_plan: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def _apply_layout_optimizations(self, document_path: str, optimization_plan: Dict[str, Any]) -> Dict[str, Any]:
         """Apply layout optimizations based on plan"""
-        results = {
+        results: Dict[str, Any] = {
             "optimizations_applied": [],
             "success_count": 0,
             "error_count": 0,
@@ -1042,10 +1010,14 @@ class DocumentLayoutTool(BaseTool):
                     self._apply_styling_optimization(document_path, optimization)
 
                 results["optimizations_applied"].append(optimization)
-                results["success_count"] += 1
+                success_count = results.get("success_count", 0)
+                if isinstance(success_count, (int, float)):
+                    results["success_count"] = success_count + 1
 
             except Exception as e:
-                results["error_count"] += 1
+                error_count = results.get("error_count", 0)
+                if isinstance(error_count, (int, float)):
+                    results["error_count"] = error_count + 1
                 self.logger.warning(f"Failed to apply optimization {optimization['type']}: {e}")
 
         return results
@@ -1120,9 +1092,7 @@ class DocumentLayoutTool(BaseTool):
         """Generate generic column markup"""
         return f"<!-- {column_config['num_columns']} columns -->\n"
 
-    def _generate_header_footer_markup(
-        self, config: Dict[str, Any], hf_type: str, file_format: str
-    ) -> str:
+    def _generate_header_footer_markup(self, config: Dict[str, Any], hf_type: str, file_format: str) -> str:
         """Generate header/footer markup"""
         if file_format == "html":
             return f"<!-- {hf_type.upper()}: {config} -->\n"

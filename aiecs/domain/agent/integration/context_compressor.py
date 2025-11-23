@@ -70,9 +70,7 @@ class ContextCompressor:
         if total_tokens <= self.max_tokens:
             return messages
 
-        logger.debug(
-            f"Compressing {len(messages)} messages from ~{total_tokens} to ~{self.max_tokens} tokens"
-        )
+        logger.debug(f"Compressing {len(messages)} messages from ~{total_tokens} to ~{self.max_tokens} tokens")
 
         # Apply compression strategy
         if self.strategy == CompressionStrategy.PRESERVE_RECENT:
@@ -85,9 +83,7 @@ class ContextCompressor:
             # Default: preserve recent
             return self._compress_preserve_recent(messages, priority_indices)
 
-    def _compress_preserve_recent(
-        self, messages: List[LLMMessage], priority_indices: Optional[List[int]]
-    ) -> List[LLMMessage]:
+    def _compress_preserve_recent(self, messages: List[LLMMessage], priority_indices: Optional[List[int]]) -> List[LLMMessage]:
         """Preserve recent messages and priority messages."""
         priority_indices_set: Set[int] = set(priority_indices or [])
         compressed: List[LLMMessage] = []
@@ -120,9 +116,7 @@ class ContextCompressor:
 
         return compressed
 
-    def _compress_truncate_middle(
-        self, messages: List[LLMMessage], priority_indices: Optional[List[int]]
-    ) -> List[LLMMessage]:
+    def _compress_truncate_middle(self, messages: List[LLMMessage], priority_indices: Optional[List[int]]) -> List[LLMMessage]:
         """Keep start and end messages, truncate middle."""
         if len(messages) <= 4:
             return messages

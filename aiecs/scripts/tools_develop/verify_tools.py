@@ -131,9 +131,7 @@ def auto_discover_tool_modules():
 
                     # Pattern 2: register_tool("name")(ClassName) function call
                     # syntax
-                    function_pattern = (
-                        r'register_tool\([\'"]([^\'"]+)[\'"]\)\([A-Za-z_][A-Za-z0-9_]*\)'
-                    )
+                    function_pattern = r'register_tool\([\'"]([^\'"]+)[\'"]\)\([A-Za-z_][A-Za-z0-9_]*\)'
                     function_matches = re.findall(function_pattern, content)
 
                     # Combine all matches
@@ -141,9 +139,7 @@ def auto_discover_tool_modules():
 
                     for tool_name in all_matches:
                         tool_module_map[tool_name] = {
-                            "module_file": (
-                                filename[:-3] if filename != "__init__.py" else "__init__"
-                            ),
+                            "module_file": (filename[:-3] if filename != "__init__.py" else "__init__"),
                             "package": package_name,
                             "module_path": module_path,
                             "category": dir_name,

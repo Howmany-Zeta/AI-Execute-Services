@@ -31,8 +31,8 @@ try:
     LOGIC_PARSER_AVAILABLE = True
 except ImportError:
     LOGIC_PARSER_AVAILABLE = False
-    LogicQueryParser = None
-    ParserError = None
+    LogicQueryParser = None  # type: ignore[misc]
+    ParserError = None  # type: ignore[misc]
 
 
 class QueryPlanner:
@@ -217,13 +217,9 @@ class QueryPlanner:
             ]
         )
 
-        has_vector_search = any(
-            keyword in query_lower for keyword in ["similar", "related", "like", "semantically"]
-        )
+        has_vector_search = any(keyword in query_lower for keyword in ["similar", "related", "like", "semantically"])
 
-        has_path_finding = any(
-            keyword in query_lower for keyword in ["path", "route", "connection", "how to get"]
-        )
+        has_path_finding = any(keyword in query_lower for keyword in ["path", "route", "connection", "how to get"])
 
         return {
             "matched_pattern": matched_pattern,
@@ -244,9 +240,7 @@ class QueryPlanner:
         else:
             return "low"
 
-    def _decompose_query(
-        self, query: str, query_info: Dict[str, Any], context: Dict[str, Any]
-    ) -> List[QueryStep]:
+    def _decompose_query(self, query: str, query_info: Dict[str, Any], context: Dict[str, Any]) -> List[QueryStep]:
         """
         Decompose query into executable steps
 
@@ -269,9 +263,7 @@ class QueryPlanner:
 
         return steps
 
-    def _create_steps_from_pattern(
-        self, query: str, pattern_info: Dict[str, Any], context: Dict[str, Any]
-    ) -> List[QueryStep]:
+    def _create_steps_from_pattern(self, query: str, pattern_info: Dict[str, Any], context: Dict[str, Any]) -> List[QueryStep]:
         """Create steps based on matched pattern"""
         steps = []
         query_type = pattern_info["type"]
@@ -441,9 +433,7 @@ class QueryPlanner:
 
         return steps
 
-    def _create_generic_steps(
-        self, query: str, query_info: Dict[str, Any], context: Dict[str, Any]
-    ) -> List[QueryStep]:
+    def _create_generic_steps(self, query: str, query_info: Dict[str, Any], context: Dict[str, Any]) -> List[QueryStep]:
         """Create generic steps when no pattern matches"""
         steps = []
 
@@ -493,11 +483,7 @@ class QueryPlanner:
                         query=GraphQuery(
                             query_type=QueryType.TRAVERSAL,
                             entity_id=context.get("start_entity_id"),
-                            relation_type=(
-                                context.get("relation_types", [None])[0]
-                                if context.get("relation_types")
-                                else None
-                            ),
+                            relation_type=(context.get("relation_types", [None])[0] if context.get("relation_types") else None),
                             max_depth=context.get("max_hops", 3),
                             max_results=context.get("max_results", 10),
                         ),
@@ -808,16 +794,8 @@ class QueryPlanner:
         return {
             "enabled": True,
             "optimizations_performed": self._optimizer.get_optimization_count(),
-            "avg_execution_time_ms": (
-                self._statistics_collector.get_average_execution_time()
-                if self._statistics_collector
-                else 0.0
-            ),
-            "p95_execution_time_ms": (
-                self._statistics_collector.get_execution_percentile(0.95)
-                if self._statistics_collector
-                else 0.0
-            ),
+            "avg_execution_time_ms": (self._statistics_collector.get_average_execution_time() if self._statistics_collector else 0.0),
+            "p95_execution_time_ms": (self._statistics_collector.get_execution_percentile(0.95) if self._statistics_collector else 0.0),
             "entity_count": self._optimizer.statistics.entity_count,
             "relation_count": self._optimizer.statistics.relation_count,
             "avg_degree": self._optimizer.statistics.avg_degree,

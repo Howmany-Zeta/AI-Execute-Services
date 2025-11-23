@@ -62,7 +62,7 @@ class BM25Scorer:
 
         # Build term frequency dictionary
         self.term_freqs = []
-        self.doc_freqs = Counter()
+        self.doc_freqs: Counter[str] = Counter()
 
         for doc in self.documents:
             tf = Counter(doc)
@@ -104,9 +104,7 @@ class BM25Scorer:
 
                     # BM25 formula
                     numerator = idf * tf * (self.k1 + 1)
-                    denominator = tf + self.k1 * (
-                        1 - self.b + self.b * (doc_length / self.avg_doc_length)
-                    )
+                    denominator = tf + self.k1 * (1 - self.b + self.b * (doc_length / self.avg_doc_length))
                     score += numerator / denominator
 
             scores.append(score)
@@ -318,9 +316,7 @@ def fuzzy_match(
             # Use SequenceMatcher ratio (built-in fuzzy matching)
             score = SequenceMatcher(None, query.lower(), candidate.lower()).ratio()
         else:
-            raise ValueError(
-                f"Unknown method: {method}. Use 'jaccard', 'cosine', 'levenshtein', or 'ratio'"
-            )
+            raise ValueError(f"Unknown method: {method}. Use 'jaccard', 'cosine', 'levenshtein', or 'ratio'")
 
         if score >= threshold:
             results.append((candidate, score))

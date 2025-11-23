@@ -187,7 +187,7 @@ class InMemoryGraphStore(GraphStore):
         Returns:
             List of neighboring entities
         """
-        if not self._initialized or entity_id not in self.graph:
+        if not self._initialized or self.graph is None or entity_id not in self.graph:
             return []
 
         neighbors = []
@@ -224,9 +224,7 @@ class InMemoryGraphStore(GraphStore):
 
         return neighbors
 
-    async def get_all_entities(
-        self, entity_type: Optional[str] = None, limit: Optional[int] = None
-    ) -> List[Entity]:
+    async def get_all_entities(self, entity_type: Optional[str] = None, limit: Optional[int] = None) -> List[Entity]:
         """
         Get all entities, optionally filtered by type
 
@@ -417,9 +415,7 @@ class InMemoryGraphStore(GraphStore):
                     scored_entities.append((entity, score))
 
         else:
-            raise ValueError(
-                f"Unknown text search method: {method}. Use 'bm25', 'jaccard', 'cosine', or 'levenshtein'"
-            )
+            raise ValueError(f"Unknown text search method: {method}. Use 'bm25', 'jaccard', 'cosine', or 'levenshtein'")
 
         # Sort by score descending and return top results
         scored_entities.sort(key=lambda x: x[1], reverse=True)
@@ -443,7 +439,7 @@ class InMemoryGraphStore(GraphStore):
         if not self._initialized:
             return []
 
-        if source_entity_id not in self.graph or target_entity_id not in self.graph:
+        if self.graph is None or source_entity_id not in self.graph or target_entity_id not in self.graph:
             return []
 
         try:
@@ -456,9 +452,7 @@ class InMemoryGraphStore(GraphStore):
                 cutoff=max_depth,
             ):
                 # Convert node IDs to Entity and Relation objects
-                entities = [
-                    self.entities[node_id] for node_id in node_path if node_id in self.entities
-                ]
+                entities = [self.entities[node_id] for node_id in node_path if node_id in self.entities]
 
                 # Get relations between consecutive nodes
                 edges = []
