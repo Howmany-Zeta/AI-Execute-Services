@@ -4,11 +4,7 @@ from aiecs.config.config import get_settings
 settings = get_settings()
 # In production, this should be set to specific origins
 # For example: ["https://your-frontend-domain.com"]
-allowed_origins = (
-    settings.cors_allowed_origins.split(",")
-    if hasattr(settings, "cors_allowed_origins")
-    else ["http://express-gateway:3001"]
-)
+allowed_origins = settings.cors_allowed_origins.split(",") if hasattr(settings, "cors_allowed_origins") else ["http://express-gateway:3001"]
 
 # Allow all origins for development (more permissive)
 # In production, you should use specific origins

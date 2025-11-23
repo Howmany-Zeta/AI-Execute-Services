@@ -302,9 +302,7 @@ class GraphMemoryMixin:
             logger.error(f"Failed to add graph conversation context: {e}")
             return False
 
-    async def get_session_knowledge_graph(
-        self, session_id: str, max_depth: int = 2
-    ) -> Dict[str, Any]:
+    async def get_session_knowledge_graph(self, session_id: str, max_depth: int = 2) -> Dict[str, Any]:
         """
         Get a subgraph of knowledge relevant to this session.
 
@@ -362,9 +360,7 @@ class GraphMemoryMixin:
                         direction="both",
                     )
                     # Combine and deduplicate
-                    neighbors = list(
-                        {n.id: n for n in neighbors_mentioned + neighbors_context}.values()
-                    )
+                    neighbors = list({n.id: n for n in neighbors_mentioned + neighbors_context}.values())
 
                     for neighbor in neighbors:
                         if neighbor.id not in visited:
@@ -415,10 +411,7 @@ class GraphMemoryMixin:
                 else:
                     # For InMemoryGraphStore, we can't easily delete entities
                     # Just log a warning
-                    logger.warning(
-                        f"delete_entity not available for {type(self.graph_store).__name__}, "
-                        f"session entity {session_entity_id} not removed"
-                    )
+                    logger.warning(f"delete_entity not available for {type(self.graph_store).__name__}, " f"session entity {session_entity_id} not removed")
 
             return True
 
@@ -461,7 +454,4 @@ class ContextEngineWithGraph(GraphMemoryMixin):
             graph_store: Optional knowledge graph store
         """
         self.graph_store = graph_store
-        logger.info(
-            f"ContextEngineWithGraph initialized with graph_store="
-            f"{'enabled' if graph_store else 'disabled'}"
-        )
+        logger.info(f"ContextEngineWithGraph initialized with graph_store=" f"{'enabled' if graph_store else 'disabled'}")

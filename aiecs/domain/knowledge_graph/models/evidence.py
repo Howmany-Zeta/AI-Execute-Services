@@ -60,13 +60,9 @@ class Evidence(BaseModel):
 
     evidence_type: EvidenceType = Field(..., description="Type of evidence")
 
-    entities: List[Entity] = Field(
-        default_factory=list, description="Entities involved in this evidence"
-    )
+    entities: List[Entity] = Field(default_factory=list, description="Entities involved in this evidence")
 
-    relations: List[Relation] = Field(
-        default_factory=list, description="Relations involved in this evidence"
-    )
+    relations: List[Relation] = Field(default_factory=list, description="Relations involved in this evidence")
 
     paths: List[Path] = Field(default_factory=list, description="Paths involved in this evidence")
 
@@ -77,9 +73,7 @@ class Evidence(BaseModel):
         description="Confidence score (0-1, higher = more confident)",
     )
 
-    relevance_score: float = Field(
-        default=0.5, ge=0.0, le=1.0, description="Relevance to the query (0-1)"
-    )
+    relevance_score: float = Field(default=0.5, ge=0.0, le=1.0, description="Relevance to the query (0-1)")
 
     explanation: str = Field(default="", description="Human-readable explanation of this evidence")
 
@@ -97,11 +91,7 @@ class Evidence(BaseModel):
         return [entity.id for entity in self.entities]
 
     def __str__(self) -> str:
-        return (
-            f"Evidence(type={self.evidence_type}, "
-            f"score={self.combined_score:.2f}, "
-            f"entities={len(self.entities)})"
-        )
+        return f"Evidence(type={self.evidence_type}, " f"score={self.combined_score:.2f}, " f"entities={len(self.entities)})"
 
 
 class ReasoningResult(BaseModel):
@@ -134,9 +124,7 @@ class ReasoningResult(BaseModel):
 
     query: str = Field(..., description="Original query that was answered")
 
-    evidence: List[Evidence] = Field(
-        default_factory=list, description="List of evidence pieces collected"
-    )
+    evidence: List[Evidence] = Field(default_factory=list, description="List of evidence pieces collected")
 
     answer: Optional[str] = Field(default=None, description="Generated answer (if applicable)")
 
@@ -147,13 +135,9 @@ class ReasoningResult(BaseModel):
         description="Overall confidence in the answer (0-1)",
     )
 
-    reasoning_trace: List[str] = Field(
-        default_factory=list, description="List of reasoning steps taken"
-    )
+    reasoning_trace: List[str] = Field(default_factory=list, description="List of reasoning steps taken")
 
-    execution_time_ms: Optional[float] = Field(
-        default=None, ge=0.0, description="Time taken to perform reasoning"
-    )
+    execution_time_ms: Optional[float] = Field(default=None, ge=0.0, description="Time taken to perform reasoning")
 
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
@@ -189,6 +173,6 @@ class ReasoningResult(BaseModel):
             f"ReasoningResult(evidence={self.evidence_count}",
             f"confidence={self.confidence:.2f})",
         ]
-        if self.has_answer:
+        if self.has_answer and self.answer:
             parts.insert(1, f"answer={self.answer[:50]}...")
         return " ".join(parts)

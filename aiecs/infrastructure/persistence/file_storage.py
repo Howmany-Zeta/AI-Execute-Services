@@ -23,10 +23,10 @@ try:
     GCS_AVAILABLE = True
 except ImportError:
     GCS_AVAILABLE = False
-    storage = None
-    NotFound = Exception
-    GoogleCloudError = Exception
-    DefaultCredentialsError = Exception
+    storage = None  # type: ignore[misc]
+    NotFound = Exception  # type: ignore[misc]
+    GoogleCloudError = Exception  # type: ignore[misc]
+    DefaultCredentialsError = Exception  # type: ignore[misc]
 
 from ..monitoring.global_metrics_manager import get_global_metrics
 
@@ -136,9 +136,7 @@ class FileStorage:
             # but we need it for bucket creation API calls
             if not self.config.gcs_project_id:
                 logger.warning("GCS project ID not provided. Bucket creation will be disabled.")
-                logger.warning(
-                    "Bucket must exist and be accessible. Falling back to local storage if bucket not found."
-                )
+                logger.warning("Bucket must exist and be accessible. Falling back to local storage if bucket not found.")
 
             # Create client with project ID (can be None, but bucket creation
             # will fail)
@@ -161,23 +159,14 @@ class FileStorage:
                             project=self.config.gcs_project_id,  # Explicitly pass project parameter
                             location=self.config.gcs_location,
                         )
-                        logger.info(
-                            f"Created GCS bucket: {self.config.gcs_bucket_name} in project {self.config.gcs_project_id}"
-                        )
+                        logger.info(f"Created GCS bucket: {self.config.gcs_bucket_name} in project {self.config.gcs_project_id}")
                     except Exception as create_error:
-                        logger.error(
-                            f"Failed to create GCS bucket {self.config.gcs_bucket_name}: {create_error}"
-                        )
+                        logger.error(f"Failed to create GCS bucket {self.config.gcs_bucket_name}: {create_error}")
                         logger.warning("Bucket creation failed. Will use local storage fallback.")
                         self._gcs_bucket = None
                 else:
-                    logger.error(
-                        f"GCS bucket '{self.config.gcs_bucket_name}' not found and "
-                        "project ID is not provided. Cannot create bucket without project parameter."
-                    )
-                    logger.warning(
-                        "Please ensure the bucket exists or provide DOC_PARSER_GCS_PROJECT_ID in configuration."
-                    )
+                    logger.error(f"GCS bucket '{self.config.gcs_bucket_name}' not found and " "project ID is not provided. Cannot create bucket without project parameter.")
+                    logger.warning("Please ensure the bucket exists or provide DOC_PARSER_GCS_PROJECT_ID in configuration.")
                     logger.warning("Falling back to local storage only.")
                     self._gcs_bucket = None
 
@@ -218,10 +207,7 @@ class FileStorage:
             serialized_data = await self._serialize_data(data)
 
             # Compress if enabled and data is large enough
-            if (
-                self.config.enable_compression
-                and len(serialized_data) > self.config.compression_threshold_bytes
-            ):
+            if self.config.enable_compression and len(serialized_data) > self.config.compression_threshold_bytes:
                 serialized_data = gzip.compress(serialized_data)
                 compressed = True
             else:
@@ -286,11 +272,7 @@ class FileStorage:
             # Check cache first
             if self.config.enable_cache and key in self._cache:
                 cache_time = self._cache_timestamps.get(key)
-                if (
-                    cache_time
-                    and (datetime.utcnow() - cache_time).total_seconds()
-                    < self.config.cache_ttl_seconds
-                ):
+                if cache_time and (datetime.utcnow() - cache_time).total_seconds() < self.config.cache_ttl_seconds:
                     if self.metrics:
                         self.metrics.record_operation("cache_hit", 1)
                     return self._cache[key]["data"]
@@ -411,11 +393,7 @@ class FileStorage:
             # Check cache first
             if self.config.enable_cache and key in self._cache:
                 cache_time = self._cache_timestamps.get(key)
-                if (
-                    cache_time
-                    and (datetime.utcnow() - cache_time).total_seconds()
-                    < self.config.cache_ttl_seconds
-                ):
+                if cache_time and (datetime.utcnow() - cache_time).total_seconds() < self.config.cache_ttl_seconds:
                     return True
 
             # Check GCS
@@ -433,9 +411,7 @@ class FileStorage:
             logger.error(f"Failed to check existence for key {key}: {e}")
             raise FileStorageError(f"Existence check failed: {e}")
 
-    async def list_keys(
-        self, prefix: Optional[str] = None, limit: Optional[int] = None
-    ) -> List[str]:
+    async def list_keys(self, prefix: Optional[str] = None, limit: Optional[int] = None) -> List[str]:
         """
         List storage keys with optional prefix filtering.
 
@@ -720,11 +696,7 @@ class FileStorage:
             "local_fallback_enabled": self.config.enable_local_fallback,
             "cache_enabled": self.config.enable_cache,
             "cache_size": len(self._cache),
-            "metrics": (
-                self.metrics.get_metrics_summary()
-                if self.metrics and hasattr(self.metrics, "get_metrics_summary")
-                else {}
-            ),
+            "metrics": (self.metrics.get_metrics_summary() if self.metrics and hasattr(self.metrics, "get_metrics_summary") else {}),
         }
 
 

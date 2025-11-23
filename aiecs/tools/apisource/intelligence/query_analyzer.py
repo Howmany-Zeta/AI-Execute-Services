@@ -11,7 +11,7 @@ Provides intelligent query understanding and parameter auto-completion:
 
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +142,7 @@ class QueryIntentAnalyzer:
         """
         query_lower = query_text.lower()
 
-        intent_result = {
+        intent_result: Dict[str, Any] = {
             "intent_type": "search",  # Default
             "entities": [],
             "time_range": None,
@@ -167,19 +167,24 @@ class QueryIntentAnalyzer:
             intent_result["confidence"] += 0.3
 
         # Extract economic indicators
-        for indicator_name, indicator_info in self.ECONOMIC_INDICATORS.items():
+        entities = cast(List[Dict[str, Any]], intent_result["entities"])
+        suggested_providers = cast(List[str], intent_result["suggested_providers"])
+        keywords_matched = cast(List[str], intent_result["keywords_matched"])
+
+        for indicator_name, indicator_info_raw in self.ECONOMIC_INDICATORS.items():
+            indicator_info = cast(Dict[str, Any], indicator_info_raw)
             for keyword in indicator_info["keywords"]:
                 if keyword in query_lower:
-                    intent_result["entities"].append(
+                    entities.append(
                         {
                             "type": "indicator",
                             "name": indicator_name,
                             "matched_keyword": keyword,
                         }
                     )
-                    intent_result["suggested_providers"].extend(indicator_info["providers"])
+                    suggested_providers.extend(indicator_info["providers"])
                     intent_result["confidence"] += 0.2
-                    intent_result["keywords_matched"].append(keyword)
+                    keywords_matched.append(keyword)
                     break
 
         # Extract countries
@@ -197,9 +202,7 @@ class QueryIntentAnalyzer:
             intent_result["confidence"] += 0.2
 
         # Suggest operations based on intent
-        intent_result["suggested_operations"] = self._suggest_operations(
-            intent_result["intent_type"], intent_result["suggested_providers"]
-        )
+        intent_result["suggested_operations"] = self._suggest_operations(intent_result["intent_type"], intent_result["suggested_providers"])
 
         # Remove duplicates from providers
         intent_result["suggested_providers"] = list(set(intent_result["suggested_providers"]))
@@ -403,7 +406,8 @@ class QueryEnhancer:
             for entity in intent["entities"]:
                 if entity["type"] == "indicator":
                     indicator_name = entity["name"]
-                    indicator_info = QueryIntentAnalyzer.ECONOMIC_INDICATORS.get(indicator_name, {})
+                    indicator_info_raw = QueryIntentAnalyzer.ECONOMIC_INDICATORS.get(indicator_name, {})
+                    indicator_info = cast(Dict[str, Any], indicator_info_raw)
                     if "fred_series" in indicator_info:
                         # Add common series IDs to improve search
                         series_ids = " ".join(indicator_info["fred_series"])

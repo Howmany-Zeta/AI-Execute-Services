@@ -50,10 +50,7 @@ def get_provider(name: str, config: Optional[Dict] = None) -> BaseAPIProvider:
         ValueError: If provider is not registered
     """
     if name not in PROVIDER_REGISTRY:
-        raise ValueError(
-            f"Provider '{name}' not found. "
-            f"Available providers: {', '.join(PROVIDER_REGISTRY.keys())}"
-        )
+        raise ValueError(f"Provider '{name}' not found. " f"Available providers: {', '.join(PROVIDER_REGISTRY.keys())}")
 
     # Return cached instance or create new one with config
     if config is None and name in PROVIDER_INSTANCES:

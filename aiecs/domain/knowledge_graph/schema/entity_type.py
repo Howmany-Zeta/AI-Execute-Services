@@ -48,9 +48,7 @@ class EntityType(BaseModel):
         description="Dictionary of property schemas (key=property name)",
     )
 
-    parent_type: Optional[str] = Field(
-        default=None, description="Parent entity type name for inheritance"
-    )
+    parent_type: Optional[str] = Field(default=None, description="Parent entity type name for inheritance")
 
     is_abstract: bool = Field(
         default=False,
@@ -107,9 +105,7 @@ class EntityType(BaseModel):
         # Check required properties
         for prop_name, prop_schema in self.properties.items():
             if prop_schema.required and prop_name not in properties:
-                raise ValueError(
-                    f"Required property '{prop_name}' missing for entity type '{self.name}'"
-                )
+                raise ValueError(f"Required property '{prop_name}' missing for entity type '{self.name}'")
 
         # Validate each provided property
         for prop_name, prop_value in properties.items():

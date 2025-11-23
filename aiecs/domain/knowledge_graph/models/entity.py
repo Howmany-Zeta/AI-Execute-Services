@@ -44,9 +44,7 @@ class Entity(BaseModel):
         description="Arbitrary properties associated with the entity",
     )
 
-    embedding: Optional[list[float]] = Field(
-        default=None, description="Vector embedding for semantic search"
-    )
+    embedding: Optional[list[float]] = Field(default=None, description="Vector embedding for semantic search")
 
     created_at: datetime = Field(
         default_factory=datetime.utcnow,

@@ -26,8 +26,8 @@ try:
     GOOGLE_API_AVAILABLE = True
 except ImportError:
     GOOGLE_API_AVAILABLE = False
-    HttpError = Exception
-    GoogleAuthError = Exception
+    HttpError = Exception  # type: ignore[misc]
+    GoogleAuthError = Exception  # type: ignore[misc]
 
 # Import search tool components
 from .constants import (
@@ -83,29 +83,19 @@ class SearchTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the search tool"""
 
-        model_config = ConfigDict(env_prefix="SEARCH_TOOL_")
+        model_config = ConfigDict(env_prefix="SEARCH_TOOL_")  # type: ignore[typeddict-unknown-key]
 
-        google_api_key: Optional[str] = Field(
-            default=None, description="Google API key for Custom Search"
-        )
+        google_api_key: Optional[str] = Field(default=None, description="Google API key for Custom Search")
         google_cse_id: Optional[str] = Field(default=None, description="Custom Search Engine ID")
-        google_application_credentials: Optional[str] = Field(
-            default=None, description="Path to service account JSON"
-        )
-        max_results_per_query: int = Field(
-            default=10, description="Maximum results per single query"
-        )
+        google_application_credentials: Optional[str] = Field(default=None, description="Path to service account JSON")
+        max_results_per_query: int = Field(default=10, description="Maximum results per single query")
         cache_ttl: int = Field(default=3600, description="Default cache time-to-live in seconds")
-        rate_limit_requests: int = Field(
-            default=100, description="Maximum requests per time window"
-        )
+        rate_limit_requests: int = Field(default=100, description="Maximum requests per time window")
         rate_limit_window: int = Field(
             default=86400,
             description="Time window for rate limiting in seconds",
         )
-        circuit_breaker_threshold: int = Field(
-            default=5, description="Failures before opening circuit"
-        )
+        circuit_breaker_threshold: int = Field(default=5, description="Failures before opening circuit")
         circuit_breaker_timeout: int = Field(
             default=60,
             description="Timeout before trying half-open in seconds",
@@ -116,25 +106,13 @@ class SearchTool(BaseTool):
         user_agent: str = Field(default="AIECS-SearchTool/2.0", description="User agent string")
 
         # Enhanced features
-        enable_quality_analysis: bool = Field(
-            default=True, description="Enable result quality analysis"
-        )
-        enable_intent_analysis: bool = Field(
-            default=True, description="Enable query intent analysis"
-        )
+        enable_quality_analysis: bool = Field(default=True, description="Enable result quality analysis")
+        enable_intent_analysis: bool = Field(default=True, description="Enable query intent analysis")
         enable_deduplication: bool = Field(default=True, description="Enable result deduplication")
-        enable_context_tracking: bool = Field(
-            default=True, description="Enable search context tracking"
-        )
-        enable_intelligent_cache: bool = Field(
-            default=True, description="Enable intelligent Redis caching"
-        )
-        similarity_threshold: float = Field(
-            default=0.85, description="Similarity threshold for deduplication"
-        )
-        max_search_history: int = Field(
-            default=10, description="Maximum search history to maintain"
-        )
+        enable_context_tracking: bool = Field(default=True, description="Enable search context tracking")
+        enable_intelligent_cache: bool = Field(default=True, description="Enable intelligent Redis caching")
+        similarity_threshold: float = Field(default=0.85, description="Similarity threshold for deduplication")
+        max_search_history: int = Field(default=10, description="Maximum search history to maintain")
 
     # Operation schemas for input validation and documentation
     SearchWebSchema = SearchWebSchema
@@ -168,10 +146,7 @@ class SearchTool(BaseTool):
         super().__init__(config)
 
         if not GOOGLE_API_AVAILABLE:
-            raise AuthenticationError(
-                "Google API client libraries not available. "
-                "Install with: pip install google-api-python-client google-auth google-auth-httplib2"
-            )
+            raise AuthenticationError("Google API client libraries not available. " "Install with: pip install google-api-python-client google-auth google-auth-httplib2")
 
         # Load settings
         global_settings = get_settings()
@@ -192,9 +167,7 @@ class SearchTool(BaseTool):
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
             handler = logging.StreamHandler()
-            handler.setFormatter(
-                logging.Formatter("%(asctime)s %(levelname)s [SearchTool] %(message)s")
-            )
+            handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [SearchTool] %(message)s"))
             self.logger.addHandler(handler)
         self.logger.setLevel(logging.INFO)
 
@@ -204,9 +177,7 @@ class SearchTool(BaseTool):
         self._init_credentials()
 
         # Initialize core components
-        self.rate_limiter = RateLimiter(
-            self.config.rate_limit_requests, self.config.rate_limit_window
-        )
+        self.rate_limiter = RateLimiter(self.config.rate_limit_requests, self.config.rate_limit_window)
 
         self.circuit_breaker = CircuitBreaker(
             self.config.circuit_breaker_threshold,
@@ -214,17 +185,11 @@ class SearchTool(BaseTool):
         )
 
         # Initialize enhanced components
-        self.quality_analyzer = (
-            ResultQualityAnalyzer() if self.config.enable_quality_analysis else None
-        )
+        self.quality_analyzer = ResultQualityAnalyzer() if self.config.enable_quality_analysis else None
         self.intent_analyzer = QueryIntentAnalyzer() if self.config.enable_intent_analysis else None
         self.deduplicator = ResultDeduplicator() if self.config.enable_deduplication else None
         self.result_summarizer = ResultSummarizer() if self.config.enable_quality_analysis else None
-        self.search_context = (
-            SearchContext(self.config.max_search_history)
-            if self.config.enable_context_tracking
-            else None
-        )
+        self.search_context = SearchContext(self.config.max_search_history) if self.config.enable_context_tracking else None
         self.error_handler = AgentFriendlyErrorHandler()
 
         # Initialize intelligent cache (Redis)
@@ -337,13 +302,9 @@ class SearchTool(BaseTool):
                 except Exception as e:
                     self.logger.warning(f"Failed to initialize with service account: {e}")
 
-        raise AuthenticationError(
-            "No valid Google API credentials found. Set GOOGLE_API_KEY and GOOGLE_CSE_ID"
-        )
+        raise AuthenticationError("No valid Google API credentials found. Set GOOGLE_API_KEY and GOOGLE_CSE_ID")
 
-    def _execute_search(
-        self, query: str, num_results: int = 10, start_index: int = 1, **kwargs
-    ) -> Dict[str, Any]:
+    def _execute_search(self, query: str, num_results: int = 10, start_index: int = 1, **kwargs) -> Dict[str, Any]:
         """Execute search with rate limiting and circuit breaker"""
         # Check rate limit
         self.rate_limiter.acquire()
@@ -388,11 +349,11 @@ class SearchTool(BaseTool):
                 last_exception = e
                 if attempt < self.config.retry_attempts - 1:
                     wait_time = self.config.retry_backoff**attempt
-                    self.logger.warning(
-                        f"Attempt {attempt + 1} failed: {e}. Retrying in {wait_time}s..."
-                    )
+                    self.logger.warning(f"Attempt {attempt + 1} failed: {e}. Retrying in {wait_time}s...")
                     time.sleep(wait_time)
 
+        if last_exception is None:
+            raise RuntimeError("Retry logic failed but no exception was captured")
         raise last_exception
 
     def _parse_search_results(
@@ -430,9 +391,7 @@ class SearchTool(BaseTool):
 
             # Add quality analysis
             if enable_quality_analysis and self.quality_analyzer and query:
-                quality_analysis = self.quality_analyzer.analyze_result_quality(
-                    result, query, position
-                )
+                quality_analysis = self.quality_analyzer.analyze_result_quality(result, query, position)
                 result["_quality"] = quality_analysis
 
                 # Add agent-friendly quality summary
@@ -453,11 +412,7 @@ class SearchTool(BaseTool):
     # Core Search Methods
     # ========================================================================
 
-    @cache_result_with_strategy(
-        ttl_strategy=lambda self, result, args, kwargs: self._create_search_ttl_strategy()(
-            result, args, kwargs
-        )
-    )
+    @cache_result_with_strategy(ttl_strategy=lambda self, result, args, kwargs: self._create_search_ttl_strategy()(result, args, kwargs))
     def search_web(
         self,
         query: str,
@@ -516,10 +471,7 @@ class SearchTool(BaseTool):
                     elif param == "num_results":
                         num_results = min(num_results, value)
 
-                self.logger.info(
-                    f"Intent: {intent_analysis['intent_type']} "
-                    f"(confidence: {intent_analysis['confidence']:.2f})"
-                )
+                self.logger.info(f"Intent: {intent_analysis['intent_type']} " f"(confidence: {intent_analysis['confidence']:.2f})")
 
             # Note: Cache is now handled by @cache_result_with_strategy decorator
             # No need for manual cache check here
@@ -558,9 +510,7 @@ class SearchTool(BaseTool):
 
             # Deduplicate
             if self.deduplicator:
-                results = self.deduplicator.deduplicate_results(
-                    results, self.config.similarity_threshold
-                )
+                results = self.deduplicator.deduplicate_results(results, self.config.similarity_threshold)
 
             # Add search metadata
             if intent_analysis:
@@ -589,9 +539,7 @@ class SearchTool(BaseTool):
             result_data = {
                 "results": results,
                 "_metadata": {
-                    "intent_type": (
-                        intent_analysis["intent_type"] if intent_analysis else "GENERAL"
-                    ),
+                    "intent_type": (intent_analysis["intent_type"] if intent_analysis else "GENERAL"),
                     "query": query,
                     "enhanced_query": enhanced_query,
                     "timestamp": time.time(),
@@ -644,9 +592,7 @@ class SearchTool(BaseTool):
         if image_color_type:
             search_params["imgColorType"] = image_color_type
 
-        raw_results = self._retry_with_backoff(
-            self._execute_search, query, num_results, 1, **search_params
-        )
+        raw_results = self._retry_with_backoff(self._execute_search, query, num_results, 1, **search_params)
 
         return self._parse_search_results(raw_results, query=query)
 

@@ -36,14 +36,10 @@ def validate_cost_config(cost_config: ModelCostConfig, model_name: str) -> List[
     warnings = []
 
     if cost_config.input < 0:
-        raise ConfigValidationError(
-            f"Model '{model_name}': Input cost must be non-negative, got {cost_config.input}"
-        )
+        raise ConfigValidationError(f"Model '{model_name}': Input cost must be non-negative, got {cost_config.input}")
 
     if cost_config.output < 0:
-        raise ConfigValidationError(
-            f"Model '{model_name}': Output cost must be non-negative, got {cost_config.output}"
-        )
+        raise ConfigValidationError(f"Model '{model_name}': Output cost must be non-negative, got {cost_config.output}")
 
     # Warn if costs are zero (might be intentional for free tiers or unknown
     # pricing)
@@ -78,36 +74,21 @@ def validate_model_config(model_config: ModelConfig) -> List[str]:
 
     # Validate capabilities
     if model_config.capabilities.max_tokens <= 0:
-        raise ConfigValidationError(
-            f"Model '{model_config.name}': max_tokens must be positive, "
-            f"got {model_config.capabilities.max_tokens}"
-        )
+        raise ConfigValidationError(f"Model '{model_config.name}': max_tokens must be positive, " f"got {model_config.capabilities.max_tokens}")
 
     if model_config.capabilities.context_window <= 0:
-        raise ConfigValidationError(
-            f"Model '{model_config.name}': context_window must be positive, "
-            f"got {model_config.capabilities.context_window}"
-        )
+        raise ConfigValidationError(f"Model '{model_config.name}': context_window must be positive, " f"got {model_config.capabilities.context_window}")
 
     # Validate default params
     if not (0.0 <= model_config.default_params.temperature <= 2.0):
-        raise ConfigValidationError(
-            f"Model '{model_config.name}': temperature must be between 0.0 and 2.0, "
-            f"got {model_config.default_params.temperature}"
-        )
+        raise ConfigValidationError(f"Model '{model_config.name}': temperature must be between 0.0 and 2.0, " f"got {model_config.default_params.temperature}")
 
     if model_config.default_params.max_tokens <= 0:
-        raise ConfigValidationError(
-            f"Model '{model_config.name}': default max_tokens must be positive, "
-            f"got {model_config.default_params.max_tokens}"
-        )
+        raise ConfigValidationError(f"Model '{model_config.name}': default max_tokens must be positive, " f"got {model_config.default_params.max_tokens}")
 
     # Warn if default max_tokens exceeds capability max_tokens
     if model_config.default_params.max_tokens > model_config.capabilities.max_tokens:
-        warnings.append(
-            f"Model '{model_config.name}': default max_tokens ({model_config.default_params.max_tokens}) "
-            f"exceeds capability max_tokens ({model_config.capabilities.max_tokens})"
-        )
+        warnings.append(f"Model '{model_config.name}': default max_tokens ({model_config.default_params.max_tokens}) " f"exceeds capability max_tokens ({model_config.capabilities.max_tokens})")
 
     return warnings
 
@@ -133,17 +114,12 @@ def validate_provider_config(provider_config: ProviderConfig) -> List[str]:
 
     # Validate models list
     if not provider_config.models:
-        raise ConfigValidationError(
-            f"Provider '{provider_config.provider_name}': Must have at least one model"
-        )
+        raise ConfigValidationError(f"Provider '{provider_config.provider_name}': Must have at least one model")
 
     # Validate default model exists
     model_names = provider_config.get_model_names()
     if provider_config.default_model not in model_names:
-        raise ConfigValidationError(
-            f"Provider '{provider_config.provider_name}': Default model '{provider_config.default_model}' "
-            f"not found in models list: {model_names}"
-        )
+        raise ConfigValidationError(f"Provider '{provider_config.provider_name}': Default model '{provider_config.default_model}' " f"not found in models list: {model_names}")
 
     # Validate each model
     for model in provider_config.models:
@@ -153,25 +129,17 @@ def validate_provider_config(provider_config: ProviderConfig) -> List[str]:
     # Check for duplicate model names
     if len(model_names) != len(set(model_names)):
         duplicates = [name for name in model_names if model_names.count(name) > 1]
-        raise ConfigValidationError(
-            f"Provider '{provider_config.provider_name}': Duplicate model names found: {set(duplicates)}"
-        )
+        raise ConfigValidationError(f"Provider '{provider_config.provider_name}': Duplicate model names found: {set(duplicates)}")
 
     # Validate model mappings if present
     if provider_config.model_mappings:
         for alias, target in provider_config.model_mappings.items():
             if target not in model_names:
-                raise ConfigValidationError(
-                    f"Provider '{provider_config.provider_name}': Model mapping alias '{alias}' "
-                    f"points to non-existent model '{target}'. Available models: {model_names}"
-                )
+                raise ConfigValidationError(f"Provider '{provider_config.provider_name}': Model mapping alias '{alias}' " f"points to non-existent model '{target}'. Available models: {model_names}")
 
             # Warn if alias is the same as target
             if alias == target:
-                warnings.append(
-                    f"Provider '{provider_config.provider_name}': Model mapping has redundant entry "
-                    f"'{alias}' -> '{target}'"
-                )
+                warnings.append(f"Provider '{provider_config.provider_name}': Model mapping has redundant entry " f"'{alias}' -> '{target}'")
 
     return warnings
 

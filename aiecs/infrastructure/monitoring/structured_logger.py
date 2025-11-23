@@ -18,9 +18,7 @@ def setup_structured_logging(level: str = "INFO", format_type: str = "json") -> 
     # Create formatter
     if format_type.lower() == "json":
         # Simple JSON-like format for now
-        formatter = logging.Formatter(
-            '{"timestamp": "%(asctime)s", "level": "%(levelname)s", "module": "%(name)s", "message": "%(message)s"}'
-        )
+        formatter = logging.Formatter('{"timestamp": "%(asctime)s", "level": "%(levelname)s", "module": "%(name)s", "message": "%(message)s"}')
     else:
         # Standard text format
         formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")

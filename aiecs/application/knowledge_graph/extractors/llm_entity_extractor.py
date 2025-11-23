@@ -72,9 +72,7 @@ class LLMEntityExtractor(EntityExtractor):
         self.max_tokens = max_tokens
         self._llm_manager = None  # Lazy-loaded in async methods
 
-    async def extract_entities(
-        self, text: str, entity_types: Optional[List[str]] = None, **kwargs
-    ) -> List[Entity]:
+    async def extract_entities(self, text: str, entity_types: Optional[List[str]] = None, **kwargs) -> List[Entity]:
         """
         Extract entities from text using LLM
 
@@ -170,9 +168,7 @@ class LLMEntityExtractor(EntityExtractor):
                 type_descriptions.append(desc)
             else:
                 # Generic description
-                type_descriptions.append(
-                    f"- {entity_type}: Extract name and any relevant properties"
-                )
+                type_descriptions.append(f"- {entity_type}: Extract name and any relevant properties")
 
         types_description = "\n".join(type_descriptions)
 

@@ -83,7 +83,7 @@ class DataVisualizerTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the data visualizer tool"""
 
-        model_config = ConfigDict(env_prefix="DATA_VISUALIZER_")
+        model_config = ConfigDict(env_prefix="DATA_VISUALIZER_")  # type: ignore[typeddict-unknown-key]
 
         default_style: str = Field(default="static", description="Default visualization style")
         default_output_dir: str = Field(
@@ -155,18 +155,14 @@ class DataVisualizerTool(BaseTool):
     class AutoVisualizeDatasetSchema(BaseModel):
         """Schema for auto_visualize_dataset operation"""
 
-        data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(
-            description="Dataset to visualize"
-        )
+        data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(description="Dataset to visualize")
         max_charts: int = Field(default=10, description="Maximum number of charts to generate")
         focus_areas: Optional[List[str]] = Field(default=None, description="Areas to focus on")
 
     class RecommendChartTypeSchema(BaseModel):
         """Schema for recommend_chart_type operation"""
 
-        data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(
-            description="Data for recommendation"
-        )
+        data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(description="Data for recommendation")
         x: Optional[str] = Field(default=None, description="X column")
         y: Optional[str] = Field(default=None, description="Y column")
 
@@ -223,13 +219,9 @@ class DataVisualizerTool(BaseTool):
 
             # Create visualization using chart_tool if available
             if self.external_tools.get("chart"):
-                chart_result = self._create_chart_with_tool(
-                    df, chart_type, x, y, hue, title, output_path
-                )
+                chart_result = self._create_chart_with_tool(df, chart_type, x, y, hue, title, output_path)
             else:
-                chart_result = self._create_chart_matplotlib(
-                    df, chart_type, x, y, hue, title, output_path
-                )
+                chart_result = self._create_chart_matplotlib(df, chart_type, x, y, hue, title, output_path)
 
             return {
                 "chart_info": chart_result,
@@ -303,9 +295,7 @@ class DataVisualizerTool(BaseTool):
                 for col in numeric_cols:
                     if chart_count >= max_charts:
                         break
-                    chart_info = self.visualize(
-                        df, ChartType.BOX, y=col, title=f"Box Plot of {col}"
-                    )
+                    chart_info = self.visualize(df, ChartType.BOX, y=col, title=f"Box Plot of {col}")
                     generated_charts.append(chart_info)
                     chart_count += 1
 

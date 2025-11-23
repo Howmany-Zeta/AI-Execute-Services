@@ -76,9 +76,7 @@ class ErrorContext:
             "operation": self.operation,
             "entity_id": self.entity_id,
             "relation_id": self.relation_id,
-            "query": (
-                self.query[:100] + "..." if self.query and len(self.query) > 100 else self.query
-            ),
+            "query": (self.query[:100] + "..." if self.query and len(self.query) > 100 else self.query),
             "parameters": self.parameters,
             "timestamp": self.timestamp.isoformat(),
             "severity": self.severity.value,
@@ -171,9 +169,7 @@ class ErrorHandler:
             return GraphStoreConflictError(str(error))
 
         # Validation errors
-        if any(
-            keyword in error_str for keyword in ["invalid", "validation", "required", "missing"]
-        ):
+        if any(keyword in error_str for keyword in ["invalid", "validation", "required", "missing"]):
             return GraphStoreValidationError(str(error))
 
         # Timeout errors
@@ -307,9 +303,7 @@ class RetryHandler:
         self.max_delay = max_delay
         self.exponential_base = exponential_base
 
-    async def execute(
-        self, func: Callable, retry_on: Optional[list] = None, *args, **kwargs
-    ) -> Any:
+    async def execute(self, func: Callable, retry_on: Optional[list] = None, *args, **kwargs) -> Any:
         """
         Execute function with retry logic
 
@@ -350,20 +344,18 @@ class RetryHandler:
                     self.max_delay,
                 )
 
-                logger.warning(
-                    f"Retry attempt {attempt + 1}/{self.max_retries} after {delay:.1f}s: {e}"
-                )
+                logger.warning(f"Retry attempt {attempt + 1}/{self.max_retries} after {delay:.1f}s: {e}")
 
                 await asyncio.sleep(delay)
 
         # All retries exhausted
+        if last_exception is None:
+            raise RuntimeError("Retry logic failed but no exception was captured")
         raise last_exception
 
 
 # Configure logging for graph storage
-def configure_graph_storage_logging(
-    level: int = logging.INFO, format_string: Optional[str] = None
-) -> None:
+def configure_graph_storage_logging(level: int = logging.INFO, format_string: Optional[str] = None) -> None:
     """
     Configure logging for graph storage modules
 
@@ -372,9 +364,7 @@ def configure_graph_storage_logging(
         format_string: Custom format string
     """
     if format_string is None:
-        format_string = (
-            "%(asctime)s - %(name)s - %(levelname)s - " "%(message)s - [%(filename)s:%(lineno)d]"
-        )
+        format_string = "%(asctime)s - %(name)s - %(levelname)s - " "%(message)s - [%(filename)s:%(lineno)d]"
 
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter(format_string))

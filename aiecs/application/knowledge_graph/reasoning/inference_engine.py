@@ -338,9 +338,7 @@ class InferenceEngine:
 
         return relations
 
-    async def _apply_transitive_rule(
-        self, rule: InferenceRule, relations: List[Relation], visited: Set[str]
-    ) -> List[Tuple[Relation, InferenceStep]]:
+    async def _apply_transitive_rule(self, rule: InferenceRule, relations: List[Relation], visited: Set[str]) -> List[Tuple[Relation, InferenceStep]]:
         """
         Apply transitive rule: A->B, B->C => A->C
 
@@ -410,9 +408,7 @@ class InferenceEngine:
 
         return inferred
 
-    async def _apply_symmetric_rule(
-        self, rule: InferenceRule, relations: List[Relation], visited: Set[str]
-    ) -> List[Tuple[Relation, InferenceStep]]:
+    async def _apply_symmetric_rule(self, rule: InferenceRule, relations: List[Relation], visited: Set[str]) -> List[Tuple[Relation, InferenceStep]]:
         """
         Apply symmetric rule: A->B => B->A
 

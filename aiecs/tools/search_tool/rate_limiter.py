@@ -82,10 +82,7 @@ class RateLimiter:
             else:
                 # Calculate wait time
                 wait_time = (tokens - self.tokens) / (self.max_requests / self.time_window)
-                raise RateLimitError(
-                    f"Rate limit exceeded. {len(self.request_history)} requests in last "
-                    f"{self.time_window}s. Wait {wait_time:.1f}s before retrying."
-                )
+                raise RateLimitError(f"Rate limit exceeded. {len(self.request_history)} requests in last " f"{self.time_window}s. Wait {wait_time:.1f}s before retrying.")
 
     def get_remaining_quota(self) -> int:
         """Get remaining quota"""
@@ -144,10 +141,7 @@ class CircuitBreaker:
                     self.state = CircuitState.HALF_OPEN
                     self.failure_count = 0
                 else:
-                    raise CircuitBreakerOpenError(
-                        f"Circuit breaker is OPEN. Retry after "
-                        f"{self.timeout - (time.time() - self.last_failure_time):.1f}s"
-                    )
+                    raise CircuitBreakerOpenError(f"Circuit breaker is OPEN. Retry after " f"{self.timeout - (time.time() - self.last_failure_time):.1f}s")
 
         try:
             result = func(*args, **kwargs)

@@ -66,7 +66,7 @@ class StatsTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the stats tool"""
 
-        model_config = ConfigDict(env_prefix="STATS_TOOL_")
+        model_config = ConfigDict(env_prefix="STATS_TOOL_")  # type: ignore[typeddict-unknown-key]
 
         max_file_size_mb: int = Field(default=200, description="Maximum file size in megabytes")
         allowed_extensions: List[str] = Field(
@@ -214,19 +214,13 @@ class StatsTool(BaseTool):
             test_type = "paired t-test"
         else:
             stat, p = stats.ttest_ind(a, b, equal_var=equal_var)
-            test_type = (
-                "independent t-test (equal variance)"
-                if equal_var
-                else "Welch's t-test (unequal variance)"
-            )
+            test_type = "independent t-test (equal variance)" if equal_var else "Welch's t-test (unequal variance)"
         mean_a = np.mean(a)
         mean_b = np.mean(b)
         std_a = np.std(a, ddof=1)
         std_b = np.std(b, ddof=1)
         if equal_var:
-            pooled_std = np.sqrt(
-                ((len(a) - 1) * std_a**2 + (len(b) - 1) * std_b**2) / (len(a) + len(b) - 2)
-            )
+            pooled_std = np.sqrt(((len(a) - 1) * std_a**2 + (len(b) - 1) * std_b**2) / (len(a) + len(b) - 2))
             cohens_d = (mean_a - mean_b) / pooled_std
         else:
             cohens_d = (mean_a - mean_b) / np.sqrt((std_a**2 + std_b**2) / 2)
@@ -366,9 +360,7 @@ class StatsTool(BaseTool):
             }
         return result
 
-    def chi_square(
-        self, file_path: str, var1: str, var2: str, correction: bool = True
-    ) -> Dict[str, Any]:
+    def chi_square(self, file_path: str, var1: str, var2: str, correction: bool = True) -> Dict[str, Any]:
         """Perform chi-square test of independence."""
         df = self._load_data(file_path)
         self._validate_variables(df, [var1, var2])
@@ -387,12 +379,8 @@ class StatsTool(BaseTool):
             "cramers_v": float(cramers_v),
             "effect_size_interpretation": self._interpret_effect_size(cramers_v),
             "contingency_table": contingency.to_dict(),
-            "expected_frequencies": pd.DataFrame(
-                expected, index=contingency.index, columns=contingency.columns
-            ).to_dict(),
-            "test_type": (
-                "Chi-square test with Yates correction" if correction else "Chi-square test"
-            ),
+            "expected_frequencies": pd.DataFrame(expected, index=contingency.index, columns=contingency.columns).to_dict(),
+            "test_type": ("Chi-square test with Yates correction" if correction else "Chi-square test"),
         }
 
     def non_parametric(
@@ -447,11 +435,7 @@ class StatsTool(BaseTool):
         elif test_type == "kruskal":
             if not grouping:
                 raise AnalysisError("Kruskal-Wallis test requires a grouping variable")
-            groups = {
-                f"{var}_{name}": group[var].dropna().values
-                for name, group in df.groupby(grouping)
-                for var in variables
-            }
+            groups = {f"{var}_{name}": group[var].dropna().values for name, group in df.groupby(grouping) for var in variables}
             h_stat, p_value = stats.kruskal(*groups.values())
             return StatsResult(
                 test_type="Kruskal-Wallis H test",
@@ -461,9 +445,7 @@ class StatsTool(BaseTool):
                 additional_metrics={
                     "groups": len(groups),
                     "group_sizes": {name: len(values) for name, values in groups.items()},
-                    "group_medians": {
-                        name: float(np.median(values)) for name, values in groups.items()
-                    },
+                    "group_medians": {name: float(np.median(values)) for name, values in groups.items()},
                 },
             ).to_dict()
         elif test_type == "friedman":
@@ -483,9 +465,7 @@ class StatsTool(BaseTool):
                 },
             ).to_dict()
         else:
-            raise AnalysisError(
-                f"Unsupported non-parametric test type: {test_type}. Supported types: mann_whitney, wilcoxon, kruskal, friedman"
-            )
+            raise AnalysisError(f"Unsupported non-parametric test type: {test_type}. Supported types: mann_whitney, wilcoxon, kruskal, friedman")
 
     def regression(
         self,
@@ -514,9 +494,7 @@ class StatsTool(BaseTool):
                     "formula": formula,
                     "n_observations": int(fit.nobs),
                     "r_squared": (float(fit.rsquared) if hasattr(fit, "rsquared") else None),
-                    "adj_r_squared": (
-                        float(fit.rsquared_adj) if hasattr(fit, "rsquared_adj") else None
-                    ),
+                    "adj_r_squared": (float(fit.rsquared_adj) if hasattr(fit, "rsquared_adj") else None),
                     "aic": float(fit.aic) if hasattr(fit, "aic") else None,
                     "bic": float(fit.bic) if hasattr(fit, "bic") else None,
                     "f_statistic": (float(fit.fvalue) if hasattr(fit, "fvalue") else None),
@@ -526,9 +504,7 @@ class StatsTool(BaseTool):
                         var: {
                             "coef": float(fit.params[var]),
                             "std_err": float(fit.bse[var]),
-                            "t_value": (
-                                float(fit.tvalues[var]) if hasattr(fit, "tvalues") else None
-                            ),
+                            "t_value": (float(fit.tvalues[var]) if hasattr(fit, "tvalues") else None),
                             "p_value": float(fit.pvalues[var]),
                             "significant": fit.pvalues[var] < 0.05,
                             "conf_lower": float(fit.conf_int().loc[var, 0]),
@@ -579,11 +555,7 @@ class StatsTool(BaseTool):
                 raise AnalysisError(f"Unsupported time series model: {model_type}")
             forecast = fit.forecast(steps=forecast_periods)
             forecast_index = pd.date_range(
-                start=(
-                    ts_data.index[-1]
-                    if isinstance(ts_data.index, pd.DatetimeIndex)
-                    else len(ts_data)
-                ),
+                start=(ts_data.index[-1] if isinstance(ts_data.index, pd.DatetimeIndex) else len(ts_data)),
                 periods=forecast_periods + 1,
                 freq="D",
             )[1:]
@@ -594,16 +566,8 @@ class StatsTool(BaseTool):
                 "aic": float(fit.aic),
                 "bic": float(fit.bic),
                 "forecast": {
-                    "values": (
-                        forecast.tolist()
-                        if isinstance(forecast, np.ndarray)
-                        else forecast.values.tolist()
-                    ),
-                    "index": (
-                        forecast_index.strftime("%Y-%m-%d").tolist()
-                        if isinstance(forecast_index, pd.DatetimeIndex)
-                        else list(range(len(forecast)))
-                    ),
+                    "values": (forecast.tolist() if isinstance(forecast, np.ndarray) else forecast.values.tolist()),
+                    "index": (forecast_index.strftime("%Y-%m-%d").tolist() if isinstance(forecast_index, pd.DatetimeIndex) else list(range(len(forecast)))),
                 },
                 "summary": str(fit.summary()),
             }
@@ -661,9 +625,7 @@ class StatsTool(BaseTool):
                 imputed_df[col] = data[col].fillna(data[col].mean())
             cat_cols = data.select_dtypes(exclude=[np.number]).columns
             for col in cat_cols:
-                imputed_df[col] = data[col].fillna(
-                    data[col].mode()[0] if not data[col].mode().empty else None
-                )
+                imputed_df[col] = data[col].fillna(data[col].mode()[0] if not data[col].mode().empty else None)
             result.update(
                 {
                     "imputation_method": {
@@ -677,11 +639,7 @@ class StatsTool(BaseTool):
             )
             processed_df = imputed_df
         if output_path:
-            output_path = (
-                os.path.abspath(output_path)
-                if os.path.isabs(output_path)
-                else os.path.join(tempfile.gettempdir(), "stats_outputs", output_path)
-            )
+            output_path = os.path.abspath(output_path) if os.path.isabs(output_path) else os.path.join(tempfile.gettempdir(), "stats_outputs", output_path)
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             processed_df.to_csv(output_path)
             result["output_file"] = output_path

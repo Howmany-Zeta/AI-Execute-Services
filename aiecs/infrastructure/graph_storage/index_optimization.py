@@ -179,9 +179,7 @@ class IndexOptimizer:
 
             # 1. Check if composite index on (entity_type, properties) would be beneficial
             # This is useful for queries filtering by type and JSONB properties
-            entity_type_props_exists = await self._index_exists(
-                conn, "graph_entities", ["entity_type", "properties"]
-            )
+            entity_type_props_exists = await self._index_exists(conn, "graph_entities", ["entity_type", "properties"])
             if not entity_type_props_exists:
                 recommendations.append(
                     IndexRecommendation(
@@ -190,17 +188,12 @@ class IndexOptimizer:
                         index_type="gin",
                         reason="Queries often filter by entity_type and search properties",
                         estimated_benefit="medium",
-                        create_sql=(
-                            "CREATE INDEX CONCURRENTLY idx_graph_entities_type_props "
-                            "ON graph_entities (entity_type, properties jsonb_path_ops)"
-                        ),
+                        create_sql=("CREATE INDEX CONCURRENTLY idx_graph_entities_type_props " "ON graph_entities (entity_type, properties jsonb_path_ops)"),
                     )
                 )
 
             # 2. Check for relation composite indexes
-            source_type_exists = await self._index_exists(
-                conn, "graph_relations", ["source_id", "relation_type"]
-            )
+            source_type_exists = await self._index_exists(conn, "graph_relations", ["source_id", "relation_type"])
             if not source_type_exists:
                 recommendations.append(
                     IndexRecommendation(
@@ -209,16 +202,11 @@ class IndexOptimizer:
                         index_type="btree",
                         reason="Queries often filter relations by source and type",
                         estimated_benefit="high",
-                        create_sql=(
-                            "CREATE INDEX CONCURRENTLY idx_graph_relations_source_type "
-                            "ON graph_relations (source_id, relation_type)"
-                        ),
+                        create_sql=("CREATE INDEX CONCURRENTLY idx_graph_relations_source_type " "ON graph_relations (source_id, relation_type)"),
                     )
                 )
 
-            target_type_exists = await self._index_exists(
-                conn, "graph_relations", ["target_id", "relation_type"]
-            )
+            target_type_exists = await self._index_exists(conn, "graph_relations", ["target_id", "relation_type"])
             if not target_type_exists:
                 recommendations.append(
                     IndexRecommendation(
@@ -227,10 +215,7 @@ class IndexOptimizer:
                         index_type="btree",
                         reason="Queries often filter incoming relations by target and type",
                         estimated_benefit="high",
-                        create_sql=(
-                            "CREATE INDEX CONCURRENTLY idx_graph_relations_target_type "
-                            "ON graph_relations (target_id, relation_type)"
-                        ),
+                        create_sql=("CREATE INDEX CONCURRENTLY idx_graph_relations_target_type " "ON graph_relations (target_id, relation_type)"),
                     )
                 )
 
@@ -244,10 +229,7 @@ class IndexOptimizer:
                         index_type="btree",
                         reason="Weight-based path finding and sorting",
                         estimated_benefit="low",
-                        create_sql=(
-                            "CREATE INDEX CONCURRENTLY idx_graph_relations_weight "
-                            "ON graph_relations (weight)"
-                        ),
+                        create_sql=("CREATE INDEX CONCURRENTLY idx_graph_relations_weight " "ON graph_relations (weight)"),
                     )
                 )
 
@@ -261,18 +243,13 @@ class IndexOptimizer:
                         index_type="btree",
                         reason="Temporal queries (recently created entities)",
                         estimated_benefit="low",
-                        create_sql=(
-                            "CREATE INDEX CONCURRENTLY idx_graph_entities_created "
-                            "ON graph_entities (created_at)"
-                        ),
+                        create_sql=("CREATE INDEX CONCURRENTLY idx_graph_entities_created " "ON graph_entities (created_at)"),
                     )
                 )
 
         return recommendations
 
-    async def _index_exists(
-        self, conn: asyncpg.Connection, table_name: str, columns: List[str]
-    ) -> bool:
+    async def _index_exists(self, conn: asyncpg.Connection, table_name: str, columns: List[str]) -> bool:
         """Check if an index exists on specified columns"""
         query = """
             SELECT EXISTS (
@@ -288,9 +265,7 @@ class IndexOptimizer:
         result = await conn.fetchval(query, table_name, columns)
         return result or False
 
-    async def apply_recommendations(
-        self, recommendations: List[IndexRecommendation], dry_run: bool = False
-    ) -> Dict[str, Any]:
+    async def apply_recommendations(self, recommendations: List[IndexRecommendation], dry_run: bool = False) -> Dict[str, Any]:
         """
         Apply index recommendations
 
@@ -311,9 +286,7 @@ class IndexOptimizer:
             try:
                 if dry_run:
                     logger.info(f"[DRY RUN] Would create index: {rec.create_sql}")
-                    results["skipped"].append(
-                        {"recommendation": rec.to_dict(), "reason": "dry_run"}
-                    )
+                    results["skipped"].append({"recommendation": rec.to_dict(), "reason": "dry_run"})
                     continue
 
                 # Create index
@@ -321,9 +294,7 @@ class IndexOptimizer:
                     logger.info(f"Creating index: {rec.create_sql}")
                     await conn.execute(rec.create_sql)
                     results["applied"].append(rec.to_dict())
-                    logger.info(
-                        f"Successfully created index on {rec.table_name}({', '.join(rec.columns)})"
-                    )
+                    logger.info(f"Successfully created index on {rec.table_name}({', '.join(rec.columns)})")
 
             except Exception as e:
                 logger.error(f"Failed to create index: {e}")
@@ -363,15 +334,9 @@ class IndexOptimizer:
                     "row_count": row["row_count"],
                     "dead_tuples": row["dead_tuples"],
                     "last_vacuum": (row["last_vacuum"].isoformat() if row["last_vacuum"] else None),
-                    "last_autovacuum": (
-                        row["last_autovacuum"].isoformat() if row["last_autovacuum"] else None
-                    ),
-                    "last_analyze": (
-                        row["last_analyze"].isoformat() if row["last_analyze"] else None
-                    ),
-                    "last_autoanalyze": (
-                        row["last_autoanalyze"].isoformat() if row["last_autoanalyze"] else None
-                    ),
+                    "last_autovacuum": (row["last_autovacuum"].isoformat() if row["last_autovacuum"] else None),
+                    "last_analyze": (row["last_analyze"].isoformat() if row["last_analyze"] else None),
+                    "last_autoanalyze": (row["last_autoanalyze"].isoformat() if row["last_autoanalyze"] else None),
                 }
 
             return stats
@@ -422,9 +387,7 @@ class IndexOptimizer:
             "summary": {
                 "total_recommendations": len(recommendations),
                 "high_priority": len([r for r in recommendations if r.estimated_benefit == "high"]),
-                "medium_priority": len(
-                    [r for r in recommendations if r.estimated_benefit == "medium"]
-                ),
+                "medium_priority": len([r for r in recommendations if r.estimated_benefit == "medium"]),
                 "low_priority": len([r for r in recommendations if r.estimated_benefit == "low"]),
                 "potential_space_savings_mb": round(unused_index_size / (1024 * 1024), 2),
             },

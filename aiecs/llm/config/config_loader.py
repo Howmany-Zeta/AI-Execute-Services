@@ -131,10 +131,7 @@ class LLMConfigLoader:
                 config_path = Path(config_path)
 
             if not config_path.exists():
-                raise FileNotFoundError(
-                    f"LLM models configuration file not found: {config_path}\n"
-                    f"Please create the configuration file or set LLM_MODELS_CONFIG environment variable."
-                )
+                raise FileNotFoundError(f"LLM models configuration file not found: {config_path}\n" f"Please create the configuration file or set LLM_MODELS_CONFIG environment variable.")
 
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
@@ -147,11 +144,7 @@ class LLMConfigLoader:
                 self._config = LLMModelsConfig(**config_data)
                 self._config_path = config_path
 
-                logger.info(
-                    f"Loaded LLM configuration from {config_path}: "
-                    f"{len(self._config.providers)} providers, "
-                    f"{sum(len(p.models) for p in self._config.providers.values())} models"
-                )
+                logger.info(f"Loaded LLM configuration from {config_path}: " f"{len(self._config.providers)} providers, " f"{sum(len(p.models) for p in self._config.providers.values())} models")
 
                 return self._config
 
@@ -184,6 +177,9 @@ class LLMConfigLoader:
         """
         if self._config is None:
             self.load_config()
+        # After load_config(), _config should never be None
+        if self._config is None:
+            raise RuntimeError("Failed to load LLM configuration")
         return self._config
 
     def get_provider_config(self, provider_name: str) -> Optional[ProviderConfig]:

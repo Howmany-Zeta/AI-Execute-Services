@@ -17,7 +17,7 @@ class TaskContext:
         self.session_id = session_id
         self.metadata = metadata or {}
         self.created_at = datetime.now()
-        self.variables = {}  # Variable storage during task execution
+        self.variables: Dict[str, Any] = {}  # Variable storage during task execution
 
     def set_variable(self, key: str, value: Any):
         """Set task variable"""

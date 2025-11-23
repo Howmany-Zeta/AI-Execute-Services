@@ -41,9 +41,7 @@ class CommunityIntegration:
         self.community_manager = CommunityManager(context_engine)
         self.decision_engine = DecisionEngine(self.community_manager)
         self.resource_manager = ResourceManager(self.community_manager, context_engine)
-        self.workflow_engine = CollaborativeWorkflowEngine(
-            self.community_manager, self.resource_manager, self.decision_engine
-        )
+        self.workflow_engine = CollaborativeWorkflowEngine(self.community_manager, self.resource_manager, self.decision_engine)
 
         # Community-aware agent tracking
         # agent_id -> community_ids
@@ -103,9 +101,7 @@ class CommunityIntegration:
         else:
             # For testing or when agent_manager is not available, just log the
             # roles
-            logger.debug(
-                f"Agent manager not available, community created without auto-adding agents for roles: {agent_roles}"
-            )
+            logger.debug(f"Agent manager not available, community created without auto-adding agents for roles: {agent_roles}")
 
         logger.info(f"Created agent community '{name}' with {len(agent_roles)} role types")
         return community_id
@@ -236,9 +232,7 @@ class CommunityIntegration:
             implementation_plan=implementation_plan,
         )
 
-        logger.info(
-            f"Agent {proposer_agent_id} proposed decision '{title}' in community {community_id}"
-        )
+        logger.info(f"Agent {proposer_agent_id} proposed decision '{title}' in community {community_id}")
         return decision_id
 
     async def agent_vote_on_decision(self, decision_id: str, agent_id: str, vote: str) -> bool:
@@ -263,9 +257,7 @@ class CommunityIntegration:
         if not member_id:
             raise TaskValidationError(f"Agent {agent_id} is not a community member")
 
-        success = await self.community_manager.vote_on_decision(
-            decision_id=decision_id, member_id=member_id, vote=vote
-        )
+        success = await self.community_manager.vote_on_decision(decision_id=decision_id, member_id=member_id, vote=vote)
 
         logger.info(f"Agent {agent_id} voted '{vote}' on decision {decision_id}")
         return success
@@ -385,9 +377,7 @@ class CommunityIntegration:
                             "community_role": community_role,
                             "member_count": len(community.members),
                             "is_leader": (member_id in community.leaders if member_id else False),
-                            "is_coordinator": (
-                                member_id in community.coordinators if member_id else False
-                            ),
+                            "is_coordinator": (member_id in community.coordinators if member_id else False),
                         }
                     )
 
@@ -408,21 +398,14 @@ class CommunityIntegration:
             raise TaskValidationError(f"Community not found: {community_id}")
 
         # Get active sessions
-        active_sessions = [
-            session_id
-            for session_id, session in self.workflow_engine.active_sessions.items()
-            if session.community_id == community_id
-        ]
+        active_sessions = [session_id for session_id, session in self.workflow_engine.active_sessions.items() if session.community_id == community_id]
 
         # Get recent decisions
         recent_decisions = [
             decision
             for decision in self.community_manager.decisions.values()
             if any(
-                member.agent_id in self.community_agent_mapping.get(community_id, [])
-                for member_id in [decision.proposer_id]
-                for member in [self.community_manager.members.get(member_id)]
-                if member
+                member.agent_id in self.community_agent_mapping.get(community_id, []) for member_id in [decision.proposer_id] for member in [self.community_manager.members.get(member_id)] if member
             )
         ]
 
@@ -486,9 +469,7 @@ class CommunityIntegration:
         community = self.community_manager.communities[community_id]
         community.metadata["temporary"] = True
         community.metadata["created_for_duration"] = duration_minutes
-        community.metadata["cleanup_at"] = (
-            datetime.utcnow() + timedelta(minutes=duration_minutes)
-        ).isoformat()
+        community.metadata["cleanup_at"] = (datetime.utcnow() + timedelta(minutes=duration_minutes)).isoformat()
 
         # Schedule cleanup if enabled
         if auto_cleanup:

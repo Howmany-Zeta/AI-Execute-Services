@@ -65,26 +65,18 @@ class GraphQuery(BaseModel):
     query_type: QueryType = Field(..., description="Type of query to execute")
 
     # Entity lookup
-    entity_id: Optional[str] = Field(
-        default=None, description="Entity ID for entity lookup queries"
-    )
+    entity_id: Optional[str] = Field(default=None, description="Entity ID for entity lookup queries")
 
     # Filtering
     entity_type: Optional[str] = Field(default=None, description="Filter results by entity type")
 
-    relation_type: Optional[str] = Field(
-        default=None, description="Filter by relation type (for traversal)"
-    )
+    relation_type: Optional[str] = Field(default=None, description="Filter by relation type (for traversal)")
 
     # Vector search
-    embedding: Optional[List[float]] = Field(
-        default=None, description="Query embedding for vector search"
-    )
+    embedding: Optional[List[float]] = Field(default=None, description="Query embedding for vector search")
 
     # Property constraints
-    properties: Dict[str, Any] = Field(
-        default_factory=dict, description="Property constraints for filtering"
-    )
+    properties: Dict[str, Any] = Field(default_factory=dict, description="Property constraints for filtering")
 
     # Result constraints
     max_results: int = Field(default=10, ge=1, description="Maximum number of results to return")
@@ -104,18 +96,12 @@ class GraphQuery(BaseModel):
     )
 
     # Source/target constraints for path finding
-    source_entity_id: Optional[str] = Field(
-        default=None, description="Source entity ID for path finding"
-    )
+    source_entity_id: Optional[str] = Field(default=None, description="Source entity ID for path finding")
 
-    target_entity_id: Optional[str] = Field(
-        default=None, description="Target entity ID for path finding"
-    )
+    target_entity_id: Optional[str] = Field(default=None, description="Target entity ID for path finding")
 
     # Custom query parameters
-    custom_params: Dict[str, Any] = Field(
-        default_factory=dict, description="Additional custom query parameters"
-    )
+    custom_params: Dict[str, Any] = Field(default_factory=dict, description="Additional custom query parameters")
 
     # Custom pattern matching (Task 3.3)
     pattern: Optional[PathPattern] = Field(
@@ -128,9 +114,7 @@ class GraphQuery(BaseModel):
         description="Multiple graph patterns for complex pattern matching",
     )
 
-    optional_patterns: Optional[List[PathPattern]] = Field(
-        default=None, description="Optional patterns that may or may not match"
-    )
+    optional_patterns: Optional[List[PathPattern]] = Field(default=None, description="Optional patterns that may or may not match")
 
     projection: Optional[List[str]] = Field(
         default=None,
@@ -142,9 +126,7 @@ class GraphQuery(BaseModel):
         description="Aggregations to apply (e.g., {'count': 'COUNT', 'avg_age': 'AVG(properties.age)'})",
     )
 
-    group_by: Optional[List[str]] = Field(
-        default=None, description="Fields to group by for aggregations"
-    )
+    group_by: Optional[List[str]] = Field(default=None, description="Fields to group by for aggregations")
 
     class Config:
         use_enum_values = True
@@ -263,10 +245,4 @@ class GraphResult(BaseModel):
         return " ".join(parts)
 
     def __repr__(self) -> str:
-        return (
-            f"GraphResult("
-            f"entities={self.entity_count}, "
-            f"relations={len(self.relations)}, "
-            f"paths={self.path_count}, "
-            f"total_count={self.total_count})"
-        )
+        return f"GraphResult(" f"entities={self.entity_count}, " f"relations={len(self.relations)}, " f"paths={self.path_count}, " f"total_count={self.total_count})"

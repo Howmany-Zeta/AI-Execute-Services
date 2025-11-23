@@ -1,7 +1,7 @@
 from io import StringIO
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Union, Optional
+from typing import List, Dict, Union, Optional, cast
 from pydantic import BaseModel, ConfigDict, Field
 import logging
 
@@ -54,7 +54,7 @@ class PandasTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the pandas tool"""
 
-        model_config = ConfigDict(env_prefix="PANDAS_TOOL_")
+        model_config = ConfigDict(env_prefix="PANDAS_TOOL_")  # type: ignore[typeddict-unknown-key]
 
         csv_delimiter: str = Field(default=",", description="Delimiter for CSV files")
         encoding: str = Field(default="utf-8", description="Encoding for file operations")
@@ -63,9 +63,7 @@ class PandasTool(BaseTool):
             description="Default aggregation functions",
         )
         chunk_size: int = Field(default=10000, description="Chunk size for large file processing")
-        max_csv_size: int = Field(
-            default=1000000, description="Threshold for chunked CSV processing"
-        )
+        max_csv_size: int = Field(default=1000000, description="Threshold for chunked CSV processing")
         allowed_file_extensions: List[str] = Field(
             default=[".csv", ".xlsx", ".json"],
             description="Allowed file extensions",
@@ -132,13 +130,9 @@ class PandasTool(BaseTool):
         available_columns = set(df.columns)
         missing = [col for col in columns if col not in available_columns]
         if missing:
-            raise InputValidationError(
-                f"Columns not found: {missing}. Available columns: {list(available_columns)}"
-            )
+            raise InputValidationError(f"Columns not found: {missing}. Available columns: {list(available_columns)}")
 
-    def _to_json_serializable(
-        self, result: Union[pd.DataFrame, pd.Series, Dict]
-    ) -> Union[List[Dict], Dict]:
+    def _to_json_serializable(self, result: Union[pd.DataFrame, pd.Series, Dict]) -> Union[List[Dict], Dict]:
         """
         Convert result to JSON-serializable format.
 
@@ -193,7 +187,8 @@ class PandasTool(BaseTool):
                     sep=self.config.csv_delimiter,
                     encoding=self.config.encoding,
                 )
-            return self._to_json_serializable(df)
+            result = self._to_json_serializable(df)
+            return cast(List[Dict], result)
         except Exception as e:
             raise DataFrameError(f"Failed to read CSV: {e}")
 
@@ -201,7 +196,8 @@ class PandasTool(BaseTool):
         """Read JSON string into a DataFrame."""
         try:
             df = pd.read_json(StringIO(json_str))
-            return self._to_json_serializable(df)
+            result = self._to_json_serializable(df)
+            return cast(List[Dict], result)
         except Exception as e:
             raise DataFrameError(f"Failed to read JSON: {e}")
 
@@ -232,7 +228,8 @@ class PandasTool(BaseTool):
                 df = pd.read_json(file_path)
             else:
                 raise ValidationError(f"Unsupported file type: {file_type}")
-            return self._to_json_serializable(df)
+            result = self._to_json_serializable(df)
+            return cast(List[Dict], result)
         except ValidationError:
             raise
         except Exception as e:
@@ -263,7 +260,8 @@ class PandasTool(BaseTool):
         """Compute summary statistics for DataFrame."""
         df = self._validate_df(records)
         desc = df.describe(include="all").to_dict()
-        return self._to_json_serializable(desc)
+        result = self._to_json_serializable(desc)
+        return cast(Dict, result)
 
     def describe(self, records: List[Dict], columns: Optional[List[str]] = None) -> Dict:
         """Compute descriptive statistics for specified columns."""
@@ -272,21 +270,24 @@ class PandasTool(BaseTool):
             self._validate_columns(df, columns)
             df = df[columns]
         desc = df.describe().to_dict()
-        return self._to_json_serializable(desc)
+        result = self._to_json_serializable(desc)
+        return cast(Dict, result)
 
     def value_counts(self, records: List[Dict], columns: List[str]) -> Dict:
         """Compute value counts for specified columns."""
         df = self._validate_df(records)
         self._validate_columns(df, columns)
         result = {col: df[col].value_counts().to_dict() for col in columns}
-        return self._to_json_serializable(result)
+        converted = self._to_json_serializable(result)
+        return cast(Dict, converted)
 
     def filter(self, records: List[Dict], condition: str) -> List[Dict]:
         """Filter DataFrame based on a condition."""
         df = self._validate_df(records)
         try:
             df = df.query(condition, engine="python")
-            return self._to_json_serializable(df)
+            result = self._to_json_serializable(df)
+            return cast(List[Dict], result)
         except Exception as e:
             raise DataFrameError(f"Invalid query condition: {e}")
 
@@ -294,29 +295,31 @@ class PandasTool(BaseTool):
         """Select specified columns from DataFrame."""
         df = self._validate_df(records)
         self._validate_columns(df, columns)
-        return self._to_json_serializable(df[columns])
+        result = self._to_json_serializable(df[columns])
+        return cast(List[Dict], result)
 
     def drop_columns(self, records: List[Dict], columns: List[str]) -> List[Dict]:
         """Drop specified columns from DataFrame."""
         df = self._validate_df(records)
         self._validate_columns(df, columns)
-        return self._to_json_serializable(df.drop(columns=columns))
+        result = self._to_json_serializable(df.drop(columns=columns))
+        return cast(List[Dict], result)
 
-    def drop_duplicates(
-        self, records: List[Dict], columns: Optional[List[str]] = None
-    ) -> List[Dict]:
+    def drop_duplicates(self, records: List[Dict], columns: Optional[List[str]] = None) -> List[Dict]:
         """Drop duplicate rows based on specified columns."""
         df = self._validate_df(records)
         if columns:
             self._validate_columns(df, columns)
-        return self._to_json_serializable(df.drop_duplicates(subset=columns))
+        result = self._to_json_serializable(df.drop_duplicates(subset=columns))
+        return cast(List[Dict], result)
 
     def dropna(self, records: List[Dict], axis: int = 0, how: str = "any") -> List[Dict]:
         """Drop rows or columns with missing values."""
         df = self._validate_df(records)
         if how not in ["any", "all"]:
             raise ValidationError("how must be 'any' or 'all'")
-        return self._to_json_serializable(df.dropna(axis=axis, how=how))
+        result = self._to_json_serializable(df.dropna(axis=axis, how=how))
+        return cast(List[Dict], result)
 
     def groupby(self, records: List[Dict], by: List[str], agg: Dict[str, str]) -> List[Dict]:
         """Group DataFrame and apply aggregations."""
@@ -324,7 +327,8 @@ class PandasTool(BaseTool):
         self._validate_columns(df, by + list(agg.keys()))
         try:
             df = df.groupby(by).agg(agg).reset_index()
-            return self._to_json_serializable(df)
+            result = self._to_json_serializable(df)
+            return cast(List[Dict], result)
         except Exception as e:
             raise DataFrameError(f"Groupby failed: {e}")
 
@@ -347,7 +351,8 @@ class PandasTool(BaseTool):
                 columns=columns,
                 aggfunc=aggfunc,
             )
-            return self._to_json_serializable(df.reset_index())
+            result = self._to_json_serializable(df.reset_index())
+            return cast(List[Dict], result)
         except Exception as e:
             raise DataFrameError(f"Pivot table failed: {e}")
 
@@ -367,7 +372,8 @@ class PandasTool(BaseTool):
         self._validate_columns(df_right, [on] if isinstance(on, str) else on)
         try:
             df = df_left.merge(df_right, on=on, how=join_type)
-            return self._to_json_serializable(df)
+            result = self._to_json_serializable(df)
+            return cast(List[Dict], result)
         except Exception as e:
             raise DataFrameError(f"Merge failed: {e}")
 
@@ -378,7 +384,8 @@ class PandasTool(BaseTool):
         dfs = [self._validate_df(records) for records in records_list]
         try:
             df = pd.concat(dfs, axis=axis, ignore_index=True)
-            return self._to_json_serializable(df)
+            result = self._to_json_serializable(df)
+            return cast(List[Dict], result)
         except Exception as e:
             raise DataFrameError(f"Concat failed: {e}")
 
@@ -393,7 +400,8 @@ class PandasTool(BaseTool):
         self._validate_columns(df, sort_by)
         try:
             df = df.sort_values(by=sort_by, ascending=ascending)
-            return self._to_json_serializable(df)
+            result = self._to_json_serializable(df)
+            return cast(List[Dict], result)
         except Exception as e:
             raise DataFrameError(f"Sort failed: {e}")
 
@@ -401,7 +409,8 @@ class PandasTool(BaseTool):
         """Rename DataFrame columns."""
         df = self._validate_df(records)
         self._validate_columns(df, list(mapping.keys()))
-        return self._to_json_serializable(df.rename(columns=mapping))
+        result = self._to_json_serializable(df.rename(columns=mapping))
+        return cast(List[Dict], result)
 
     def replace_values(
         self,
@@ -414,7 +423,8 @@ class PandasTool(BaseTool):
         if columns:
             self._validate_columns(df, columns)
             df = df[columns]
-        return self._to_json_serializable(df.replace(to_replace))
+        result = self._to_json_serializable(df.replace(to_replace))
+        return cast(List[Dict], result)
 
     def fill_na(
         self,
@@ -429,7 +439,8 @@ class PandasTool(BaseTool):
             df[columns] = df[columns].fillna(value)
         else:
             df = df.fillna(value)
-        return self._to_json_serializable(df)
+        result = self._to_json_serializable(df)
+        return cast(List[Dict], result)
 
     def astype(self, records: List[Dict], dtypes: Dict[str, str]) -> List[Dict]:
         """Convert column types in DataFrame."""
@@ -437,13 +448,12 @@ class PandasTool(BaseTool):
         self._validate_columns(df, list(dtypes.keys()))
         try:
             df = df.astype(dtypes)
-            return self._to_json_serializable(df)
+            result = self._to_json_serializable(df)
+            return cast(List[Dict], result)
         except Exception as e:
             raise DataFrameError(f"Type conversion failed: {e}")
 
-    def apply(
-        self, records: List[Dict], func: str, columns: List[str], axis: int = 0
-    ) -> List[Dict]:
+    def apply(self, records: List[Dict], func: str, columns: List[str], axis: int = 0) -> List[Dict]:
         """Apply a function to specified columns or rows."""
         df = self._validate_df(records)
         self._validate_columns(df, columns)
@@ -457,9 +467,7 @@ class PandasTool(BaseTool):
             "abs": lambda x: (abs(float(x)) if pd.notna(x) and not isinstance(x, str) else x),
             "round": lambda x: (round(float(x)) if pd.notna(x) and not isinstance(x, str) else x),
             "ceil": lambda x: (np.ceil(float(x)) if pd.notna(x) and not isinstance(x, str) else x),
-            "floor": lambda x: (
-                np.floor(float(x)) if pd.notna(x) and not isinstance(x, str) else x
-            ),
+            "floor": lambda x: (np.floor(float(x)) if pd.notna(x) and not isinstance(x, str) else x),
             "int": lambda x: (int(float(x)) if pd.notna(x) and not isinstance(x, str) else None),
             "float": lambda x: (float(x) if pd.notna(x) and not isinstance(x, str) else None),
             "str": lambda x: str(x) if pd.notna(x) else "",
@@ -475,7 +483,8 @@ class PandasTool(BaseTool):
                     df[col] = df[col].apply(allowed_funcs[func])
             else:
                 df[columns] = df[columns].apply(allowed_funcs[func], axis=1)
-            return self._to_json_serializable(df)
+            result = self._to_json_serializable(df)
+            return cast(List[Dict], result)
         except Exception as e:
             raise DataFrameError(f"Apply failed: {e}")
 
@@ -485,7 +494,8 @@ class PandasTool(BaseTool):
         self._validate_columns(df, id_vars + value_vars)
         try:
             df = pd.melt(df, id_vars=id_vars, value_vars=value_vars)
-            return self._to_json_serializable(df)
+            result = self._to_json_serializable(df)
+            return cast(List[Dict], result)
         except Exception as e:
             raise DataFrameError(f"Melt failed: {e}")
 
@@ -504,7 +514,8 @@ class PandasTool(BaseTool):
         df = self._validate_df(records)
         try:
             df = df.stack().reset_index()
-            return self._to_json_serializable(df)
+            result = self._to_json_serializable(df)
+            return cast(List[Dict], result)
         except Exception as e:
             raise DataFrameError(f"Stack failed: {e}")
 
@@ -513,7 +524,8 @@ class PandasTool(BaseTool):
         df = self._validate_df(records)
         try:
             df = df.unstack(level=level).reset_index()
-            return self._to_json_serializable(df)
+            result = self._to_json_serializable(df)
+            return cast(List[Dict], result)
         except Exception as e:
             raise DataFrameError(f"Unstack failed: {e}")
 
@@ -524,7 +536,8 @@ class PandasTool(BaseTool):
         for col in columns:
             if df[col].dtype == "object":
                 df[col] = df[col].str.strip()
-        return self._to_json_serializable(df)
+        result = self._to_json_serializable(df)
+        return cast(List[Dict], result)
 
     def to_numeric(self, records: List[Dict], columns: List[str]) -> List[Dict]:
         """Convert columns to numeric type."""
@@ -533,7 +546,8 @@ class PandasTool(BaseTool):
         try:
             for col in columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
-            return self._to_json_serializable(df)
+            result = self._to_json_serializable(df)
+            return cast(List[Dict], result)
         except Exception as e:
             raise DataFrameError(f"To numeric failed: {e}")
 
@@ -549,7 +563,8 @@ class PandasTool(BaseTool):
         try:
             for col in columns:
                 df[col] = pd.to_datetime(df[col], format=format, errors="coerce")
-            return self._to_json_serializable(df)
+            result = self._to_json_serializable(df)
+            return cast(List[Dict], result)
         except Exception as e:
             raise DataFrameError(f"To datetime failed: {e}")
 
@@ -559,7 +574,8 @@ class PandasTool(BaseTool):
         if columns:
             self._validate_columns(df, columns)
             df = df[columns]
-        return self._to_json_serializable(df.select_dtypes(include=np.number).mean())
+        result = self._to_json_serializable(df.select_dtypes(include=np.number).mean())
+        return cast(Dict, result)
 
     def sum(self, records: List[Dict], columns: Optional[List[str]] = None) -> Dict:
         """Compute sum of numeric columns."""
@@ -567,7 +583,8 @@ class PandasTool(BaseTool):
         if columns:
             self._validate_columns(df, columns)
             df = df[columns]
-        return self._to_json_serializable(df.select_dtypes(include=np.number).sum())
+        result = self._to_json_serializable(df.select_dtypes(include=np.number).sum())
+        return cast(Dict, result)
 
     def count(self, records: List[Dict], columns: Optional[List[str]] = None) -> Dict:
         """Compute count of non-null values."""
@@ -575,7 +592,8 @@ class PandasTool(BaseTool):
         if columns:
             self._validate_columns(df, columns)
             df = df[columns]
-        return self._to_json_serializable(df.count())
+        result = self._to_json_serializable(df.count())
+        return cast(Dict, result)
 
     def min(self, records: List[Dict], columns: Optional[List[str]] = None) -> Dict:
         """Compute minimum values."""
@@ -583,7 +601,8 @@ class PandasTool(BaseTool):
         if columns:
             self._validate_columns(df, columns)
             df = df[columns]
-        return self._to_json_serializable(df.min())
+        result = self._to_json_serializable(df.min())
+        return cast(Dict, result)
 
     def max(self, records: List[Dict], columns: Optional[List[str]] = None) -> Dict:
         """Compute maximum values."""
@@ -591,7 +610,8 @@ class PandasTool(BaseTool):
         if columns:
             self._validate_columns(df, columns)
             df = df[columns]
-        return self._to_json_serializable(df.max())
+        result = self._to_json_serializable(df.max())
+        return cast(Dict, result)
 
     def rolling(
         self,
@@ -610,19 +630,22 @@ class PandasTool(BaseTool):
             for col in columns:
                 if pd.api.types.is_numeric_dtype(df[col]):
                     df[f"{col}_{function}_{window}"] = getattr(df[col].rolling(window), function)()
-            return self._to_json_serializable(df)
+            result = self._to_json_serializable(df)
+            return cast(List[Dict], result)
         except Exception as e:
             raise DataFrameError(f"Rolling operation failed: {e}")
 
     def head(self, records: List[Dict], n: int = 5) -> List[Dict]:
         """Return first n rows of DataFrame."""
         df = self._validate_df(records)
-        return self._to_json_serializable(df.head(n))
+        result = self._to_json_serializable(df.head(n))
+        return cast(List[Dict], result)
 
     def tail(self, records: List[Dict], n: int = 5) -> List[Dict]:
         """Return last n rows of DataFrame."""
         df = self._validate_df(records)
-        return self._to_json_serializable(df.tail(n))
+        result = self._to_json_serializable(df.tail(n))
+        return cast(List[Dict], result)
 
     def sample(
         self,
@@ -632,4 +655,5 @@ class PandasTool(BaseTool):
     ) -> List[Dict]:
         """Return random sample of n rows from DataFrame."""
         df = self._validate_df(records)
-        return self._to_json_serializable(df.sample(n=min(n, len(df)), random_state=random_state))
+        result = self._to_json_serializable(df.sample(n=min(n, len(df)), random_state=random_state))
+        return cast(List[Dict], result)

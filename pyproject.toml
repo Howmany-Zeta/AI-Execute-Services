@@ -1,5 +1,5 @@
 [tool.black]
-line-length = 100
+line-length = 200
 target-version = ['py38']
 include = '\.pyi?$'
 exclude = '''
@@ -28,6 +28,14 @@ pytest-timeout = "^2.4.0"
 mypy = "^1.18.2"
 flake8 = "^7.3.0"
 black = "^25.1.0"
+types-aiofiles = "^25.1.0.20251011"
+types-cachetools = "^6.2.0.20251022"
+types-colorama = "^0.4.15.20250801"
+types-tqdm = "^4.67.0.20250809"
+types-pyyaml = "^6.0.12.20250915"
+types-opentracing = "^2.4.10.20250622"
+types-lxml = "^2025.8.25"
+types-bleach = "^6.3.0.20251115"
 
 [project]
 name = "aiecs"

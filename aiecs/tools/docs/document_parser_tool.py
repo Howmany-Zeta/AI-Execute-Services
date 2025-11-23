@@ -96,16 +96,12 @@ class DocumentParserTool(BaseTool):
             default="DocumentParser/1.0",
             description="User agent for HTTP requests",
         )
-        max_file_size: int = Field(
-            default=50 * 1024 * 1024, description="Maximum file size in bytes"
-        )
+        max_file_size: int = Field(default=50 * 1024 * 1024, description="Maximum file size in bytes")
         temp_dir: str = Field(
             default=os.path.join(tempfile.gettempdir(), "document_parser"),
             description="Temporary directory for document processing",
         )
-        default_encoding: str = Field(
-            default="utf-8", description="Default encoding for text files"
-        )
+        default_encoding: str = Field(default="utf-8", description="Default encoding for text files")
         timeout: int = Field(default=30, description="Timeout for HTTP requests in seconds")
         max_pages: int = Field(
             default=1000,
@@ -119,9 +115,7 @@ class DocumentParserTool(BaseTool):
             default="aiecs-documents",
             description="Google Cloud Storage bucket name",
         )
-        gcs_project_id: Optional[str] = Field(
-            default=None, description="Google Cloud Storage project ID"
-        )
+        gcs_project_id: Optional[str] = Field(default=None, description="Google Cloud Storage project ID")
 
     def __init__(self, config: Optional[Dict] = None):
         """Initialize DocumentParserTool with settings"""
@@ -219,13 +213,9 @@ class DocumentParserTool(BaseTool):
             description="Parsing strategy",
         )
         output_format: OutputFormat = Field(default=OutputFormat.JSON, description="Output format")
-        force_type: Optional[DocumentType] = Field(
-            default=None, description="Force document type detection"
-        )
+        force_type: Optional[DocumentType] = Field(default=None, description="Force document type detection")
         extract_metadata: bool = Field(default=True, description="Whether to extract metadata")
-        chunk_size: Optional[int] = Field(
-            default=None, description="Chunk size for large documents"
-        )
+        chunk_size: Optional[int] = Field(default=None, description="Chunk size for large documents")
 
     class DetectTypeSchema(BaseModel):
         """Schema for detect_document_type operation"""
@@ -270,7 +260,8 @@ class DocumentParserTool(BaseTool):
             # Method 2: MIME type detection (for URLs)
             if self._is_url(source) and download_sample:
                 mime_type, mime_confidence = self._detect_by_mime_type(source)
-                if mime_type != DocumentType.UNKNOWN and mime_confidence > result["confidence"]:
+                confidence = result.get("confidence", 0.0)
+                if isinstance(confidence, (int, float)) and mime_type != DocumentType.UNKNOWN and mime_confidence > confidence:
                     result["detected_type"] = mime_type
                     result["confidence"] = mime_confidence
                     result["detection_methods"].append("mime_type")
@@ -278,10 +269,8 @@ class DocumentParserTool(BaseTool):
             # Method 3: Content-based detection
             if download_sample:
                 content_type, content_confidence = self._detect_by_content(source)
-                if (
-                    content_type != DocumentType.UNKNOWN
-                    and content_confidence > result["confidence"]
-                ):
+                confidence = result.get("confidence", 0.0)
+                if isinstance(confidence, (int, float)) and content_type != DocumentType.UNKNOWN and content_confidence > confidence:
                     result["detected_type"] = content_type
                     result["confidence"] = content_confidence
                     result["detection_methods"].append("content_analysis")
@@ -325,9 +314,7 @@ class DocumentParserTool(BaseTool):
                 confidence = detection_result["confidence"]
 
                 if confidence < 0.5:
-                    raise UnsupportedDocumentError(
-                        f"Unable to reliably detect document type for: {source}"
-                    )
+                    raise UnsupportedDocumentError(f"Unable to reliably detect document type for: {source}")
 
             # Step 2: Download document if it's a URL
             local_path = self._ensure_local_file(source)
@@ -424,9 +411,7 @@ class DocumentParserTool(BaseTool):
         uuid_pattern = r"^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
         storage_id_pattern = r"^[a-zA-Z0-9_-]{10,}$"  # Generic storage ID
 
-        return bool(
-            re.match(uuid_pattern, source, re.IGNORECASE) or re.match(storage_id_pattern, source)
-        )
+        return bool(re.match(uuid_pattern, source, re.IGNORECASE) or re.match(storage_id_pattern, source))
 
     def _detect_by_extension(self, source: str) -> Tuple[DocumentType, float]:
         """Detect document type by file extension"""
@@ -474,9 +459,7 @@ class DocumentParserTool(BaseTool):
                 return DocumentType.UNKNOWN, 0.0
 
             # Get headers only
-            response = asyncio.run(
-                self.scraper_tool.get_httpx(url, method="HEAD", verify_ssl=False)
-            )
+            response = asyncio.run(self.scraper_tool.get_httpx(url, method="HEAD", verify_ssl=False))
 
             content_type = response.get("headers", {}).get("content-type", "").lower()
 
@@ -692,9 +675,7 @@ class DocumentParserTool(BaseTool):
         # requests
         return self._download_document(url)
 
-    def _parse_by_type(
-        self, file_path: str, doc_type: DocumentType, strategy: ParsingStrategy
-    ) -> Union[str, Dict[str, Any]]:
+    def _parse_by_type(self, file_path: str, doc_type: DocumentType, strategy: ParsingStrategy) -> Union[str, Dict[str, Any]]:
         """Parse document based on its type and strategy"""
         try:
             if doc_type == DocumentType.PDF:
@@ -747,9 +728,7 @@ class DocumentParserTool(BaseTool):
         # Fallback to simple text extraction
         return self._extract_text_fallback(file_path)
 
-    def _parse_office_document(
-        self, file_path: str, doc_type: DocumentType, strategy: ParsingStrategy
-    ) -> Union[str, Dict[str, Any]]:
+    def _parse_office_document(self, file_path: str, doc_type: DocumentType, strategy: ParsingStrategy) -> Union[str, Dict[str, Any]]:
         """Parse Office documents (DOCX, XLSX, PPTX)"""
         if not self.office_tool:
             raise UnsupportedDocumentError("OfficeTool not available for Office document parsing")
@@ -787,9 +766,7 @@ class DocumentParserTool(BaseTool):
         except Exception as e:
             raise ParseError(f"Failed to parse image document: {str(e)}")
 
-    def _parse_text_document(
-        self, file_path: str, doc_type: DocumentType, strategy: ParsingStrategy
-    ) -> Union[str, Dict[str, Any]]:
+    def _parse_text_document(self, file_path: str, doc_type: DocumentType, strategy: ParsingStrategy) -> Union[str, Dict[str, Any]]:
         """Parse text-based documents"""
         try:
             with open(
@@ -958,10 +935,7 @@ class DocumentParserTool(BaseTool):
 
             soup = BeautifulSoup(content, "html.parser")
             result["title"] = soup.title.string if soup.title else ""
-            result["headings"] = [
-                {"tag": h.name, "text": h.get_text()}
-                for h in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"])
-            ]
+            result["headings"] = [{"tag": h.name, "text": h.get_text()} for h in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"])]
         elif doc_type == DocumentType.JSON:
             import json
 

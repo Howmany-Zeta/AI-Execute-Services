@@ -81,7 +81,7 @@ class ModelTrainerTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the model trainer tool"""
 
-        model_config = ConfigDict(env_prefix="MODEL_TRAINER_")
+        model_config = ConfigDict(env_prefix="MODEL_TRAINER_")  # type: ignore[typeddict-unknown-key]
 
         test_size: float = Field(default=0.2, description="Proportion of data to use for testing")
         random_state: int = Field(default=42, description="Random state for reproducibility")
@@ -129,9 +129,7 @@ class ModelTrainerTool(BaseTool):
     class AutoSelectModelSchema(BaseModel):
         """Schema for auto_select_model operation"""
 
-        data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(
-            description="Data for model selection"
-        )
+        data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(description="Data for model selection")
         target: str = Field(description="Target column name")
         task_type: Optional[TaskType] = Field(default=None, description="Task type")
 
@@ -437,9 +435,7 @@ class ModelTrainerTool(BaseTool):
         if task_type == TaskType.CLASSIFICATION:
             return {
                 "accuracy": float(accuracy_score(y_true, y_pred)),
-                "precision": float(
-                    precision_score(y_true, y_pred, average="weighted", zero_division=0)
-                ),
+                "precision": float(precision_score(y_true, y_pred, average="weighted", zero_division=0)),
                 "recall": float(recall_score(y_true, y_pred, average="weighted", zero_division=0)),
                 "f1_score": float(f1_score(y_true, y_pred, average="weighted", zero_division=0)),
             }

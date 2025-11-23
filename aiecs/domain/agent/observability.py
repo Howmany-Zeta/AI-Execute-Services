@@ -448,9 +448,7 @@ class AgentController:
             except Exception as e:
                 logger.error(f"Observer notification failed: {e}")
 
-    async def execute_task_with_observation(
-        self, task: Dict[str, Any], context: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def execute_task_with_observation(self, task: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute task with observer notifications.
 

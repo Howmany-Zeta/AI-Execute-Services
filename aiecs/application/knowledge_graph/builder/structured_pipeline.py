@@ -129,10 +129,7 @@ class StructuredDataPipeline:
         self.skip_errors = skip_errors
 
         if not PANDAS_AVAILABLE:
-            logger.warning(
-                "pandas not available. CSV import will use basic CSV reader. "
-                "Install pandas for better performance: pip install pandas"
-            )
+            logger.warning("pandas not available. CSV import will use basic CSV reader. " "Install pandas for better performance: pip install pandas")
 
     async def import_from_csv(
         self,
@@ -380,14 +377,16 @@ class StructuredDataPipeline:
                 entity_data = entity_mapping.map_row_to_entity(row)
 
                 # Create Entity object
+                # Merge metadata into properties since Entity doesn't have a metadata field
+                properties = entity_data["properties"].copy()
+                properties["_metadata"] = {
+                    "source": "structured_data_import",
+                    "imported_at": datetime.now().isoformat(),
+                }
                 entity = Entity(
                     id=entity_data["id"],
                     entity_type=entity_data["type"],
-                    properties=entity_data["properties"],
-                    metadata={
-                        "source": "structured_data_import",
-                        "imported_at": datetime.now().isoformat(),
-                    },
+                    properties=properties,
                 )
 
                 entities.append(entity)
@@ -418,24 +417,24 @@ class StructuredDataPipeline:
                 relation_data = relation_mapping.map_row_to_relation(row)
 
                 # Create Relation object
+                # Merge metadata into properties since Relation doesn't have a metadata field
+                rel_properties = relation_data["properties"].copy()
+                rel_properties["_metadata"] = {
+                    "source": "structured_data_import",
+                    "imported_at": datetime.now().isoformat(),
+                }
                 relation = Relation(
                     id=f"{relation_data['source_id']}_{relation_data['type']}_{relation_data['target_id']}",
                     relation_type=relation_data["type"],
                     source_id=relation_data["source_id"],
                     target_id=relation_data["target_id"],
-                    properties=relation_data["properties"],
-                    metadata={
-                        "source": "structured_data_import",
-                        "imported_at": datetime.now().isoformat(),
-                    },
+                    properties=rel_properties,
                 )
 
                 relations.append(relation)
 
             except Exception as e:
-                error_msg = (
-                    f"Failed to map row to relation type '{relation_mapping.relation_type}': {e}"
-                )
+                error_msg = f"Failed to map row to relation type '{relation_mapping.relation_type}': {e}"
                 logger.warning(error_msg)
                 if not self.skip_errors:
                     raise ValueError(error_msg)

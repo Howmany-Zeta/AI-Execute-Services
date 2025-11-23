@@ -20,8 +20,8 @@ class DependencyFixer:
         self.logger = self._setup_logging()
         self.system = platform.system().lower()
         self.interactive = interactive
-        self.fixes_applied = []
-        self.fixes_failed = []
+        self.fixes_applied: List[str] = []
+        self.fixes_failed: List[str] = []
 
     def _setup_logging(self) -> logging.Logger:
         """Setup logging configuration."""
@@ -333,9 +333,7 @@ class DependencyFixer:
         report.append(f"Total fixes failed: {len(self.fixes_failed)}")
 
         if self.fixes_failed:
-            report.append(
-                "\n⚠️  Some fixes failed. Please check the logs and try manual installation."
-            )
+            report.append("\n⚠️  Some fixes failed. Please check the logs and try manual installation.")
         else:
             report.append("\n🎉 All fixes applied successfully!")
 

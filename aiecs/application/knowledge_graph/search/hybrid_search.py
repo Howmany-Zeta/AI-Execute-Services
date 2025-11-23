@@ -61,9 +61,7 @@ class HybridSearchConfig(BaseModel):
         description="Minimum similarity threshold for vector search",
     )
 
-    max_graph_depth: int = Field(
-        default=2, ge=1, le=5, description="Maximum depth for graph traversal"
-    )
+    max_graph_depth: int = Field(default=2, ge=1, le=5, description="Maximum depth for graph traversal")
 
     expand_results: bool = Field(
         default=True,
@@ -77,9 +75,7 @@ class HybridSearchConfig(BaseModel):
         description="Minimum combined score threshold",
     )
 
-    entity_type_filter: Optional[str] = Field(
-        default=None, description="Optional entity type filter"
-    )
+    entity_type_filter: Optional[str] = Field(default=None, description="Optional entity type filter")
 
     class Config:
         use_enum_values = True
@@ -186,9 +182,7 @@ class HybridSearchStrategy:
 
         return results
 
-    async def _graph_search(
-        self, seed_entity_ids: List[str], config: HybridSearchConfig
-    ) -> List[Tuple[Entity, float]]:
+    async def _graph_search(self, seed_entity_ids: List[str], config: HybridSearchConfig) -> List[Tuple[Entity, float]]:
         """
         Perform graph structure search from seed entities
 
@@ -227,9 +221,7 @@ class HybridSearchStrategy:
                         entity_scores[entity_id] = max(entity_scores[entity_id], depth_score)
 
                     # Get neighbors for next depth
-                    neighbors = await self.graph_store.get_neighbors(
-                        entity_id, direction="outgoing"
-                    )
+                    neighbors = await self.graph_store.get_neighbors(entity_id, direction="outgoing")
 
                     for neighbor in neighbors:
                         if neighbor.id not in visited:
@@ -385,9 +377,7 @@ class HybridSearchStrategy:
 
         return results, paths
 
-    async def _find_result_paths(
-        self, results: List[Tuple[Entity, float]], config: HybridSearchConfig
-    ) -> List[Path]:
+    async def _find_result_paths(self, results: List[Tuple[Entity, float]], config: HybridSearchConfig) -> List[Path]:
         """
         Find paths between top results
 

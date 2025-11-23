@@ -188,9 +188,7 @@ class GraphStore(ABC):
         Returns:
             List of paths found during traversal
         """
-        return await self._default_traverse_bfs(
-            start_entity_id, relation_type, max_depth, max_results
-        )
+        return await self._default_traverse_bfs(start_entity_id, relation_type, max_depth, max_results)
 
     async def find_paths(
         self,
@@ -214,13 +212,9 @@ class GraphStore(ABC):
         Returns:
             List of paths between source and target
         """
-        return await self._default_find_paths(
-            source_entity_id, target_entity_id, max_depth, max_paths
-        )
+        return await self._default_find_paths(source_entity_id, target_entity_id, max_depth, max_paths)
 
-    async def subgraph_query(
-        self, entity_ids: List[str], include_relations: bool = True
-    ) -> tuple[List[Entity], List[Relation]]:
+    async def subgraph_query(self, entity_ids: List[str], include_relations: bool = True) -> tuple[List[Entity], List[Relation]]:
         """
         Extract a subgraph containing specified entities
 
@@ -258,9 +252,7 @@ class GraphStore(ABC):
         Returns:
             List of (entity, score) tuples, sorted by score descending
         """
-        return await self._default_vector_search(
-            query_embedding, entity_type, max_results, score_threshold
-        )
+        return await self._default_vector_search(query_embedding, entity_type, max_results, score_threshold)
 
     async def text_search(
         self,
@@ -286,9 +278,7 @@ class GraphStore(ABC):
         Returns:
             List of (entity, score) tuples, sorted by score descending
         """
-        return await self._default_text_search(
-            query_text, entity_type, max_results, score_threshold, method
-        )
+        return await self._default_text_search(query_text, entity_type, max_results, score_threshold, method)
 
     async def execute_query(self, query: GraphQuery) -> GraphResult:
         """
@@ -393,9 +383,7 @@ class GraphStore(ABC):
 
         return target_paths[:max_paths]
 
-    async def _default_subgraph_query(
-        self, entity_ids: List[str], include_relations: bool
-    ) -> tuple[List[Entity], List[Relation]]:
+    async def _default_subgraph_query(self, entity_ids: List[str], include_relations: bool) -> tuple[List[Entity], List[Relation]]:
         """
         Default subgraph extraction
         """
@@ -520,9 +508,7 @@ class GraphStore(ABC):
                     scored_entities.append((entity, score))
 
         else:
-            raise ValueError(
-                f"Unknown text search method: {method}. Use 'bm25', 'jaccard', 'cosine', or 'levenshtein'"
-            )
+            raise ValueError(f"Unknown text search method: {method}. Use 'bm25', 'jaccard', 'cosine', or 'levenshtein'")
 
         # Sort by score descending and return top results
         scored_entities.sort(key=lambda x: x[1], reverse=True)

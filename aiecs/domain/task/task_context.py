@@ -152,29 +152,21 @@ class TaskContext:
 
         self.context_history = list(reversed(optimized_history))
         if len(deduplicated) < len(self.context_history):
-            logger.debug(
-                f"Optimized context: removed {len(self.context_history) - len(deduplicated)} duplicates"
-            )
+            logger.debug(f"Optimized context: removed {len(self.context_history) - len(deduplicated)} duplicates")
             return True
         return False
 
     async def truncate_context_history(self, timestamp: float):
         """Truncate context history after a given timestamp."""
         original_len = len(self.context_history)
-        self.context_history = [
-            update for update in self.context_history if update.timestamp <= timestamp
-        ]
+        self.context_history = [update for update in self.context_history if update.timestamp <= timestamp]
         if len(self.context_history) < original_len:
             await self._save_context_history()
             logger.debug(f"Truncated context history at timestamp {timestamp}")
 
     def get_active_metadata(self) -> Dict[str, Any]:
         """Return metadata filtered by toggles."""
-        return {
-            key: value
-            for key, value in self.metadata.items()
-            if key not in self.metadata_toggles or self.metadata_toggles[key] is not False
-        }
+        return {key: value for key, value in self.metadata.items() if key not in self.metadata_toggles or self.metadata_toggles[key] is not False}
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert context to dictionary."""

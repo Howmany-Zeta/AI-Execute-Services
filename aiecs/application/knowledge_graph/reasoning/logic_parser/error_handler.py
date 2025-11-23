@@ -29,10 +29,10 @@ try:
     LARK_AVAILABLE = True
 except ImportError:
     LARK_AVAILABLE = False
-    LarkError = Exception
-    UnexpectedInput = Exception
-    UnexpectedToken = Exception
-    UnexpectedCharacters = Exception
+    LarkError = Exception  # type: ignore[misc]
+    UnexpectedInput = Exception  # type: ignore[misc]
+    UnexpectedToken = Exception  # type: ignore[misc]
+    UnexpectedCharacters = Exception  # type: ignore[misc]
 
 # Optional: colorama for terminal colors
 try:
@@ -83,10 +83,7 @@ class ParserError:
     def __repr__(self) -> str:
         """String representation for debugging"""
         suggestion_str = f", suggestion={self.suggestion}" if self.suggestion else ""
-        return (
-            f"ParserError(line={self.line}, col={self.column}, "
-            f"phase={self.phase}, message={self.message}{suggestion_str})"
-        )
+        return f"ParserError(line={self.line}, col={self.column}, " f"phase={self.phase}, message={self.message}{suggestion_str})"
 
     def __str__(self) -> str:
         """Human-readable string representation"""
@@ -383,9 +380,7 @@ class ErrorHandler:
 
         return None
 
-    def _fuzzy_match(
-        self, word: str, candidates: List[str], threshold: float = 0.7
-    ) -> Optional[str]:
+    def _fuzzy_match(self, word: str, candidates: List[str], threshold: float = 0.7) -> Optional[str]:
         """
         Find closest match using fuzzy string matching
 
@@ -399,7 +394,7 @@ class ErrorHandler:
         """
         try:
             # Try to use python-Levenshtein if available
-            import Levenshtein
+            import Levenshtein  # type: ignore[import-not-found]
 
             best_match = None
             best_ratio = 0.0
@@ -442,9 +437,7 @@ class ErrorHandler:
         # Header
         error_count = len(errors)
         if use_colors and COLORAMA_AVAILABLE:
-            parts.append(
-                f"{Fore.RED}{Style.BRIGHT}Found {error_count} error(s):{Style.RESET_ALL}\n"
-            )
+            parts.append(f"{Fore.RED}{Style.BRIGHT}Found {error_count} error(s):{Style.RESET_ALL}\n")
         else:
             parts.append(f"Found {error_count} error(s):\n")
 

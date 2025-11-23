@@ -80,11 +80,7 @@ class SearchEnhancer:
             recency = self._calculate_recency(result)
 
             # Calculate composite score
-            composite_score = (
-                relevance * self.relevance_weight
-                + popularity * self.popularity_weight
-                + recency * self.recency_weight
-            )
+            composite_score = relevance * self.relevance_weight + popularity * self.popularity_weight + recency * self.recency_weight
 
             # Add search metadata
             result_copy = result.copy()
@@ -182,10 +178,11 @@ class SearchEnhancer:
                     return min(value / 100, 1.0)
 
         # Check for "popular" or "commonly used" in metadata
-        if result.get("frequency") in ["Daily", "Weekly", "Monthly"]:
+        frequency = result.get("frequency")
+        if frequency in ["Daily", "Weekly", "Monthly"]:
             # More frequent updates = more popular
             frequency_scores = {"Daily": 1.0, "Weekly": 0.8, "Monthly": 0.6}
-            return frequency_scores.get(result.get("frequency"), 0.5)
+            return frequency_scores.get(str(frequency) if frequency else "", 0.5)
 
         # Default: medium popularity
         return 0.5

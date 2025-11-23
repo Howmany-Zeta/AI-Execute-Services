@@ -109,20 +109,14 @@ class EnhancedMetrics:
         self._update_percentiles()
 
         # Track slowest/fastest queries
-        if (
-            not self.metrics["performance"]["slowest_query"]
-            or response_time_ms > self.metrics["performance"]["slowest_query"]["time"]
-        ):
+        if not self.metrics["performance"]["slowest_query"] or response_time_ms > self.metrics["performance"]["slowest_query"]["time"]:
             self.metrics["performance"]["slowest_query"] = {
                 "query": query,
                 "time": response_time_ms,
                 "type": search_type,
             }
 
-        if (
-            not self.metrics["performance"]["fastest_query"]
-            or response_time_ms < self.metrics["performance"]["fastest_query"]["time"]
-        ):
+        if not self.metrics["performance"]["fastest_query"] or response_time_ms < self.metrics["performance"]["fastest_query"]["time"]:
             self.metrics["performance"]["fastest_query"] = {
                 "query": query,
                 "time": response_time_ms,
@@ -134,64 +128,44 @@ class EnhancedMetrics:
             result_count = len(results)
 
             # Calculate average quality
-            avg_quality = (
-                sum(r.get("_quality", {}).get("quality_score", 0.5) for r in results) / result_count
-            )
+            avg_quality = sum(r.get("_quality", {}).get("quality_score", 0.5) for r in results) / result_count
 
             # Count high quality results
-            high_quality_count = sum(
-                1 for r in results if r.get("_quality", {}).get("quality_score", 0) > 0.75
-            )
+            high_quality_count = sum(1 for r in results if r.get("_quality", {}).get("quality_score", 0) > 0.75)
 
             # Update running averages
             total = self.metrics["requests"]["successful"]
 
             current_avg_results = self.metrics["quality"]["avg_results_per_query"]
-            self.metrics["quality"]["avg_results_per_query"] = (
-                current_avg_results * (total - 1) + result_count
-            ) / total
+            self.metrics["quality"]["avg_results_per_query"] = (current_avg_results * (total - 1) + result_count) / total
 
             current_avg_quality = self.metrics["quality"]["avg_quality_score"]
-            self.metrics["quality"]["avg_quality_score"] = (
-                current_avg_quality * (total - 1) + avg_quality
-            ) / total
+            self.metrics["quality"]["avg_quality_score"] = (current_avg_quality * (total - 1) + avg_quality) / total
 
             current_high_pct = self.metrics["quality"]["high_quality_results_pct"]
             high_pct = high_quality_count / result_count
-            self.metrics["quality"]["high_quality_results_pct"] = (
-                current_high_pct * (total - 1) + high_pct
-            ) / total
+            self.metrics["quality"]["high_quality_results_pct"] = (current_high_pct * (total - 1) + high_pct) / total
         else:
             self.metrics["quality"]["queries_with_no_results"] += 1
 
         # Update query patterns
         query_type = self._detect_query_type(query)
-        self.metrics["patterns"]["top_query_types"][query_type] = (
-            self.metrics["patterns"]["top_query_types"].get(query_type, 0) + 1
-        )
+        self.metrics["patterns"]["top_query_types"][query_type] = self.metrics["patterns"]["top_query_types"].get(query_type, 0) + 1
 
         # Track returned domains
         for result in results:
             domain = result.get("displayLink", "unknown")
-            self.metrics["patterns"]["top_domains_returned"][domain] = (
-                self.metrics["patterns"]["top_domains_returned"].get(domain, 0) + 1
-            )
+            self.metrics["patterns"]["top_domains_returned"][domain] = self.metrics["patterns"]["top_domains_returned"].get(domain, 0) + 1
 
         # Update average query length
         total = self.metrics["requests"]["total"]
         current_avg_len = self.metrics["patterns"]["avg_query_length"]
-        self.metrics["patterns"]["avg_query_length"] = (
-            current_avg_len * (total - 1) + len(query.split())
-        ) / total
+        self.metrics["patterns"]["avg_query_length"] = (current_avg_len * (total - 1) + len(query.split())) / total
 
         # Update cache hit rate
-        total_cache_requests = (
-            self.metrics["cache"]["total_hits"] + self.metrics["cache"]["total_misses"]
-        )
+        total_cache_requests = self.metrics["cache"]["total_hits"] + self.metrics["cache"]["total_misses"]
         if total_cache_requests > 0:
-            self.metrics["cache"]["hit_rate"] = (
-                self.metrics["cache"]["total_hits"] / total_cache_requests
-            )
+            self.metrics["cache"]["hit_rate"] = self.metrics["cache"]["total_hits"] / total_cache_requests
 
     def _update_percentiles(self):
         """Update response time percentiles"""
@@ -208,9 +182,7 @@ class EnhancedMetrics:
         """Record an error"""
         error_type = type(error).__name__
 
-        self.metrics["errors"]["by_type"][error_type] = (
-            self.metrics["errors"]["by_type"].get(error_type, 0) + 1
-        )
+        self.metrics["errors"]["by_type"][error_type] = self.metrics["errors"]["by_type"].get(error_type, 0) + 1
 
         self.metrics["errors"]["recent_errors"].append(
             {

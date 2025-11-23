@@ -122,9 +122,7 @@ class RelationType(BaseModel):
         # Check required properties
         for prop_name, prop_schema in self.properties.items():
             if prop_schema.required and prop_name not in properties:
-                raise ValueError(
-                    f"Required property '{prop_name}' missing for relation type '{self.name}'"
-                )
+                raise ValueError(f"Required property '{prop_name}' missing for relation type '{self.name}'")
 
         # Validate each provided property
         for prop_name, prop_value in properties.items():
@@ -150,17 +148,11 @@ class RelationType(BaseModel):
         """
         if self.source_entity_types is not None:
             if source_entity_type not in self.source_entity_types:
-                raise ValueError(
-                    f"Source entity type '{source_entity_type}' not allowed for "
-                    f"relation '{self.name}'. Allowed: {self.source_entity_types}"
-                )
+                raise ValueError(f"Source entity type '{source_entity_type}' not allowed for " f"relation '{self.name}'. Allowed: {self.source_entity_types}")
 
         if self.target_entity_types is not None:
             if target_entity_type not in self.target_entity_types:
-                raise ValueError(
-                    f"Target entity type '{target_entity_type}' not allowed for "
-                    f"relation '{self.name}'. Allowed: {self.target_entity_types}"
-                )
+                raise ValueError(f"Target entity type '{target_entity_type}' not allowed for " f"relation '{self.name}'. Allowed: {self.target_entity_types}")
 
         return True
 

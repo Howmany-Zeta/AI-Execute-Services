@@ -36,9 +36,7 @@ class CommunityAnalytics:
 
         logger.info("Community analytics initialized")
 
-    def get_decision_analytics(
-        self, community_id: str, time_range_days: int = 30
-    ) -> Dict[str, Any]:
+    def get_decision_analytics(self, community_id: str, time_range_days: int = 30) -> Dict[str, Any]:
         """
         Get decision analytics for a community.
 
@@ -70,9 +68,7 @@ class CommunityAnalytics:
         total_decisions = len(decisions)
         approved = sum(1 for d in decisions if d.status == DecisionStatus.APPROVED)
         rejected = sum(1 for d in decisions if d.status == DecisionStatus.REJECTED)
-        pending = sum(
-            1 for d in decisions if d.status in [DecisionStatus.PROPOSED, DecisionStatus.VOTING]
-        )
+        pending = sum(1 for d in decisions if d.status in [DecisionStatus.PROPOSED, DecisionStatus.VOTING])
 
         # Calculate average time to decision
         decision_times = []
@@ -89,7 +85,7 @@ class CommunityAnalytics:
         avg_decision_time = sum(decision_times) / len(decision_times) if decision_times else 0
 
         # Decision types distribution
-        decision_types = defaultdict(int)
+        decision_types: Dict[str, int] = defaultdict(int)
         for decision in decisions:
             decision_types[decision.decision_type] += 1
 
@@ -117,9 +113,7 @@ class CommunityAnalytics:
 
         return analytics
 
-    def get_member_participation_analytics(
-        self, community_id: str, time_range_days: int = 30
-    ) -> Dict[str, Any]:
+    def get_member_participation_analytics(self, community_id: str, time_range_days: int = 30) -> Dict[str, Any]:
         """
         Get member participation analytics.
 
@@ -152,21 +146,13 @@ class CommunityAnalytics:
 
             for decision in self.community_manager.decisions.values():
                 if decision.created_at >= cutoff_date:
-                    if (
-                        member_id in decision.votes_for
-                        or member_id in decision.votes_against
-                        or member_id in decision.abstentions
-                    ):
+                    if member_id in decision.votes_for or member_id in decision.votes_against or member_id in decision.abstentions:
                         votes_cast += 1
                     if decision.proposer_id == member_id:
                         proposals_made += 1
 
             # Count resources contributed
-            resources_created = sum(
-                1
-                for resource in self.community_manager.resources.values()
-                if resource.owner_id == member_id and resource.created_at >= cutoff_date
-            )
+            resources_created = sum(1 for resource in self.community_manager.resources.values() if resource.owner_id == member_id and resource.created_at >= cutoff_date)
 
             member_metrics[member_id] = {
                 "agent_id": member.agent_id,
@@ -216,15 +202,11 @@ class CommunityAnalytics:
             "total_proposals_made": total_proposals,
             "total_resources_created": total_resources,
             "average_votes_per_member": (total_votes / total_members if total_members > 0 else 0),
-            "average_proposals_per_member": (
-                total_proposals / total_members if total_members > 0 else 0
-            ),
+            "average_proposals_per_member": (total_proposals / total_members if total_members > 0 else 0),
             "member_metrics": member_metrics,
             "top_voters": [{"member_id": mid, **metrics} for mid, metrics in top_voters],
             "top_proposers": [{"member_id": mid, **metrics} for mid, metrics in top_proposers],
-            "top_contributors": [
-                {"member_id": mid, **metrics} for mid, metrics in top_contributors
-            ],
+            "top_contributors": [{"member_id": mid, **metrics} for mid, metrics in top_contributors],
         }
 
         return analytics
@@ -248,41 +230,23 @@ class CommunityAnalytics:
 
         # Member health
         total_members = len(community.members)
-        active_members = sum(
-            1
-            for mid in community.members
-            if self.community_manager.members.get(mid)
-            and self.community_manager.members[mid].is_active
-        )
+        active_members = sum(1 for mid in community.members if self.community_manager.members.get(mid) and self.community_manager.members[mid].is_active)
 
         # Leadership health
         has_leaders = len(community.leaders) > 0
         has_coordinators = len(community.coordinators) > 0
-        (
-            (len(community.leaders) + len(community.coordinators)) / total_members
-            if total_members > 0
-            else 0
-        )
+        ((len(community.leaders) + len(community.coordinators)) / total_members if total_members > 0 else 0)
 
         # Activity health
         recent_activity_days = 7
         recent_cutoff = datetime.utcnow() - timedelta(days=recent_activity_days)
 
-        recent_decisions = sum(
-            1
-            for d in self.community_manager.decisions.values()
-            if d.created_at >= recent_cutoff and d.proposer_id in community.members
-        )
+        recent_decisions = sum(1 for d in self.community_manager.decisions.values() if d.created_at >= recent_cutoff and d.proposer_id in community.members)
 
-        recent_resources = sum(
-            1
-            for rid in community.shared_resources
-            if self.community_manager.resources.get(rid)
-            and self.community_manager.resources[rid].created_at >= recent_cutoff
-        )
+        recent_resources = sum(1 for rid in community.shared_resources if self.community_manager.resources.get(rid) and self.community_manager.resources[rid].created_at >= recent_cutoff)
 
         # Diversity metrics
-        role_distribution = defaultdict(int)
+        role_distribution: Dict[str, int] = defaultdict(int)
         for member_id in community.members:
             member = self.community_manager.members.get(member_id)
             if member:
@@ -296,11 +260,7 @@ class CommunityAnalytics:
         # Calculate overall health score (0-100)
         health_components = {
             "member_activity": ((active_members / total_members * 100) if total_members > 0 else 0),
-            "leadership": (
-                100
-                if has_leaders and has_coordinators
-                else 50 if has_leaders or has_coordinators else 0
-            ),
+            "leadership": (100 if has_leaders and has_coordinators else 50 if has_leaders or has_coordinators else 0),
             "recent_activity": min((recent_decisions + recent_resources) * 10, 100),
             "role_diversity": role_diversity * 100,
             "collaboration": collaboration_score * 100,
@@ -363,9 +323,7 @@ class CommunityAnalytics:
 
         return metrics
 
-    def get_collaboration_effectiveness(
-        self, community_id: str, time_range_days: int = 30
-    ) -> Dict[str, Any]:
+    def get_collaboration_effectiveness(self, community_id: str, time_range_days: int = 30) -> Dict[str, Any]:
         """
         Get collaboration effectiveness metrics.
 
@@ -381,9 +339,7 @@ class CommunityAnalytics:
 
         # Get decision and participation analytics
         decision_analytics = self.get_decision_analytics(community_id, time_range_days)
-        participation_analytics = self.get_member_participation_analytics(
-            community_id, time_range_days
-        )
+        participation_analytics = self.get_member_participation_analytics(community_id, time_range_days)
 
         # Calculate effectiveness metrics
         decision_efficiency = decision_analytics.get("decision_velocity", 0) * 10
@@ -391,9 +347,7 @@ class CommunityAnalytics:
         participation_rate = participation_analytics.get("activity_rate", 0) * 100
 
         # Combined effectiveness score
-        effectiveness_score = (
-            decision_efficiency * 0.3 + approval_effectiveness * 0.4 + participation_rate * 0.3
-        )
+        effectiveness_score = decision_efficiency * 0.3 + approval_effectiveness * 0.4 + participation_rate * 0.3
 
         # Determine effectiveness level
         if effectiveness_score >= 80:
@@ -451,9 +405,7 @@ class CommunityAnalytics:
 
         return metrics
 
-    def get_comprehensive_report(
-        self, community_id: str, time_range_days: int = 30
-    ) -> Dict[str, Any]:
+    def get_comprehensive_report(self, community_id: str, time_range_days: int = 30) -> Dict[str, Any]:
         """
         Get comprehensive analytics report for a community.
 
@@ -469,13 +421,9 @@ class CommunityAnalytics:
             "report_date": datetime.utcnow().isoformat(),
             "time_range_days": time_range_days,
             "decision_analytics": self.get_decision_analytics(community_id, time_range_days),
-            "participation_analytics": self.get_member_participation_analytics(
-                community_id, time_range_days
-            ),
+            "participation_analytics": self.get_member_participation_analytics(community_id, time_range_days),
             "health_metrics": self.get_community_health_metrics(community_id),
-            "collaboration_effectiveness": self.get_collaboration_effectiveness(
-                community_id, time_range_days
-            ),
+            "collaboration_effectiveness": self.get_collaboration_effectiveness(community_id, time_range_days),
         }
 
         return report

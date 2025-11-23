@@ -248,9 +248,7 @@ class Session:
             Dictionary with session metrics
         """
         duration = ((self.ended_at or datetime.utcnow()) - self.created_at).total_seconds()
-        avg_processing_time = (
-            self.total_processing_time / self.request_count if self.request_count > 0 else 0.0
-        )
+        avg_processing_time = self.total_processing_time / self.request_count if self.request_count > 0 else 0.0
 
         return {
             "session_id": self.session_id,
@@ -465,9 +463,7 @@ class ConversationMemory:
         self._sessions: Dict[str, Session] = {}
 
         if context_engine:
-            logger.info(
-                f"ConversationMemory initialized for agent {agent_id} with ContextEngine integration"
-            )
+            logger.info(f"ConversationMemory initialized for agent {agent_id} with ContextEngine integration")
         else:
             logger.info(f"ConversationMemory initialized for agent {agent_id} (in-memory mode)")
 
@@ -605,9 +601,7 @@ class ConversationMemory:
 
     # ==================== ContextEngine Integration Methods ====================
 
-    def add_conversation_message(
-        self, session_id: str, role: str, content: str, metadata: Optional[Dict] = None
-    ) -> None:
+    def add_conversation_message(self, session_id: str, role: str, content: str, metadata: Optional[Dict] = None) -> None:
         """
         Add conversation message (sync version with ContextEngine fallback).
 
@@ -626,18 +620,12 @@ class ConversationMemory:
             aadd_conversation_message() for ContextEngine integration.
         """
         if self.context_engine:
-            logger.warning(
-                "add_conversation_message called with ContextEngine configured. "
-                "Use aadd_conversation_message() for persistent storage. "
-                "Falling back to in-memory storage."
-            )
+            logger.warning("add_conversation_message called with ContextEngine configured. " "Use aadd_conversation_message() for persistent storage. " "Falling back to in-memory storage.")
 
         # Fall back to existing add_message method
         self.add_message(session_id, role, content)
 
-    async def aadd_conversation_message(
-        self, session_id: str, role: str, content: str, metadata: Optional[Dict] = None
-    ) -> bool:
+    async def aadd_conversation_message(self, session_id: str, role: str, content: str, metadata: Optional[Dict] = None) -> bool:
         """
         Add conversation message (async version with ContextEngine integration).
 
@@ -653,17 +641,11 @@ class ConversationMemory:
         if self.context_engine:
             try:
                 # Use ContextEngine for persistent storage
-                success = await self.context_engine.add_conversation_message(
-                    session_id=session_id, role=role, content=content, metadata=metadata or {}
-                )
-                logger.debug(
-                    f"Added message to session {session_id} via ContextEngine (role={role})"
-                )
+                success = await self.context_engine.add_conversation_message(session_id=session_id, role=role, content=content, metadata=metadata or {})
+                logger.debug(f"Added message to session {session_id} via ContextEngine (role={role})")
                 return success
             except Exception as e:
-                logger.error(
-                    f"Failed to add message to ContextEngine for session {session_id}: {e}"
-                )
+                logger.error(f"Failed to add message to ContextEngine for session {session_id}: {e}")
                 logger.warning("Falling back to in-memory storage")
                 # Fall back to in-memory
                 self.add_message(session_id, role, content)
@@ -673,9 +655,7 @@ class ConversationMemory:
             self.add_message(session_id, role, content)
             return True
 
-    def get_conversation_history(
-        self, session_id: str, limit: Optional[int] = None
-    ) -> List[LLMMessage]:
+    def get_conversation_history(self, session_id: str, limit: Optional[int] = None) -> List[LLMMessage]:
         """
         Get conversation history (sync version with ContextEngine fallback).
 
@@ -695,18 +675,12 @@ class ConversationMemory:
             aget_conversation_history() for ContextEngine integration.
         """
         if self.context_engine:
-            logger.warning(
-                "get_conversation_history called with ContextEngine configured. "
-                "Use aget_conversation_history() for persistent storage. "
-                "Falling back to in-memory storage."
-            )
+            logger.warning("get_conversation_history called with ContextEngine configured. " "Use aget_conversation_history() for persistent storage. " "Falling back to in-memory storage.")
 
         # Fall back to existing get_history method
         return self.get_history(session_id, limit)
 
-    async def aget_conversation_history(
-        self, session_id: str, limit: Optional[int] = None
-    ) -> List[LLMMessage]:
+    async def aget_conversation_history(self, session_id: str, limit: Optional[int] = None) -> List[LLMMessage]:
         """
         Get conversation history (async version with ContextEngine integration).
 
@@ -720,23 +694,17 @@ class ConversationMemory:
         if self.context_engine:
             try:
                 # Use ContextEngine for persistent storage
-                messages = await self.context_engine.get_conversation_history(
-                    session_id=session_id, limit=limit or 50
-                )
+                messages = await self.context_engine.get_conversation_history(session_id=session_id, limit=limit or 50)
 
                 # Convert ConversationMessage to LLMMessage
                 llm_messages = []
                 for msg in messages:
                     llm_messages.append(LLMMessage(role=msg.role, content=msg.content))
 
-                logger.debug(
-                    f"Retrieved {len(llm_messages)} messages from session {session_id} via ContextEngine"
-                )
+                logger.debug(f"Retrieved {len(llm_messages)} messages from session {session_id} via ContextEngine")
                 return llm_messages
             except Exception as e:
-                logger.error(
-                    f"Failed to get conversation history from ContextEngine for session {session_id}: {e}"
-                )
+                logger.error(f"Failed to get conversation history from ContextEngine for session {session_id}: {e}")
                 logger.warning("Falling back to in-memory storage")
                 # Fall back to in-memory
                 return self.get_history(session_id, limit)
@@ -764,18 +732,12 @@ class ConversationMemory:
             aformat_conversation_history() for ContextEngine integration.
         """
         if self.context_engine:
-            logger.warning(
-                "format_conversation_history called with ContextEngine configured. "
-                "Use aformat_conversation_history() for persistent storage. "
-                "Falling back to in-memory storage."
-            )
+            logger.warning("format_conversation_history called with ContextEngine configured. " "Use aformat_conversation_history() for persistent storage. " "Falling back to in-memory storage.")
 
         # Fall back to existing format_history method
         return self.format_history(session_id, limit)
 
-    async def aformat_conversation_history(
-        self, session_id: str, limit: Optional[int] = None
-    ) -> str:
+    async def aformat_conversation_history(self, session_id: str, limit: Optional[int] = None) -> str:
         """
         Format conversation history as string (async version with ContextEngine integration).
 
@@ -819,13 +781,9 @@ class ConversationMemory:
                 # ContextEngine doesn't have a direct clear_conversation method,
                 # so we'll need to end the session which will clean up associated data
                 await self.context_engine.end_session(session_id, status="cleared")
-                logger.debug(
-                    f"Cleared conversation history for session {session_id} in ContextEngine"
-                )
+                logger.debug(f"Cleared conversation history for session {session_id} in ContextEngine")
             except Exception as e:
-                logger.error(
-                    f"Failed to clear conversation history in ContextEngine for session {session_id}: {e}"
-                )
+                logger.error(f"Failed to clear conversation history in ContextEngine for session {session_id}: {e}")
                 success = False
 
         return success
@@ -858,11 +816,7 @@ class ConversationMemory:
             acreate_session_with_context() for ContextEngine integration.
         """
         if self.context_engine:
-            logger.warning(
-                "create_session_with_context called with ContextEngine configured. "
-                "Use acreate_session_with_context() for persistent storage. "
-                "Falling back to in-memory storage."
-            )
+            logger.warning("create_session_with_context called with ContextEngine configured. " "Use acreate_session_with_context() for persistent storage. " "Falling back to in-memory storage.")
 
         # Fall back to existing create_session method
         return self.create_session(session_id)
@@ -891,16 +845,12 @@ class ConversationMemory:
             try:
                 # Use ContextEngine for persistent storage
                 user_id = user_id or self.agent_id
-                await self.context_engine.create_session(
-                    session_id=session_id, user_id=user_id, metadata=metadata or {}
-                )
+                await self.context_engine.create_session(session_id=session_id, user_id=user_id, metadata=metadata or {})
                 logger.debug(f"Created session {session_id} via ContextEngine")
 
                 # Also create in-memory session for compatibility
                 if session_id not in self._sessions:
-                    self._sessions[session_id] = Session(
-                        session_id=session_id, agent_id=self.agent_id, metadata=metadata or {}
-                    )
+                    self._sessions[session_id] = Session(session_id=session_id, agent_id=self.agent_id, metadata=metadata or {})
             except Exception as e:
                 logger.error(f"Failed to create session in ContextEngine: {e}")
                 logger.warning("Falling back to in-memory storage")
@@ -931,11 +881,7 @@ class ConversationMemory:
             aget_session_with_context() for ContextEngine integration.
         """
         if self.context_engine:
-            logger.warning(
-                "get_session_with_context called with ContextEngine configured. "
-                "Use aget_session_with_context() for persistent storage. "
-                "Falling back to in-memory storage."
-            )
+            logger.warning("get_session_with_context called with ContextEngine configured. " "Use aget_session_with_context() for persistent storage. " "Falling back to in-memory storage.")
 
         # Fall back to existing get_session method
         return self.get_session(session_id)
@@ -1070,9 +1016,7 @@ class ConversationMemory:
 
         return session is not None
 
-    def track_session_request(
-        self, session_id: str, processing_time: float = 0.0, is_error: bool = False
-    ) -> None:
+    def track_session_request(self, session_id: str, processing_time: float = 0.0, is_error: bool = False) -> None:
         """
         Track a request in a session.
 
