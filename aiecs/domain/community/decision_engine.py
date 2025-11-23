@@ -119,9 +119,7 @@ class DecisionEngine:
 
         return result, details
 
-    async def _simple_majority_consensus(
-        self, decision: CommunityDecision, community: AgentCommunity
-    ) -> Tuple[bool, Dict[str, Any]]:
+    async def _simple_majority_consensus(self, decision: CommunityDecision, community: AgentCommunity) -> Tuple[bool, Dict[str, Any]]:
         """Simple majority voting (>50%)."""
         total_votes = len(decision.votes_for) + len(decision.votes_against)
         votes_for = len(decision.votes_for)
@@ -178,9 +176,7 @@ class DecisionEngine:
 
         return passed, details
 
-    async def _unanimous_consensus(
-        self, decision: CommunityDecision, community: AgentCommunity
-    ) -> Tuple[bool, Dict[str, Any]]:
+    async def _unanimous_consensus(self, decision: CommunityDecision, community: AgentCommunity) -> Tuple[bool, Dict[str, Any]]:
         """Unanimous consensus (all votes must be 'for')."""
         votes_for = len(decision.votes_for)
         votes_against = len(decision.votes_against)
@@ -201,9 +197,7 @@ class DecisionEngine:
 
         return passed, details
 
-    async def _weighted_voting_consensus(
-        self, decision: CommunityDecision, community: AgentCommunity
-    ) -> Tuple[bool, Dict[str, Any]]:
+    async def _weighted_voting_consensus(self, decision: CommunityDecision, community: AgentCommunity) -> Tuple[bool, Dict[str, Any]]:
         """Weighted voting based on member reputation and contribution."""
         if not self.community_manager:
             return False, {"reason": "Community manager not available"}
@@ -244,9 +238,7 @@ class DecisionEngine:
 
         return passed, details
 
-    async def _delegated_proof_consensus(
-        self, decision: CommunityDecision, community: AgentCommunity
-    ) -> Tuple[bool, Dict[str, Any]]:
+    async def _delegated_proof_consensus(self, decision: CommunityDecision, community: AgentCommunity) -> Tuple[bool, Dict[str, Any]]:
         """Delegated proof consensus (leaders and coordinators have more weight)."""
         if not self.community_manager:
             return False, {"reason": "Community manager not available"}
@@ -281,9 +273,7 @@ class DecisionEngine:
 
         # Calculate weighted score (leaders: 3x, coordinators: 2x, regular: 1x)
         score_for = (leader_votes_for * 3) + (coordinator_votes_for * 2) + regular_votes_for
-        score_against = (
-            (leader_votes_against * 3) + (coordinator_votes_against * 2) + regular_votes_against
-        )
+        score_against = (leader_votes_against * 3) + (coordinator_votes_against * 2) + regular_votes_against
 
         total_score = score_for + score_against
         passed = total_score > 0 and score_for > score_against
@@ -399,9 +389,7 @@ class DecisionEngine:
             "strategy": "mediation",
             "status": "mediation_completed",
             "mediator_id": mediator_id,
-            "mediator": (
-                self.community_manager.members.get(mediator_id).agent_id if mediator_id else None
-            ),
+            "mediator": (self.community_manager.members.get(mediator_id).agent_id if mediator_id else None),
             "concerns_identified": concerns,
             "compromise_proposal": compromise_proposal,
             "next_steps": "Re-vote on mediated proposal",
@@ -411,9 +399,7 @@ class DecisionEngine:
         logger.info(f"Mediation completed for decision {decision_id} by mediator {mediator_id}")
         return result
 
-    async def _select_mediator(
-        self, decision: CommunityDecision, community: AgentCommunity
-    ) -> Optional[str]:
+    async def _select_mediator(self, decision: CommunityDecision, community: AgentCommunity) -> Optional[str]:
         """Select a neutral mediator for conflict resolution."""
         # Find members who didn't vote or abstained, with high reputation
         candidates = []
@@ -442,12 +428,10 @@ class DecisionEngine:
     def _extract_concerns(self, voter_ids: List[str], community: AgentCommunity) -> List[str]:
         """Extract concerns from voter groups based on their roles and specializations."""
         concerns = []
-        role_distribution = {}
+        role_distribution: Dict[str, int] = {}
 
         for voter_id in voter_ids:
-            member = (
-                self.community_manager.members.get(voter_id) if self.community_manager else None
-            )
+            member = self.community_manager.members.get(voter_id) if self.community_manager else None
             if member:
                 role = member.community_role.value
                 role_distribution[role] = role_distribution.get(role, 0) + 1
@@ -514,19 +498,13 @@ class DecisionEngine:
         arbitration_decision = "approved" if support_ratio >= 0.4 else "rejected"
 
         # Step 4: Provide rationale
-        rationale = self._generate_arbitration_rationale(
-            arbitration_decision, support_ratio, decision, community
-        )
+        rationale = self._generate_arbitration_rationale(arbitration_decision, support_ratio, decision, community)
 
         result = {
             "strategy": "arbitration",
             "status": "arbitration_completed",
             "arbitrator_id": arbitrator_id,
-            "arbitrator": (
-                self.community_manager.members.get(arbitrator_id).agent_id
-                if arbitrator_id
-                else None
-            ),
+            "arbitrator": (self.community_manager.members.get(arbitrator_id).agent_id if arbitrator_id else None),
             "binding_decision": arbitration_decision,
             "rationale": rationale,
             "votes_for": votes_for,
@@ -593,18 +571,12 @@ class DecisionEngine:
 
         if decision == "approved":
             rationale_parts.append("this arbitration approves the proposal. ")
-            rationale_parts.append(
-                "The decision aligns with community interests and demonstrates sufficient support. "
-            )
+            rationale_parts.append("The decision aligns with community interests and demonstrates sufficient support. ")
             if support_ratio < 0.5:
-                rationale_parts.append(
-                    "While not achieving majority, the strategic importance warrants approval. "
-                )
+                rationale_parts.append("While not achieving majority, the strategic importance warrants approval. ")
         else:
             rationale_parts.append("this arbitration rejects the proposal. ")
-            rationale_parts.append(
-                "The concerns raised outweigh the benefits, and insufficient consensus exists. "
-            )
+            rationale_parts.append("The concerns raised outweigh the benefits, and insufficient consensus exists. ")
 
         rationale_parts.append(f"Priority level: {proposal.priority}. ")
         rationale_parts.append("This decision is binding and final.")
@@ -722,9 +694,7 @@ class DecisionEngine:
         )
 
         # Select best compromise based on vote distribution
-        recommended_option = (
-            compromise_options[0] if support_ratio > 0.45 else compromise_options[2]
-        )
+        recommended_option = compromise_options[0] if support_ratio > 0.45 else compromise_options[2]
 
         result = {
             "strategy": "compromise",
@@ -869,11 +839,7 @@ class DecisionEngine:
             decision.votes_against = []
             decision.abstentions = []
             decision.status = DecisionStatus.PROPOSED
-            decision.voting_ends_at = datetime.utcnow() + timedelta(
-                days=int(current_escalation["timeline"].split()[0])
-            )
+            decision.voting_ends_at = datetime.utcnow() + timedelta(days=int(current_escalation["timeline"].split()[0]))
 
-        logger.info(
-            f"Decision {decision_id} escalated to level {next_level}: {current_escalation['name']}"
-        )
+        logger.info(f"Decision {decision_id} escalated to level {next_level}: {current_escalation['name']}")
         return result

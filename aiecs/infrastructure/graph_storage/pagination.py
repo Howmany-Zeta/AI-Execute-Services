@@ -87,9 +87,7 @@ class Page(Generic[T]):
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         return {
-            "items": [
-                item.model_dump() if hasattr(item, "model_dump") else item for item in self.items
-            ],
+            "items": [item.model_dump() if hasattr(item, "model_dump") else item for item in self.items],
             "page_info": self.page_info.to_dict(),
         }
 

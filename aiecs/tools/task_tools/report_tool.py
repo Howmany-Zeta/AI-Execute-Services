@@ -94,11 +94,9 @@ class ReportTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the report tool"""
 
-        model_config = ConfigDict(env_prefix="REPORT_TOOL_")
+        model_config = ConfigDict(env_prefix="REPORT_TOOL_")  # type: ignore[typeddict-unknown-key]
 
-        templates_dir: str = Field(
-            default=os.getcwd(), description="Directory for Jinja2 templates"
-        )
+        templates_dir: str = Field(default=os.getcwd(), description="Directory for Jinja2 templates")
         default_output_dir: str = Field(
             default=os.path.join(tempfile.gettempdir(), "reports"),
             description="Default directory for output files",
@@ -187,12 +185,8 @@ class ReportTool(BaseTool):
             handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
             self.logger.addHandler(handler)
         self.logger.setLevel(logging.INFO)
-        self._jinja_env = sandbox.SandboxedEnvironment(
-            loader=FileSystemLoader(self.config.templates_dir), autoescape=True
-        )
-        self._temp_manager = TempFileManager(
-            self.config.default_output_dir, self.config.temp_files_max_age
-        )
+        self._jinja_env = sandbox.SandboxedEnvironment(loader=FileSystemLoader(self.config.templates_dir), autoescape=True)
+        self._temp_manager = TempFileManager(self.config.default_output_dir, self.config.temp_files_max_age)
 
     def generate_html(
         self,
@@ -373,9 +367,7 @@ class ReportTool(BaseTool):
                 title_shape = s.shapes.title
                 title_shape.text = slide["title"]
                 font = slide.get("font") or default_font or self.config.default_font
-                font_size = (
-                    slide.get("font_size") or default_font_size or self.config.default_font_size
-                )
+                font_size = slide.get("font_size") or default_font_size or self.config.default_font_size
                 slide.get("font_color") or default_font_color or (0, 0, 0)
                 title_shape.text_frame.paragraphs[0].font.name = font
                 title_shape.text_frame.paragraphs[0].font.size = Pt(font_size)
@@ -588,22 +580,14 @@ class ReportTool(BaseTool):
                     op_params["styles"] = input_data[i].get("styles")
                 elif operation == "generate_pptx":
                     op_params["slides"] = input_data[i]
-                    op_params["default_font"] = (
-                        input_data[i][0].get("font") if input_data[i] else None
-                    )
-                    op_params["default_font_size"] = (
-                        input_data[i][0].get("font_size") if input_data[i] else None
-                    )
-                    op_params["default_font_color"] = (
-                        input_data[i][0].get("font_color") if input_data[i] else None
-                    )
+                    op_params["default_font"] = input_data[i][0].get("font") if input_data[i] else None
+                    op_params["default_font_size"] = input_data[i][0].get("font_size") if input_data[i] else None
+                    op_params["default_font_color"] = input_data[i][0].get("font_color") if input_data[i] else None
                 elif operation == "generate_image":
                     op_params.update(input_data[i])
                 elif operation == "generate_pdf":
                     op_params["html"] = input_data[i].get("html")
-                    op_params["html_schema"] = (
-                        input_data[i] if input_data[i].get("context") else None
-                    )
+                    op_params["html_schema"] = input_data[i] if input_data[i].get("context") else None
                     op_params["page_size"] = input_data[i].get("page_size")
                 tasks.append({"op": operation, "kwargs": op_params})
             # Execute tasks synchronously for batch generation

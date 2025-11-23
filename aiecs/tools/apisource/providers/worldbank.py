@@ -247,12 +247,7 @@ class WorldBankProvider(BaseAPIProvider):
             # Filter for search operation
             if operation == "search_indicators" and result_data:
                 search_text = params["search_text"].lower()
-                filtered = [
-                    item
-                    for item in result_data
-                    if search_text in str(item.get("name", "")).lower()
-                    or search_text in str(item.get("sourceNote", "")).lower()
-                ]
+                filtered = [item for item in result_data if search_text in str(item.get("name", "")).lower() or search_text in str(item.get("sourceNote", "")).lower()]
                 result_data = filtered[: params.get("limit", 20)]
 
             return self._format_response(

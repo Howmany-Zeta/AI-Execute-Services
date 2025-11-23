@@ -174,19 +174,14 @@ class CommunicationHub:
 
         # Deliver to each recipient's queue
         for recipient_id in recipient_ids:
-            if (
-                recipient_id in self.active_agents
-                or len(self.message_queues[recipient_id]) < self.max_queue_size
-            ):
+            if recipient_id in self.active_agents or len(self.message_queues[recipient_id]) < self.max_queue_size:
                 self.message_queues[recipient_id].append(message)
                 message.delivered_to.add(recipient_id)
 
         # Store in history
         self.message_history.append(message)
 
-        logger.debug(
-            f"Message {message.message_id} from {sender_id} to {len(recipient_ids)} recipients"
-        )
+        logger.debug(f"Message {message.message_id} from {sender_id} to {len(recipient_ids)} recipients")
         return message.message_id
 
     async def broadcast_message(
@@ -222,9 +217,7 @@ class CommunicationHub:
         # Store in history
         self.message_history.append(message)
 
-        logger.info(
-            f"Broadcast message {message.message_id} from {sender_id} to {len(recipients)} agents"
-        )
+        logger.info(f"Broadcast message {message.message_id} from {sender_id} to {len(recipients)} agents")
         return message.message_id
 
     async def receive_messages(
@@ -635,11 +628,7 @@ class CommunicationHub:
             "agent_id": agent_id,
             "is_active": agent_id in self.active_agents,
             "unread_messages": len(self.message_queues[agent_id]),
-            "event_subscriptions": [
-                et.value for et, subs in self.event_subscriptions.items() if agent_id in subs
-            ],
-            "topic_subscriptions": [
-                topic for topic, subs in self.topic_subscriptions.items() if agent_id in subs
-            ],
+            "event_subscriptions": [et.value for et, subs in self.event_subscriptions.items() if agent_id in subs],
+            "topic_subscriptions": [topic for topic, subs in self.topic_subscriptions.items() if agent_id in subs],
             "output_subscribers": len(self.output_streams.get(agent_id, [])),
         }

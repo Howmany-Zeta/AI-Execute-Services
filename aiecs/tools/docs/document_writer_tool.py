@@ -154,43 +154,25 @@ class DocumentWriterTool(BaseTool):
             default=os.path.join(tempfile.gettempdir(), "document_backups"),
             description="Directory for document backups",
         )
-        output_dir: Optional[str] = Field(
-            default=None, description="Default output directory for documents"
-        )
-        max_file_size: int = Field(
-            default=100 * 1024 * 1024, description="Maximum file size in bytes"
-        )
-        max_backup_versions: int = Field(
-            default=10, description="Maximum number of backup versions to keep"
-        )
-        default_encoding: str = Field(
-            default="utf-8", description="Default text encoding for documents"
-        )
+        output_dir: Optional[str] = Field(default=None, description="Default output directory for documents")
+        max_file_size: int = Field(default=100 * 1024 * 1024, description="Maximum file size in bytes")
+        max_backup_versions: int = Field(default=10, description="Maximum number of backup versions to keep")
+        default_encoding: str = Field(default="utf-8", description="Default text encoding for documents")
         enable_backup: bool = Field(
             default=True,
             description="Whether to enable automatic backup functionality",
         )
-        enable_versioning: bool = Field(
-            default=True, description="Whether to enable document versioning"
-        )
-        enable_content_validation: bool = Field(
-            default=True, description="Whether to enable content validation"
-        )
-        enable_security_scan: bool = Field(
-            default=True, description="Whether to enable security scanning"
-        )
-        atomic_write: bool = Field(
-            default=True, description="Whether to use atomic write operations"
-        )
+        enable_versioning: bool = Field(default=True, description="Whether to enable document versioning")
+        enable_content_validation: bool = Field(default=True, description="Whether to enable content validation")
+        enable_security_scan: bool = Field(default=True, description="Whether to enable security scanning")
+        atomic_write: bool = Field(default=True, description="Whether to use atomic write operations")
         validation_level: str = Field(default="basic", description="Content validation level")
         timeout_seconds: int = Field(default=60, description="Operation timeout in seconds")
         auto_backup: bool = Field(
             default=True,
             description="Whether to automatically backup before write operations",
         )
-        atomic_writes: bool = Field(
-            default=True, description="Whether to use atomic write operations"
-        )
+        atomic_writes: bool = Field(default=True, description="Whether to use atomic write operations")
         default_format: str = Field(default="md", description="Default document format")
         version_control: bool = Field(default=True, description="Whether to enable version control")
         security_scan: bool = Field(default=True, description="Whether to enable security scanning")
@@ -202,9 +184,7 @@ class DocumentWriterTool(BaseTool):
             default="aiecs-documents",
             description="Google Cloud Storage bucket name",
         )
-        gcs_project_id: Optional[str] = Field(
-            default=None, description="Google Cloud Storage project ID"
-        )
+        gcs_project_id: Optional[str] = Field(default=None, description="Google Cloud Storage project ID")
 
     def __init__(self, config: Optional[Dict] = None):
         """Initialize DocumentWriterTool with settings"""
@@ -279,9 +259,7 @@ class DocumentWriterTool(BaseTool):
         format: DocumentFormat = Field(description="Document format")
         mode: WriteMode = Field(default=WriteMode.CREATE, description="Write mode")
         encoding: EncodingType = Field(default=EncodingType.UTF8, description="Text encoding")
-        validation_level: ValidationLevel = Field(
-            default=ValidationLevel.BASIC, description="Validation level"
-        )
+        validation_level: ValidationLevel = Field(default=ValidationLevel.BASIC, description="Validation level")
         metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata")
         backup_comment: Optional[str] = Field(default=None, description="Backup comment")
 
@@ -298,15 +276,9 @@ class DocumentWriterTool(BaseTool):
         target_path: str = Field(description="Target file path")
         operation: EditOperation = Field(description="Edit operation to perform")
         content: Optional[str] = Field(default=None, description="Content for the operation")
-        position: Optional[Dict[str, Any]] = Field(
-            default=None, description="Position info (line, column, offset)"
-        )
-        selection: Optional[Dict[str, Any]] = Field(
-            default=None, description="Text selection range"
-        )
-        format_options: Optional[Dict[str, Any]] = Field(
-            default=None, description="Formatting options"
-        )
+        position: Optional[Dict[str, Any]] = Field(default=None, description="Position info (line, column, offset)")
+        selection: Optional[Dict[str, Any]] = Field(default=None, description="Text selection range")
+        format_options: Optional[Dict[str, Any]] = Field(default=None, description="Formatting options")
 
     class FormatTextSchema(BaseModel):
         """Schema for format_text operation"""
@@ -314,9 +286,7 @@ class DocumentWriterTool(BaseTool):
         target_path: str = Field(description="Target file path")
         text_to_format: str = Field(description="Text to apply formatting to")
         format_type: EditOperation = Field(description="Type of formatting")
-        format_options: Optional[Dict[str, Any]] = Field(
-            default=None, description="Additional format options"
-        )
+        format_options: Optional[Dict[str, Any]] = Field(default=None, description="Additional format options")
 
     class FindReplaceSchema(BaseModel):
         """Schema for find_replace operation"""
@@ -365,9 +335,7 @@ class DocumentWriterTool(BaseTool):
             self._validate_write_inputs(target_path, content, format, mode)
 
             # Step 2: Prepare content
-            processed_content, content_metadata = self._prepare_content(
-                content, format, encoding, validation_level
-            )
+            processed_content, content_metadata = self._prepare_content(content, format, encoding, validation_level)
 
             # Step 3: Handle write mode logic
             write_plan = self._plan_write_operation(target_path, mode, metadata)
@@ -381,17 +349,13 @@ class DocumentWriterTool(BaseTool):
                 backup_info = self._create_backup(target_path, backup_comment)
 
             # Step 5: Execute atomic write
-            write_result = self._execute_atomic_write(
-                target_path, processed_content, format, encoding, write_plan
-            )
+            write_result = self._execute_atomic_write(target_path, processed_content, format, encoding, write_plan)
 
             # Step 6: Update metadata and versioning
             version_info = self._handle_versioning(target_path, content_metadata, metadata)
 
             # Step 7: Audit logging
-            audit_info = self._log_write_operation(
-                operation_id, target_path, mode, write_result, backup_info
-            )
+            audit_info = self._log_write_operation(operation_id, target_path, mode, write_result, backup_info)
 
             result = {
                 "operation_id": operation_id,
@@ -466,9 +430,7 @@ class DocumentWriterTool(BaseTool):
             start_time = datetime.now()
             batch_id = str(uuid.uuid4())
 
-            self.logger.info(
-                f"Starting batch write operation {batch_id}: {len(write_operations)} operations"
-            )
+            self.logger.info(f"Starting batch write operation {batch_id}: {len(write_operations)} operations")
 
             completed_operations = []
             backup_operations = []
@@ -552,9 +514,7 @@ class DocumentWriterTool(BaseTool):
         # Size validation
         content_size = self._calculate_content_size(content)
         if content_size > self.config.max_file_size:
-            raise ValueError(
-                f"Content size {content_size} exceeds maximum {self.config.max_file_size}"
-            )
+            raise ValueError(f"Content size {content_size} exceeds maximum {self.config.max_file_size}")
 
         # Permission validation
         if not self._check_write_permission(target_path, mode):
@@ -600,9 +560,7 @@ class DocumentWriterTool(BaseTool):
         # Calculate metadata
         content_metadata = {
             "original_type": type(content).__name__,
-            "processed_size": (
-                len(processed_content) if isinstance(processed_content, (str, bytes)) else 0
-            ),
+            "processed_size": (len(processed_content) if isinstance(processed_content, (str, bytes)) else 0),
             "format": format,
             "encoding": encoding,
             "checksum": self._calculate_checksum(processed_content),
@@ -612,9 +570,7 @@ class DocumentWriterTool(BaseTool):
 
         return processed_content, content_metadata
 
-    def _plan_write_operation(
-        self, target_path: str, mode: WriteMode, metadata: Optional[Dict]
-    ) -> Dict:
+    def _plan_write_operation(self, target_path: str, mode: WriteMode, metadata: Optional[Dict]) -> Dict:
         """Plan the write operation based on mode and target"""
 
         plan = {
@@ -749,11 +705,7 @@ class DocumentWriterTool(BaseTool):
                     file_mode += "b"
 
                 # Handle both EncodingType enum and string
-                enc_value = (
-                    None
-                    if isinstance(content, bytes)
-                    else (encoding.value if hasattr(encoding, "value") else str(encoding))
-                )
+                enc_value = None if isinstance(content, bytes) else (encoding.value if hasattr(encoding, "value") else str(encoding))
                 with open(target_path, file_mode, encoding=enc_value) as f:
                     f.write(content)
 
@@ -1128,9 +1080,7 @@ class DocumentWriterTool(BaseTool):
         except Exception as e:
             self.logger.error(f"Rollback failed: {e}")
 
-    def _rollback_batch_operations(
-        self, completed_operations: List[Dict], backup_operations: List[Dict]
-    ):
+    def _rollback_batch_operations(self, completed_operations: List[Dict], backup_operations: List[Dict]):
         """Rollback batch operations"""
         for op in reversed(completed_operations):
             try:
@@ -1198,9 +1148,7 @@ class DocumentWriterTool(BaseTool):
             start_time = datetime.now()
             operation_id = str(uuid.uuid4())
 
-            self.logger.info(
-                f"Starting edit operation {operation_id}: {operation} on {target_path}"
-            )
+            self.logger.info(f"Starting edit operation {operation_id}: {operation} on {target_path}")
 
             # Read current document content
             current_content = self._read_document_content(target_path)
@@ -1215,21 +1163,13 @@ class DocumentWriterTool(BaseTool):
             elif operation == EditOperation.BOLD:
                 edited_content = self._format_text_bold(current_content, selection, format_options)
             elif operation == EditOperation.ITALIC:
-                edited_content = self._format_text_italic(
-                    current_content, selection, format_options
-                )
+                edited_content = self._format_text_italic(current_content, selection, format_options)
             elif operation == EditOperation.UNDERLINE:
-                edited_content = self._format_text_underline(
-                    current_content, selection, format_options
-                )
+                edited_content = self._format_text_underline(current_content, selection, format_options)
             elif operation == EditOperation.STRIKETHROUGH:
-                edited_content = self._format_text_strikethrough(
-                    current_content, selection, format_options
-                )
+                edited_content = self._format_text_strikethrough(current_content, selection, format_options)
             elif operation == EditOperation.HIGHLIGHT:
-                edited_content = self._format_text_highlight(
-                    current_content, selection, format_options
-                )
+                edited_content = self._format_text_highlight(current_content, selection, format_options)
             elif operation == EditOperation.INSERT_LINE:
                 edited_content = self._insert_line(current_content, position, content)
             elif operation == EditOperation.DELETE_LINE:
@@ -1305,9 +1245,7 @@ class DocumentWriterTool(BaseTool):
             current_content = self._read_document_content(target_path)
 
             # Find all occurrences of the text
-            formatted_content = self._apply_text_formatting(
-                current_content, text_to_format, format_type, format_options
-            )
+            formatted_content = self._apply_text_formatting(current_content, text_to_format, format_type, format_options)
 
             # Write back to file
             file_format = self._detect_file_format(target_path)
@@ -1802,9 +1740,7 @@ class DocumentWriterTool(BaseTool):
 
                 pattern = re.escape(find_text)
                 if replace_all:
-                    new_content, replacements = re.subn(
-                        pattern, replace_text, content, flags=re.IGNORECASE
-                    )
+                    new_content, replacements = re.subn(pattern, replace_text, content, flags=re.IGNORECASE)
                 else:
                     new_content = re.sub(
                         pattern,

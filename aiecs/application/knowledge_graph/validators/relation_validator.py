@@ -46,9 +46,7 @@ class RelationValidator:
         self.schema = schema
         self.strict = strict
 
-    def validate_relation(
-        self, relation: Relation, source_entity: Entity, target_entity: Entity
-    ) -> Tuple[bool, List[str]]:
+    def validate_relation(self, relation: Relation, source_entity: Entity, target_entity: Entity) -> Tuple[bool, List[str]]:
         """
         Validate a relation against schema
 
@@ -72,15 +70,9 @@ class RelationValidator:
 
         # Check entity IDs match
         if relation.source_id != source_entity.id:
-            errors.append(
-                f"Relation source_id '{relation.source_id}' does not match "
-                f"source_entity id '{source_entity.id}'"
-            )
+            errors.append(f"Relation source_id '{relation.source_id}' does not match " f"source_entity id '{source_entity.id}'")
         if relation.target_id != target_entity.id:
-            errors.append(
-                f"Relation target_id '{relation.target_id}' does not match "
-                f"target_entity id '{target_entity.id}'"
-            )
+            errors.append(f"Relation target_id '{relation.target_id}' does not match " f"target_entity id '{target_entity.id}'")
 
         # Schema-based validation (if schema provided)
         if self.schema:
@@ -89,9 +81,7 @@ class RelationValidator:
 
         return (len(errors) == 0, errors)
 
-    def validate_relations(
-        self, relations: List[Relation], entities: List[Entity]
-    ) -> List[Tuple[Relation, bool, List[str]]]:
+    def validate_relations(self, relations: List[Relation], entities: List[Entity]) -> List[Tuple[Relation, bool, List[str]]]:
         """
         Validate multiple relations
 
@@ -120,9 +110,7 @@ class RelationValidator:
 
         return results
 
-    def filter_valid_relations(
-        self, relations: List[Relation], entities: List[Entity]
-    ) -> List[Relation]:
+    def filter_valid_relations(self, relations: List[Relation], entities: List[Entity]) -> List[Relation]:
         """
         Filter relations to only valid ones
 
@@ -136,9 +124,7 @@ class RelationValidator:
         validation_results = self.validate_relations(relations, entities)
         return [relation for relation, is_valid, errors in validation_results if is_valid]
 
-    def _validate_against_schema(
-        self, relation: Relation, source_entity: Entity, target_entity: Entity
-    ) -> List[str]:
+    def _validate_against_schema(self, relation: Relation, source_entity: Entity, target_entity: Entity) -> List[str]:
         """
         Validate relation against schema rules
 
@@ -165,20 +151,12 @@ class RelationValidator:
         # Validate source entity type
         if rel_type_schema.source_entity_types:
             if source_entity.entity_type not in rel_type_schema.source_entity_types:
-                errors.append(
-                    f"Source entity type '{source_entity.entity_type}' not allowed for "
-                    f"relation '{relation.relation_type}'. "
-                    f"Allowed types: {rel_type_schema.source_entity_types}"
-                )
+                errors.append(f"Source entity type '{source_entity.entity_type}' not allowed for " f"relation '{relation.relation_type}'. " f"Allowed types: {rel_type_schema.source_entity_types}")
 
         # Validate target entity type
         if rel_type_schema.target_entity_types:
             if target_entity.entity_type not in rel_type_schema.target_entity_types:
-                errors.append(
-                    f"Target entity type '{target_entity.entity_type}' not allowed for "
-                    f"relation '{relation.relation_type}'. "
-                    f"Allowed types: {rel_type_schema.target_entity_types}"
-                )
+                errors.append(f"Target entity type '{target_entity.entity_type}' not allowed for " f"relation '{relation.relation_type}'. " f"Allowed types: {rel_type_schema.target_entity_types}")
 
         # TODO: Validate relation properties against schema (if PropertySchema defined)
         # This would check:

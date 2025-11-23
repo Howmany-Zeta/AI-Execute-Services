@@ -100,9 +100,7 @@ class LLMClientManager:
     def __init__(self):
         self.factory = LLMClientFactory()
 
-    def _extract_ai_preference(
-        self, context: Optional[Dict[str, Any]]
-    ) -> tuple[Optional[str], Optional[str]]:
+    def _extract_ai_preference(self, context: Optional[Dict[str, Any]]) -> tuple[Optional[str], Optional[str]]:
         """Extract AI provider and model from context"""
         if not context:
             return None, None

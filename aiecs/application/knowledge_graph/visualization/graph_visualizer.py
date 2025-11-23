@@ -66,9 +66,7 @@ class GraphVisualizer:
             node_id = self._sanitize_id(entity.id)
             color = self._get_entity_color(entity.entity_type)
 
-            lines.append(
-                f'  {node_id} [label="{label}", fillcolor="{color}", style="rounded,filled"];'
-            )
+            lines.append(f'  {node_id} [label="{label}", fillcolor="{color}", style="rounded,filled"];')
 
         lines.append("")
 
@@ -136,9 +134,7 @@ class GraphVisualizer:
 
         return {"nodes": nodes, "links": links}
 
-    def _to_cytoscape_json(
-        self, entities: List[Entity], relations: List[Relation]
-    ) -> Dict[str, Any]:
+    def _to_cytoscape_json(self, entities: List[Entity], relations: List[Relation]) -> Dict[str, Any]:
         """Export to Cytoscape.js format"""
         elements = []
 
@@ -173,9 +169,7 @@ class GraphVisualizer:
 
         return {"elements": elements}
 
-    def _to_networkx_json(
-        self, entities: List[Entity], relations: List[Relation]
-    ) -> Dict[str, Any]:
+    def _to_networkx_json(self, entities: List[Entity], relations: List[Relation]) -> Dict[str, Any]:
         """Export to NetworkX node-link format"""
         nodes = []
         for entity in entities:
@@ -281,9 +275,7 @@ class GraphVisualizer:
         lines.append("}")
         return "\n".join(lines)
 
-    def _create_entity_label(
-        self, entity: Entity, include_properties: bool, max_length: int
-    ) -> str:
+    def _create_entity_label(self, entity: Entity, include_properties: bool, max_length: int) -> str:
         """Create label for entity node"""
         label_parts = [f"{entity.entity_type}: {entity.id}"]
 

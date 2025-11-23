@@ -89,12 +89,8 @@ class ClassifierTool(BaseTool):
             default=3600,
             description="Time-to-live for pipeline cache in seconds",
         )
-        pipeline_cache_size: int = Field(
-            default=10, description="Maximum number of pipeline cache entries"
-        )
-        max_text_length: int = Field(
-            default=10_000, description="Maximum text length in characters"
-        )
+        pipeline_cache_size: int = Field(default=10, description="Maximum number of pipeline cache entries")
+        max_text_length: int = Field(default=10_000, description="Maximum text length in characters")
         spacy_model_en: str = Field(default="en_core_web_sm", description="spaCy model for English")
         spacy_model_zh: str = Field(default="zh_core_web_sm", description="spaCy model for Chinese")
         allowed_models: List[str] = Field(
@@ -104,11 +100,9 @@ class ClassifierTool(BaseTool):
         rate_limit_enabled: bool = Field(default=True, description="Enable rate limiting")
         rate_limit_requests: int = Field(default=100, description="Maximum requests per window")
         rate_limit_window: int = Field(default=60, description="Rate limit window in seconds")
-        use_rake_for_english: bool = Field(
-            default=True, description="Use RAKE for English phrase extraction"
-        )
+        use_rake_for_english: bool = Field(default=True, description="Use RAKE for English phrase extraction")
 
-        model_config = ConfigDict(env_prefix="CLASSIFIER_TOOL_")
+        model_config = ConfigDict(env_prefix="CLASSIFIER_TOOL_")  # type: ignore[typeddict-unknown-key]
 
     # Base schema for text operations
     class BaseTextSchema(BaseModel):
@@ -333,9 +327,7 @@ class ClassifierTool(BaseTool):
 
                 spacy = spacy_module
             except ImportError:
-                raise ImportError(
-                    "spaCy is required but not installed. Please install it with: pip install spacy"
-                )
+                raise ImportError("spaCy is required but not installed. Please install it with: pip install spacy")
 
         model = self.config.spacy_model_zh if language == "zh" else self.config.spacy_model_en
         return spacy.load(model, disable=["textcat"])
@@ -379,11 +371,7 @@ class ClassifierTool(BaseTool):
         # Get lock from executor
         with self._executor.get_lock("rate_limit"):
             # Remove timestamps outside the window
-            self._request_timestamps = [
-                ts
-                for ts in self._request_timestamps
-                if current_time - ts <= self.config.rate_limit_window
-            ]
+            self._request_timestamps = [ts for ts in self._request_timestamps if current_time - ts <= self.config.rate_limit_window]
 
             # Check if we're at the limit
             if len(self._request_timestamps) >= self.config.rate_limit_requests:
@@ -487,13 +475,11 @@ class ClassifierTool(BaseTool):
             ValueError: If the pipeline creation fails.
         """
         try:
-            from transformers import pipeline
+            from transformers import pipeline  # type: ignore[import-not-found]
 
             return pipeline(task, model=model)
         except ImportError:
-            raise ImportError(
-                "transformers library is required for summarization but not installed. Please install it with: pip install transformers"
-            )
+            raise ImportError("transformers library is required for summarization but not installed. Please install it with: pip install transformers")
         except Exception as e:
             raise ValueError(f"Error creating pipeline for task '{task}' with model '{model}': {e}")
 
@@ -654,9 +640,7 @@ class ClassifierTool(BaseTool):
         return [token.lemma_ for token in doc]
 
     @validate_input(DependencyParseSchema)
-    async def dependency_parse(
-        self, text: str, language: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+    async def dependency_parse(self, text: str, language: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Perform dependency parsing using spaCy (supports both English and Chinese).
 
@@ -713,14 +697,10 @@ class ClassifierTool(BaseTool):
 
         if language == "zh":
             if extract_phrases:
-                return await asyncio.get_event_loop().run_in_executor(
-                    None, self._extract_chinese_phrases, text, top_k
-                )
+                return await asyncio.get_event_loop().run_in_executor(None, self._extract_chinese_phrases, text, top_k)
             else:
                 # Extract simple keywords using spaCy
-                nlp = await asyncio.get_event_loop().run_in_executor(
-                    None, self._get_spacy, language
-                )
+                nlp = await asyncio.get_event_loop().run_in_executor(None, self._get_spacy, language)
 
                 doc = await asyncio.get_event_loop().run_in_executor(None, nlp, text)
 
@@ -728,13 +708,9 @@ class ClassifierTool(BaseTool):
                 return keywords
         else:  # English or other languages
             if extract_phrases and self.config.use_rake_for_english:
-                return await asyncio.get_event_loop().run_in_executor(
-                    None, self._extract_english_phrases, text, top_k
-                )
+                return await asyncio.get_event_loop().run_in_executor(None, self._extract_english_phrases, text, top_k)
             else:
-                nlp = await asyncio.get_event_loop().run_in_executor(
-                    None, self._get_spacy, language
-                )
+                nlp = await asyncio.get_event_loop().run_in_executor(None, self._get_spacy, language)
 
                 doc = await asyncio.get_event_loop().run_in_executor(None, nlp, text)
 
@@ -742,9 +718,7 @@ class ClassifierTool(BaseTool):
                 return keywords
 
     @validate_input(SummarizeSchema)
-    async def summarize(
-        self, text: str, max_length: int = 150, language: Optional[str] = None
-    ) -> str:
+    async def summarize(self, text: str, max_length: int = 150, language: Optional[str] = None) -> str:
         """
         Summarize text.
 
@@ -769,9 +743,7 @@ class ClassifierTool(BaseTool):
             # in the future
             model = "t5-base"
 
-        pipe = await asyncio.get_event_loop().run_in_executor(
-            None, self._get_hf_pipeline, "summarization", model
-        )
+        pipe = await asyncio.get_event_loop().run_in_executor(None, self._get_hf_pipeline, "summarization", model)
 
         # Different models use different parameter names for length control
         if model.startswith("t5"):
@@ -795,7 +767,9 @@ class ClassifierTool(BaseTool):
                     max_new_tokens=max_new_tokens,
                     min_new_tokens=min_new_tokens,
                     do_sample=False,
-                )[0]["summary_text"],
+                )[
+                    0
+                ]["summary_text"],
             )
         else:
             # BART and other models use max_length
@@ -881,11 +855,7 @@ class ClassifierTool(BaseTool):
             "metrics": {
                 "requests": self._metrics["requests"],
                 "cache_hits": self._metrics["cache_hits"],
-                "avg_processing_time": (
-                    sum(self._metrics["processing_time"]) / len(self._metrics["processing_time"])
-                    if self._metrics["processing_time"]
-                    else 0.0
-                ),
+                "avg_processing_time": (sum(self._metrics["processing_time"]) / len(self._metrics["processing_time"]) if self._metrics["processing_time"] else 0.0),
             },
             "config": {
                 "max_workers": self.config.max_workers,

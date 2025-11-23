@@ -54,13 +54,9 @@ class LegacyAgentWrapper:
             result = await self.legacy_agent.process(task)
             return {"output": result, "success": True}
         else:
-            raise NotImplementedError(
-                f"Legacy agent {type(self.legacy_agent).__name__} has no compatible interface"
-            )
+            raise NotImplementedError(f"Legacy agent {type(self.legacy_agent).__name__} has no compatible interface")
 
-    async def process_message(
-        self, message: str, sender_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def process_message(self, message: str, sender_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Process message using legacy agent.
 

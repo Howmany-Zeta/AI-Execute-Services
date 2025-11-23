@@ -205,9 +205,7 @@ class PostgresGraphStore(GraphStore):
                         max_size=self.max_pool_size,
                         **self.conn_kwargs,
                     )
-                    logger.info(
-                        "PostgreSQL connection pool created using connection string (cloud/local)"
-                    )
+                    logger.info("PostgreSQL connection pool created using connection string (cloud/local)")
                 else:
                     self.pool = await asyncpg.create_pool(
                         host=self.host,
@@ -219,13 +217,9 @@ class PostgresGraphStore(GraphStore):
                         max_size=self.max_pool_size,
                         **self.conn_kwargs,
                     )
-                    logger.info(
-                        f"PostgreSQL connection pool created: {self.host}:{self.port}/{self.database}"
-                    )
+                    logger.info(f"PostgreSQL connection pool created: {self.host}:{self.port}/{self.database}")
             else:
-                logger.info(
-                    "Using external PostgreSQL connection pool (shared with AIECS DatabaseManager)"
-                )
+                logger.info("Using external PostgreSQL connection pool (shared with AIECS DatabaseManager)")
 
             # Create schema
             async with self.pool.acquire() as conn:
@@ -235,9 +229,7 @@ class PostgresGraphStore(GraphStore):
                         await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
                         logger.info("pgvector extension enabled")
                     except Exception as e:
-                        logger.warning(
-                            f"Failed to enable pgvector: {e}. Continuing without vector support."
-                        )
+                        logger.warning(f"Failed to enable pgvector: {e}. Continuing without vector support.")
                         self.enable_pgvector = False
 
                 # Execute schema creation
@@ -420,11 +412,7 @@ class PostgresGraphStore(GraphStore):
             return None
 
         # Deserialize
-        properties = (
-            json.loads(row["properties"])
-            if isinstance(row["properties"], str)
-            else row["properties"]
-        )
+        properties = json.loads(row["properties"]) if isinstance(row["properties"], str) else row["properties"]
         embedding = self._deserialize_embedding(row["embedding"]) if row["embedding"] else None
 
         return Entity(
@@ -566,11 +554,7 @@ class PostgresGraphStore(GraphStore):
         if not row:
             return None
 
-        properties = (
-            json.loads(row["properties"])
-            if isinstance(row["properties"], str)
-            else row["properties"]
-        )
+        properties = json.loads(row["properties"]) if isinstance(row["properties"], str) else row["properties"]
 
         return Relation(
             id=row["id"],
@@ -591,9 +575,7 @@ class PostgresGraphStore(GraphStore):
             result = await conn.execute("DELETE FROM graph_relations WHERE id = $1", relation_id)
         else:
             async with self.pool.acquire() as conn:
-                result = await conn.execute(
-                    "DELETE FROM graph_relations WHERE id = $1", relation_id
-                )
+                result = await conn.execute("DELETE FROM graph_relations WHERE id = $1", relation_id)
 
         if result == "DELETE 0":
             raise ValueError(f"Relation with ID '{relation_id}' not found")
@@ -659,11 +641,7 @@ class PostgresGraphStore(GraphStore):
 
         entities = []
         for row in rows:
-            properties = (
-                json.loads(row["properties"])
-                if isinstance(row["properties"], str)
-                else row["properties"]
-            )
+            properties = json.loads(row["properties"]) if isinstance(row["properties"], str) else row["properties"]
             embedding = self._deserialize_embedding(row["embedding"]) if row["embedding"] else None
             entities.append(
                 Entity(
@@ -676,9 +654,7 @@ class PostgresGraphStore(GraphStore):
 
         return entities
 
-    async def get_all_entities(
-        self, entity_type: Optional[str] = None, limit: Optional[int] = None
-    ) -> List[Entity]:
+    async def get_all_entities(self, entity_type: Optional[str] = None, limit: Optional[int] = None) -> List[Entity]:
         """Get all entities, optionally filtered by type"""
         if not self._is_initialized:
             raise RuntimeError("GraphStore not initialized")
@@ -703,11 +679,7 @@ class PostgresGraphStore(GraphStore):
 
         entities = []
         for row in rows:
-            properties = (
-                json.loads(row["properties"])
-                if isinstance(row["properties"], str)
-                else row["properties"]
-            )
+            properties = json.loads(row["properties"]) if isinstance(row["properties"], str) else row["properties"]
             embedding = self._deserialize_embedding(row["embedding"]) if row["embedding"] else None
             entities.append(
                 Entity(
@@ -729,22 +701,14 @@ class PostgresGraphStore(GraphStore):
             conn = self._transaction_conn
             entity_count = await conn.fetchval("SELECT COUNT(*) FROM graph_entities")
             relation_count = await conn.fetchval("SELECT COUNT(*) FROM graph_relations")
-            entity_types = await conn.fetch(
-                "SELECT entity_type, COUNT(*) as count FROM graph_entities GROUP BY entity_type"
-            )
-            relation_types = await conn.fetch(
-                "SELECT relation_type, COUNT(*) as count FROM graph_relations GROUP BY relation_type"
-            )
+            entity_types = await conn.fetch("SELECT entity_type, COUNT(*) as count FROM graph_entities GROUP BY entity_type")
+            relation_types = await conn.fetch("SELECT relation_type, COUNT(*) as count FROM graph_relations GROUP BY relation_type")
         else:
             async with self.pool.acquire() as conn:
                 entity_count = await conn.fetchval("SELECT COUNT(*) FROM graph_entities")
                 relation_count = await conn.fetchval("SELECT COUNT(*) FROM graph_relations")
-                entity_types = await conn.fetch(
-                    "SELECT entity_type, COUNT(*) as count FROM graph_entities GROUP BY entity_type"
-                )
-                relation_types = await conn.fetch(
-                    "SELECT relation_type, COUNT(*) as count FROM graph_relations GROUP BY relation_type"
-                )
+                entity_types = await conn.fetch("SELECT entity_type, COUNT(*) as count FROM graph_entities GROUP BY entity_type")
+                relation_types = await conn.fetch("SELECT relation_type, COUNT(*) as count FROM graph_relations GROUP BY relation_type")
 
         return {
             "entity_count": entity_count,

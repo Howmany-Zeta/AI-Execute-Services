@@ -80,9 +80,7 @@ class ContextEngineAdapter:
         logger.debug(f"Saved agent {agent_id} state version {version} to ContextEngine")
         return version
 
-    async def load_agent_state(
-        self, agent_id: str, version: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
+    async def load_agent_state(self, agent_id: str, version: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Load agent state from ContextEngine.
 
@@ -95,9 +93,7 @@ class ContextEngineAdapter:
         """
         if version is None:
             return None
-        checkpoint = await self.context_engine.get_checkpoint(
-            thread_id=agent_id, checkpoint_id=version
-        )
+        checkpoint = await self.context_engine.get_checkpoint(thread_id=agent_id, checkpoint_id=version)
 
         if checkpoint and "data" in checkpoint:
             checkpoint_data = checkpoint["data"]
@@ -141,9 +137,7 @@ class ContextEngineAdapter:
         versions.sort(key=lambda v: v.get("timestamp", ""), reverse=True)
         return versions
 
-    async def save_conversation_history(
-        self, session_id: str, messages: List[Dict[str, Any]]
-    ) -> None:
+    async def save_conversation_history(self, session_id: str, messages: List[Dict[str, Any]]) -> None:
         """
         Save conversation history to ContextEngine.
 
@@ -175,9 +169,7 @@ class ContextEngineAdapter:
 
         logger.debug(f"Saved {len(messages)} messages to session {session_id}")
 
-    async def load_conversation_history(
-        self, session_id: str, limit: int = 50
-    ) -> List[Dict[str, Any]]:
+    async def load_conversation_history(self, session_id: str, limit: int = 50) -> List[Dict[str, Any]]:
         """
         Load conversation history from ContextEngine.
 
@@ -188,9 +180,7 @@ class ContextEngineAdapter:
         Returns:
             List of message dictionaries
         """
-        messages = await self.context_engine.get_conversation_history(
-            session_id=session_id, limit=limit
-        )
+        messages = await self.context_engine.get_conversation_history(session_id=session_id, limit=limit)
 
         # Convert ConversationMessage objects to dictionaries
         result = []
@@ -199,11 +189,7 @@ class ContextEngineAdapter:
                 {
                     "role": msg.role,
                     "content": msg.content,
-                    "timestamp": (
-                        msg.timestamp.isoformat()
-                        if hasattr(msg.timestamp, "isoformat")
-                        else str(msg.timestamp)
-                    ),
+                    "timestamp": (msg.timestamp.isoformat() if hasattr(msg.timestamp, "isoformat") else str(msg.timestamp)),
                     "metadata": msg.metadata,
                 }
             )
@@ -278,10 +264,7 @@ class ContextEngineAdapter:
         Note:
             ContextEngine operations are async. Use acreate_session() instead.
         """
-        raise NotImplementedError(
-            "Synchronous create_session not supported with ContextEngine. "
-            "Use acreate_session() instead."
-        )
+        raise NotImplementedError("Synchronous create_session not supported with ContextEngine. " "Use acreate_session() instead.")
 
     async def acreate_session(
         self,
@@ -313,9 +296,7 @@ class ContextEngineAdapter:
         user_id = user_id or self.user_id
         metadata = metadata or {}
 
-        await self.context_engine.create_session(
-            session_id=session_id, user_id=user_id, metadata=metadata
-        )
+        await self.context_engine.create_session(session_id=session_id, user_id=user_id, metadata=metadata)
 
         logger.debug(f"Created session {session_id} via ContextEngine")
         return session_id
@@ -336,10 +317,7 @@ class ContextEngineAdapter:
         Note:
             ContextEngine operations are async. Use aget_session() instead.
         """
-        raise NotImplementedError(
-            "Synchronous get_session not supported with ContextEngine. "
-            "Use aget_session() instead."
-        )
+        raise NotImplementedError("Synchronous get_session not supported with ContextEngine. " "Use aget_session() instead.")
 
     async def aget_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -397,9 +375,7 @@ class ContextEngineAdapter:
 
     # ==================== Conversation Message Methods ====================
 
-    def add_conversation_message(
-        self, session_id: str, role: str, content: str, metadata: Optional[Dict] = None
-    ) -> None:
+    def add_conversation_message(self, session_id: str, role: str, content: str, metadata: Optional[Dict] = None) -> None:
         """
         Add conversation message (sync version - not recommended with ContextEngine).
 
@@ -418,14 +394,9 @@ class ContextEngineAdapter:
         Note:
             ContextEngine operations are async. Use aadd_conversation_message() instead.
         """
-        raise NotImplementedError(
-            "Synchronous add_conversation_message not supported with ContextEngine. "
-            "Use aadd_conversation_message() instead."
-        )
+        raise NotImplementedError("Synchronous add_conversation_message not supported with ContextEngine. " "Use aadd_conversation_message() instead.")
 
-    async def aadd_conversation_message(
-        self, session_id: str, role: str, content: str, metadata: Optional[Dict] = None
-    ) -> bool:
+    async def aadd_conversation_message(self, session_id: str, role: str, content: str, metadata: Optional[Dict] = None) -> bool:
         """
         Add conversation message (async version with ContextEngine integration).
 
@@ -447,18 +418,14 @@ class ContextEngineAdapter:
             )
         """
         try:
-            await self.context_engine.add_conversation_message(
-                session_id=session_id, role=role, content=content, metadata=metadata or {}
-            )
+            await self.context_engine.add_conversation_message(session_id=session_id, role=role, content=content, metadata=metadata or {})
             logger.debug(f"Added message to session {session_id} (role={role})")
             return True
         except Exception as e:
             logger.error(f"Failed to add message to session {session_id}: {e}")
             return False
 
-    def get_conversation_history(
-        self, session_id: str, limit: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
+    def get_conversation_history(self, session_id: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         Get conversation history (sync version - not recommended with ContextEngine).
 
@@ -475,14 +442,9 @@ class ContextEngineAdapter:
         Note:
             ContextEngine operations are async. Use aget_conversation_history() instead.
         """
-        raise NotImplementedError(
-            "Synchronous get_conversation_history not supported with ContextEngine. "
-            "Use aget_conversation_history() instead."
-        )
+        raise NotImplementedError("Synchronous get_conversation_history not supported with ContextEngine. " "Use aget_conversation_history() instead.")
 
-    async def aget_conversation_history(
-        self, session_id: str, limit: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
+    async def aget_conversation_history(self, session_id: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         Get conversation history (async version with ContextEngine integration).
 
@@ -502,9 +464,7 @@ class ContextEngineAdapter:
                 print(f"{msg['role']}: {msg['content']}")
         """
         try:
-            messages = await self.context_engine.get_conversation_history(
-                session_id=session_id, limit=limit or 50
-            )
+            messages = await self.context_engine.get_conversation_history(session_id=session_id, limit=limit or 50)
 
             # Convert ConversationMessage objects to dictionaries
             result = []
@@ -513,11 +473,7 @@ class ContextEngineAdapter:
                     {
                         "role": msg.role,
                         "content": msg.content,
-                        "timestamp": (
-                            msg.timestamp.isoformat()
-                            if hasattr(msg.timestamp, "isoformat")
-                            else str(msg.timestamp)
-                        ),
+                        "timestamp": (msg.timestamp.isoformat() if hasattr(msg.timestamp, "isoformat") else str(msg.timestamp)),
                         "metadata": msg.metadata,
                     }
                 )
@@ -573,9 +529,7 @@ class ContextEngineAdapter:
             logger.error(f"Failed to store checkpoint {checkpoint_id} for thread {thread_id}: {e}")
             return False
 
-    async def get_checkpoint(
-        self, thread_id: str, checkpoint_id: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
+    async def get_checkpoint(self, thread_id: str, checkpoint_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Get a checkpoint from ContextEngine.
 
@@ -606,20 +560,14 @@ class ContextEngineAdapter:
         try:
             if checkpoint_id is None:
                 return None
-            checkpoint = await self.context_engine.get_checkpoint(
-                thread_id=thread_id, checkpoint_id=checkpoint_id
-            )
+            checkpoint = await self.context_engine.get_checkpoint(thread_id=thread_id, checkpoint_id=checkpoint_id)
 
             if checkpoint:
-                logger.debug(
-                    f"Retrieved checkpoint {checkpoint_id or 'latest'} for thread {thread_id}"
-                )
+                logger.debug(f"Retrieved checkpoint {checkpoint_id or 'latest'} for thread {thread_id}")
                 return checkpoint
 
             logger.debug(f"Checkpoint {checkpoint_id or 'latest'} not found for thread {thread_id}")
             return None
         except Exception as e:
-            logger.error(
-                f"Failed to get checkpoint {checkpoint_id or 'latest'} for thread {thread_id}: {e}"
-            )
+            logger.error(f"Failed to get checkpoint {checkpoint_id or 'latest'} for thread {thread_id}: {e}")
             return None

@@ -53,9 +53,7 @@ class QueryStats:
         """Convert to dictionary"""
         return {
             "query_type": self.query_type,
-            "query_text": (
-                self.query_text[:100] + "..." if len(self.query_text) > 100 else self.query_text
-            ),
+            "query_text": (self.query_text[:100] + "..." if len(self.query_text) > 100 else self.query_text),
             "execution_count": self.execution_count,
             "total_time_ms": round(self.total_time_ms, 2),
             "avg_time_ms": round(self.avg_time_ms, 2),
@@ -225,14 +223,9 @@ class PerformanceMonitor:
                 self.slow_queries.pop(0)
 
             if self.log_slow_queries:
-                logger.warning(
-                    f"Slow query detected: {query_type} took {duration_ms:.2f}ms "
-                    f"(rows: {row_count})"
-                )
+                logger.warning(f"Slow query detected: {query_type} took {duration_ms:.2f}ms " f"(rows: {row_count})")
 
-    async def analyze_query_plan(
-        self, conn: asyncpg.Connection, query: str, params: tuple = ()
-    ) -> QueryPlan:
+    async def analyze_query_plan(self, conn: asyncpg.Connection, query: str, params: tuple = ()) -> QueryPlan:
         """
         Analyze query execution plan
 
@@ -331,9 +324,7 @@ class PerformanceMonitor:
             "enabled": True,
             "total_queries": total_queries,
             "total_time_ms": round(total_time_ms, 2),
-            "avg_query_time_ms": (
-                round(total_time_ms / total_queries, 2) if total_queries > 0 else 0
-            ),
+            "avg_query_time_ms": (round(total_time_ms / total_queries, 2) if total_queries > 0 else 0),
             "unique_queries": len(self.query_stats),
             "slow_query_count": len(self.slow_queries),
             "slow_query_threshold_ms": self.slow_query_threshold_ms,

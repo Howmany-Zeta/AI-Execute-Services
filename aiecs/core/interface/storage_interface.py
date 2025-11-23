@@ -13,9 +13,7 @@ class ISessionStorage(ABC):
     """Session storage interface - Domain layer abstraction"""
 
     @abstractmethod
-    async def create_session(
-        self, session_id: str, user_id: str, metadata: Dict[str, Any] = None
-    ) -> Dict[str, Any]:
+    async def create_session(self, session_id: str, user_id: str, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Create a new session."""
 
     @abstractmethod
@@ -26,7 +24,7 @@ class ISessionStorage(ABC):
     async def update_session(
         self,
         session_id: str,
-        updates: Dict[str, Any] = None,
+        updates: Optional[Dict[str, Any]] = None,
         increment_requests: bool = False,
         add_processing_time: float = 0.0,
         mark_error: bool = False,
@@ -47,14 +45,12 @@ class IConversationStorage(ABC):
         session_id: str,
         role: str,
         content: str,
-        metadata: Dict[str, Any] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Add message to conversation history."""
 
     @abstractmethod
-    async def get_conversation_history(
-        self, session_id: str, limit: int = 50
-    ) -> List[Dict[str, Any]]:
+    async def get_conversation_history(self, session_id: str, limit: int = 50) -> List[Dict[str, Any]]:
         """Get conversation history for a session."""
 
 
@@ -67,14 +63,12 @@ class ICheckpointStorage(ABC):
         thread_id: str,
         checkpoint_id: str,
         checkpoint_data: Dict[str, Any],
-        metadata: Dict[str, Any] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Store checkpoint data."""
 
     @abstractmethod
-    async def get_checkpoint(
-        self, thread_id: str, checkpoint_id: str = None
-    ) -> Optional[Dict[str, Any]]:
+    async def get_checkpoint(self, thread_id: str, checkpoint_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Get checkpoint data. If checkpoint_id is None, get the latest."""
 
     @abstractmethod
@@ -142,14 +136,12 @@ class ICheckpointerBackend(ABC):
         thread_id: str,
         checkpoint_id: str,
         checkpoint_data: Dict[str, Any],
-        metadata: Dict[str, Any] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Store a checkpoint for LangGraph workflows."""
 
     @abstractmethod
-    async def get_checkpoint(
-        self, thread_id: str, checkpoint_id: str = None
-    ) -> Optional[Dict[str, Any]]:
+    async def get_checkpoint(self, thread_id: str, checkpoint_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Retrieve a checkpoint for LangGraph workflows."""
 
     @abstractmethod

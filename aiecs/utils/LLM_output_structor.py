@@ -221,15 +221,11 @@ class LLMOutputTransformer:
                 )
                 sentence = "Looking at what you've shared, " + sentence.lower()
             # For sentences about what's missing
-            elif any(
-                word in sentence.lower() for word in ["lacks", "missing", "doesn't have", "without"]
-            ):
+            elif any(word in sentence.lower() for word in ["lacks", "missing", "doesn't have", "without"]):
                 if not sentence.lower().startswith(("i ", "it ", "this ")):
                     sentence = "I notice that it " + sentence.lower()
             # For sentences about what's not clear
-            elif "not" in sentence.lower() and any(
-                word in sentence.lower() for word in ["specific", "clear", "measurable"]
-            ):
+            elif "not" in sentence.lower() and any(word in sentence.lower() for word in ["specific", "clear", "measurable"]):
                 sentence = re.sub(
                     r"it is not",
                     "it isn't quite",
@@ -240,14 +236,10 @@ class LLMOutputTransformer:
                     sentence = "I can see that " + sentence.lower()
             # For requirement sentences
             elif any(word in sentence.lower() for word in ["requires", "needs", "must"]):
-                sentence = "To help you effectively, " + sentence.lower().replace(
-                    "the request", "we'll"
-                )
+                sentence = "To help you effectively, " + sentence.lower().replace("the request", "we'll")
             # Default: make it conversational
             else:
-                if len(sentence) > 20 and not sentence.lower().startswith(
-                    ("i ", "this ", "that ", "we ")
-                ):
+                if len(sentence) > 20 and not sentence.lower().startswith(("i ", "this ", "that ", "we ")):
                     sentence = "Additionally, " + sentence.lower()
 
             conversational_parts.append(sentence)
@@ -396,9 +388,7 @@ def format_clarification_message(
     return transformer.transform_message(content, "clarification")
 
 
-def format_confirmation_message(
-    content: Union[str, Dict[str, Any]], confirmation_type: str = "strategy"
-) -> str:
+def format_confirmation_message(content: Union[str, Dict[str, Any]], confirmation_type: str = "strategy") -> str:
     """
     Format confirmation messages with preserved technical details.
 

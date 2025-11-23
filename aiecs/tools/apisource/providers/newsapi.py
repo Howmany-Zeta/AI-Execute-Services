@@ -191,10 +191,7 @@ class NewsAPIProvider(BaseAPIProvider):
         # Get API key
         api_key = self._get_api_key("NEWSAPI_API_KEY")
         if not api_key:
-            raise ValueError(
-                "News API key not found. Set NEWSAPI_API_KEY environment variable or "
-                "provide 'api_key' in config. Get your key at https://newsapi.org"
-            )
+            raise ValueError("News API key not found. Set NEWSAPI_API_KEY environment variable or " "provide 'api_key' in config. Get your key at https://newsapi.org")
 
         headers = {"X-Api-Key": api_key}
         timeout = self.config.get("timeout", 30)

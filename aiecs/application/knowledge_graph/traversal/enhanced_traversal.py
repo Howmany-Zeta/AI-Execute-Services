@@ -115,9 +115,7 @@ class EnhancedTraversal:
 
             # Get neighbors based on pattern direction
             # pattern.direction is already a string due to use_enum_values=True
-            direction_str = (
-                pattern.direction if isinstance(pattern.direction, str) else pattern.direction.value
-            )
+            direction_str = pattern.direction if isinstance(pattern.direction, str) else pattern.direction.value
             neighbors = await self.graph_store.get_neighbors(
                 current_entity.id,
                 relation_type=None,  # We'll filter by pattern
@@ -135,9 +133,7 @@ class EnhancedTraversal:
 
                 # Get the relation between current and neighbor
                 # We need to find the actual relation
-                relation = await self._find_relation(
-                    current_entity.id, neighbor.id, pattern.direction
-                )
+                relation = await self._find_relation(current_entity.id, neighbor.id, pattern.direction)
 
                 if relation is None:
                     continue
@@ -148,11 +144,7 @@ class EnhancedTraversal:
 
                 # For incoming direction, we need to reverse the relation for path construction
                 # because paths expect edges[i].source_id == nodes[i].id
-                direction_str = (
-                    pattern.direction
-                    if isinstance(pattern.direction, str)
-                    else pattern.direction.value
-                )
+                direction_str = pattern.direction if isinstance(pattern.direction, str) else pattern.direction.value
                 if direction_str == "incoming":
                     # Reverse the relation: if we have e1->e2 and we're going from e2 to e1,
                     # the path needs e2->e1 (source=current, target=neighbor)
@@ -169,9 +161,7 @@ class EnhancedTraversal:
                 # Create new path state
                 new_path_entities = path_entities + [neighbor]
                 new_path_edges = path_edges + [path_relation]
-                new_visited = (
-                    visited_nodes | {neighbor.id} if not pattern.allow_cycles else visited_nodes
-                )
+                new_visited = visited_nodes | {neighbor.id} if not pattern.allow_cycles else visited_nodes
 
                 queue.append(
                     {
@@ -185,9 +175,7 @@ class EnhancedTraversal:
 
         return paths
 
-    async def _find_relation(
-        self, source_id: str, target_id: str, direction: TraversalDirection
-    ) -> Optional[Relation]:
+    async def _find_relation(self, source_id: str, target_id: str, direction: TraversalDirection) -> Optional[Relation]:
         """
         Find the relation between two entities
 
@@ -204,18 +192,11 @@ class EnhancedTraversal:
 
         # Handle both enum and string directions
         direction_str = direction if isinstance(direction, str) else direction.value
-        direction_enum = (
-            TraversalDirection(direction_str) if isinstance(direction, str) else direction
-        )
+        direction_enum = TraversalDirection(direction_str) if isinstance(direction, str) else direction
 
-        if (
-            direction_enum == TraversalDirection.OUTGOING
-            or direction_enum == TraversalDirection.BOTH
-        ):
+        if direction_enum == TraversalDirection.OUTGOING or direction_enum == TraversalDirection.BOTH:
             # Look for outgoing relations from source
-            neighbors = await self.graph_store.get_neighbors(
-                source_id, relation_type=None, direction="outgoing"
-            )
+            neighbors = await self.graph_store.get_neighbors(source_id, relation_type=None, direction="outgoing")
             for neighbor in neighbors:
                 if neighbor.id == target_id:
                     # Found the neighbor, now get the relation
@@ -240,15 +221,10 @@ class EnhancedTraversal:
                             target_id=target_id,
                         )
 
-        if (
-            direction_enum == TraversalDirection.INCOMING
-            or direction_enum == TraversalDirection.BOTH
-        ):
+        if direction_enum == TraversalDirection.INCOMING or direction_enum == TraversalDirection.BOTH:
             # Look for incoming relations to source (i.e., outgoing from
             # target)
-            neighbors = await self.graph_store.get_neighbors(
-                target_id, relation_type=None, direction="outgoing"
-            )
+            neighbors = await self.graph_store.get_neighbors(target_id, relation_type=None, direction="outgoing")
             for neighbor in neighbors:
                 if neighbor.id == source_id:
                     from aiecs.infrastructure.graph_storage.in_memory import (

@@ -41,9 +41,7 @@ class DatabaseManager:
     async def init_connection_pool(self, min_size: int = 10, max_size: int = 20):
         """Initialize database connection pool"""
         try:
-            self.connection_pool = await asyncpg.create_pool(
-                **self.db_config, min_size=min_size, max_size=max_size
-            )
+            self.connection_pool = await asyncpg.create_pool(**self.db_config, min_size=min_size, max_size=max_size)
             logger.info("Database connection pool initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize database connection pool: {e}")

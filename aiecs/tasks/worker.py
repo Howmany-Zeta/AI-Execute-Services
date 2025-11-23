@@ -4,6 +4,7 @@ from aiecs.config.config import get_settings
 from aiecs.config.registry import get_ai_service
 from aiecs.ws.socket_server import push_progress
 import logging
+import asyncio
 from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -78,9 +79,7 @@ def execute_heavy_task(
     Execute a heavy task from the service executor queue.
     This task is used for operations that may take longer to complete.
     """
-    logger.info(
-        f"Executing heavy task: {task_name} for user {user_id}, task {task_id}, step {step}"
-    )
+    logger.info(f"Executing heavy task: {task_name} for user {user_id}, task {task_id}, step {step}")
     return _execute_service_task(
         self,
         task_name,
@@ -111,14 +110,16 @@ def _execute_service_task(
     """
     try:
         # 1. Push started status
-        push_progress(
-            user_id,
-            {
-                "status": TaskStatus.RUNNING.value,
-                "step": step,
-                "task": task_name,
-                "message": f"Executing task: {task_name}",
-            },
+        asyncio.run(
+            push_progress(
+                user_id,
+                {
+                    "status": TaskStatus.RUNNING.value,
+                    "step": step,
+                    "task": task_name,
+                    "message": f"Executing task: {task_name}",
+                },
+            )
         )
 
         # 2. Get the service instance
@@ -135,15 +136,17 @@ def _execute_service_task(
             result = service_instance.execute_task(task_name, input_data, context)
 
         # 4. Push completed status
-        push_progress(
-            user_id,
-            {
-                "status": TaskStatus.COMPLETED.value,
-                "step": step,
-                "task": task_name,
-                "result": result,
-                "message": f"Completed task: {task_name}",
-            },
+        asyncio.run(
+            push_progress(
+                user_id,
+                {
+                    "status": TaskStatus.COMPLETED.value,
+                    "step": step,
+                    "task": task_name,
+                    "result": result,
+                    "message": f"Completed task: {task_name}",
+                },
+            )
         )
 
         return {
@@ -154,15 +157,17 @@ def _execute_service_task(
     except Exception as e:
         logger.error(f"Error executing task {task_name}: {str(e)}", exc_info=True)
         # Push error status
-        push_progress(
-            user_id,
-            {
-                "status": TaskStatus.FAILED.value,
-                "step": step,
-                "task": task_name,
-                "error": str(e),
-                "message": f"Failed to execute task: {task_name}",
-            },
+        asyncio.run(
+            push_progress(
+                user_id,
+                {
+                    "status": TaskStatus.FAILED.value,
+                    "step": step,
+                    "task": task_name,
+                    "error": str(e),
+                    "message": f"Failed to execute task: {task_name}",
+                },
+            )
         )
 
         return {

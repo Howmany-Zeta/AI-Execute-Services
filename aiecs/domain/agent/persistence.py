@@ -328,9 +328,7 @@ class AgentStateSerializer:
             try:
                 result.append(AgentStateSerializer._make_json_serializable(item))
             except Exception as e:
-                logger.warning(
-                    f"Failed to sanitize list item at index {i}: {e}. Using placeholder."
-                )
+                logger.warning(f"Failed to sanitize list item at index {i}: {e}. Using placeholder.")
                 result.append(f"<non-serializable: {type(item).__name__}>")
         return result
 
@@ -367,18 +365,12 @@ class AgentStateSerializer:
 
         # Handle asyncio.Queue
         if isinstance(obj, asyncio.Queue):
-            logger.warning(
-                "asyncio.Queue detected in checkpoint data. "
-                "Queues cannot be serialized. Using placeholder."
-            )
+            logger.warning("asyncio.Queue detected in checkpoint data. " "Queues cannot be serialized. Using placeholder.")
             return "<asyncio.Queue: not serializable>"
 
         # Handle queue.Queue
         if isinstance(obj, queue.Queue):
-            logger.warning(
-                "queue.Queue detected in checkpoint data. "
-                "Queues cannot be serialized. Using placeholder."
-            )
+            logger.warning("queue.Queue detected in checkpoint data. " "Queues cannot be serialized. Using placeholder.")
             return "<queue.Queue: not serializable>"
 
         # Handle ChainMap
@@ -414,17 +406,11 @@ class AgentStateSerializer:
 
         # Try to convert using __dict__ for custom objects
         if hasattr(obj, "__dict__"):
-            logger.warning(
-                f"Converting custom object {type(obj).__name__} using __dict__. "
-                "This may not preserve all state."
-            )
+            logger.warning(f"Converting custom object {type(obj).__name__} using __dict__. " "This may not preserve all state.")
             return AgentStateSerializer._sanitize_dict(obj.__dict__)
 
         # Last resort: convert to string
-        logger.warning(
-            f"Object of type {type(obj).__name__} is not directly serializable. "
-            "Converting to string representation."
-        )
+        logger.warning(f"Object of type {type(obj).__name__} is not directly serializable. " "Converting to string representation.")
         return str(obj)
 
 

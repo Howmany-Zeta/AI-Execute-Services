@@ -37,9 +37,7 @@ class CustomQueryExecutor:
         self.graph_store = graph_store
         self.pattern_matcher = PatternMatcher(graph_store)
 
-    async def execute(
-        self, query: GraphQuery, start_entity_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def execute(self, query: GraphQuery, start_entity_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Execute a custom query
 
@@ -61,9 +59,7 @@ class CustomQueryExecutor:
 
         # Apply aggregation if specified
         if query.aggregations:
-            aggregated_results = self._apply_aggregation(
-                projected_results, query.aggregations, query.group_by
-            )
+            aggregated_results = self._apply_aggregation(projected_results, query.aggregations, query.group_by)
             return {
                 "matches": len(matches),
                 "results": aggregated_results,
@@ -76,9 +72,7 @@ class CustomQueryExecutor:
             "aggregated": False,
         }
 
-    async def _execute_pattern_matching(
-        self, query: GraphQuery, start_entity_id: Optional[str]
-    ) -> List[PatternMatch]:
+    async def _execute_pattern_matching(self, query: GraphQuery, start_entity_id: Optional[str]) -> List[PatternMatch]:
         """
         Execute pattern matching based on query
 
@@ -93,9 +87,7 @@ class CustomQueryExecutor:
 
         # Single pattern
         if query.pattern:
-            return await self.pattern_matcher.match_pattern(
-                query.pattern, start_entity_id, max_matches
-            )
+            return await self.pattern_matcher.match_pattern(query.pattern, start_entity_id, max_matches)
 
         # Multiple patterns (required)
         if query.patterns:
@@ -109,9 +101,7 @@ class CustomQueryExecutor:
                 )
             else:
                 # Only required patterns
-                return await self.pattern_matcher.match_multiple_patterns(
-                    query.patterns, start_entity_id, max_matches
-                )
+                return await self.pattern_matcher.match_multiple_patterns(query.patterns, start_entity_id, max_matches)
 
         # No patterns specified
         return []
@@ -149,9 +139,7 @@ class CustomQueryExecutor:
             "bindings": match.bindings,
         }
 
-    def _apply_projection(
-        self, matches: List[PatternMatch], projection: List[str]
-    ) -> List[Dict[str, Any]]:
+    def _apply_projection(self, matches: List[PatternMatch], projection: List[str]) -> List[Dict[str, Any]]:
         """
         Apply projection to matches
 

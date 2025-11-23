@@ -118,7 +118,7 @@ class DocumentCreatorTool(BaseTool):
     class Config(BaseModel):
         """Configuration for the document creator tool"""
 
-        model_config = ConfigDict(env_prefix="DOC_CREATOR_")
+        model_config = ConfigDict(env_prefix="DOC_CREATOR_")  # type: ignore[typeddict-unknown-key]
 
         templates_dir: str = Field(
             default=os.path.join(tempfile.gettempdir(), "document_templates"),
@@ -241,9 +241,7 @@ class DocumentCreatorTool(BaseTool):
             start_time = datetime.now()
             document_id = str(uuid.uuid4())
 
-            self.logger.info(
-                f"Creating document {document_id}: {document_type} using {template_type}"
-            )
+            self.logger.info(f"Creating document {document_id}: {document_type} using {template_type}")
 
             # Step 1: Validate and prepare template
             template = self._get_template(template_type)
@@ -259,9 +257,7 @@ class DocumentCreatorTool(BaseTool):
             style_config = self._get_style_config(style_preset or self.config.default_style)
 
             # Step 5: Create document from template
-            document_content = self._create_document_from_template(
-                template, processed_metadata, style_config, output_format
-            )
+            document_content = self._create_document_from_template(template, processed_metadata, style_config, output_format)
 
             # Step 6: Write document to file
             self._write_document_file(output_path, document_content, output_format)
@@ -277,9 +273,7 @@ class DocumentCreatorTool(BaseTool):
                 "style_preset": style_preset,
                 "creation_metadata": {
                     "created_at": start_time.isoformat(),
-                    "file_size": (
-                        os.path.getsize(output_path) if os.path.exists(output_path) else 0
-                    ),
+                    "file_size": (os.path.getsize(output_path) if os.path.exists(output_path) else 0),
                     "duration": (datetime.now() - start_time).total_seconds(),
                 },
             }
@@ -321,9 +315,7 @@ class DocumentCreatorTool(BaseTool):
                 template_content = f.read()
 
             # Process template variables
-            processed_content = self._process_template_variables(
-                template_content, template_variables
-            )
+            processed_content = self._process_template_variables(template_content, template_variables)
 
             # Generate output path if not provided
             if not output_path:
@@ -373,9 +365,7 @@ class DocumentCreatorTool(BaseTool):
                 content = ""
 
             # Generate structure
-            structure_content = self._generate_document_structure(
-                sections, generate_toc, numbering_style
-            )
+            structure_content = self._generate_document_structure(sections, generate_toc, numbering_style)
 
             # Combine with existing content
             final_content = self._combine_structure_with_content(structure_content, content)
@@ -1051,9 +1041,7 @@ class DocumentCreatorTool(BaseTool):
         filename = f"{document_type}_{timestamp}_{document_id[:8]}.{output_format.value}"
         return os.path.join(self.config.output_dir, filename)
 
-    def _process_metadata(
-        self, metadata: Dict[str, Any], output_format: DocumentFormat
-    ) -> Dict[str, Any]:
+    def _process_metadata(self, metadata: Dict[str, Any], output_format: DocumentFormat) -> Dict[str, Any]:
         """Process and validate metadata"""
         processed = metadata.copy()
 
@@ -1138,9 +1126,7 @@ class DocumentCreatorTool(BaseTool):
 
         return content
 
-    def _generate_metadata_header(
-        self, metadata: Dict[str, Any], output_format: DocumentFormat
-    ) -> str:
+    def _generate_metadata_header(self, metadata: Dict[str, Any], output_format: DocumentFormat) -> str:
         """Generate metadata header for document"""
         if output_format == DocumentFormat.MARKDOWN:
             return "---\n" + "\n".join([f"{k}: {v}" for k, v in metadata.items()]) + "\n---"
@@ -1215,9 +1201,7 @@ class DocumentCreatorTool(BaseTool):
 
         return "\n".join(structure_parts)
 
-    def _generate_table_of_contents(
-        self, sections: List[Dict[str, Any]], numbering_style: Optional[str]
-    ) -> str:
+    def _generate_table_of_contents(self, sections: List[Dict[str, Any]], numbering_style: Optional[str]) -> str:
         """Generate table of contents"""
         toc_parts = ["# Table of Contents", ""]
 
@@ -1277,9 +1261,7 @@ class DocumentCreatorTool(BaseTool):
         }
         return format_map.get(ext, DocumentFormat.PLAIN_TEXT)
 
-    def _generate_format_specific_metadata(
-        self, metadata: Dict[str, Any], file_format: DocumentFormat
-    ) -> str:
+    def _generate_format_specific_metadata(self, metadata: Dict[str, Any], file_format: DocumentFormat) -> str:
         """Generate format-specific metadata"""
         if file_format == DocumentFormat.MARKDOWN:
             return "---\n" + "\n".join([f"{k}: {v}" for k, v in metadata.items()]) + "\n---"

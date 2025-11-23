@@ -170,9 +170,7 @@ class DocumentGraphBuilder:
                 chunk_results = await self._process_chunks_parallel(chunks, document_path, metadata)
             else:
                 # Process chunks sequentially
-                chunk_results = await self._process_chunks_sequential(
-                    chunks, document_path, metadata
-                )
+                chunk_results = await self._process_chunks_sequential(chunks, document_path, metadata)
 
             result.chunk_results = chunk_results
             result.chunks_processed = len(chunk_results)
@@ -313,9 +311,7 @@ class DocumentGraphBuilder:
                     chunk_metadata.update(metadata)
 
                 source = f"{document_path}#chunk{chunk.chunk_index}"
-                return await self.graph_builder.build_from_text(
-                    text=chunk.text, source=source, metadata=chunk_metadata
-                )
+                return await self.graph_builder.build_from_text(text=chunk.text, source=source, metadata=chunk_metadata)
 
         tasks = [process_chunk(chunk) for chunk in chunks]
         gather_results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -367,9 +363,7 @@ class DocumentGraphBuilder:
                 chunk_metadata.update(metadata)
 
             source = f"{document_path}#chunk{chunk.chunk_index}"
-            result = await self.graph_builder.build_from_text(
-                text=chunk.text, source=source, metadata=chunk_metadata
-            )
+            result = await self.graph_builder.build_from_text(text=chunk.text, source=source, metadata=chunk_metadata)
             results.append(result)
 
         return results

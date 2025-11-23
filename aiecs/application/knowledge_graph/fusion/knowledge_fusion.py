@@ -124,9 +124,7 @@ class KnowledgeFusion:
 
         return stats
 
-    async def resolve_property_conflicts(
-        self, entities: List[Entity], strategy: str = "most_complete"
-    ) -> Entity:
+    async def resolve_property_conflicts(self, entities: List[Entity], strategy: str = "most_complete") -> Entity:
         """
         Resolve conflicts when merging entities with different property values
 
@@ -533,9 +531,7 @@ class KnowledgeFusion:
         # Update counter
         self.entities_merged += len(entities) - 1
 
-    async def _update_relations_for_merge(
-        self, merged_entities: List[Entity], canonical_id: str
-    ) -> None:
+    async def _update_relations_for_merge(self, merged_entities: List[Entity], canonical_id: str) -> None:
         """
         Update relations to point to canonical merged entity
 

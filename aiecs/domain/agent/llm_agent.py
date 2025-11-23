@@ -416,9 +416,7 @@ class LLMAgent(BaseAIAgent):
                 task_id=task.get("task_id"),
             )
 
-    async def process_message(
-        self, message: str, sender_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def process_message(self, message: str, sender_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Process an incoming message.
 
@@ -449,9 +447,7 @@ class LLMAgent(BaseAIAgent):
             logger.error(f"Message processing failed for {self.agent_id}: {e}")
             raise
 
-    async def execute_task_streaming(
-        self, task: Dict[str, Any], context: Dict[str, Any]
-    ) -> AsyncIterator[Dict[str, Any]]:
+    async def execute_task_streaming(self, task: Dict[str, Any], context: Dict[str, Any]) -> AsyncIterator[Dict[str, Any]]:
         """
         Execute a task with streaming LLM tokens.
 
@@ -563,9 +559,7 @@ class LLMAgent(BaseAIAgent):
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
-    async def process_message_streaming(
-        self, message: str, sender_id: Optional[str] = None
-    ) -> AsyncIterator[str]:
+    async def process_message_streaming(self, message: str, sender_id: Optional[str] = None) -> AsyncIterator[str]:
         """
         Process a message with streaming response.
 
@@ -672,7 +666,4 @@ class LLMAgent(BaseAIAgent):
         """
         # This is a placeholder - actual implementation would require
         # providing the LLM client separately
-        raise NotImplementedError(
-            "LLMAgent.from_dict requires LLM client to be provided separately. "
-            "Use constructor instead."
-        )
+        raise NotImplementedError("LLMAgent.from_dict requires LLM client to be provided separately. " "Use constructor instead.")

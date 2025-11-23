@@ -95,7 +95,7 @@ class TextChunker:
                     start_char=0,
                     end_char=len(text),
                     chunk_index=0,
-                    metadata=metadata,
+                    metadata=metadata or {},
                 )
             ]
 
@@ -130,7 +130,7 @@ class TextChunker:
                 start_char=start,
                 end_char=end,
                 chunk_index=chunk_index,
-                metadata=metadata,
+                metadata=metadata or {},
             )
             chunks.append(chunk)
 
@@ -175,7 +175,7 @@ class TextChunker:
                         start_char=current_start,
                         end_char=chunk_end,
                         chunk_index=chunk_index,
-                        metadata=metadata,
+                        metadata=metadata or {},
                     )
                 )
 
@@ -198,15 +198,13 @@ class TextChunker:
                     start_char=current_start,
                     end_char=len(text),
                     chunk_index=chunk_index,
-                    metadata=metadata,
+                    metadata=metadata or {},
                 )
             )
 
         return chunks
 
-    def _chunk_by_paragraphs(
-        self, text: str, metadata: Optional[Dict[str, Any]]
-    ) -> List[TextChunk]:
+    def _chunk_by_paragraphs(self, text: str, metadata: Optional[Dict[str, Any]]) -> List[TextChunk]:
         """
         Chunk text respecting paragraph boundaries
 
@@ -245,7 +243,7 @@ class TextChunker:
                         start_char=current_start,
                         end_char=chunk_end,
                         chunk_index=chunk_index,
-                        metadata=metadata,
+                        metadata=metadata or {},
                     )
                 )
 
@@ -267,7 +265,7 @@ class TextChunker:
                     start_char=current_start,
                     end_char=len(text),
                     chunk_index=chunk_index,
-                    metadata=metadata,
+                    metadata=metadata or {},
                 )
             )
 
@@ -305,7 +303,7 @@ class TextChunker:
         if not sentences or self.overlap == 0:
             return []
 
-        overlap_sentences = []
+        overlap_sentences: List[str] = []
         overlap_length = 0
 
         # Take sentences from end until we reach overlap size

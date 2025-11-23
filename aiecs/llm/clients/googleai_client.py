@@ -35,9 +35,7 @@ class GoogleAIClient(BaseLLMClient):
         if not self._initialized:
             api_key = self.settings.googleai_api_key or os.environ.get("GOOGLEAI_API_KEY")
             if not api_key:
-                raise ProviderNotAvailableError(
-                    "Google AI API key not configured. Set GOOGLEAI_API_KEY."
-                )
+                raise ProviderNotAvailableError("Google AI API key not configured. Set GOOGLEAI_API_KEY.")
 
             try:
                 genai.configure(api_key=api_key)
@@ -120,7 +118,7 @@ class GoogleAIClient(BaseLLMClient):
             self.logger.error(f"Error generating text with Google AI: {e}")
             raise
 
-    async def stream_text(
+    async def stream_text(  # type: ignore[override]
         self,
         messages: List[LLMMessage],
         model: Optional[str] = None,

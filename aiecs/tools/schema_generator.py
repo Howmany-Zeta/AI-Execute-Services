@@ -92,9 +92,7 @@ def _extract_param_description_from_docstring(docstring: str, param_name: str) -
     return None
 
 
-def generate_schema_from_method(
-    method: callable, method_name: str, base_class: Type[BaseModel] = BaseModel
-) -> Optional[Type[BaseModel]]:
+def generate_schema_from_method(method: callable, method_name: str, base_class: Type[BaseModel] = BaseModel) -> Optional[Type[BaseModel]]:
     """
     Automatically generate Pydantic Schema from method signature
 
@@ -266,10 +264,6 @@ if __name__ == "__main__":
         print("  Fields:")
         for field_name, field_info in schema.model_fields.items():
             required = "Required" if field_info.is_required() else "Optional"
-            default = (
-                f" (default: {field_info.default})"
-                if not field_info.is_required() and field_info.default is not None
-                else ""
-            )
+            default = f" (default: {field_info.default})" if not field_info.is_required() and field_info.default is not None else ""
             print(f"    - {field_name}: {field_info.description} [{required}]{default}")
         print()

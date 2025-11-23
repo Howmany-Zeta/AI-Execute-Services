@@ -29,10 +29,11 @@ class Metric:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
+        timestamp_str = self.timestamp.isoformat() if self.timestamp else None
         return {
             "name": self.name,
             "value": self.value,
-            "timestamp": self.timestamp.isoformat(),
+            "timestamp": timestamp_str,
             "tags": self.tags,
         }
 
@@ -214,11 +215,7 @@ class MetricsCollector:
         resource_avgs = {}
         for name, values in self.resource_metrics.items():
             if values:
-                recent = [
-                    v["value"]
-                    for v in values
-                    if (datetime.utcnow() - v["timestamp"]).total_seconds() <= self.window_seconds
-                ]
+                recent = [v["value"] for v in values if (datetime.utcnow() - v["timestamp"]).total_seconds() <= self.window_seconds]
                 if recent:
                     resource_avgs[name] = sum(recent) / len(recent)
 
@@ -282,21 +279,11 @@ class MetricsExporter:
         # Latency metrics
         for operation, stats in metrics["latency"].items():
             lines.append("# TYPE graph_store_latency_seconds histogram")
-            lines.append(
-                f'graph_store_latency_seconds{{operation="{operation}",quantile="0.5"}} {stats["p50"]/1000}'
-            )
-            lines.append(
-                f'graph_store_latency_seconds{{operation="{operation}",quantile="0.95"}} {stats["p95"]/1000}'
-            )
-            lines.append(
-                f'graph_store_latency_seconds{{operation="{operation}",quantile="0.99"}} {stats["p99"]/1000}'
-            )
-            lines.append(
-                f'graph_store_latency_seconds_count{{operation="{operation}"}} {stats["count"]}'
-            )
-            lines.append(
-                f'graph_store_latency_seconds_sum{{operation="{operation}"}} {stats["avg"] * stats["count"] / 1000}'
-            )
+            lines.append(f'graph_store_latency_seconds{{operation="{operation}",quantile="0.5"}} {stats["p50"]/1000}')
+            lines.append(f'graph_store_latency_seconds{{operation="{operation}",quantile="0.95"}} {stats["p95"]/1000}')
+            lines.append(f'graph_store_latency_seconds{{operation="{operation}",quantile="0.99"}} {stats["p99"]/1000}')
+            lines.append(f'graph_store_latency_seconds_count{{operation="{operation}"}} {stats["count"]}')
+            lines.append(f'graph_store_latency_seconds_sum{{operation="{operation}"}} {stats["avg"] * stats["count"] / 1000}')
 
         # Cache metrics
         cache = metrics["cache"]

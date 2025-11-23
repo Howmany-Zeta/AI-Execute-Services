@@ -6,7 +6,7 @@ contextual suggestions for better search results.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, cast
 
 
 class SearchContext:
@@ -22,7 +22,7 @@ class SearchContext:
         self.search_history: List[Dict[str, Any]] = []
         self.max_history = max_history
         self.topic_context: Optional[List[str]] = None
-        self.user_preferences = {
+        self.user_preferences: Dict[str, Any] = {
             "preferred_domains": set(),
             "avoided_domains": set(),
             "preferred_content_types": [],
@@ -74,7 +74,7 @@ class SearchContext:
         Returns:
             Suggestions dictionary with related queries and parameters
         """
-        suggestions = {
+        suggestions: Dict[str, Any] = {
             "related_queries": [],
             "refinement_suggestions": [],
             "context_aware_params": {},
@@ -84,12 +84,13 @@ class SearchContext:
             return suggestions
 
         # Find related historical queries
+        related_queries = cast(List[Dict[str, Any]], suggestions["related_queries"])
         for record in reversed(self.search_history[-5:]):
             prev_query = record["query"]
             similarity = self._calculate_query_similarity(current_query, prev_query)
 
             if similarity > 0.5:
-                suggestions["related_queries"].append(
+                related_queries.append(
                     {
                         "query": prev_query,
                         "similarity": similarity,
@@ -98,10 +99,10 @@ class SearchContext:
                 )
 
         # Suggest preferred sites if available
-        if self.user_preferences["preferred_domains"]:
-            suggestions["context_aware_params"]["preferred_sites"] = list(
-                self.user_preferences["preferred_domains"]
-            )
+        preferred_domains = cast(Set[str], self.user_preferences["preferred_domains"])
+        if preferred_domains:
+            context_aware_params = cast(Dict[str, Any], suggestions["context_aware_params"])
+            context_aware_params["preferred_sites"] = list(preferred_domains)
 
         return suggestions
 
@@ -131,10 +132,13 @@ class SearchContext:
         Returns:
             User preferences dictionary
         """
+        preferred_domains = cast(Set[str], self.user_preferences["preferred_domains"])
+        avoided_domains = cast(Set[str], self.user_preferences["avoided_domains"])
+        preferred_content_types = cast(List[str], self.user_preferences["preferred_content_types"])
         return {
-            "preferred_domains": list(self.user_preferences["preferred_domains"]),
-            "avoided_domains": list(self.user_preferences["avoided_domains"]),
-            "preferred_content_types": self.user_preferences["preferred_content_types"].copy(),
+            "preferred_domains": list(preferred_domains),
+            "avoided_domains": list(avoided_domains),
+            "preferred_content_types": preferred_content_types.copy(),
             "language": self.user_preferences["language"],
         }
 
@@ -147,11 +151,13 @@ class SearchContext:
             value: Preference value
         """
         if key in self.user_preferences:
-            if isinstance(self.user_preferences[key], set):
+            pref_value = self.user_preferences[key]
+            if isinstance(pref_value, set):
                 if isinstance(value, (list, set)):
                     self.user_preferences[key] = set(value)
                 else:
-                    self.user_preferences[key].add(value)
+                    pref_set = cast(Set[str], pref_value)
+                    pref_set.add(value)
             else:
                 self.user_preferences[key] = value
 
@@ -176,22 +182,24 @@ class SearchContext:
             feedback: User feedback
         """
         # Learn from clicked/used results
+        preferred_domains = cast(Set[str], self.user_preferences["preferred_domains"])
         if "clicked_indices" in feedback:
             for idx in feedback["clicked_indices"]:
                 if 0 <= idx < len(results):
                     result = results[idx]
                     domain = result.get("displayLink", "")
                     if domain:
-                        self.user_preferences["preferred_domains"].add(domain)
+                        preferred_domains.add(domain)
 
         # Learn from disliked results
+        avoided_domains = cast(Set[str], self.user_preferences["avoided_domains"])
         if "disliked_indices" in feedback:
             for idx in feedback["disliked_indices"]:
                 if 0 <= idx < len(results):
                     result = results[idx]
                     domain = result.get("displayLink", "")
                     if domain:
-                        self.user_preferences["avoided_domains"].add(domain)
+                        avoided_domains.add(domain)
 
     def _calculate_query_similarity(self, query1: str, query2: str) -> float:
         """

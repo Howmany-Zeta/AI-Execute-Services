@@ -89,7 +89,7 @@ class OpenAIClient(BaseLLMClient):
                 raise RateLimitError(f"OpenAI rate limit exceeded: {str(e)}")
             raise
 
-    async def stream_text(
+    async def stream_text(  # type: ignore[override]
         self,
         messages: List[LLMMessage],
         model: Optional[str] = None,

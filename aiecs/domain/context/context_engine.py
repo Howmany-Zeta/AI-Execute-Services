@@ -22,7 +22,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Optional, List
+from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, asdict, is_dataclass
 
 
@@ -46,8 +46,8 @@ try:
 
     REDIS_AVAILABLE = True
 except ImportError:
-    redis = None
-    get_redis_client = None
+    redis = None  # type: ignore[assignment]
+    get_redis_client = None  # type: ignore[assignment]
     REDIS_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ class ConversationMessage:
     role: str  # user, assistant, system
     content: str
     timestamp: datetime
-    metadata: Dict[str, Any] = None
+    metadata: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -209,7 +209,7 @@ class CompressionConfig:
     embedding_model: str = "text-embedding-ada-002"  # Embedding model to use
 
     # Hybrid strategy settings
-    hybrid_strategies: List[str] = None  # Strategies to combine (default: ["truncate", "summarize"])
+    hybrid_strategies: Optional[List[str]] = None  # Strategies to combine (default: ["truncate", "summarize"])
 
     # Auto-compression triggers
     auto_compress_enabled: bool = False  # Enable automatic compression
@@ -227,10 +227,7 @@ class CompressionConfig:
         # Validate strategy
         valid_strategies = ["truncate", "summarize", "semantic", "hybrid"]
         if self.strategy not in valid_strategies:
-            raise ValueError(
-                f"Invalid strategy '{self.strategy}'. "
-                f"Must be one of: {', '.join(valid_strategies)}"
-            )
+            raise ValueError(f"Invalid strategy '{self.strategy}'. " f"Must be one of: {', '.join(valid_strategies)}")
 
 
 class ContextEngine(IStorageBackend, ICheckpointerBackend):
@@ -535,9 +532,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             "total_checkpoints": 0,
         }
 
-        logger.info(
-            f"ContextEngine initialized with compression strategy: {self.compression_config.strategy}"
-        )
+        logger.info(f"ContextEngine initialized with compression strategy: {self.compression_config.strategy}")
 
     async def initialize(self) -> bool:
         """Initialize Redis connection and validate setup."""
@@ -572,9 +567,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
             # Test connection
             await self.redis_client.ping()
-            logger.info(
-                "ContextEngine connected to Redis successfully using RedisClient wrapper in current event loop"
-            )
+            logger.info("ContextEngine connected to Redis successfully using RedisClient wrapper in current event loop")
             return True
 
         except Exception as e:
@@ -598,9 +591,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
     # ==================== Session Management ====================
 
-    async def create_session(
-        self, session_id: str, user_id: str, metadata: Dict[str, Any] = None
-    ) -> SessionMetrics:
+    async def create_session(self, session_id: str, user_id: str, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Create a new session."""
         now = datetime.utcnow()
         session = SessionMetrics(
@@ -628,25 +619,27 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         self._global_metrics["active_sessions"] += 1
 
         logger.info(f"Created session {session_id} for user {user_id}")
-        return session
+        return session.to_dict()
 
-    async def get_session(self, session_id: str) -> Optional[SessionMetrics]:
+    async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Get session by ID."""
         if self.redis_client:
             try:
-                data = await self.redis_client.hget("sessions", session_id)
+                data = await self.redis_client.hget("sessions", session_id)  # type: ignore[misc]
                 if data:
-                    return SessionMetrics.from_dict(json.loads(data))
+                    session = SessionMetrics.from_dict(json.loads(data))
+                    return session.to_dict()
             except Exception as e:
                 logger.error(f"Failed to get session from Redis: {e}")
 
         # Fallback to memory
-        return self._memory_sessions.get(session_id)
+        session = self._memory_sessions.get(session_id)
+        return session.to_dict() if session else None
 
     async def update_session(
         self,
         session_id: str,
-        updates: Dict[str, Any] = None,
+        updates: Optional[Dict[str, Any]] = None,
         increment_requests: bool = False,
         add_processing_time: float = 0.0,
         mark_error: bool = False,
@@ -690,9 +683,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         await self._store_session(session)
 
         # Update global metrics
-        self._global_metrics["active_sessions"] = max(
-            0, self._global_metrics["active_sessions"] - 1
-        )
+        self._global_metrics["active_sessions"] = max(0, self._global_metrics["active_sessions"] - 1)
 
         logger.info(f"Ended session {session_id} with status: {status}")
         return True
@@ -701,12 +692,12 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         """Store session to Redis or memory."""
         if self.redis_client:
             try:
-                await self.redis_client.hset(
+                await self.redis_client.hset(  # type: ignore[misc]
                     "sessions",
                     session.session_id,
                     json.dumps(session.to_dict(), cls=DateTimeEncoder),
                 )
-                await self.redis_client.expire("sessions", self.session_ttl)
+                await self.redis_client.expire("sessions", self.session_ttl)  # type: ignore[misc]
                 return
             except Exception as e:
                 logger.error(f"Failed to store session to Redis: {e}")
@@ -721,7 +712,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         session_id: str,
         role: str,
         content: str,
-        metadata: Dict[str, Any] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Add message to conversation history."""
         message = ConversationMessage(
@@ -742,42 +733,34 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         return True
 
-    async def get_conversation_history(
-        self, session_id: str, limit: int = 50
-    ) -> List[ConversationMessage]:
+    async def get_conversation_history(self, session_id: str, limit: int = 50) -> List[Dict[str, Any]]:
         """Get conversation history for a session."""
         if self.redis_client:
             try:
-                messages_data = await self.redis_client.lrange(
-                    f"conversation:{session_id}", -limit, -1
-                )
+                messages_data = await self.redis_client.lrange(f"conversation:{session_id}", -limit, -1)  # type: ignore[misc]
                 # Since lpush adds to the beginning, we need to reverse to get
                 # chronological order
-                messages = [
-                    ConversationMessage.from_dict(json.loads(msg))
-                    for msg in reversed(messages_data)
-                ]
-                return messages
+                messages = [ConversationMessage.from_dict(json.loads(msg)) for msg in reversed(messages_data)]
+                return [msg.to_dict() for msg in messages]
             except Exception as e:
                 logger.error(f"Failed to get conversation from Redis: {e}")
 
         # Fallback to memory
         messages = self._memory_conversations.get(session_id, [])
-        return messages[-limit:] if limit > 0 else messages
+        message_list = messages[-limit:] if limit > 0 else messages
+        return [msg.to_dict() for msg in message_list]
 
     async def _store_conversation_message(self, session_id: str, message: ConversationMessage):
         """Store conversation message to Redis or memory."""
         if self.redis_client:
             try:
                 # Add to list
-                await self.redis_client.lpush(
+                await self.redis_client.lpush(  # type: ignore[misc]
                     f"conversation:{session_id}",
                     json.dumps(message.to_dict(), cls=DateTimeEncoder),
                 )
                 # Trim to limit
-                await self.redis_client.ltrim(
-                    f"conversation:{session_id}", -self.conversation_limit, -1
-                )
+                await self.redis_client.ltrim(f"conversation:{session_id}", -self.conversation_limit, -1)  # type: ignore[misc]
                 # Set TTL
                 await self.redis_client.expire(f"conversation:{session_id}", self.session_ttl)
                 return
@@ -792,9 +775,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         # Trim to limit
         if len(self._memory_conversations[session_id]) > self.conversation_limit:
-            self._memory_conversations[session_id] = self._memory_conversations[session_id][
-                -self.conversation_limit :
-            ]
+            self._memory_conversations[session_id] = self._memory_conversations[session_id][-self.conversation_limit :]
 
     # ==================== TaskContext Integration ====================
 
@@ -802,7 +783,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         """Get TaskContext for a session."""
         if self.redis_client:
             try:
-                data = await self.redis_client.hget("task_contexts", session_id)
+                data = await self.redis_client.hget("task_contexts", session_id)  # type: ignore[misc]
                 if data:
                     context_data = json.loads(data)
                     # Reconstruct TaskContext from stored data
@@ -864,12 +845,12 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 context_dict = context.to_dict()
                 sanitized_dict = self._sanitize_dataclasses(context_dict)
 
-                await self.redis_client.hset(
+                await self.redis_client.hset(  # type: ignore[misc]
                     "task_contexts",
                     session_id,
                     json.dumps(sanitized_dict, cls=DateTimeEncoder),
                 )
-                await self.redis_client.expire("task_contexts", self.session_ttl)
+                await self.redis_client.expire("task_contexts", self.session_ttl)  # type: ignore[misc]
                 return
             except Exception as e:
                 logger.error(f"Failed to store TaskContext to Redis: {e}")
@@ -903,7 +884,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         thread_id: str,
         checkpoint_id: str,
         checkpoint_data: Dict[str, Any],
-        metadata: Dict[str, Any] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
         Store checkpoint data for LangGraph workflows.
@@ -926,13 +907,13 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         if self.redis_client:
             try:
                 # Store checkpoint
-                await self.redis_client.hset(
+                await self.redis_client.hset(  # type: ignore[misc]
                     f"checkpoints:{thread_id}",
                     checkpoint_id,
                     json.dumps(checkpoint, cls=DateTimeEncoder),
                 )
                 # Set TTL
-                await self.redis_client.expire(f"checkpoints:{thread_id}", self.checkpoint_ttl)
+                await self.redis_client.expire(f"checkpoints:{thread_id}", self.checkpoint_ttl)  # type: ignore[misc]
 
                 # Update global metrics
                 self._global_metrics["total_checkpoints"] += 1
@@ -946,20 +927,18 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         self._memory_checkpoints[key] = checkpoint
         return True
 
-    async def get_checkpoint(
-        self, thread_id: str, checkpoint_id: str = None
-    ) -> Optional[Dict[str, Any]]:
+    async def get_checkpoint(self, thread_id: str, checkpoint_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Get checkpoint data. If checkpoint_id is None, get the latest."""
         if self.redis_client:
             try:
                 if checkpoint_id:
                     # Get specific checkpoint
-                    data = await self.redis_client.hget(f"checkpoints:{thread_id}", checkpoint_id)
+                    data = await self.redis_client.hget(f"checkpoints:{thread_id}", checkpoint_id)  # type: ignore[misc]
                     if data:
                         return json.loads(data)
                 else:
                     # Get latest checkpoint
-                    checkpoints = await self.redis_client.hgetall(f"checkpoints:{thread_id}")
+                    checkpoints = await self.redis_client.hgetall(f"checkpoints:{thread_id}")  # type: ignore[misc]
                     if checkpoints:
                         # Sort by creation time and get latest
                         latest = max(
@@ -976,9 +955,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             return self._memory_checkpoints.get(key)
         else:
             # Get latest from memory
-            thread_checkpoints = {
-                k: v for k, v in self._memory_checkpoints.items() if k.startswith(f"{thread_id}:")
-            }
+            thread_checkpoints = {k: v for k, v in self._memory_checkpoints.items() if k.startswith(f"{thread_id}:")}
             if thread_checkpoints:
                 latest_key = max(
                     thread_checkpoints.keys(),
@@ -992,7 +969,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         """List checkpoints for a thread, ordered by creation time (newest first)."""
         if self.redis_client:
             try:
-                checkpoints_data = await self.redis_client.hgetall(f"checkpoints:{thread_id}")
+                checkpoints_data = await self.redis_client.hgetall(f"checkpoints:{thread_id}")  # type: ignore[misc]
                 checkpoints = [json.loads(data) for data in checkpoints_data.values()]
                 # Sort by creation time (newest first)
                 checkpoints.sort(key=lambda x: x["created_at"], reverse=True)
@@ -1001,9 +978,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 logger.error(f"Failed to list checkpoints from Redis: {e}")
 
         # Fallback to memory
-        thread_checkpoints = [
-            v for k, v in self._memory_checkpoints.items() if k.startswith(f"{thread_id}:")
-        ]
+        thread_checkpoints = [v for k, v in self._memory_checkpoints.items() if k.startswith(f"{thread_id}:")]
         thread_checkpoints.sort(key=lambda x: x["created_at"], reverse=True)
         return thread_checkpoints[:limit]
 
@@ -1017,7 +992,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         if self.redis_client:
             try:
                 # Get all sessions
-                sessions_data = await self.redis_client.hgetall("sessions")
+                sessions_data = await self.redis_client.hgetall("sessions")  # type: ignore[misc]
                 expired_sessions = []
 
                 for session_id, data in sessions_data.items():
@@ -1034,11 +1009,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 logger.error(f"Failed to cleanup expired sessions from Redis: {e}")
         else:
             # Memory cleanup
-            expired_sessions = [
-                session_id
-                for session_id, session in self._memory_sessions.items()
-                if session.last_activity < cutoff_time
-            ]
+            expired_sessions = [session_id for session_id, session in self._memory_sessions.items() if session.last_activity < cutoff_time]
 
             for session_id in expired_sessions:
                 await self._cleanup_session_data(session_id)
@@ -1054,13 +1025,13 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         if self.redis_client:
             try:
                 # Remove session
-                await self.redis_client.hdel("sessions", session_id)
+                await self.redis_client.hdel("sessions", session_id)  # type: ignore[misc]
                 # Remove conversation
-                await self.redis_client.delete(f"conversation:{session_id}")
+                await self.redis_client.delete(f"conversation:{session_id}")  # type: ignore[misc]
                 # Remove task context
-                await self.redis_client.hdel("task_contexts", session_id)
+                await self.redis_client.hdel("task_contexts", session_id)  # type: ignore[misc]
                 # Remove checkpoints
-                await self.redis_client.delete(f"checkpoints:{session_id}")
+                await self.redis_client.delete(f"checkpoints:{session_id}")  # type: ignore[misc]
             except Exception as e:
                 logger.error(f"Failed to cleanup session data from Redis: {e}")
         else:
@@ -1070,9 +1041,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             self._memory_contexts.pop(session_id, None)
 
             # Remove checkpoints
-            checkpoint_keys = [
-                k for k in self._memory_checkpoints.keys() if k.startswith(f"{session_id}:")
-            ]
+            checkpoint_keys = [k for k in self._memory_checkpoints.keys() if k.startswith(f"{session_id}:")]
             for key in checkpoint_keys:
                 self._memory_checkpoints.pop(key, None)
 
@@ -1084,16 +1053,12 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         if self.redis_client:
             try:
-                sessions_data = await self.redis_client.hgetall("sessions")
-                active_sessions_count = len(
-                    [s for s in sessions_data.values() if json.loads(s)["status"] == "active"]
-                )
+                sessions_data = await self.redis_client.hgetall("sessions")  # type: ignore[misc]
+                active_sessions_count = len([s for s in sessions_data.values() if json.loads(s)["status"] == "active"])
             except Exception as e:
                 logger.error(f"Failed to get metrics from Redis: {e}")
         else:
-            active_sessions_count = len(
-                [s for s in self._memory_sessions.values() if s.status == "active"]
-            )
+            active_sessions_count = len([s for s in self._memory_sessions.values() if s.status == "active"])
 
         return {
             **self._global_metrics,
@@ -1123,12 +1088,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         # Check memory usage (basic check)
         if not self.redis_client:
-            total_memory_items = (
-                len(self._memory_sessions)
-                + len(self._memory_conversations)
-                + len(self._memory_contexts)
-                + len(self._memory_checkpoints)
-            )
+            total_memory_items = len(self._memory_sessions) + len(self._memory_conversations) + len(self._memory_contexts) + len(self._memory_checkpoints)
             if total_memory_items > 10000:  # Arbitrary threshold
                 health["issues"].append(f"High memory usage: {total_memory_items} items")
                 health["status"] = "warning"
@@ -1142,7 +1102,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         thread_id: str,
         checkpoint_id: str,
         checkpoint_data: Dict[str, Any],
-        metadata: Dict[str, Any] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Store a checkpoint for LangGraph workflows (ICheckpointerBackend interface)."""
         return await self.store_checkpoint(thread_id, checkpoint_id, checkpoint_data, metadata)
@@ -1166,14 +1126,12 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         if self.redis_client:
             try:
-                await self.redis_client.hset(
+                await self.redis_client.hset(  # type: ignore[misc]
                     f"checkpoint_writes:{thread_id}",
                     f"{checkpoint_id}:{task_id}",
                     json.dumps(writes_payload, cls=DateTimeEncoder),
                 )
-                await self.redis_client.expire(
-                    f"checkpoint_writes:{thread_id}", self.checkpoint_ttl
-                )
+                await self.redis_client.expire(f"checkpoint_writes:{thread_id}", self.checkpoint_ttl)
                 return True
             except Exception as e:
                 logger.error(f"Failed to store writes to Redis: {e}")
@@ -1186,7 +1144,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         """Get intermediate writes for a checkpoint (ICheckpointerBackend interface)."""
         if self.redis_client:
             try:
-                writes_data = await self.redis_client.hgetall(f"checkpoint_writes:{thread_id}")
+                writes_data = await self.redis_client.hgetall(f"checkpoint_writes:{thread_id}")  # type: ignore[misc]
                 writes = []
                 for key, data in writes_data.items():
                     if key.startswith(f"{checkpoint_id}:"):
@@ -1217,7 +1175,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         session_id: str,
         participants: List[Dict[str, Any]],
         session_type: str,
-        metadata: Dict[str, Any] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Create an isolated conversation session between participants.
@@ -1277,7 +1235,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         recipient_role: Optional[str],
         content: str,
         message_type: str = "communication",
-        metadata: Dict[str, Any] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
         Add a message to an agent communication session.
@@ -1359,7 +1317,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 if hasattr(msg, "to_dict"):
                     msg_dict = msg.to_dict()
                 else:
-                    msg_dict = msg
+                    msg_dict = msg  # type: ignore[assignment]
 
                 msg_metadata = msg_dict.get("metadata", {})
                 msg_type = msg_metadata.get("message_type", "communication")
@@ -1393,12 +1351,12 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         if self.redis_client:
             try:
-                await self.redis_client.hset(
+                await self.redis_client.hset(  # type: ignore[misc]
                     "conversation_sessions",
                     session_key,
                     json.dumps(session_data, cls=DateTimeEncoder),
                 )
-                await self.redis_client.expire("conversation_sessions", self.session_ttl)
+                await self.redis_client.expire("conversation_sessions", self.session_ttl)  # type: ignore[misc]
                 return
             except Exception as e:
                 logger.error(f"Failed to store conversation session to Redis: {e}")
@@ -1412,11 +1370,11 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         """Update last activity timestamp for a conversation session."""
         if self.redis_client:
             try:
-                session_data = await self.redis_client.hget("conversation_sessions", session_key)
+                session_data = await self.redis_client.hget("conversation_sessions", session_key)  # type: ignore[misc]
                 if session_data:
                     session_dict = json.loads(session_data)
                     session_dict["last_activity"] = datetime.utcnow().isoformat()
-                    await self.redis_client.hset(
+                    await self.redis_client.hset(  # type: ignore[misc]
                         "conversation_sessions",
                         session_key,
                         json.dumps(session_dict, cls=DateTimeEncoder),
@@ -1426,13 +1384,8 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 logger.error(f"Failed to update conversation session activity in Redis: {e}")
 
         # Fallback to memory
-        if (
-            hasattr(self, "_memory_conversation_sessions")
-            and session_key in self._memory_conversation_sessions
-        ):
-            self._memory_conversation_sessions[session_key][
-                "last_activity"
-            ] = datetime.utcnow().isoformat()
+        if hasattr(self, "_memory_conversation_sessions") and session_key in self._memory_conversation_sessions:
+            self._memory_conversation_sessions[session_key]["last_activity"] = datetime.utcnow().isoformat()
 
     # ==================== Compression Methods (Phase 6) ====================
 
@@ -1470,15 +1423,14 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             print(f"Compressed from {result['original_count']} to {result['compressed_count']} messages")
         """
         import time
+
         start_time = time.time()
 
         # Use config override or default
         config = config_override or self.compression_config
         selected_strategy = strategy or config.strategy
 
-        logger.info(
-            f"Compressing conversation {session_id} using strategy: {selected_strategy}"
-        )
+        logger.info(f"Compressing conversation {session_id} using strategy: {selected_strategy}")
 
         try:
             # Get current conversation
@@ -1506,9 +1458,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 raise ValueError(f"Unknown compression strategy: {selected_strategy}")
 
             compressed_count = len(compressed_messages)
-            compression_ratio = (
-                1.0 - (compressed_count / original_count) if original_count > 0 else 0.0
-            )
+            compression_ratio = 1.0 - (compressed_count / original_count) if original_count > 0 else 0.0
 
             # Replace conversation history
             await self._replace_conversation_history(session_id, compressed_messages)
@@ -1524,10 +1474,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 "time_taken": time_taken,
             }
 
-            logger.info(
-                f"Compression complete: {original_count} -> {compressed_count} messages "
-                f"({compression_ratio:.1%} reduction) in {time_taken:.2f}s"
-            )
+            logger.info(f"Compression complete: {original_count} -> {compressed_count} messages " f"({compression_ratio:.1%} reduction) in {time_taken:.2f}s")
 
             return result
 
@@ -1540,9 +1487,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 "time_taken": time.time() - start_time,
             }
 
-    async def _compress_with_truncation(
-        self, messages: List[ConversationMessage], config: CompressionConfig
-    ) -> List[ConversationMessage]:
+    async def _compress_with_truncation(self, messages: List[ConversationMessage], config: CompressionConfig) -> List[ConversationMessage]:
         """
         Compress by truncating old messages (fast, no LLM required).
 
@@ -1561,16 +1506,11 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         # Keep most recent messages
         truncated = messages[-config.keep_recent :]
 
-        logger.debug(
-            f"Truncation: kept {len(truncated)} most recent messages "
-            f"(removed {len(messages) - len(truncated)})"
-        )
+        logger.debug(f"Truncation: kept {len(truncated)} most recent messages " f"(removed {len(messages) - len(truncated)})")
 
         return truncated
 
-    async def _compress_with_summarization(
-        self, messages: List[ConversationMessage], config: CompressionConfig
-    ) -> List[ConversationMessage]:
+    async def _compress_with_summarization(self, messages: List[ConversationMessage], config: CompressionConfig) -> List[ConversationMessage]:
         """
         Compress using LLM-based summarization.
 
@@ -1587,10 +1527,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             ValueError: If no LLM client configured
         """
         if not self.llm_client:
-            raise ValueError(
-                "LLM client required for summarization compression. "
-                "Provide llm_client parameter to ContextEngine."
-            )
+            raise ValueError("LLM client required for summarization compression. " "Provide llm_client parameter to ContextEngine.")
 
         if len(messages) <= config.keep_recent:
             return messages
@@ -1607,9 +1544,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         llm_messages = [LLMMessage(role="user", content=summary_prompt)]
 
-        response = await self.llm_client.generate_text(
-            messages=llm_messages, max_tokens=config.summary_max_tokens
-        )
+        response = await self.llm_client.generate_text(messages=llm_messages, max_tokens=config.summary_max_tokens)
 
         summary_text = response.content
 
@@ -1627,16 +1562,11 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         else:
             compressed = messages_to_keep
 
-        logger.debug(
-            f"Summarization: {len(messages_to_summarize)} messages -> 1 summary, "
-            f"kept {len(messages_to_keep)} recent messages"
-        )
+        logger.debug(f"Summarization: {len(messages_to_summarize)} messages -> 1 summary, " f"kept {len(messages_to_keep)} recent messages")
 
         return compressed
 
-    def _build_summary_prompt(
-        self, messages: List[ConversationMessage], config: CompressionConfig
-    ) -> str:
+    def _build_summary_prompt(self, messages: List[ConversationMessage], config: CompressionConfig) -> str:
         """
         Build prompt for summarization.
 
@@ -1650,9 +1580,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         # Use custom template if provided
         if config.summary_prompt_template:
             # Format template with messages
-            messages_text = "\n\n".join(
-                [f"{msg.role}: {msg.content}" for msg in messages]
-            )
+            messages_text = "\n\n".join([f"{msg.role}: {msg.content}" for msg in messages])
             return config.summary_prompt_template.format(messages=messages_text)
 
         # Default template
@@ -1669,9 +1597,7 @@ Summary:"""
 
         return prompt
 
-    async def _compress_with_semantic_dedup(
-        self, messages: List[ConversationMessage], config: CompressionConfig
-    ) -> List[ConversationMessage]:
+    async def _compress_with_semantic_dedup(self, messages: List[ConversationMessage], config: CompressionConfig) -> List[ConversationMessage]:
         """
         Compress using semantic deduplication (embedding-based).
 
@@ -1688,10 +1614,7 @@ Summary:"""
             ValueError: If no LLM client configured
         """
         if not self.llm_client:
-            raise ValueError(
-                "LLM client required for semantic deduplication. "
-                "Provide llm_client parameter to ContextEngine."
-            )
+            raise ValueError("LLM client required for semantic deduplication. " "Provide llm_client parameter to ContextEngine.")
 
         if len(messages) <= config.keep_recent:
             return messages
@@ -1700,33 +1623,22 @@ Summary:"""
         texts = [msg.content for msg in messages]
 
         try:
-            embeddings = await self.llm_client.get_embeddings(
-                texts=texts, model=config.embedding_model
-            )
+            embeddings = await self.llm_client.get_embeddings(texts=texts, model=config.embedding_model)
         except NotImplementedError:
-            logger.warning(
-                "LLM client does not support embeddings. Falling back to truncation."
-            )
+            logger.warning("LLM client does not support embeddings. Falling back to truncation.")
             return await self._compress_with_truncation(messages, config)
 
         # Find diverse messages using embeddings
-        diverse_indices = self._find_diverse_messages(
-            embeddings, config.similarity_threshold, config.keep_recent
-        )
+        diverse_indices = self._find_diverse_messages(embeddings, config.similarity_threshold, config.keep_recent)
 
         # Keep messages at diverse indices
         compressed = [messages[i] for i in sorted(diverse_indices)]
 
-        logger.debug(
-            f"Semantic dedup: kept {len(compressed)} diverse messages "
-            f"(removed {len(messages) - len(compressed)} similar messages)"
-        )
+        logger.debug(f"Semantic dedup: kept {len(compressed)} diverse messages " f"(removed {len(messages) - len(compressed)} similar messages)")
 
         return compressed
 
-    def _find_diverse_messages(
-        self, embeddings: List[List[float]], similarity_threshold: float, target_count: int
-    ) -> List[int]:
+    def _find_diverse_messages(self, embeddings: List[List[float]], similarity_threshold: float, target_count: int) -> List[int]:
         """
         Find diverse messages using embeddings.
 
@@ -1765,9 +1677,7 @@ Summary:"""
 
             for idx in remaining_indices:
                 # Calculate similarity to all selected messages
-                similarities = np.dot(
-                    emb_normalized[idx], emb_normalized[selected_indices].T
-                )
+                similarities = np.dot(emb_normalized[idx], emb_normalized[selected_indices].T)
                 min_similarity = np.min(similarities) if len(similarities) > 0 else 0
 
                 # We want maximum minimum distance (most diverse)
@@ -1783,9 +1693,7 @@ Summary:"""
 
         return selected_indices
 
-    async def _replace_conversation_history(
-        self, session_id: str, messages: List[ConversationMessage]
-    ) -> None:
+    async def _replace_conversation_history(self, session_id: str, messages: List[ConversationMessage]) -> None:
         """
         Replace conversation history with compressed messages.
 
@@ -1800,32 +1708,24 @@ Summary:"""
 
                 # Store new messages
                 for msg in messages:
-                    await self.redis_client.rpush(
+                    await self.redis_client.rpush(  # type: ignore[misc]
                         f"conversation:{session_id}",
                         json.dumps(msg.to_dict(), cls=DateTimeEncoder),
                     )
 
                 # Set TTL
-                await self.redis_client.expire(
-                    f"conversation:{session_id}", self.session_ttl
-                )
+                await self.redis_client.expire(f"conversation:{session_id}", self.session_ttl)
 
-                logger.debug(
-                    f"Replaced conversation history for {session_id} with {len(messages)} messages"
-                )
+                logger.debug(f"Replaced conversation history for {session_id} with {len(messages)} messages")
                 return
             except Exception as e:
                 logger.error(f"Failed to replace conversation history in Redis: {e}")
 
         # Fallback to memory
         self._memory_conversations[session_id] = messages
-        logger.debug(
-            f"Replaced conversation history (memory) for {session_id} with {len(messages)} messages"
-        )
+        logger.debug(f"Replaced conversation history (memory) for {session_id} with {len(messages)} messages")
 
-    async def _compress_with_hybrid(
-        self, messages: List[ConversationMessage], config: CompressionConfig
-    ) -> List[ConversationMessage]:
+    async def _compress_with_hybrid(self, messages: List[ConversationMessage], config: CompressionConfig) -> List[ConversationMessage]:
         """
         Compress using hybrid strategy (combination of multiple strategies).
 
@@ -1857,10 +1757,7 @@ Summary:"""
             else:
                 logger.warning(f"Unknown hybrid strategy: {strategy}, skipping")
 
-        logger.debug(
-            f"Hybrid compression: {len(messages)} -> {len(compressed)} messages "
-            f"using strategies: {', '.join(config.hybrid_strategies)}"
-        )
+        logger.debug(f"Hybrid compression: {len(messages)} -> {len(compressed)} messages " f"using strategies: {', '.join(config.hybrid_strategies)}")
 
         return compressed
 
@@ -1902,20 +1799,13 @@ Summary:"""
         if message_count <= self.compression_config.auto_compress_threshold:
             return None
 
-        logger.info(
-            f"Auto-compression triggered for {session_id}: "
-            f"{message_count} messages exceeds threshold of "
-            f"{self.compression_config.auto_compress_threshold}"
-        )
+        logger.info(f"Auto-compression triggered for {session_id}: " f"{message_count} messages exceeds threshold of " f"{self.compression_config.auto_compress_threshold}")
 
         # Compress conversation
         result = await self.compress_conversation(session_id)
 
         if result.get("success"):
-            logger.info(
-                f"Auto-compression complete for {session_id}: "
-                f"{result['original_count']} -> {result['compressed_count']} messages"
-            )
+            logger.info(f"Auto-compression complete for {session_id}: " f"{result['original_count']} -> {result['compressed_count']} messages")
 
         return result
 
@@ -1978,9 +1868,7 @@ Summary:"""
             return [self._sanitize_for_json(msg.to_dict()) for msg in messages]
 
         else:
-            raise ValueError(
-                f"Invalid format '{format}'. Must be 'messages', 'string', or 'dict'"
-            )
+            raise ValueError(f"Invalid format '{format}'. Must be 'messages', 'string', or 'dict'")
 
     def _sanitize_for_json(self, obj: Any) -> Any:
         """

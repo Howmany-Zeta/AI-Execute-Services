@@ -86,7 +86,7 @@ class ExecutorConfig(BaseModel):
     redis_cache_ttl: int = 86400  # 1 day
     l1_cache_ttl: int = 300  # 5 minutes
 
-    model_config = ConfigDict(env_prefix="TOOL_EXECUTOR_")
+    model_config = ConfigDict(env_prefix="TOOL_EXECUTOR_")  # type: ignore[typeddict-unknown-key]
 
 
 # Metrics counter
@@ -118,11 +118,7 @@ class ToolExecutorStats:
             "requests": self.requests,
             "failures": self.failures,
             "cache_hits": self.cache_hits,
-            "avg_processing_time": (
-                sum(self.processing_times) / len(self.processing_times)
-                if self.processing_times
-                else 0.0
-            ),
+            "avg_processing_time": (sum(self.processing_times) / len(self.processing_times) if self.processing_times else 0.0),
         }
 
 
@@ -260,18 +256,13 @@ def cache_result_with_strategy(
                         ttl = ttl_strategy(result, args, kwargs)
 
                     if not isinstance(ttl, int) or ttl < 0:
-                        logger.warning(
-                            f"TTL strategy returned invalid value: {ttl}. "
-                            f"Expected positive integer. Using default TTL."
-                        )
+                        logger.warning(f"TTL strategy returned invalid value: {ttl}. " f"Expected positive integer. Using default TTL.")
                         ttl = None
                 except Exception as e:
                     logger.error(f"Error calculating TTL from strategy: {e}. Using default TTL.")
                     ttl = None
             else:
-                ttl = self._executor._calculate_ttl_from_strategy(
-                    ttl_strategy, result, args, kwargs
-                )
+                ttl = self._executor._calculate_ttl_from_strategy(ttl_strategy, result, args, kwargs)
 
             # Cache with calculated TTL
             self._executor._add_to_cache(cache_key, result, ttl)
@@ -352,9 +343,7 @@ def sanitize_input(func: Callable) -> Callable:
             return func(self, *args, **kwargs)
         sanitized_kwargs = {}
         for k, v in kwargs.items():
-            if isinstance(v, str) and re.search(
-                r"(\bSELECT\b|\bINSERT\b|--|;|/\*)", v, re.IGNORECASE
-            ):
+            if isinstance(v, str) and re.search(r"(\bSELECT\b|\bINSERT\b|--|;|/\*)", v, re.IGNORECASE):
                 raise SecurityError(f"Input parameter '{k}' contains potentially malicious content")
             sanitized_kwargs[k] = v
         return func(self, *args, **sanitized_kwargs)
@@ -397,9 +386,7 @@ class ToolExecutor:
             level=getattr(logging, self.config.log_level),
             format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         )
-        self._thread_pool = ThreadPoolExecutor(
-            max_workers=max(os.cpu_count() or 4, self.config.max_workers)
-        )
+        self._thread_pool = ThreadPoolExecutor(max_workers=max(os.cpu_count() or 4, self.config.max_workers))
         self._locks: Dict[str, threading.Lock] = {}
         self._metrics = ToolExecutorStats()
         self.execution_utils = ExecutionUtils(
@@ -532,10 +519,7 @@ class ToolExecutor:
             try:
                 calculated_ttl = ttl_strategy(result, args, kwargs)
                 if not isinstance(calculated_ttl, int) or calculated_ttl < 0:
-                    logger.warning(
-                        f"TTL strategy returned invalid value: {calculated_ttl}. "
-                        f"Expected positive integer. Using default TTL."
-                    )
+                    logger.warning(f"TTL strategy returned invalid value: {calculated_ttl}. " f"Expected positive integer. Using default TTL.")
                     return None
                 return calculated_ttl
             except Exception as e:
@@ -543,10 +527,7 @@ class ToolExecutor:
                 return None
 
         # Invalid strategy type
-        logger.warning(
-            f"Invalid TTL strategy type: {type(ttl_strategy)}. "
-            f"Expected None, int, or Callable. Using default TTL."
-        )
+        logger.warning(f"Invalid TTL strategy type: {type(ttl_strategy)}. " f"Expected None, int, or Callable. Using default TTL.")
         return None
 
     def _get_from_cache(self, cache_key: str) -> Optional[Any]:
@@ -596,9 +577,7 @@ class ToolExecutor:
             # Fallback to sync interface
             return self.cache_provider.get(cache_key)
 
-    async def _add_to_cache_async(
-        self, cache_key: str, result: Any, ttl: Optional[int] = None
-    ) -> None:
+    async def _add_to_cache_async(self, cache_key: str, result: Any, ttl: Optional[int] = None) -> None:
         """
         Add a result to the cache with optional TTL (asynchronous).
 
@@ -668,9 +647,7 @@ class ToolExecutor:
         Raises:
             OperationError: If all retries fail.
         """
-        return await self.execution_utils.execute_with_retry_and_timeout(
-            func, self.config.timeout, *args, **kwargs
-        )
+        return await self.execution_utils.execute_with_retry_and_timeout(func, self.config.timeout, *args, **kwargs)
 
     def execute(self, tool_instance: Any, operation: str, **kwargs) -> Any:
         """
@@ -691,28 +668,16 @@ class ToolExecutor:
         """
         method = getattr(tool_instance, operation, None)
         if not method or not callable(method) or operation.startswith("_"):
-            available_ops = [
-                m
-                for m in dir(tool_instance)
-                if not m.startswith("_") and callable(getattr(tool_instance, m))
-            ]
-            raise ToolExecutionError(
-                f"Unsupported operation: {operation}. Available operations: {', '.join(available_ops)}"
-            )
-        logger.info(
-            f"Executing {tool_instance.__class__.__name__}.{operation} with params: {kwargs}"
-        )
+            available_ops = [m for m in dir(tool_instance) if not m.startswith("_") and callable(getattr(tool_instance, m))]
+            raise ToolExecutionError(f"Unsupported operation: {operation}. Available operations: {', '.join(available_ops)}")
+        logger.info(f"Executing {tool_instance.__class__.__name__}.{operation} with params: {kwargs}")
         start_time = time.time()
         try:
             # Sanitize inputs
             if self.config.enable_security_checks:
                 for k, v in kwargs.items():
-                    if isinstance(v, str) and re.search(
-                        r"(\bSELECT\b|\bINSERT\b|--|;|/\*)", v, re.IGNORECASE
-                    ):
-                        raise SecurityError(
-                            f"Input parameter '{k}' contains potentially malicious content"
-                        )
+                    if isinstance(v, str) and re.search(r"(\bSELECT\b|\bINSERT\b|--|;|/\*)", v, re.IGNORECASE):
+                        raise SecurityError(f"Input parameter '{k}' contains potentially malicious content")
             # Use cache if enabled
             if self.config.enable_cache:
                 cache_key = self._get_cache_key(operation, (), kwargs)
@@ -725,9 +690,7 @@ class ToolExecutor:
             result = method(**kwargs)
             self._metrics.record_request(time.time() - start_time)
             if self.config.log_execution_time:
-                logger.info(
-                    f"{tool_instance.__class__.__name__}.{operation} executed in {time.time() - start_time:.4f} seconds"
-                )
+                logger.info(f"{tool_instance.__class__.__name__}.{operation} executed in {time.time() - start_time:.4f} seconds")
 
             # Cache result if enabled
             if self.config.enable_cache:
@@ -760,29 +723,17 @@ class ToolExecutor:
         """
         method = getattr(tool_instance, operation, None)
         if not method or not callable(method) or operation.startswith("_"):
-            available_ops = [
-                m
-                for m in dir(tool_instance)
-                if not m.startswith("_") and callable(getattr(tool_instance, m))
-            ]
-            raise ToolExecutionError(
-                f"Unsupported operation: {operation}. Available operations: {', '.join(available_ops)}"
-            )
+            available_ops = [m for m in dir(tool_instance) if not m.startswith("_") and callable(getattr(tool_instance, m))]
+            raise ToolExecutionError(f"Unsupported operation: {operation}. Available operations: {', '.join(available_ops)}")
         is_async = inspect.iscoroutinefunction(method)
-        logger.info(
-            f"Executing async {tool_instance.__class__.__name__}.{operation} with params: {kwargs}"
-        )
+        logger.info(f"Executing async {tool_instance.__class__.__name__}.{operation} with params: {kwargs}")
         start_time = time.time()
         try:
             # Sanitize inputs
             if self.config.enable_security_checks:
                 for k, v in kwargs.items():
-                    if isinstance(v, str) and re.search(
-                        r"(\bSELECT\b|\bINSERT\b|--|;|/\*)", v, re.IGNORECASE
-                    ):
-                        raise SecurityError(
-                            f"Input parameter '{k}' contains potentially malicious content"
-                        )
+                    if isinstance(v, str) and re.search(r"(\bSELECT\b|\bINSERT\b|--|;|/\*)", v, re.IGNORECASE):
+                        raise SecurityError(f"Input parameter '{k}' contains potentially malicious content")
             # Use cache if enabled (async)
             if self.config.enable_cache:
                 cache_key = self._get_cache_key(operation, (), kwargs)
@@ -796,16 +747,12 @@ class ToolExecutor:
                 if is_async:
                     return await method(**kwargs)
                 loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(
-                    self._thread_pool, functools.partial(method, **kwargs)
-                )
+                return await loop.run_in_executor(self._thread_pool, functools.partial(method, **kwargs))
 
             result = await self._retry_operation(_execute)
             self._metrics.record_request(time.time() - start_time)
             if self.config.log_execution_time:
-                logger.info(
-                    f"{tool_instance.__class__.__name__}.{operation} executed in {time.time() - start_time:.4f} seconds"
-                )
+                logger.info(f"{tool_instance.__class__.__name__}.{operation} executed in {time.time() - start_time:.4f} seconds")
 
             # Cache result if enabled (async)
             if self.config.enable_cache:
@@ -819,9 +766,7 @@ class ToolExecutor:
             )
             raise OperationError(f"Error executing {operation}: {str(e)}") from e
 
-    async def execute_batch(
-        self, tool_instance: Any, operations: List[Dict[str, Any]]
-    ) -> List[Any]:
+    async def execute_batch(self, tool_instance: Any, operations: List[Dict[str, Any]]) -> List[Any]:
         """
         Execute multiple tool operations in parallel.
 

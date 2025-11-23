@@ -29,9 +29,7 @@ class ExecutorMetrics:
                     "intent_success_total",
                     "Number of successful intent parsings",
                 ),
-                "intent_retries": Counter(
-                    "intent_retries_total", "Number of intent parsing retries"
-                ),
+                "intent_retries": Counter("intent_retries_total", "Number of intent parsing retries"),
                 "plan_latency": Histogram("plan_latency_seconds", "Latency of task planning"),
                 "plan_success": Counter("plan_success_total", "Number of successful plans"),
                 "plan_retries": Counter("plan_retries_total", "Number of plan retries"),

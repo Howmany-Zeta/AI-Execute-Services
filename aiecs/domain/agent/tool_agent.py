@@ -245,10 +245,7 @@ class ToolAgent(BaseAIAgent):
         if base_tool_instances:
             # Tool instances were provided - use them directly
             self._tool_instances = base_tool_instances
-            logger.info(
-                f"ToolAgent {self.agent_id} using "
-                f"{len(self._tool_instances)} pre-configured tool instances"
-            )
+            logger.info(f"ToolAgent {self.agent_id} using " f"{len(self._tool_instances)} pre-configured tool instances")
         elif self._available_tools:
             # Tool names were provided - load them
             for tool_name in self._available_tools:
@@ -258,9 +255,7 @@ class ToolAgent(BaseAIAgent):
                 except Exception as e:
                     logger.warning(f"Failed to load tool {tool_name}: {e}")
 
-            logger.info(
-                f"ToolAgent {self.agent_id} initialized with {len(self._tool_instances)} tools"
-            )
+            logger.info(f"ToolAgent {self.agent_id} initialized with {len(self._tool_instances)} tools")
 
         # Initialize usage stats for all tools
         for tool_name in self._tool_instances.keys():
@@ -359,9 +354,7 @@ class ToolAgent(BaseAIAgent):
                 task_id=task.get("task_id"),
             )
 
-    async def process_message(
-        self, message: str, sender_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def process_message(self, message: str, sender_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Process an incoming message.
 
@@ -376,10 +369,7 @@ class ToolAgent(BaseAIAgent):
         """
         available_tools_str = ", ".join(self._available_tools) if self._available_tools else "none"
         return {
-            "response": (
-                f"ToolAgent {self.name} received message but requires explicit tool tasks. "
-                f"Available tools: {available_tools_str}"
-            ),
+            "response": (f"ToolAgent {self.name} received message but requires explicit tool tasks. " f"Available tools: {available_tools_str}"),
             "available_tools": self._available_tools or [],
         }
 

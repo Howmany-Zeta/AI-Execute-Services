@@ -73,9 +73,7 @@ class IOperationExecutor(ABC):
         """Execute operations sequence sequentially"""
 
     @abstractmethod
-    async def execute_parallel_operations(
-        self, operations: List[Dict[str, Any]]
-    ) -> List[TaskStepResult]:
+    async def execute_parallel_operations(self, operations: List[Dict[str, Any]]) -> List[TaskStepResult]:
         """Execute operations in parallel"""
 
 

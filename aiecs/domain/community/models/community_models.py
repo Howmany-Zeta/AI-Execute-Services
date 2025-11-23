@@ -60,23 +60,17 @@ class CommunityMember(BaseModel):
     community_role: CommunityRole = Field(..., description="Role within the community")
 
     # Participation metrics
-    contribution_score: float = Field(
-        default=0.0, description="Contribution score to the community"
-    )
+    contribution_score: float = Field(default=0.0, description="Contribution score to the community")
     reputation: float = Field(default=0.0, description="Reputation within the community")
     participation_level: str = Field(default="active", description="Level of participation")
 
     # Capabilities and specializations
     specializations: List[str] = Field(default_factory=list, description="Areas of specialization")
-    available_resources: List[str] = Field(
-        default_factory=list, description="Resources this member can provide"
-    )
+    available_resources: List[str] = Field(default_factory=list, description="Resources this member can provide")
 
     # Status
     is_active: bool = Field(default=True, description="Whether the member is active")
-    joined_at: datetime = Field(
-        default_factory=datetime.utcnow, description="When the member joined"
-    )
+    joined_at: datetime = Field(default_factory=datetime.utcnow, description="When the member joined")
     last_active_at: Optional[datetime] = Field(None, description="Last activity timestamp")
 
     # Metadata
@@ -142,18 +136,12 @@ class CommunityDecision(BaseModel):
     # Voting and consensus
     status: DecisionStatus = Field(default=DecisionStatus.PROPOSED, description="Current status")
     votes_for: List[str] = Field(default_factory=list, description="Member IDs who voted for")
-    votes_against: List[str] = Field(
-        default_factory=list, description="Member IDs who voted against"
-    )
+    votes_against: List[str] = Field(default_factory=list, description="Member IDs who voted against")
     abstentions: List[str] = Field(default_factory=list, description="Member IDs who abstained")
 
     # Implementation
-    implementation_plan: Optional[str] = Field(
-        None, description="Plan for implementing the decision"
-    )
-    assigned_members: List[str] = Field(
-        default_factory=list, description="Members assigned to implement"
-    )
+    implementation_plan: Optional[str] = Field(None, description="Plan for implementing the decision")
+    assigned_members: List[str] = Field(default_factory=list, description="Members assigned to implement")
     deadline: Optional[datetime] = Field(None, description="Implementation deadline")
 
     # Status tracking
@@ -177,42 +165,26 @@ class AgentCommunity(BaseModel):
     description: Optional[str] = Field(None, description="Description of the community")
 
     # Governance
-    governance_type: GovernanceType = Field(
-        default=GovernanceType.DEMOCRATIC, description="Type of governance"
-    )
-    governance_rules: Dict[str, Any] = Field(
-        default_factory=dict, description="Governance rules and policies"
-    )
+    governance_type: GovernanceType = Field(default=GovernanceType.DEMOCRATIC, description="Type of governance")
+    governance_rules: Dict[str, Any] = Field(default_factory=dict, description="Governance rules and policies")
 
     # Membership
     members: List[str] = Field(default_factory=list, description="List of member IDs")
     max_members: Optional[int] = Field(None, description="Maximum number of members")
-    membership_criteria: Dict[str, Any] = Field(
-        default_factory=dict, description="Criteria for membership"
-    )
+    membership_criteria: Dict[str, Any] = Field(default_factory=dict, description="Criteria for membership")
 
     # Leadership
     leaders: List[str] = Field(default_factory=list, description="List of leader member IDs")
-    coordinators: List[str] = Field(
-        default_factory=list, description="List of coordinator member IDs"
-    )
+    coordinators: List[str] = Field(default_factory=list, description="List of coordinator member IDs")
 
     # Resources and capabilities
-    shared_resources: List[str] = Field(
-        default_factory=list, description="List of shared resource IDs"
-    )
-    collective_capabilities: List[str] = Field(
-        default_factory=list, description="Collective capabilities"
-    )
-    knowledge_base: Dict[str, Any] = Field(
-        default_factory=dict, description="Community knowledge base"
-    )
+    shared_resources: List[str] = Field(default_factory=list, description="List of shared resource IDs")
+    collective_capabilities: List[str] = Field(default_factory=list, description="Collective capabilities")
+    knowledge_base: Dict[str, Any] = Field(default_factory=dict, description="Community knowledge base")
 
     # Activity and metrics
     activity_level: str = Field(default="active", description="Overall activity level")
-    collaboration_score: float = Field(
-        default=0.0, description="Overall collaboration effectiveness score"
-    )
+    collaboration_score: float = Field(default=0.0, description="Overall collaboration effectiveness score")
     decision_count: int = Field(default=0, description="Number of decisions made")
     resource_count: int = Field(default=0, description="Number of shared resources")
 
@@ -248,15 +220,9 @@ class CollaborationSession(BaseModel):
     agenda: List[str] = Field(default_factory=list, description="Session agenda items")
 
     # Outcomes
-    decisions_made: List[str] = Field(
-        default_factory=list, description="Decision IDs made during session"
-    )
-    resources_created: List[str] = Field(
-        default_factory=list, description="Resource IDs created during session"
-    )
-    action_items: List[Dict[str, Any]] = Field(
-        default_factory=list, description="Action items from the session"
-    )
+    decisions_made: List[str] = Field(default_factory=list, description="Decision IDs made during session")
+    resources_created: List[str] = Field(default_factory=list, description="Resource IDs created during session")
+    action_items: List[Dict[str, Any]] = Field(default_factory=list, description="Action items from the session")
 
     # Status
     status: str = Field(default="active", description="Session status")

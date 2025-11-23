@@ -99,9 +99,7 @@ class VersionManager:
         )
 
         init_file.write_text(content, encoding="utf-8")
-        print(
-            f'✓ Updated {init_file.relative_to(self.project_root)}: __version__ = "{new_version}"'
-        )
+        print(f'✓ Updated {init_file.relative_to(self.project_root)}: __version__ = "{new_version}"')
 
     def update_main_file(self, new_version: str) -> None:
         """Update version in aiecs/main.py"""
@@ -115,9 +113,7 @@ class VersionManager:
         content = re.sub(r'("version":\s*")([^"]+)(")', rf"\g<1>{new_version}\g<3>", content)
 
         main_file.write_text(content, encoding="utf-8")
-        print(
-            f"✓ Updated {main_file.relative_to(self.project_root)}: FastAPI version and health check version"
-        )
+        print(f"✓ Updated {main_file.relative_to(self.project_root)}: FastAPI version and health check version")
 
     def update_pyproject_file(self, new_version: str) -> None:
         """Update version in pyproject.toml"""
@@ -179,9 +175,7 @@ Examples:
 
     # Create mutually exclusive group for version options
     version_group = parser.add_mutually_exclusive_group(required=True)
-    version_group.add_argument(
-        "--version", "-v", type=str, help="Set specific version (e.g., 1.2.0)"
-    )
+    version_group.add_argument("--version", "-v", type=str, help="Set specific version (e.g., 1.2.0)")
     version_group.add_argument(
         "--bump",
         "-b",
