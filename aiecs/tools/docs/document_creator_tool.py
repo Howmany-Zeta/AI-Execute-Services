@@ -159,7 +159,7 @@ class DocumentCreatorTool(BaseTool):
         self._init_templates()
 
         # Initialize document tracking
-        self._documents_created = []
+        self._documents_created: List[Any] = []
 
     def _init_directories(self):
         """Initialize required directories"""
@@ -254,7 +254,9 @@ class DocumentCreatorTool(BaseTool):
             processed_metadata = self._process_metadata(metadata, output_format)
 
             # Step 4: Apply style preset
-            style_config = self._get_style_config(style_preset or self.config.default_style)
+            preset_value = style_preset or self.config.default_style
+            style_preset_enum = StylePreset(preset_value) if isinstance(preset_value, str) else preset_value
+            style_config = self._get_style_config(style_preset_enum)
 
             # Step 5: Create document from template
             document_content = self._create_document_from_template(template, processed_metadata, style_config, output_format)

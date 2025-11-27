@@ -4,7 +4,7 @@ Knowledge Fusion Orchestrator
 High-level orchestrator for cross-document entity merging and knowledge fusion.
 """
 
-from typing import List, Dict, Set, Tuple, Any
+from typing import List, Dict, Set, Tuple, Any, Optional
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.infrastructure.graph_storage.base import GraphStore
 from aiecs.application.knowledge_graph.fusion.entity_deduplicator import (
@@ -53,7 +53,7 @@ class KnowledgeFusion:
         self.entities_merged = 0
         self.conflicts_resolved = 0
 
-    async def fuse_cross_document_entities(self, entity_types: List[str] = None) -> Dict[str, int]:
+    async def fuse_cross_document_entities(self, entity_types: Optional[List[str]] = None) -> Dict[str, int]:
         """
         Perform cross-document entity fusion
 
@@ -321,7 +321,7 @@ class KnowledgeFusion:
     # Helper Methods for Cross-Document Fusion
     # =========================================================================
 
-    async def _query_entities(self, entity_types: List[str] = None) -> List[Entity]:
+    async def _query_entities(self, entity_types: Optional[List[str]] = None) -> List[Entity]:
         """
         Query entities from graph store
 

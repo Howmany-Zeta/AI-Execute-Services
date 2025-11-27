@@ -365,7 +365,7 @@ class AgentAdapterRegistry:
     Allows registration, lookup, and management of agent adapters.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the adapter registry."""
         self.adapters: Dict[str, AgentAdapter] = {}
         self.adapter_types: Dict[str, Type[AgentAdapter]] = {

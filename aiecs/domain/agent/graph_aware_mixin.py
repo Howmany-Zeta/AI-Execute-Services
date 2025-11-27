@@ -6,11 +6,15 @@ Can be mixed into any agent class to add graph capabilities.
 """
 
 import logging
-from typing import Dict, List, Any, Optional, Set
+from typing import Dict, List, Any, Optional, Set, TYPE_CHECKING
 
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.relation import Relation
 from aiecs.domain.knowledge_graph.models.path import Path
+
+if TYPE_CHECKING:
+    from aiecs.infrastructure.graph_storage.protocols import GraphAwareAgentMixinProtocol
+    from aiecs.infrastructure.graph_storage.base import GraphStore
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +29,9 @@ class GraphAwareAgentMixin:
     - Graph query helpers
     - Entity/relation utilities
 
+    This mixin expects the class it's mixed into to implement `GraphAwareAgentMixinProtocol`,
+    specifically the `graph_store` attribute.
+
     Usage:
         class MyAgent(BaseAIAgent, GraphAwareAgentMixin):
             def __init__(self, graph_store, ...):
@@ -32,7 +39,9 @@ class GraphAwareAgentMixin:
                 self.graph_store = graph_store
     """
 
-    # Note: Assumes the class has self.graph_store: Optional[GraphStore]
+    if TYPE_CHECKING:
+        # Type hint for mypy: this mixin expects GraphAwareAgentMixinProtocol
+        graph_store: Optional["GraphStore"]
 
     # ==================== Knowledge Formatting ====================
 

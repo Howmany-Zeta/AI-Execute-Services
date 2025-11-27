@@ -222,7 +222,7 @@ class QueryIntentAnalyzer:
         Returns:
             Dictionary with start_date, end_date, or None
         """
-        time_range = {}
+        time_range: Dict[str, Any] = {}
 
         # Look for year patterns (4 digits)
         year_pattern = r"\b(19|20)\d{2}\b"

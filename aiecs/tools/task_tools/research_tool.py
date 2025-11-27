@@ -4,7 +4,7 @@ import spacy
 from spacy.language import Language
 from pydantic import BaseModel, ConfigDict, Field
 from collections import Counter
-from scipy.stats import pearsonr
+from scipy.stats import pearsonr  # type: ignore[import-untyped]
 import os
 
 from aiecs.tools.base_tool import BaseTool
@@ -250,7 +250,7 @@ class ResearchTool(BaseTool):
                 else:
                     # Approximate p-value using t-distribution
                     t_stat = corr * np.sqrt((n - 2) / (1 - corr**2 + 1e-10))
-                    from scipy.stats import t
+                    from scipy.stats import t  # type: ignore[import-untyped]
 
                     pval = 2 * (1 - t.cdf(abs(t_stat), n - 2))
 
@@ -309,8 +309,8 @@ class ResearchTool(BaseTool):
                     "conclusion": None,
                     "reason": "No conclusion provided",
                 }
-            premise_entities = set()
-            premise_predicates = set()
+            premise_entities: Set[str] = set()
+            premise_predicates: Set[str] = set()
             for doc in premises_docs:
                 premise_entities.update(ent.text.lower() for ent in doc.ents)
                 premise_predicates.update(token.lemma_.lower() for token in doc if token.pos_ == "VERB")

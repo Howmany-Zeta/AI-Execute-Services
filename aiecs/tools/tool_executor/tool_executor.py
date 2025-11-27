@@ -97,7 +97,7 @@ class ToolExecutorStats:
     Tracks tool executor performance statistics.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.requests: int = 0
         self.failures: int = 0
         self.cache_hits: int = 0

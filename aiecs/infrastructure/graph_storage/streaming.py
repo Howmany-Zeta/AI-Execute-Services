@@ -7,7 +7,7 @@ enabling efficient handling of millions of entities and relations.
 
 import json
 import logging
-from typing import AsyncIterator, Optional, Dict, Any
+from typing import AsyncIterator, Optional, Dict, Any, List
 from enum import Enum
 import gzip
 from pathlib import Path
@@ -80,7 +80,7 @@ class GraphStreamExporter:
         batch_size: int = 1000,
         entity_type: Optional[str] = None,
         include_relations: bool = True,
-    ) -> Dict[str, int]:
+    ) -> Dict[str, Any]:
         """
         Export entire graph to file
 
@@ -472,7 +472,7 @@ async def stream_subgraph(
                 neighbors = await store.get_neighbors(entity_id, direction="both")
                 # For now, return empty relations list - would need to fetch
                 # actual relations
-                relations = []
+                relations: List[Any] = []
 
                 # Collect next level
                 for neighbor in neighbors:

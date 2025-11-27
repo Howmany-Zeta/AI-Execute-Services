@@ -6,7 +6,7 @@ Automatically generate Pydantic Schema from method signatures and type annotatio
 
 import inspect
 import logging
-from typing import Any, Dict, Optional, Type, get_type_hints
+from typing import Any, Dict, Optional, Type, get_type_hints, Callable
 from pydantic import BaseModel, Field, create_model, ConfigDict
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ def _extract_param_description_from_docstring(docstring: str, param_name: str) -
     lines = docstring.split("\n")
     in_args_section = False
     current_param = None
-    description_lines = []
+    description_lines: List[str] = []
 
     for line in lines:
         stripped = line.strip()
@@ -92,7 +92,7 @@ def _extract_param_description_from_docstring(docstring: str, param_name: str) -
     return None
 
 
-def generate_schema_from_method(method: callable, method_name: str, base_class: Type[BaseModel] = BaseModel) -> Optional[Type[BaseModel]]:
+def generate_schema_from_method(method: Callable[..., Any], method_name: str, base_class: Type[BaseModel] = BaseModel) -> Optional[Type[BaseModel]]:
     """
     Automatically generate Pydantic Schema from method signature
 
@@ -175,13 +175,16 @@ def generate_schema_from_method(method: callable, method_name: str, base_class: 
         schema_name = f"{method_name.title().replace('_', '')}Schema"
 
         # Create Schema class, allow arbitrary types
-        schema_class = create_model(
+        # In Pydantic v2, create_model signature may vary - use type ignore for dynamic model creation
+        schema_class = create_model(  # type: ignore[call-overload]
             schema_name,
             __base__=base_class,
             __doc__=schema_description,
-            __config__=ConfigDict(arbitrary_types_allowed=True),
             **field_definitions,
         )
+        # Set model_config if base_class supports it
+        if hasattr(schema_class, "model_config"):
+            schema_class.model_config = ConfigDict(arbitrary_types_allowed=True)  # type: ignore[assignment]
 
         logger.debug(f"Generated schema {schema_name} for method {method_name}")
         return schema_class

@@ -104,7 +104,7 @@ class FREDProvider(BaseAPIProvider):
         Returns:
             Dictionary containing observations and metadata
         """
-        params = {"series_id": series_id}
+        params: Dict[str, Any] = {"series_id": series_id}
         if observation_start:
             params["observation_start"] = observation_start
         if observation_end:
@@ -139,7 +139,7 @@ class FREDProvider(BaseAPIProvider):
         Returns:
             Dictionary containing search results and metadata
         """
-        params = {"search_text": search_text}
+        params: Dict[str, Any] = {"search_text": search_text}
         if limit:
             params["limit"] = limit
         if offset:

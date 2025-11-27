@@ -301,7 +301,8 @@ class GraphReasoningTool(BaseTool):
             "latency": OptimizationStrategy.MINIMIZE_LATENCY,
             "balanced": OptimizationStrategy.BALANCED,
         }
-        strategy = strategy_map.get(input_data.optimization_strategy, OptimizationStrategy.BALANCED)
+        strategy_key = input_data.optimization_strategy or "balanced"
+        strategy = strategy_map.get(strategy_key, OptimizationStrategy.BALANCED)
         optimized_plan = self.query_planner.optimize_plan(plan, strategy)
 
         return {
@@ -330,7 +331,7 @@ class GraphReasoningTool(BaseTool):
             raise ValueError("start_entity_id is required for multi-hop reasoning")
 
         # Build context for reasoning
-        context = {}
+        context: Dict[str, Any] = {}
         if input_data.start_entity_id:
             context["start_entity_id"] = input_data.start_entity_id
         if input_data.target_entity_id:
@@ -482,7 +483,7 @@ class GraphReasoningTool(BaseTool):
         if not input_data.start_entity_id:
             raise ValueError("start_entity_id is required for full reasoning")
 
-        results = {
+        results: Dict[str, Any] = {
             "mode": "full_reasoning",
             "query": input_data.query,
             "steps": [],
@@ -495,7 +496,8 @@ class GraphReasoningTool(BaseTool):
             "latency": OptimizationStrategy.MINIMIZE_LATENCY,
             "balanced": OptimizationStrategy.BALANCED,
         }
-        strategy = strategy_map.get(input_data.optimization_strategy, OptimizationStrategy.BALANCED)
+        strategy_key = input_data.optimization_strategy or "balanced"
+        strategy = strategy_map.get(strategy_key, OptimizationStrategy.BALANCED)
         optimized_plan = self.query_planner.optimize_plan(plan, strategy)
 
         results["steps"].append(
@@ -509,7 +511,7 @@ class GraphReasoningTool(BaseTool):
 
         # Step 2: Multi-Hop Reasoning
         # Build context for reasoning
-        context = {}
+        context: Dict[str, Any] = {}
         if input_data.start_entity_id:
             context["start_entity_id"] = input_data.start_entity_id
         if input_data.target_entity_id:

@@ -179,6 +179,27 @@ class AgentConfiguration(BaseModel):
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="LLM temperature setting")
     max_tokens: int = Field(default=4096, ge=1, description="Maximum tokens for LLM responses")
 
+    # RAG strategy selection LLM configuration
+    strategy_selection_llm_provider: Optional[str] = Field(
+        None,
+        description="LLM provider for RAG strategy selection (supports custom providers registered via LLMClientFactory)",
+    )
+    strategy_selection_llm_model: Optional[str] = Field(
+        None,
+        description="LLM model for RAG strategy selection (lightweight model recommended)",
+    )
+    strategy_selection_temperature: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=2.0,
+        description="Temperature for strategy selection (0.0 for deterministic classification)",
+    )
+    strategy_selection_max_tokens: int = Field(
+        default=100,
+        ge=1,
+        description="Maximum tokens for strategy selection response",
+    )
+
     # Tool access
     allowed_tools: List[str] = Field(default_factory=list, description="List of tool names agent can use")
     tool_selection_strategy: str = Field(
@@ -208,6 +229,30 @@ class AgentConfiguration(BaseModel):
     # Context compression
     context_window_limit: int = Field(default=20000, ge=0, description="Token limit for context window")
     enable_context_compression: bool = Field(default=True, description="Enable automatic context compression")
+
+    # Knowledge retrieval configuration
+    retrieval_strategy: str = Field(
+        default="hybrid",
+        description="Knowledge retrieval strategy: 'vector' (semantic similarity), 'graph' (graph traversal), 'hybrid' (combination), or 'auto' (automatic selection)",
+    )
+    enable_knowledge_caching: bool = Field(
+        default=True,
+        description="Enable caching for knowledge retrieval results",
+    )
+    cache_ttl: int = Field(
+        default=300,
+        ge=0,
+        description="Cache time-to-live in seconds (default: 300 = 5 minutes)",
+    )
+    max_context_size: int = Field(
+        default=50,
+        ge=1,
+        description="Maximum number of knowledge entities to include in context (default: 50)",
+    )
+    entity_extraction_provider: str = Field(
+        default="llm",
+        description="Entity extraction provider: 'llm' (LLM-based extraction), 'ner' (Named Entity Recognition), or custom provider name",
+    )
 
     # Metadata
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional configuration metadata")
@@ -321,6 +366,42 @@ class AgentMetrics(BaseModel):
     p50_operation_time: Optional[float] = Field(None, ge=0, description="50th percentile operation time (median) in seconds")
     p95_operation_time: Optional[float] = Field(None, ge=0, description="95th percentile operation time in seconds")
     p99_operation_time: Optional[float] = Field(None, ge=0, description="99th percentile operation time in seconds")
+
+    # Timestamps
+    last_reset_at: Optional[datetime] = Field(None, description="When metrics were last reset")
+    updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last metrics update")
+
+    model_config = ConfigDict()
+
+
+class GraphMetrics(BaseModel):
+    """Model for tracking knowledge graph retrieval metrics."""
+
+    # Query metrics
+    total_graph_queries: int = Field(default=0, ge=0, description="Total number of graph queries executed")
+    total_entities_retrieved: int = Field(default=0, ge=0, description="Total number of entities retrieved")
+    total_relationships_traversed: int = Field(default=0, ge=0, description="Total number of relationships traversed")
+
+    # Performance metrics
+    average_graph_query_time: float = Field(default=0.0, ge=0, description="Average graph query time in seconds")
+    total_graph_query_time: float = Field(default=0.0, ge=0, description="Total graph query time in seconds")
+    min_graph_query_time: Optional[float] = Field(None, ge=0, description="Minimum graph query time in seconds")
+    max_graph_query_time: Optional[float] = Field(None, ge=0, description="Maximum graph query time in seconds")
+
+    # Cache metrics
+    cache_hit_rate: float = Field(default=0.0, ge=0.0, le=1.0, description="Cache hit rate (0-1)")
+    cache_hits: int = Field(default=0, ge=0, description="Number of cache hits")
+    cache_misses: int = Field(default=0, ge=0, description="Number of cache misses")
+
+    # Strategy metrics
+    vector_search_count: int = Field(default=0, ge=0, description="Number of vector-only searches")
+    graph_search_count: int = Field(default=0, ge=0, description="Number of graph-only searches")
+    hybrid_search_count: int = Field(default=0, ge=0, description="Number of hybrid searches")
+
+    # Entity extraction metrics
+    entity_extraction_count: int = Field(default=0, ge=0, description="Number of entity extractions performed")
+    average_extraction_time: float = Field(default=0.0, ge=0, description="Average entity extraction time in seconds")
+    total_extraction_time: float = Field(default=0.0, ge=0, description="Total entity extraction time in seconds")
 
     # Timestamps
     last_reset_at: Optional[datetime] = Field(None, description="When metrics were last reset")

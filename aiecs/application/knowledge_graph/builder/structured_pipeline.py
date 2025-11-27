@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 try:
-    import pandas as pd
+    import pandas as pd  # type: ignore[import-untyped]
 
     PANDAS_AVAILABLE = True
 except ImportError:

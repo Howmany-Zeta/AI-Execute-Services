@@ -26,11 +26,13 @@ try:
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     # If langchain is not installed, create simple base class for type checking
-    class LangchainBaseTool:
+    # Use different name to avoid redefinition error
+    class _LangchainBaseToolFallback:  # type: ignore[no-redef]
         pass
 
-    CallbackManagerForToolRun = None  # type: ignore[misc]
-    AsyncCallbackManagerForToolRun = None  # type: ignore[misc]
+    LangchainBaseTool = _LangchainBaseToolFallback  # type: ignore[assignment,misc]
+    CallbackManagerForToolRun = None  # type: ignore[assignment,misc]
+    AsyncCallbackManagerForToolRun = None  # type: ignore[assignment,misc]
     LANGCHAIN_AVAILABLE = False
 
 from aiecs.tools.base_tool import BaseTool
@@ -151,7 +153,7 @@ class LangchainToolAdapter(LangchainBaseTool):
 class ToolRegistry:
     """Tool Registry: Manages conversion from BaseTool to Langchain tools"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._langchain_tools: Dict[str, LangchainToolAdapter] = {}
 
     def discover_operations(self, base_tool_class: Type[BaseTool]) -> List[Dict[str, Any]]:
@@ -330,8 +332,10 @@ class ToolRegistry:
         # Add parameter information
         if schema:
             try:
-                fields = schema.__fields__ if hasattr(schema, "__fields__") else {}
-                if fields:
+                fields_raw = schema.__fields__ if hasattr(schema, "__fields__") else {}
+                # Type narrowing: ensure fields is a dict
+                fields: Dict[str, Any] = fields_raw if isinstance(fields_raw, dict) else {}
+                if isinstance(fields, dict) and fields:
                     required_params = [name for name, field in fields.items() if field.is_required()]
                     optional_params = [name for name, field in fields.items() if not field.is_required()]
 

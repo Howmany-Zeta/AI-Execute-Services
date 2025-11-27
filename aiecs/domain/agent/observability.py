@@ -220,7 +220,7 @@ class LoggingObserver:
 class MetricsObserver:
     """Observer that collects metrics."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize metrics observer."""
         self.state_changes: List[Dict[str, Any]] = []
         self.task_events: List[Dict[str, Any]] = []

@@ -51,6 +51,12 @@ from .config import (
 
 from .callbacks import CustomAsyncCallbackHandler
 
+from .client_resolver import (
+    resolve_llm_client,
+    clear_client_cache,
+    get_cached_providers,
+)
+
 __all__ = [
     # Base classes and types
     "BaseLLMClient",
@@ -74,6 +80,10 @@ __all__ = [
     # Convenience functions
     "generate_text",
     "stream_text",
+    # Client resolution helpers
+    "resolve_llm_client",
+    "clear_client_cache",
+    "get_cached_providers",
     # Configuration management
     "ModelCostConfig",
     "ModelCapabilities",

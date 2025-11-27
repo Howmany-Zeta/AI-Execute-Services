@@ -5,7 +5,7 @@ Maps structured data (CSV, JSON) columns to knowledge graph entity and relation 
 with support for property transformations.
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, cast
 from enum import Enum
 from pydantic import BaseModel, Field, field_validator
 from aiecs.domain.knowledge_graph.schema.property_schema import PropertyType
@@ -418,25 +418,25 @@ class SchemaMapping(BaseModel):
 
         # Check relation mappings
         relation_type_names = set()
-        for i, mapping in enumerate(self.relation_mappings):
-            if not mapping.relation_type:
+        for i, relation_mapping in enumerate(self.relation_mappings):
+            if not relation_mapping.relation_type:
                 errors.append(f"Relation mapping {i}: relation_type is required")
 
-            if mapping.relation_type in relation_type_names:
-                errors.append(f"Relation mapping {i}: duplicate relation_type '{mapping.relation_type}'")
-            relation_type_names.add(mapping.relation_type)
+            if relation_mapping.relation_type in relation_type_names:
+                errors.append(f"Relation mapping {i}: duplicate relation_type '{relation_mapping.relation_type}'")
+            relation_type_names.add(relation_mapping.relation_type)
 
             # Check entity columns
-            if not mapping.source_entity_column:
+            if not relation_mapping.source_entity_column:
                 errors.append(f"Relation mapping {i}: source_entity_column is required")
-            if not mapping.target_entity_column:
+            if not relation_mapping.target_entity_column:
                 errors.append(f"Relation mapping {i}: target_entity_column is required")
 
             # Check that source columns include entity columns
-            if mapping.source_entity_column not in mapping.source_columns:
-                errors.append(f"Relation mapping {i}: source_entity_column '{mapping.source_entity_column}' " f"must be in source_columns")
-            if mapping.target_entity_column not in mapping.source_columns:
-                errors.append(f"Relation mapping {i}: target_entity_column '{mapping.target_entity_column}' " f"must be in source_columns")
+            if relation_mapping.source_entity_column not in relation_mapping.source_columns:
+                errors.append(f"Relation mapping {i}: source_entity_column '{relation_mapping.source_entity_column}' " f"must be in source_columns")
+            if relation_mapping.target_entity_column not in relation_mapping.source_columns:
+                errors.append(f"Relation mapping {i}: target_entity_column '{relation_mapping.target_entity_column}' " f"must be in source_columns")
 
         return errors
 

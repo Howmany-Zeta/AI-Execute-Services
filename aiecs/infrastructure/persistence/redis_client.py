@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 class RedisClient:
     """Redis client singleton for sharing across different caching strategies"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._client: Optional[redis.Redis] = None
         self._connection_pool: Optional[redis.ConnectionPool] = None
 
@@ -142,7 +142,7 @@ class RedisClient:
             logger.error(f"Redis ping failed: {e}")
             return False
 
-    async def info(self, section: str = None) -> dict:
+    async def info(self, section: Optional[str] = None) -> dict:
         """Get Redis server information"""
         try:
             client = await self.get_client()
@@ -160,7 +160,7 @@ class RedisClient:
             logger.error(f"Redis delete failed: {e}")
             return 0
 
-    async def set(self, key: str, value: str, ex: int = None) -> bool:
+    async def set(self, key: str, value: str, ex: Optional[int] = None) -> bool:
         """Set a key-value pair with optional expiration"""
         try:
             client = await self.get_client()

@@ -34,11 +34,11 @@ try:
     QUERY_PLAN_AVAILABLE = True
 except ImportError:
     QUERY_PLAN_AVAILABLE = False
-    QueryPlan = None  # type: ignore[misc]
-    QueryStep = None  # type: ignore[misc]
-    QueryOperation = None  # type: ignore[misc]
-    GraphQuery = None  # type: ignore[misc]
-    QueryType = None  # type: ignore[misc]
+    QueryPlan = None  # type: ignore[assignment]
+    QueryStep = None  # type: ignore[assignment]
+    QueryOperation = None  # type: ignore[assignment]
+    GraphQuery = None  # type: ignore[assignment]
+    QueryType = None  # type: ignore[assignment]
 
 # Placeholder for ValidationError (will be defined in error_handler.py)
 
@@ -259,7 +259,7 @@ class FindNode(ASTNode):
         self,
         context: "QueryContext",
         step_id: str = "step_1",
-        depends_on: List[str] = None,
+        depends_on: Optional[List[str]] = None,
     ) -> Any:
         """
         Convert FindNode to QueryStep

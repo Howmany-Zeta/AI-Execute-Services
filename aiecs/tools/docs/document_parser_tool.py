@@ -822,7 +822,7 @@ class DocumentParserTool(BaseTool):
 
     def _create_chunks(self, content: str, chunk_size: int) -> List[Dict[str, Any]]:
         """Create chunks from content for better AI processing"""
-        chunks = []
+        chunks: List[Dict[str, Any]] = []
         words = content.split()
 
         for i in range(0, len(words), chunk_size):
@@ -923,7 +923,7 @@ class DocumentParserTool(BaseTool):
 
     def _extract_text_structure(self, content: str, doc_type: DocumentType) -> Dict[str, Any]:
         """Extract structure from text documents"""
-        result = {"text": content}
+        result: Dict[str, Any] = {"text": content}
 
         if doc_type == DocumentType.MARKDOWN:
             # Extract markdown structure

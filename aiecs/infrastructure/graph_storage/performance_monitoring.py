@@ -6,7 +6,8 @@ Provides query performance monitoring, query plan analysis, and optimization sug
 
 import time
 import logging
-import asyncpg
+import asyncio
+import asyncpg  # type: ignore[import-untyped]
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from collections import defaultdict
@@ -154,12 +155,10 @@ class PerformanceMonitor:
 
         self.query_stats: Dict[str, QueryStats] = {}
         self.slow_queries: List[Dict[str, Any]] = []
-        self._lock = None
+        self._lock: Optional[asyncio.Lock] = None
 
     async def initialize(self) -> None:
         """Initialize monitor (create locks, etc.)"""
-        import asyncio
-
         self._lock = asyncio.Lock()
 
     def track_query(self, query_type: str, query_text: str):
@@ -346,11 +345,11 @@ class PerformanceMonitor:
         if not self.enabled:
             return []
 
-        stats = self.query_stats.values()
+        stats_list: List[QueryStats] = list(self.query_stats.values())
         if query_type:
-            stats = [s for s in stats if s.query_type == query_type]
+            stats_list = [s for s in stats_list if s.query_type == query_type]
 
-        return [s.to_dict() for s in stats]
+        return [s.to_dict() for s in stats_list]
 
     def reset_stats(self) -> None:
         """Reset all performance statistics"""

@@ -7,12 +7,15 @@ during conversations.
 """
 
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, TYPE_CHECKING
 from datetime import datetime
 
 from aiecs.infrastructure.graph_storage.base import GraphStore
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.relation import Relation
+
+if TYPE_CHECKING:
+    from aiecs.infrastructure.graph_storage.protocols import GraphMemoryMixinProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +30,9 @@ class GraphMemoryMixin:
     - Link conversation to knowledge graph
     - Maintain graph-based conversation context
 
+    This mixin expects the class it's mixed into to implement `GraphMemoryMixinProtocol`,
+    specifically the `graph_store` attribute.
+
     Usage:
         class ContextEngineWithGraph(ContextEngine, GraphMemoryMixin):
             def __init__(self, graph_store: GraphStore, ...):
@@ -34,7 +40,9 @@ class GraphMemoryMixin:
                 self.graph_store = graph_store
     """
 
-    # Note: This assumes the class has self.graph_store: Optional[GraphStore]
+    if TYPE_CHECKING:
+        # Type hint for mypy: this mixin expects GraphMemoryMixinProtocol
+        graph_store: Optional[GraphStore]
 
     async def store_knowledge(
         self,
@@ -338,7 +346,7 @@ class GraphMemoryMixin:
                 return {"entities": [], "relations": []}
 
             entities = [session_entity]
-            relations = []
+            relations: List[Any] = []
             visited = {session_entity_id}
 
             # Traverse from session entity

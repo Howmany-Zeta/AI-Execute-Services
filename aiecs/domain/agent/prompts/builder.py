@@ -19,7 +19,7 @@ class MessageBuilder:
         messages = builder.build()
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize message builder."""
         self.messages: List[LLMMessage] = []
 

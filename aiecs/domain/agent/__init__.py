@@ -30,6 +30,7 @@ from .models import (
     AgentGoal,
     AgentCapabilityDeclaration,
     AgentMetrics,
+    GraphMetrics,
     AgentInteraction,
     AgentMemory,
 )
@@ -134,6 +135,7 @@ __all__ = [
     "AgentGoal",
     "AgentCapabilityDeclaration",
     "AgentMetrics",
+    "GraphMetrics",
     "AgentInteraction",
     "AgentMemory",
     # Base Agent

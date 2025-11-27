@@ -6,7 +6,7 @@ based on query patterns and workload analysis.
 """
 
 import logging
-import asyncpg
+import asyncpg  # type: ignore[import-untyped]
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
@@ -276,7 +276,7 @@ class IndexOptimizer:
         Returns:
             Dictionary with results
         """
-        results: Dict[str, List[IndexRecommendation]] = {
+        results: Dict[str, List[Dict[str, Any]]] = {
             "applied": [],
             "failed": [],
             "skipped": [],

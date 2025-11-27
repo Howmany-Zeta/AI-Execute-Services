@@ -5,7 +5,7 @@ Pluggable reranking strategies for improving search result relevance.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Set
 from enum import Enum
 
 from aiecs.domain.knowledge_graph.models.entity import Entity
@@ -132,7 +132,7 @@ def combine_scores(
         return {}
 
     # Collect all entity IDs
-    all_entity_ids = set()
+    all_entity_ids: Set[str] = set()
     for score_dict in score_dicts:
         all_entity_ids.update(score_dict.keys())
 

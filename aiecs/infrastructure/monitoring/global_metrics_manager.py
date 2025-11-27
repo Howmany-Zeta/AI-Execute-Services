@@ -156,6 +156,11 @@ def get_metrics_summary() -> Dict[str, Any]:
             "message": "Global metrics not initialized",
         }
 
+    if _global_metrics is None:
+        return {
+            "initialized": False,
+            "message": "Global metrics not initialized",
+        }
     try:
         return _global_metrics.get_metrics_summary()
     except Exception as e:

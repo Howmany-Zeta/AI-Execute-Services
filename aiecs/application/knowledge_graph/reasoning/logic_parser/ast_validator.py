@@ -122,7 +122,7 @@ class ASTValidator:
         Returns:
             List of validation errors
         """
-        errors = []
+        errors: List[ValidationError] = []
 
         # Validate FindNode
         errors.extend(self.validate_find_node(node.find))
@@ -150,7 +150,7 @@ class ASTValidator:
         Returns:
             List of validation errors
         """
-        errors = []
+        errors: List[ValidationError] = []
 
         # Validate entity type exists
         errors.extend(self.validate_entity_type(node.entity_type, node.line, node.column))
@@ -179,7 +179,7 @@ class ASTValidator:
         Returns:
             List of validation errors
         """
-        errors = []
+        errors: List[ValidationError] = []
 
         # Validate relation type exists
         errors.extend(self.validate_relation_type(node.relation_type, node.line, node.column))
@@ -224,7 +224,7 @@ class ASTValidator:
         Returns:
             List of validation errors
         """
-        errors = []
+        errors: List[ValidationError] = []
 
         # Validate operator
         valid_operators = ["==", "!=", ">", "<", ">=", "<=", "IN", "CONTAINS"]
@@ -299,7 +299,7 @@ class ASTValidator:
         Returns:
             List of validation errors
         """
-        errors = []
+        errors: List[ValidationError] = []
 
         # Validate operator
         valid_operators = ["AND", "OR", "NOT"]
@@ -345,7 +345,7 @@ class ASTValidator:
         Returns:
             List of validation errors
         """
-        errors = []
+        errors: List[ValidationError] = []
 
         # Check if schema has the method
         if not hasattr(self.schema, "get_entity_type"):
@@ -388,7 +388,7 @@ class ASTValidator:
         Returns:
             List of validation errors
         """
-        errors = []
+        errors: List[ValidationError] = []
 
         # Check if schema has the method
         if not hasattr(self.schema, "get_relation_type"):
@@ -432,7 +432,7 @@ class ASTValidator:
         Returns:
             List of validation errors
         """
-        errors = []
+        errors: List[ValidationError] = []
 
         # Get entity type schema
         if not hasattr(self.schema, "get_entity_type"):
@@ -499,7 +499,7 @@ class ASTValidator:
         Returns:
             List of validation errors
         """
-        errors = []
+        errors: List[ValidationError] = []
 
         # Get entity type schema
         if not hasattr(self.schema, "get_entity_type"):
@@ -598,7 +598,7 @@ class ASTValidator:
         Returns:
             List of validation errors
         """
-        errors = []
+        errors: List[ValidationError] = []
 
         # Get relation type schema
         if not hasattr(self.schema, "get_relation_type"):

@@ -633,7 +633,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 logger.error(f"Failed to get session from Redis: {e}")
 
         # Fallback to memory
-        session = self._memory_sessions.get(session_id)
+        session: Optional[SessionMetrics] = self._memory_sessions.get(session_id)
         return session.to_dict() if session else None
 
     async def update_session(
@@ -645,9 +645,16 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         mark_error: bool = False,
     ) -> bool:
         """Update session with activity and metrics."""
-        session = await self.get_session(session_id)
-        if not session:
+        session_data = await self.get_session(session_id)
+        if not session_data:
             return False
+
+        # Convert dict to SessionMetrics if needed
+        session: SessionMetrics
+        if isinstance(session_data, dict):
+            session = SessionMetrics.from_dict(session_data)
+        else:
+            session = session_data
 
         # Update activity
         session.last_activity = datetime.utcnow()
@@ -672,10 +679,12 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
     async def end_session(self, session_id: str, status: str = "completed") -> bool:
         """End a session and update metrics."""
-        session = await self.get_session(session_id)
-        if not session:
+        session_data = await self.get_session(session_id)
+        if not session_data:
             return False
 
+        # Convert dict to SessionMetrics if needed
+        session = SessionMetrics.from_dict(session_data) if isinstance(session_data, dict) else session_data
         session.status = status
         session.last_activity = datetime.utcnow()
 
@@ -1070,12 +1079,13 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
     async def health_check(self) -> Dict[str, Any]:
         """Perform health check."""
-        health = {
+        health: Dict[str, Any] = {
             "status": "healthy",
             "storage_backend": "redis" if self.redis_client else "memory",
             "redis_connected": False,
             "issues": [],
         }
+        issues: List[str] = health["issues"]  # Type narrowing
 
         # Check Redis connection
         if self.redis_client:
@@ -1083,15 +1093,17 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 await self.redis_client.ping()
                 health["redis_connected"] = True
             except Exception as e:
-                health["issues"].append(f"Redis connection failed: {e}")
+                issues.append(f"Redis connection failed: {e}")
                 health["status"] = "degraded"
 
         # Check memory usage (basic check)
         if not self.redis_client:
             total_memory_items = len(self._memory_sessions) + len(self._memory_conversations) + len(self._memory_contexts) + len(self._memory_checkpoints)
             if total_memory_items > 10000:  # Arbitrary threshold
-                health["issues"].append(f"High memory usage: {total_memory_items} items")
+                issues.append(f"High memory usage: {total_memory_items} items")
                 health["status"] = "warning"
+        
+        health["issues"] = issues  # Update health dict
 
         return health
 
@@ -1197,8 +1209,8 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         # Create participant objects
         participant_objects = [
             ConversationParticipant(
-                participant_id=p.get("id"),
-                participant_type=p.get("type"),
+                participant_id=p.get("id") or "",
+                participant_type=p.get("type") or "",
                 participant_role=p.get("role"),
                 metadata=p.get("metadata", {}),
             )
@@ -1434,7 +1446,9 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         try:
             # Get current conversation
-            messages = await self.get_conversation_history(session_id)
+            messages_dict = await self.get_conversation_history(session_id)
+            # Convert dict list to ConversationMessage list
+            messages = [ConversationMessage.from_dict(msg) for msg in messages_dict]
             original_count = len(messages)
 
             if original_count == 0:
@@ -1747,6 +1761,10 @@ Summary:"""
         """
         compressed = messages
 
+        # Type narrowing: ensure hybrid_strategies is a list
+        if config.hybrid_strategies is None:
+            config.hybrid_strategies = ["truncate", "summarize"]
+        
         for strategy in config.hybrid_strategies:
             if strategy == "truncate":
                 compressed = await self._compress_with_truncation(compressed, config)

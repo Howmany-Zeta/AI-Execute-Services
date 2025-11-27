@@ -141,7 +141,7 @@ class APISourceTool(BaseTool):
         self.search_enhancer = SearchEnhancer(relevance_weight=0.5, popularity_weight=0.3, recency_weight=0.2)
 
         # Load providers (they auto-discover on import)
-        self._providers = {}
+        self._providers: Dict[str, Any] = {}
         self._load_providers()
 
     def _load_providers(self):
@@ -255,7 +255,7 @@ class APISourceTool(BaseTool):
                 # Make optional if not required
                 is_required = param_info.get("required", False)
                 if not is_required:
-                    field_type = Optional[field_type]
+                    field_type = Optional[field_type]  # type: ignore[assignment]
 
                 # Build field description
                 description_parts = [param_info.get("description", "")]
@@ -289,7 +289,8 @@ class APISourceTool(BaseTool):
                     )
 
             # Create the Pydantic model
-            schema_class = create_model(
+            # Dynamic model creation - use type ignore for create_model overload issues
+            schema_class = create_model(  # type: ignore[call-overload]
                 f"{schema_name.replace('_', '').title()}Schema",
                 __doc__=dict_schema.get("description", ""),
                 **fields,
@@ -752,7 +753,7 @@ class APISourceTool(BaseTool):
         Returns:
             Dictionary with metrics from all providers and fallback statistics
         """
-        report = {
+        report: Dict[str, Any] = {
             "providers": {},
             "fallback_stats": self.fallback_strategy.get_fallback_stats(),
             "total_providers": len(self._providers),

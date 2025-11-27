@@ -161,7 +161,7 @@ class DocumentLayoutTool(BaseTool):
         self._init_layout_presets()
 
         # Track layout operations
-        self._layout_operations = []
+        self._layout_operations: List[Any] = []
 
     def _init_directories(self):
         """Initialize required directories"""
@@ -725,7 +725,7 @@ class DocumentLayoutTool(BaseTool):
         page_size: PageSize,
         orientation: PageOrientation,
         margins: Dict[str, float],
-    ) -> Dict[str, float]:
+    ) -> Dict[str, Any]:
         """Calculate page dimensions including margins"""
         # Standard page sizes in cm
         page_sizes = {
@@ -761,7 +761,7 @@ class DocumentLayoutTool(BaseTool):
         balance_columns: bool,
     ) -> Dict[str, Any]:
         """Calculate column configuration"""
-        config = {
+        config: Dict[str, Any] = {
             "num_columns": num_columns,
             "column_gap": column_gap,
             "balance_columns": balance_columns,

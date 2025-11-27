@@ -197,8 +197,10 @@ def validate_config_file(config_path: str) -> Tuple[bool, List[str]]:
         FileNotFoundError: If file doesn't exist
     """
     from aiecs.llm.config.config_loader import LLMConfigLoader
+    from pathlib import Path
 
     loader = LLMConfigLoader()
-    config = loader.load_config(config_path)
+    config_path_obj: Path | None = Path(config_path) if config_path else None
+    config = loader.load_config(config_path_obj)
 
     return validate_llm_config(config)

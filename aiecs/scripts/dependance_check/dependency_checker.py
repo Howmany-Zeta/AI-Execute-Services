@@ -135,10 +135,10 @@ class DependencyChecker:
 
     def check_image_tool_dependencies(self) -> ToolDependencies:
         """Check dependencies for Image Tool."""
-        system_deps: List[str] = []
-        python_deps: List[str] = []
-        model_deps: List[str] = []
-        optional_deps: List[str] = []
+        system_deps: List[DependencyInfo] = []
+        python_deps: List[DependencyInfo] = []
+        model_deps: List[DependencyInfo] = []
+        optional_deps: List[DependencyInfo] = []
 
         # Tesseract OCR
         tesseract_status = self.check_system_command("tesseract")
@@ -216,10 +216,10 @@ class DependencyChecker:
 
     def check_classfire_tool_dependencies(self) -> ToolDependencies:
         """Check dependencies for ClassFire Tool."""
-        system_deps: List[str] = []
-        python_deps: List[str] = []
-        model_deps: List[str] = []
-        optional_deps: List[str] = []
+        system_deps: List[DependencyInfo] = []
+        python_deps: List[DependencyInfo] = []
+        model_deps: List[DependencyInfo] = []
+        optional_deps: List[DependencyInfo] = []
 
         # Python packages
         python_packages = [
@@ -317,10 +317,10 @@ class DependencyChecker:
 
     def check_office_tool_dependencies(self) -> ToolDependencies:
         """Check dependencies for Office Tool."""
-        system_deps: List[str] = []
-        python_deps: List[str] = []
-        model_deps: List[str] = []
-        optional_deps: List[str] = []
+        system_deps: List[DependencyInfo] = []
+        python_deps: List[DependencyInfo] = []
+        model_deps: List[DependencyInfo] = []
+        optional_deps: List[DependencyInfo] = []
 
         # Java Runtime Environment
         java_status = self.check_system_command("java", "-version")
@@ -381,10 +381,10 @@ class DependencyChecker:
 
     def check_stats_tool_dependencies(self) -> ToolDependencies:
         """Check dependencies for Stats Tool."""
-        system_deps: List[str] = []
-        python_deps: List[str] = []
-        model_deps: List[str] = []
-        optional_deps: List[str] = []
+        system_deps: List[DependencyInfo] = []
+        python_deps: List[DependencyInfo] = []
+        model_deps: List[DependencyInfo] = []
+        optional_deps: List[DependencyInfo] = []
 
         # pyreadstat system dependencies
         pyreadstat_status = self._check_pyreadstat_system_deps()
@@ -445,10 +445,10 @@ class DependencyChecker:
 
     def check_report_tool_dependencies(self) -> ToolDependencies:
         """Check dependencies for Report Tool."""
-        system_deps: List[str] = []
-        python_deps: List[str] = []
-        model_deps: List[str] = []
-        optional_deps: List[str] = []
+        system_deps: List[DependencyInfo] = []
+        python_deps: List[DependencyInfo] = []
+        model_deps: List[DependencyInfo] = []
+        optional_deps: List[DependencyInfo] = []
 
         # WeasyPrint system dependencies
         weasyprint_status = self._check_weasyprint_system_deps()
@@ -511,10 +511,10 @@ class DependencyChecker:
 
     def check_scraper_tool_dependencies(self) -> ToolDependencies:
         """Check dependencies for Scraper Tool."""
-        system_deps: List[str] = []
-        python_deps: List[str] = []
-        model_deps: List[str] = []
-        optional_deps: List[str] = []
+        system_deps: List[DependencyInfo] = []
+        python_deps: List[DependencyInfo] = []
+        model_deps: List[DependencyInfo] = []
+        optional_deps: List[DependencyInfo] = []
 
         # Playwright browsers
         playwright_status = self._check_playwright_browsers()
@@ -626,7 +626,7 @@ class DependencyChecker:
     def _check_nltk_data(self, data: str) -> DependencyStatus:
         """Check if NLTK data is available."""
         try:
-            import nltk
+            import nltk  # type: ignore[import-untyped]
 
             nltk.data.find(f"corpora/{data}")
             return DependencyStatus.AVAILABLE
@@ -638,7 +638,7 @@ class DependencyChecker:
     def _check_spacy_pkuseg_model(self) -> DependencyStatus:
         """Check if spaCy PKUSeg model is available."""
         try:
-            import spacy_pkuseg
+            import spacy_pkuseg  # type: ignore[import-untyped]
 
             # Test basic functionality
             seg = spacy_pkuseg.pkuseg()
