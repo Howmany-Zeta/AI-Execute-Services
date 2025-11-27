@@ -1,4 +1,4 @@
-import asyncpg
+import asyncpg  # type: ignore[import-untyped]
 import json
 import logging
 from datetime import datetime

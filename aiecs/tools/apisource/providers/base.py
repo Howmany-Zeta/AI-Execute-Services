@@ -91,7 +91,7 @@ class RateLimiter:
             elapsed = now - self.last_update
 
             # Add new tokens based on elapsed time
-            self.tokens = min(self.max_tokens, self.tokens + elapsed * self.tokens_per_second)
+            self.tokens = int(min(self.max_tokens, self.tokens + elapsed * self.tokens_per_second))
             self.last_update = now
 
             if self.tokens >= tokens:
@@ -160,7 +160,7 @@ class BaseAPIProvider(ABC):
         self.validator = DataValidator()
 
         # Legacy stats for backwards compatibility
-        self.stats = {
+        self.stats: Dict[str, Any] = {
             "total_requests": 0,
             "successful_requests": 0,
             "failed_requests": 0,
@@ -298,15 +298,9 @@ class BaseAPIProvider(ABC):
                     operation_name = attr._operation_name
                     operation_description = attr._operation_description
 
-                    # Try to get schema - this might require instantiation
+                    # Schema retrieval requires an instance, so skip at class level
+                    # Schema will be available at runtime when provider instances are created
                     schema = None
-                    if hasattr(cls, "get_operation_schema"):
-                        try:
-                            # Try calling as class method first
-                            schema = cls.get_operation_schema(cls, operation_name)
-                        except (TypeError, AttributeError):
-                            # If that fails, we'll need to handle it at runtime
-                            logger.debug(f"Could not get schema for {operation_name} at class level")
 
                     operations.append(
                         {
@@ -470,7 +464,7 @@ class BaseAPIProvider(ABC):
         Returns:
             Coverage information dictionary
         """
-        coverage = {}
+        coverage: Dict[str, Any] = {}
 
         # Calculate record count
         if isinstance(data, list):
@@ -548,16 +542,18 @@ class BaseAPIProvider(ABC):
         if operation not in self.supported_operations:
             available_ops = ", ".join(self.supported_operations)
             schema = self.get_operation_schema(operation)
-            error_msg = f"Operation '{operation}' not supported by {self.name}.\n" f"Supported operations: {available_ops}"
+            operation_error_msg = f"Operation '{operation}' not supported by {self.name}.\n" f"Supported operations: {available_ops}"
             if schema:
-                error_msg += f"\nSee get_operation_schema('{operation}') for details"
-            raise ValueError(error_msg)
+                operation_error_msg += f"\nSee get_operation_schema('{operation}') for details"
+            raise ValueError(operation_error_msg)
 
         # Validate parameters with enhanced error messages
-        is_valid, error_msg = self.validate_params(operation, params)
+        validation_result = self.validate_params(operation, params)
+        is_valid: bool = validation_result[0]
+        error_msg: Optional[str] = validation_result[1]
         if not is_valid:
             schema = self.get_operation_schema(operation)
-            enhanced_error = f"Invalid parameters for {self.name}.{operation}: {error_msg}"
+            enhanced_error = f"Invalid parameters for {self.name}.{operation}: {error_msg or 'Unknown error'}"
 
             if schema and "parameters" in schema:
                 # Add helpful parameter information

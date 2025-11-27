@@ -13,10 +13,10 @@ import logging
 from typing import Dict, Any, List, Optional, Union
 from enum import Enum
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 import numpy as np
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.metrics import (
+from sklearn.model_selection import train_test_split, cross_val_score  # type: ignore[import-untyped]
+from sklearn.metrics import (  # type: ignore[import-untyped]
     accuracy_score,
     precision_score,
     recall_score,
@@ -24,14 +24,14 @@ from sklearn.metrics import (
     r2_score,
     mean_squared_error,
 )
-from sklearn.ensemble import (
+from sklearn.ensemble import (  # type: ignore[import-untyped]
     RandomForestClassifier,
     RandomForestRegressor,
     GradientBoostingClassifier,
     GradientBoostingRegressor,
 )
-from sklearn.linear_model import LogisticRegression, LinearRegression
-from sklearn.preprocessing import LabelEncoder
+from sklearn.linear_model import LogisticRegression, LinearRegression  # type: ignore[import-untyped]
+from sklearn.preprocessing import LabelEncoder  # type: ignore[import-untyped]
 from pydantic import BaseModel, Field, ConfigDict
 
 from aiecs.tools.base_tool import BaseTool
@@ -110,7 +110,7 @@ class ModelTrainerTool(BaseTool):
         self.logger.setLevel(logging.INFO)
 
         self._init_external_tools()
-        self.trained_models = {}
+        self.trained_models: Dict[str, Any] = {}
 
     def _init_external_tools(self):
         """Initialize external task tools"""

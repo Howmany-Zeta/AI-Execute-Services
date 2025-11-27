@@ -5,14 +5,17 @@ Provides efficient batch operations for bulk inserts, updates, and deletes.
 Uses PostgreSQL COPY and multi-row INSERT for optimal performance.
 """
 
-import asyncpg
+import asyncpg  # type: ignore[import-untyped]
 import logging
 import io
-from typing import List
+from typing import List, TYPE_CHECKING, Optional
 import json
 
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.relation import Relation
+
+if TYPE_CHECKING:
+    from aiecs.infrastructure.graph_storage.protocols import BatchOperationsMixinProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +27,9 @@ class BatchOperationsMixin:
     This mixin adds efficient batch insert/update/delete methods
     using PostgreSQL-specific optimizations like COPY and multi-row INSERT.
 
+    This mixin expects the class it's mixed into to implement `BatchOperationsMixinProtocol`,
+    specifically the `pool` attribute and `_serialize_embedding()` method.
+
     Example:
         ```python
         class MyGraphStore(GraphStore, BatchOperationsMixin):
@@ -33,6 +39,14 @@ class BatchOperationsMixin:
         await store.batch_add_entities([entity1, entity2, ...], batch_size=1000)
         ```
     """
+
+    if TYPE_CHECKING:
+        # Type hints for mypy: this mixin expects BatchOperationsMixinProtocol
+        pool: Optional[asyncpg.Pool]
+
+        def _serialize_embedding(self, embedding: List[float]) -> Optional[bytes]:
+            """Expected method from BatchOperationsMixinProtocol"""
+            ...
 
     async def batch_add_entities(
         self,

@@ -13,7 +13,7 @@ import logging
 from typing import Dict, Any, List, Optional, Union
 from enum import Enum
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 import numpy as np
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -406,7 +406,7 @@ class DataProfilerTool(BaseTool):
 
     def _detect_quality_issues(self, df: pd.DataFrame, checks: Optional[List[DataQualityCheck]]) -> Dict[str, List[Dict[str, Any]]]:
         """Detect data quality issues"""
-        issues = {
+        issues: Dict[str, List[Dict[str, Any]]] = {
             "missing_values": [],
             "duplicates": [],
             "outliers": [],

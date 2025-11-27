@@ -5,6 +5,8 @@ Provides a formal base class for async task components with standardized
 lifecycle management, configuration, error handling, and retry logic.
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, TypeVar, Generic
 from dataclasses import dataclass, field
@@ -16,8 +18,8 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-# Type variable for configuration
-ConfigT = TypeVar("ConfigT")
+# Type variable for configuration - must be a subclass of RunnableConfig
+ConfigT = TypeVar("ConfigT", bound="RunnableConfig")
 # Type variable for result
 ResultT = TypeVar("ResultT")
 

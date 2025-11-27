@@ -22,7 +22,7 @@
 from aiecs.tools.schema_generator import generate_schema_from_method
 from aiecs.tools import discover_tools, TOOL_CLASSES
 import sys
-from typing import Dict, List, Any, Type, Optional
+from typing import Dict, List, Any, Type, Optional, Callable
 from pydantic import BaseModel
 
 # 确保可以导入 aiecs
@@ -80,7 +80,7 @@ class SchemaQualityMetrics:
         }
 
 
-def validate_schema_quality(schema: Type[BaseModel], method: callable, method_name: str) -> List[str]:
+def validate_schema_quality(schema: Type[BaseModel], method: Callable[..., Any], method_name: str) -> List[str]:
     """
     验证单个 Schema 的质量
 
@@ -174,6 +174,7 @@ def analyze_tool_schemas(tool_name: str, tool_class: Type) -> Dict[str, Any]:
         # 首先尝试查找手动定义的 Schema
         manual_schema = find_manual_schema(tool_class, method_name)
 
+        schema: Optional[Type[BaseModel]]
         if manual_schema:
             schema = manual_schema
             schema_type = "manual"
@@ -199,7 +200,7 @@ def analyze_tool_schemas(tool_name: str, tool_class: Type) -> Dict[str, Any]:
             # 统计字段
             for field_name, field_info in schema.model_fields.items():
                 has_type = field_info.annotation is not None
-                has_meaningful_desc = field_info.description and field_info.description != f"Parameter {field_name}"
+                has_meaningful_desc = bool(field_info.description and field_info.description != f"Parameter {field_name}")
                 metrics.add_field(has_type, has_meaningful_desc)
 
             # 记录问题

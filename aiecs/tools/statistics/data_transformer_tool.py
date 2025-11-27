@@ -13,9 +13,9 @@ import logging
 from typing import Dict, Any, List, Optional, Union
 from enum import Enum
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 import numpy as np
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, LabelEncoder
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, LabelEncoder  # type: ignore[import-untyped]
 from pydantic import BaseModel, Field, ConfigDict
 
 from aiecs.tools.base_tool import BaseTool
@@ -127,7 +127,7 @@ class DataTransformerTool(BaseTool):
         self._init_external_tools()
 
         # Initialize transformation pipeline cache
-        self.pipeline_cache = {}
+        self.pipeline_cache: Dict[str, Any] = {}
 
     def _init_external_tools(self):
         """Initialize external task tools"""
@@ -210,6 +210,8 @@ class DataTransformerTool(BaseTool):
 
             for i, transform in enumerate(transformations):
                 trans_type = transform.get("type")
+                if not isinstance(trans_type, str):
+                    raise ValueError(f"Invalid transformation type: {trans_type}, expected string")
                 columns = transform.get("columns")
                 params = transform.get("params", {})
 
@@ -365,7 +367,7 @@ class DataTransformerTool(BaseTool):
             if method == "one_hot":
                 # One-hot encoding
                 df_encoded = pd.get_dummies(df, columns=columns, prefix=columns)
-                encoding_info = {
+                encoding_info: Dict[str, Any] = {
                     "method": "one_hot",
                     "original_columns": columns,
                     "new_columns": [col for col in df_encoded.columns if col not in df.columns],
@@ -373,7 +375,7 @@ class DataTransformerTool(BaseTool):
             elif method == "label":
                 # Label encoding
                 df_encoded = df.copy()
-                encoders = {}
+                encoders: Dict[str, Any] = {}
                 for col in columns:
                     le = LabelEncoder()
                     df_encoded[col] = le.fit_transform(df[col].astype(str))
@@ -488,7 +490,7 @@ class DataTransformerTool(BaseTool):
         task_type: Optional[str],
     ) -> List[Dict[str, Any]]:
         """Determine transformations needed for data"""
-        transformations = []
+        transformations: List[Dict[str, Any]] = []
 
         # Remove duplicates if present
         if df.duplicated().sum() > 0:

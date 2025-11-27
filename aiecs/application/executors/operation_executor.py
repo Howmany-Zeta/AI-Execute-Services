@@ -23,7 +23,7 @@ class OperationExecutor:
         self.tool_executor = tool_executor
         self.execution_utils = execution_utils
         self.config = config
-        self._tool_instances = {}
+        self._tool_instances: Dict[str, Any] = {}
         self.semaphore = asyncio.Semaphore(config.get("rate_limit_requests_per_second", 5))
 
     def _filter_tool_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -50,7 +50,9 @@ class OperationExecutor:
         if "." not in operation_spec:
             raise ValueError(f"Invalid operation spec: {operation_spec}, expected 'tool_name.operation_name'")
 
-        tool_name, operation_name = operation_spec.split(".", 1)
+        parts = operation_spec.split(".", 1)
+        tool_name: str = parts[0]
+        operation_name: str = parts[1]
 
         # Get or create tool instance
         if tool_name not in self._tool_instances:
@@ -100,10 +102,12 @@ class OperationExecutor:
         """
         Execute operations sequence sequentially, with option to stop on failure
         """
-        results = []
+        results: List[TaskStepResult] = []
 
         for step, op_info in enumerate(operations):
             operation_spec = op_info.get("operation")
+            if not isinstance(operation_spec, str):
+                raise ValueError(f"Invalid operation spec: {operation_spec}, expected string")
             params = op_info.get("params", {})
 
             # Process parameter references
@@ -203,7 +207,10 @@ class OperationExecutor:
         Execute a single tool call with rate limiting
         """
         async with self.semaphore:
-            tool_name = call.get("tool")
+            tool_name_raw = call.get("tool")
+            if not isinstance(tool_name_raw, str):
+                raise ValueError(f"Invalid tool name: {tool_name_raw}, expected string")
+            tool_name: str = tool_name_raw
             params = call.get("params", {})
 
             # Use context-aware caching
@@ -283,9 +290,11 @@ class OperationExecutor:
 
         for i, op_info in enumerate(operations):
             operation_spec = op_info.get("operation")
+            if not isinstance(operation_spec, str):
+                raise ValueError(f"Invalid operation spec: {operation_spec}, expected string")
             params = op_info.get("params", {})
 
-            async def execute_single_op(spec, p, index):
+            async def execute_single_op(spec: str, p: Dict[str, Any], index: int) -> TaskStepResult:
                 try:
                     result = await self.execute_operation(spec, p)
                     return TaskStepResult(
@@ -311,7 +320,7 @@ class OperationExecutor:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Handle exception results
-        processed_results = []
+        processed_results: List[TaskStepResult] = []
         for i, result in enumerate(results):
             if isinstance(result, Exception):
                 processed_results.append(
@@ -326,6 +335,8 @@ class OperationExecutor:
                     )
                 )
             else:
+                # result is TaskStepResult here because execute_single_op always returns TaskStepResult
+                assert isinstance(result, TaskStepResult), f"Expected TaskStepResult, got {type(result)}"
                 processed_results.append(result)
 
         return processed_results

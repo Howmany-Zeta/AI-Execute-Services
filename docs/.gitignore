@@ -1,0 +1,9 @@
+# Sphinx build directory
+_build/
+_static/
+_templates/
+
+# Generated files
+*.pyc
+__pycache__/
+

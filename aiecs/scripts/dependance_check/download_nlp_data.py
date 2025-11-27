@@ -90,7 +90,7 @@ def download_nltk_data(logger: logging.Logger) -> bool:
         return False
 
     try:
-        import nltk
+        import nltk  # type: ignore[import-untyped]
 
         # Download required NLTK data
         packages_to_download = [
@@ -201,7 +201,7 @@ def download_spacy_pkuseg_model(logger: logging.Logger) -> bool:
 
         # Verify the package can be imported
         try:
-            import spacy_pkuseg
+            import spacy_pkuseg  # type: ignore[import-untyped]
 
             logger.info("Verified spacy_pkuseg can be imported")
 
@@ -235,7 +235,7 @@ def download_rake_nltk_data(logger: logging.Logger) -> bool:
         return True  # Not critical, return True
 
     try:
-        from rake_nltk import Rake
+        from rake_nltk import Rake  # type: ignore[import-untyped]
 
         # Test RAKE functionality
         rake = Rake()
@@ -264,7 +264,7 @@ def verify_installation(logger: logging.Logger) -> bool:
 
     # Test NLTK
     try:
-        from nltk.corpus import stopwords
+        from nltk.corpus import stopwords  # type: ignore[import-untyped]
 
         english_stopwords = stopwords.words("english")
         logger.info(f"NLTK verification successful. Loaded {len(english_stopwords)} English stopwords")

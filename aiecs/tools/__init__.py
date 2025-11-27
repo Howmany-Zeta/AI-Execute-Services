@@ -4,15 +4,16 @@ import importlib
 import logging
 import os
 import pkgutil
+from typing import Dict, Any
 
 from aiecs.tools.base_tool import BaseTool
 
 logger = logging.getLogger(__name__)
 
 # Global tool registry
-TOOL_REGISTRY = {}
-TOOL_CLASSES = {}
-TOOL_CONFIGS = {}
+TOOL_REGISTRY: Dict[str, Any] = {}
+TOOL_CLASSES: Dict[str, Any] = {}
+TOOL_CONFIGS: Dict[str, Any] = {}
 
 
 def register_tool(name):
@@ -135,6 +136,8 @@ def discover_tools(package_path: str = "aiecs.tools"):
         package_path: Package path to search
     """
     package = importlib.import_module(package_path)
+    if package.__file__ is None:
+        return
     package_dir = os.path.dirname(package.__file__)
 
     for _, module_name, is_pkg in pkgutil.iter_modules([package_dir]):

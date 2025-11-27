@@ -7,7 +7,11 @@ within agent communities.
 
 import logging
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Set
+from typing import Dict, List, Any, Optional, Set, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .community_manager import CommunityManager
+    from aiecs.domain.context.context_engine import ContextEngine
 import json
 
 from .models.community_models import (
@@ -25,7 +29,11 @@ class ResourceManager:
     Manager for community resources, knowledge sharing, and collaborative tools.
     """
 
-    def __init__(self, community_manager=None, context_engine=None):
+    def __init__(
+        self,
+        community_manager: Optional["CommunityManager"] = None,
+        context_engine: Optional["ContextEngine"] = None,
+    ) -> None:
         """
         Initialize the resource manager.
 
@@ -77,7 +85,7 @@ class ResourceManager:
         Returns:
             Resource ID
         """
-        resource_content = {
+        resource_content: Dict[str, Any] = {
             "title": title,
             "content": content,
             "knowledge_type": knowledge_type,

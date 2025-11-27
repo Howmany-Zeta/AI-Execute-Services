@@ -89,7 +89,7 @@ class TaskContext:
         except Exception as e:
             logger.error(f"Failed to save context history: {e}")
 
-    def add_context_update(self, update_type: str, data: Any, metadata: Dict[str, Any] = None):
+    def add_context_update(self, update_type: str, data: Any, metadata: Optional[Dict[str, Any]] = None):
         """Add a context update (e.g., message, metadata change)."""
         update = ContextUpdate(
             timestamp=time.time(),

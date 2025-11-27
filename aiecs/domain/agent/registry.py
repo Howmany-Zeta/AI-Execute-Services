@@ -21,7 +21,7 @@ class AgentRegistry:
     Thread-safe registry for agent lifecycle management.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize agent registry."""
         self._agents: Dict[str, BaseAIAgent] = {}
         self._agents_by_type: Dict[AgentType, Set[str]] = {}

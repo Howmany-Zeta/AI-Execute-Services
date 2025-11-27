@@ -339,14 +339,20 @@ class ContextEngineAdapter:
 
         if session:
             logger.debug(f"Retrieved session {session_id} from ContextEngine")
-            # Convert SessionMetrics to dict
-            if hasattr(session, "to_dict"):
+            # session is already a dict from get_session()
+            if isinstance(session, dict):
+                return session
+            # Convert SessionMetrics to dict if it's a dataclass
+            elif hasattr(session, "to_dict"):
                 return session.to_dict()  # type: ignore[attr-defined]
             else:
                 # Fallback for dataclass
-                from dataclasses import asdict
+                from dataclasses import asdict, is_dataclass
 
-                return asdict(session)  # type: ignore[arg-type]
+                if is_dataclass(session):
+                    return asdict(session)  # type: ignore[arg-type]
+                # If it's already a dict or other type, return as-is
+                return session  # type: ignore[return-value]
 
         logger.debug(f"Session {session_id} not found in ContextEngine")
         return None

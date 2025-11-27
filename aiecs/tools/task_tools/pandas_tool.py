@@ -1,5 +1,5 @@
 from io import StringIO
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 import numpy as np
 from typing import List, Dict, Union, Optional, cast
 from pydantic import BaseModel, ConfigDict, Field
@@ -505,7 +505,11 @@ class PandasTool(BaseTool):
         self._validate_columns(df, [index, columns, values])
         try:
             df = df.pivot(index=index, columns=columns, values=values)
-            return self._to_json_serializable(df.reset_index())
+            result = self._to_json_serializable(df.reset_index())
+            # Ensure we return a list
+            if isinstance(result, dict):
+                return [result]
+            return result
         except Exception as e:
             raise DataFrameError(f"Pivot failed: {e}")
 

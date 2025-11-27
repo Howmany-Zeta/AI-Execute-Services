@@ -138,6 +138,12 @@ class RelationValidator:
         """
         errors = []
 
+        # Check if schema is available
+        if self.schema is None:
+            if self.strict:
+                errors.append("Schema is required for strict validation")
+            return errors
+
         # Check if relation type exists in schema
         if not self.schema.has_relation_type(relation.relation_type):
             if self.strict:
@@ -147,6 +153,10 @@ class RelationValidator:
 
         # Get relation type schema
         rel_type_schema = self.schema.get_relation_type(relation.relation_type)
+
+        # Skip validation if relation type schema not found
+        if rel_type_schema is None:
+            return errors
 
         # Validate source entity type
         if rel_type_schema.source_entity_types:

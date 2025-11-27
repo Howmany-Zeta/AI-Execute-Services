@@ -16,7 +16,7 @@ Version: 1.0
 """
 
 from dataclasses import dataclass
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Type, cast
 
 try:
     from lark import (
@@ -29,10 +29,12 @@ try:
     LARK_AVAILABLE = True
 except ImportError:
     LARK_AVAILABLE = False
-    LarkError = Exception  # type: ignore[misc]
-    UnexpectedInput = Exception  # type: ignore[misc]
-    UnexpectedToken = Exception  # type: ignore[misc]
-    UnexpectedCharacters = Exception  # type: ignore[misc]
+    # When Lark is not available, use Exception as fallback
+    # Use different names to avoid redefinition errors
+    LarkError = Exception  # type: ignore[misc,assignment]
+    UnexpectedInput = Exception  # type: ignore[misc,assignment]
+    UnexpectedToken = Exception  # type: ignore[misc,assignment]
+    UnexpectedCharacters = Exception  # type: ignore[misc,assignment]
 
 # Optional: colorama for terminal colors
 try:
@@ -43,17 +45,20 @@ try:
 except ImportError:
     COLORAMA_AVAILABLE = False
     # Fallback: no colors
-
-    class Fore:
+    # Create fallback classes with same interface but different implementation
+    class _ForeFallback:  # type: ignore[no-redef]
         RED = ""
         YELLOW = ""
         GREEN = ""
         CYAN = ""
         RESET = ""
 
-    class Style:
+    class _StyleFallback:  # type: ignore[no-redef]
         BRIGHT = ""
         RESET_ALL = ""
+
+    Fore = _ForeFallback  # type: ignore[assignment,misc]
+    Style = _StyleFallback  # type: ignore[assignment,misc]
 
 
 @dataclass

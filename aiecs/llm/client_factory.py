@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, Optional, Union, List
+from typing import Dict, Any, Optional, Union, List, TYPE_CHECKING
 from enum import Enum
 
 from .clients.base_client import BaseLLMClient, LLMMessage, LLMResponse
@@ -8,6 +8,9 @@ from .clients.vertex_client import VertexAIClient
 from .clients.googleai_client import GoogleAIClient
 from .clients.xai_client import XAIClient
 from .callbacks.custom_callbacks import CustomAsyncCallbackHandler
+
+if TYPE_CHECKING:
+    from .protocols import LLMClientProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -23,15 +26,95 @@ class LLMClientFactory:
     """Factory for creating and managing LLM provider clients"""
 
     _clients: Dict[AIProvider, BaseLLMClient] = {}
+    _custom_clients: Dict[str, "LLMClientProtocol"] = {}
 
     @classmethod
-    def get_client(cls, provider: Union[str, AIProvider]) -> BaseLLMClient:
-        """Get or create a client for the specified provider"""
+    def register_custom_provider(cls, name: str, client: "LLMClientProtocol") -> None:
+        """
+        Register a custom LLM client provider.
+
+        This allows registration of custom LLM clients that implement the LLMClientProtocol
+        without inheriting from BaseLLMClient. Custom providers can be retrieved by name
+        using get_client().
+
+        Args:
+            name: Custom provider name (e.g., "my-llm", "llama-local", "custom-gpt")
+            client: Client implementing LLMClientProtocol
+
+        Raises:
+            ValueError: If client doesn't implement LLMClientProtocol
+            ValueError: If name conflicts with standard AIProvider enum values
+
+        Example:
+            ```python
+            # Register custom LLM client
+            custom_client = MyCustomLLMClient()
+            LLMClientFactory.register_custom_provider("my-llm", custom_client)
+
+            # Use custom client
+            client = LLMClientFactory.get_client("my-llm")
+            response = await client.generate_text(messages)
+            ```
+        """
+        # Import here to avoid circular dependency
+        from .protocols import LLMClientProtocol
+
+        # Validate protocol compliance
+        if not isinstance(client, LLMClientProtocol):
+            raise ValueError(
+                f"Client must implement LLMClientProtocol. "
+                f"Required methods: generate_text, stream_text, close, get_embeddings. "
+                f"Required attribute: provider_name"
+            )
+
+        # Prevent conflicts with standard provider names
+        try:
+            AIProvider(name)
+            raise ValueError(
+                f"Custom provider name '{name}' conflicts with standard AIProvider enum. "
+                f"Please use a different name."
+            )
+        except ValueError as e:
+            # If ValueError is raised because name is not in enum, that's good
+            if "conflicts with standard AIProvider" in str(e):
+                raise
+            # Otherwise, name is not in enum, proceed with registration
+
+        cls._custom_clients[name] = client
+        logger.info(f"Registered custom LLM provider: {name}")
+
+    @classmethod
+    def get_client(cls, provider: Union[str, AIProvider]) -> Union[BaseLLMClient, "LLMClientProtocol"]:
+        """
+        Get or create a client for the specified provider.
+
+        Supports both standard AIProvider enum values and custom provider names
+        registered via register_custom_provider().
+
+        Args:
+            provider: AIProvider enum or custom provider name string
+
+        Returns:
+            LLM client (BaseLLMClient for standard providers, LLMClientProtocol for custom)
+
+        Raises:
+            ValueError: If provider is unknown (not standard and not registered)
+        """
+        # Check custom providers first
+        if isinstance(provider, str) and provider in cls._custom_clients:
+            return cls._custom_clients[provider]
+
+        # Handle standard providers
         if isinstance(provider, str):
             try:
                 provider = AIProvider(provider)
             except ValueError:
-                raise ValueError(f"Unsupported provider: {provider}")
+                raise ValueError(
+                    f"Unknown provider: {provider}. "
+                    f"Standard providers: {[p.value for p in AIProvider]}. "
+                    f"Custom providers: {list(cls._custom_clients.keys())}. "
+                    f"Register custom providers with LLMClientFactory.register_custom_provider()"
+                )
 
         if provider not in cls._clients:
             cls._clients[provider] = cls._create_client(provider)
@@ -54,7 +137,8 @@ class LLMClientFactory:
 
     @classmethod
     async def close_all(cls):
-        """Close all active clients"""
+        """Close all active clients (both standard and custom)"""
+        # Close standard clients
         for client in cls._clients.values():
             try:
                 await client.close()
@@ -62,11 +146,34 @@ class LLMClientFactory:
                 logger.error(f"Error closing client {client.provider_name}: {e}")
         cls._clients.clear()
 
+        # Close custom clients
+        for name, client in cls._custom_clients.items():
+            try:
+                await client.close()
+            except Exception as e:
+                logger.error(f"Error closing custom client {name}: {e}")
+        cls._custom_clients.clear()
+
     @classmethod
     async def close_client(cls, provider: Union[str, AIProvider]):
-        """Close a specific client"""
+        """Close a specific client (standard or custom)"""
+        # Check if it's a custom provider
+        if isinstance(provider, str) and provider in cls._custom_clients:
+            try:
+                await cls._custom_clients[provider].close()
+                del cls._custom_clients[provider]
+                logger.info(f"Closed custom client: {provider}")
+            except Exception as e:
+                logger.error(f"Error closing custom client {provider}: {e}")
+            return
+
+        # Handle standard providers
         if isinstance(provider, str):
-            provider = AIProvider(provider)
+            try:
+                provider = AIProvider(provider)
+            except ValueError:
+                logger.warning(f"Unknown provider to close: {provider}")
+                return
 
         if provider in cls._clients:
             try:

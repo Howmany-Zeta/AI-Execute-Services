@@ -14,9 +14,9 @@ from typing import Dict, Any, List, Optional, Union
 from enum import Enum
 from datetime import datetime
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 import numpy as np
-from scipy import stats as scipy_stats
+from scipy import stats as scipy_stats  # type: ignore[import-untyped]
 from pydantic import BaseModel, Field, ConfigDict
 
 from aiecs.tools.base_tool import BaseTool
@@ -414,7 +414,7 @@ class AIInsightGeneratorTool(BaseTool):
 
     def _analyze_correlations_internal(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
         """Analyze correlations between variables"""
-        correlations = []
+        correlations: List[Dict[str, Any]] = []
 
         numeric_df = df.select_dtypes(include=[np.number])
         if numeric_df.shape[1] < 2:
@@ -453,7 +453,7 @@ class AIInsightGeneratorTool(BaseTool):
 
     def _analyze_causation_internal(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
         """Analyze potential causal relationships using reasoning methods"""
-        causations = []
+        causations: List[Dict[str, Any]] = []
 
         # Use research tool for Mill's methods if available
         if self.external_tools.get("research"):
@@ -479,7 +479,7 @@ class AIInsightGeneratorTool(BaseTool):
         if not insights:
             return "No significant insights found in the data."
 
-        type_counts = {}
+        type_counts: Dict[str, int] = {}
         for insight in insights:
             insight_type = insight.get("type", "unknown")
             type_counts[insight_type] = type_counts.get(insight_type, 0) + 1

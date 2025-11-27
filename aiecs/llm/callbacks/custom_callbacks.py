@@ -1,5 +1,6 @@
 from typing import Any, List, Optional
 import logging
+import time
 
 # Import the base callback handler from utils
 from aiecs.utils.base_callback import CustomAsyncCallbackHandler
@@ -22,8 +23,8 @@ class RedisTokenCallbackHandler(CustomAsyncCallbackHandler):
             raise ValueError("user_id must be provided for RedisTokenCallbackHandler")
         self.user_id = user_id
         self.cycle_start_date = cycle_start_date
-        self.start_time = None
-        self.messages = None
+        self.start_time: Optional[float] = None
+        self.messages: Optional[List[dict]] = None
 
     async def on_llm_start(self, messages: List[dict], **kwargs: Any) -> None:
         """Triggered when LLM call starts"""
@@ -81,8 +82,8 @@ class DetailedRedisTokenCallbackHandler(CustomAsyncCallbackHandler):
             raise ValueError("user_id must be provided for DetailedRedisTokenCallbackHandler")
         self.user_id = user_id
         self.cycle_start_date = cycle_start_date
-        self.start_time = None
-        self.messages = None
+        self.start_time: Optional[float] = None
+        self.messages: Optional[List[dict]] = None
         self.prompt_tokens = 0
 
     async def on_llm_start(self, messages: List[dict], **kwargs: Any) -> None:

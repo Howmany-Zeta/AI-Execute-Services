@@ -4,7 +4,8 @@ import time
 import logging
 import tempfile
 import subprocess
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Union
+import csv
 from enum import Enum
 
 import httpx
@@ -188,6 +189,7 @@ class ScraperTool(BaseTool):
                 import csv
 
                 with open(path, "w", newline="", encoding="utf-8") as f:
+                    writer: Union[csv.Writer, csv.DictWriter]
                     if isinstance(content, dict):
                         writer = csv.writer(f)
                         writer.writerow(content.keys())
@@ -250,13 +252,13 @@ class ScraperTool(BaseTool):
             headers = headers or {}
             if "User-Agent" not in headers:
                 headers["User-Agent"] = self.config.user_agent
-            kwargs = {
+            kwargs: Dict[str, Any] = {
                 "params": params,
                 "headers": headers,
                 "follow_redirects": allow_redirects,
             }
             if auth:
-                kwargs["auth"] = auth
+                kwargs["auth"] = auth  # httpx accepts Tuple[str, str] for auth
             if cookies:
                 kwargs["cookies"] = cookies
             if json_data:

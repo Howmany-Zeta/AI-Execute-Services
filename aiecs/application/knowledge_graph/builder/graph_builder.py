@@ -5,9 +5,10 @@ Orchestrates the full document-to-graph conversion pipeline.
 """
 
 import asyncio
-from typing import List, Optional, Dict, Any, Callable, cast
+from typing import List, Optional, Dict, Any, Callable, cast, TYPE_CHECKING
 from dataclasses import dataclass, field
 from datetime import datetime
+import logging
 
 from aiecs.domain.knowledge_graph.schema.graph_schema import GraphSchema
 from aiecs.infrastructure.graph_storage.base import GraphStore
@@ -25,6 +26,11 @@ from aiecs.application.knowledge_graph.fusion.relation_deduplicator import (
 from aiecs.application.knowledge_graph.validators.relation_validator import (
     RelationValidator,
 )
+
+if TYPE_CHECKING:
+    from aiecs.llm.protocols import LLMClientProtocol
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -115,6 +121,7 @@ class GraphBuilder:
         enable_linking: bool = True,
         enable_validation: bool = True,
         progress_callback: Optional[Callable[[str, float], None]] = None,
+        embedding_client: Optional["LLMClientProtocol"] = None,
     ):
         """
         Initialize graph builder
@@ -128,6 +135,7 @@ class GraphBuilder:
             enable_linking: Enable linking to existing entities
             enable_validation: Enable relation validation
             progress_callback: Optional callback for progress updates (message, progress_pct)
+            embedding_client: Optional custom LLM client for generating embeddings
         """
         self.graph_store = graph_store
         self.entity_extractor = entity_extractor
@@ -137,12 +145,94 @@ class GraphBuilder:
         self.enable_linking = enable_linking
         self.enable_validation = enable_validation
         self.progress_callback = progress_callback
+        self.embedding_client = embedding_client
 
         # Initialize fusion components
         self.entity_deduplicator = EntityDeduplicator() if enable_deduplication else None
         self.entity_linker = EntityLinker(graph_store) if enable_linking else None
         self.relation_deduplicator = RelationDeduplicator() if enable_deduplication else None
         self.relation_validator = RelationValidator(schema) if enable_validation and schema else None
+
+    @staticmethod
+    def from_config(
+        graph_store: GraphStore,
+        entity_extractor: EntityExtractor,
+        relation_extractor: RelationExtractor,
+        schema: Optional[GraphSchema] = None,
+        enable_deduplication: bool = True,
+        enable_linking: bool = True,
+        enable_validation: bool = True,
+        progress_callback: Optional[Callable[[str, float], None]] = None,
+    ) -> "GraphBuilder":
+        """
+        Create GraphBuilder with embedding client resolved from configuration
+
+        This factory method automatically resolves the embedding client from
+        the global Settings configuration using LLMClientFactory.
+
+        Args:
+            graph_store: Graph storage to save entities/relations
+            entity_extractor: Entity extractor to use
+            relation_extractor: Relation extractor to use
+            schema: Optional schema for validation
+            enable_deduplication: Enable entity/relation deduplication
+            enable_linking: Enable linking to existing entities
+            enable_validation: Enable relation validation
+            progress_callback: Optional callback for progress updates
+
+        Returns:
+            GraphBuilder instance with configured embedding client
+
+        Example:
+            ```python
+            from aiecs.config import get_settings
+            from aiecs.llm.factory import LLMClientFactory
+
+            # Register custom embedding provider
+            LLMClientFactory.register_custom_provider("my_embedder", my_client)
+
+            # Set environment variable
+            os.environ["KG_EMBEDDING_PROVIDER"] = "my_embedder"
+
+            # Create builder with auto-resolved embedding client
+            builder = GraphBuilder.from_config(
+                graph_store=store,
+                entity_extractor=extractor,
+                relation_extractor=rel_extractor
+            )
+            ```
+        """
+        from aiecs.config import get_settings
+        from aiecs.llm import resolve_llm_client
+
+        settings = get_settings()
+
+        # Resolve embedding client from configuration
+        embedding_client = None
+        if settings.kg_embedding_provider:
+            try:
+                embedding_client = resolve_llm_client(
+                    provider=settings.kg_embedding_provider,
+                    model=settings.kg_embedding_model,
+                )
+                logger.info(
+                    f"Using embedding provider: {settings.kg_embedding_provider} "
+                    f"with model: {settings.kg_embedding_model}"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to resolve embedding client from config: {e}")
+
+        return GraphBuilder(
+            graph_store=graph_store,
+            entity_extractor=entity_extractor,
+            relation_extractor=relation_extractor,
+            schema=schema,
+            enable_deduplication=enable_deduplication,
+            enable_linking=enable_linking,
+            enable_validation=enable_validation,
+            progress_callback=progress_callback,
+            embedding_client=embedding_client,
+        )
 
     async def build_from_text(
         self,
@@ -200,7 +290,9 @@ class GraphBuilder:
                 new_entities = entities
 
             # Combine linked and new entities for relation extraction
-            all_entities = linked_entities + new_entities
+            all_entities_with_none = linked_entities + new_entities
+            # Filter out None values for relation extraction
+            all_entities = [e for e in all_entities_with_none if e is not None]
 
             # Step 4: Extract relations
             if len(all_entities) >= 2:
@@ -230,7 +322,12 @@ class GraphBuilder:
                 result.relations_deduplicated = original_count - len(valid_relations)
                 self._report_progress(f"Deduplicated to {len(valid_relations)} relations", 0.8)
 
-            # Step 7: Store in graph
+            # Step 7: Generate embeddings for entities
+            if self.embedding_client and new_entities:
+                self._report_progress("Generating embeddings for entities", 0.85)
+                await self._generate_embeddings_for_entities(new_entities)
+
+            # Step 8: Store in graph
             self._report_progress("Storing entities and relations in graph", 0.9)
 
             # Add provenance metadata
@@ -350,3 +447,46 @@ class GraphBuilder:
         if result.start_time:
             result.duration_seconds = (result.end_time - result.start_time).total_seconds()
         return result
+
+    async def _generate_embeddings_for_entities(
+        self, entities: List[Any], model: Optional[str] = None
+    ) -> None:
+        """
+        Generate embeddings for entities using the configured embedding client
+
+        Args:
+            entities: List of entities to generate embeddings for
+            model: Optional model name for embedding generation
+
+        Note:
+            This method modifies entities in-place by setting their embedding attribute.
+            If no embedding client is configured, entities will not have embeddings.
+        """
+        if not self.embedding_client or not entities:
+            return
+
+        try:
+            # Prepare texts for embedding (use entity name or string representation)
+            texts = []
+            for entity in entities:
+                # Try to get a meaningful text representation
+                name = entity.properties.get("name") if entity.properties else None
+                if name:
+                    text = f"{entity.entity_type}: {name}"
+                else:
+                    text = f"{entity.entity_type}: {entity.id}"
+                texts.append(text)
+
+            # Generate embeddings
+            embeddings = await self.embedding_client.get_embeddings(texts, model=model)
+
+            # Assign embeddings to entities
+            for entity, embedding in zip(entities, embeddings):
+                entity.embedding = embedding
+
+            logger.debug(f"Generated embeddings for {len(entities)} entities")
+
+        except NotImplementedError:
+            logger.debug("Embedding client does not support get_embeddings()")
+        except Exception as e:
+            logger.warning(f"Failed to generate embeddings: {e}")

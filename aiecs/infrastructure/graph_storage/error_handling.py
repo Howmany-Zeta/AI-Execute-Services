@@ -63,7 +63,7 @@ class ErrorContext:
     relation_id: Optional[str] = None
     query: Optional[str] = None
     parameters: Optional[Dict[str, Any]] = None
-    timestamp: datetime = None
+    timestamp: Optional[datetime] = None
     severity: ErrorSeverity = ErrorSeverity.MEDIUM
 
     def __post_init__(self):

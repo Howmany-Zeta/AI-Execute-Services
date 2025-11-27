@@ -349,7 +349,8 @@ class DocumentWriterTool(BaseTool):
                 backup_info = self._create_backup(target_path, backup_comment)
 
             # Step 5: Execute atomic write
-            write_result = self._execute_atomic_write(target_path, processed_content, format, encoding, write_plan)
+            import asyncio
+            write_result = asyncio.run(self._execute_atomic_write(target_path, processed_content, format, encoding, write_plan))
 
             # Step 6: Update metadata and versioning
             version_info = self._handle_versioning(target_path, content_metadata, metadata)
@@ -530,6 +531,7 @@ class DocumentWriterTool(BaseTool):
         """Prepare and validate content for writing"""
 
         # Content conversion based on format
+        processed_content: Union[str, bytes]
         if format == DocumentFormat.JSON:
             if isinstance(content, (dict, list)):
                 processed_content = json.dumps(content, ensure_ascii=False, indent=2)
@@ -599,7 +601,7 @@ class DocumentWriterTool(BaseTool):
     def _create_backup(self, target_path: str, comment: Optional[str] = None) -> Dict:
         """Create backup of existing file"""
         if not self._file_exists(target_path):
-            return None
+            return {}
 
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -630,7 +632,7 @@ class DocumentWriterTool(BaseTool):
             self.logger.error(f"Failed to create backup for {target_path}: {e}")
             raise StorageError(f"Backup creation failed: {e}")
 
-    def _execute_atomic_write(
+    async def _execute_atomic_write(
         self,
         target_path: str,
         content: Union[str, bytes],
@@ -641,7 +643,7 @@ class DocumentWriterTool(BaseTool):
         """Execute atomic write operation"""
 
         if plan["is_cloud_path"]:
-            return self._write_to_cloud_storage(target_path, content, format, encoding, plan)
+            return await self._write_to_cloud_storage(target_path, content, format, encoding, plan)
         else:
             return self._write_to_local_file(target_path, content, format, encoding, plan)
 
@@ -705,7 +707,7 @@ class DocumentWriterTool(BaseTool):
                     file_mode += "b"
 
                 # Handle both EncodingType enum and string
-                enc_value = None if isinstance(content, bytes) else (encoding.value if hasattr(encoding, "value") else str(encoding))
+                enc_value: Optional[str] = None if isinstance(content, bytes) else (encoding.value if hasattr(encoding, "value") else str(encoding))
                 with open(target_path, file_mode, encoding=enc_value) as f:
                     f.write(content)
 
@@ -1155,10 +1157,14 @@ class DocumentWriterTool(BaseTool):
 
             # Perform the specific edit operation
             if operation == EditOperation.INSERT_TEXT:
+                if content is None:
+                    raise ValueError("content is required for INSERT_TEXT operation")
                 edited_content = self._insert_text(current_content, content, position)
             elif operation == EditOperation.DELETE_TEXT:
                 edited_content = self._delete_text(current_content, selection)
             elif operation == EditOperation.REPLACE_TEXT:
+                if content is None:
+                    raise ValueError("content is required for REPLACE_TEXT operation")
                 edited_content = self._replace_text(current_content, selection, content)
             elif operation == EditOperation.BOLD:
                 edited_content = self._format_text_bold(current_content, selection, format_options)
@@ -1171,6 +1177,8 @@ class DocumentWriterTool(BaseTool):
             elif operation == EditOperation.HIGHLIGHT:
                 edited_content = self._format_text_highlight(current_content, selection, format_options)
             elif operation == EditOperation.INSERT_LINE:
+                if content is None:
+                    raise ValueError("content is required for INSERT_LINE operation")
                 edited_content = self._insert_line(current_content, position, content)
             elif operation == EditOperation.DELETE_LINE:
                 edited_content = self._delete_line(current_content, position)
@@ -1189,12 +1197,13 @@ class DocumentWriterTool(BaseTool):
                 raise ValueError(f"Unsupported edit operation: {operation}")
 
             # Write the edited content back to file
-            file_format = self._detect_file_format(target_path)
+            file_format_str = self._detect_file_format(target_path)
+            file_format = DocumentFormat(file_format_str) if file_format_str in [f.value for f in DocumentFormat] else DocumentFormat.TXT
             write_result = self.write_document(
                 target_path=target_path,
                 content=edited_content,
                 format=file_format,
-                mode="backup_write",  # Always backup before editing
+                mode=WriteMode.BACKUP_WRITE,  # Always backup before editing
                 backup_comment=f"Edit operation: {operation}",
             )
 
@@ -1248,12 +1257,13 @@ class DocumentWriterTool(BaseTool):
             formatted_content = self._apply_text_formatting(current_content, text_to_format, format_type, format_options)
 
             # Write back to file
-            file_format = self._detect_file_format(target_path)
+            file_format_str = self._detect_file_format(target_path)
+            file_format = DocumentFormat(file_format_str) if file_format_str in [f.value for f in DocumentFormat] else DocumentFormat.TXT
             write_result = self.write_document(
                 target_path=target_path,
                 content=formatted_content,
                 format=file_format,
-                mode="backup_write",
+                mode=WriteMode.BACKUP_WRITE,
             )
 
             return {
@@ -1304,12 +1314,13 @@ class DocumentWriterTool(BaseTool):
 
             if replacements > 0:
                 # Write back to file
-                file_format = self._detect_file_format(target_path)
+                file_format_str = self._detect_file_format(target_path)
+                file_format = DocumentFormat(file_format_str) if file_format_str in [f.value for f in DocumentFormat] else DocumentFormat.TXT
                 write_result = self.write_document(
                     target_path=target_path,
                     content=new_content,
                     format=file_format,
-                    mode="backup_write",
+                    mode=WriteMode.BACKUP_WRITE,
                     backup_comment=f"Find/Replace: '{find_text}' -> '{replace_text}'",
                 )
 

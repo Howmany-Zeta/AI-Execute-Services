@@ -2,9 +2,9 @@ import asyncio
 import logging
 import time
 import uuid
-from typing import Dict, List, Any
-from celery import Celery
-from celery.exceptions import TimeoutError as CeleryTimeoutError
+from typing import Dict, List, Any, Optional
+from celery import Celery  # type: ignore[import-untyped]
+from celery.exceptions import TimeoutError as CeleryTimeoutError  # type: ignore[import-untyped]
 from asyncio import TimeoutError as AsyncioTimeoutError
 
 # Removed direct import to avoid circular dependency
@@ -21,7 +21,7 @@ class CeleryTaskManager:
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.celery_app = None
+        self.celery_app: Optional[Celery] = None
         self._init_celery()
 
     def _init_celery(self):
@@ -101,6 +101,8 @@ class CeleryTaskManager:
             celery_task_name = "aiecs.tasks.worker.execute_heavy_task"
 
         # Send task to Celery
+        if self.celery_app is None:
+            raise RuntimeError("Celery app not initialized")
         return self.celery_app.send_task(
             celery_task_name,
             kwargs={
@@ -139,6 +141,8 @@ class CeleryTaskManager:
             if queue == "heavy_tasks":
                 celery_task_name = "aiecs.tasks.worker.execute_heavy_task"
 
+            if self.celery_app is None:
+                raise RuntimeError("Celery app not initialized")
             result = self.celery_app.send_task(
                 celery_task_name,
                 kwargs={
@@ -213,6 +217,8 @@ class CeleryTaskManager:
         step_num = context.get("step", 0)
 
         # Send task to Celery
+        if self.celery_app is None:
+            raise RuntimeError("Celery app not initialized")
         celery_task = self.celery_app.send_task(
             celery_task_name,
             kwargs={
@@ -289,6 +295,8 @@ class CeleryTaskManager:
     def get_task_result(self, task_id: str):
         """Get task result"""
         try:
+            if self.celery_app is None:
+                raise RuntimeError("Celery app not initialized")
             result = self.celery_app.AsyncResult(task_id)
             return {
                 "task_id": task_id,
@@ -304,6 +312,8 @@ class CeleryTaskManager:
     def cancel_task(self, task_id: str):
         """Cancel task"""
         try:
+            if self.celery_app is None:
+                raise RuntimeError("Celery app not initialized")
             self.celery_app.control.revoke(task_id, terminate=True)
             logger.info(f"Task {task_id} cancelled")
             return True
@@ -340,6 +350,8 @@ class CeleryTaskManager:
     def get_queue_info(self) -> Dict[str, Any]:
         """Get queue information"""
         try:
+            if self.celery_app is None:
+                raise RuntimeError("Celery app not initialized")
             inspect = self.celery_app.control.inspect()
             active_tasks = inspect.active()
             scheduled_tasks = inspect.scheduled()
@@ -357,6 +369,8 @@ class CeleryTaskManager:
     def get_worker_stats(self) -> Dict[str, Any]:
         """Get worker statistics"""
         try:
+            if self.celery_app is None:
+                raise RuntimeError("Celery app not initialized")
             inspect = self.celery_app.control.inspect()
             stats = inspect.stats()
             return stats or {}

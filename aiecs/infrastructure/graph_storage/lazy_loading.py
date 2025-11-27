@@ -6,11 +6,14 @@ and improve performance when working with large graphs.
 """
 
 import logging
-from typing import Optional, List, Dict, Any, AsyncIterator
+from typing import Optional, List, Dict, Any, AsyncIterator, TYPE_CHECKING
 from dataclasses import dataclass, field
 
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.relation import Relation
+
+if TYPE_CHECKING:
+    from aiecs.infrastructure.graph_storage.protocols import LazyLoadingMixinProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +86,7 @@ class LazyEntity:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary (only includes loaded data)"""
-        result = {"id": self.id}
+        result: Dict[str, Any] = {"id": self.id}
         if self.entity_type:
             result["entity_type"] = self.entity_type
         if self._is_loaded and self._loaded_entity:
@@ -142,6 +145,9 @@ class LazyLoadingMixin:
 
     Enables deferred loading of entities and relations to reduce memory usage.
 
+    This mixin expects the class it's mixed into to implement `LazyLoadingMixinProtocol`,
+    specifically the `get_entity()`, `get_all_entities()`, and `get_neighbors()` methods.
+
     Example:
         ```python
         class MyGraphStore(GraphStore, LazyLoadingMixin):
@@ -158,6 +164,27 @@ class LazyLoadingMixin:
             print(entity.properties["name"])
         ```
     """
+
+    if TYPE_CHECKING:
+        # Type hints for mypy: this mixin expects LazyLoadingMixinProtocol
+        async def get_entity(self, entity_id: str) -> Optional[Entity]:
+            """Expected method from LazyLoadingMixinProtocol"""
+            ...
+
+        async def get_all_entities(
+            self, entity_type: Optional[str] = None, limit: Optional[int] = None
+        ) -> List[Entity]:
+            """Expected method from LazyLoadingMixinProtocol"""
+            ...
+
+        async def get_neighbors(
+            self,
+            entity_id: str,
+            relation_type: Optional[str] = None,
+            direction: str = "outgoing",
+        ) -> List[Entity]:
+            """Expected method from LazyLoadingMixinProtocol"""
+            ...
 
     async def get_lazy_entity(self, entity_id: str) -> LazyEntity:
         """

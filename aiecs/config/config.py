@@ -1,5 +1,5 @@
-from pydantic import Field, ConfigDict, field_validator
-from pydantic_settings import BaseSettings
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 from pathlib import Path
 import logging
@@ -150,6 +150,50 @@ class Settings(BaseSettings):
         description="Time-to-live for cached query results (seconds)",
     )
 
+    # Entity Extraction LLM Configuration
+    kg_entity_extraction_llm_provider: str = Field(
+        default="",
+        alias="KG_ENTITY_EXTRACTION_LLM_PROVIDER",
+        description="LLM provider for entity extraction (supports custom providers registered via LLMClientFactory)",
+    )
+
+    kg_entity_extraction_llm_model: str = Field(
+        default="",
+        alias="KG_ENTITY_EXTRACTION_LLM_MODEL",
+        description="LLM model for entity extraction",
+    )
+
+    kg_entity_extraction_temperature: float = Field(
+        default=0.1,
+        alias="KG_ENTITY_EXTRACTION_TEMPERATURE",
+        description="Temperature for entity extraction (low for deterministic results)",
+    )
+
+    kg_entity_extraction_max_tokens: int = Field(
+        default=2000,
+        alias="KG_ENTITY_EXTRACTION_MAX_TOKENS",
+        description="Maximum tokens for entity extraction response",
+    )
+
+    # Embedding Configuration
+    kg_embedding_provider: str = Field(
+        default="openai",
+        alias="KG_EMBEDDING_PROVIDER",
+        description="LLM provider for embeddings (supports custom providers registered via LLMClientFactory)",
+    )
+
+    kg_embedding_model: str = Field(
+        default="text-embedding-ada-002",
+        alias="KG_EMBEDDING_MODEL",
+        description="Model for generating embeddings",
+    )
+
+    kg_embedding_dimension: int = Field(
+        default=1536,
+        alias="KG_EMBEDDING_DIMENSION",
+        description="Dimension of embedding vectors (must match model output, e.g., 1536 for ada-002)",
+    )
+
     # Feature flags for new capabilities
     kg_enable_runnable_pattern: bool = Field(
         default=True,
@@ -233,7 +277,7 @@ class Settings(BaseSettings):
         description="Query optimization strategy: cost, latency, balanced",
     )
 
-    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8", extra="allow")  # type: ignore[typeddict-unknown-key]
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="allow")
 
     @property
     def database_config(self) -> dict:

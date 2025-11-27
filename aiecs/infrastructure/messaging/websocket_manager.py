@@ -77,7 +77,9 @@ class WebSocketManager:
 
         try:
             async for message in websocket:
-                await self._handle_client_message(websocket, message)
+                # Decode bytes to str if needed
+                message_str = message if isinstance(message, str) else message.decode('utf-8')
+                await self._handle_client_message(websocket, message_str)
         except websockets.exceptions.ConnectionClosed:
             logger.info(f"WebSocket connection closed: {client_addr}")
         except Exception as e:
@@ -197,7 +199,7 @@ class WebSocketManager:
     ) -> UserConfirmation:
         """Notify user of task step result"""
         callback_id = str(uuid.uuid4())
-        confirmation_future = asyncio.Future()
+        confirmation_future: asyncio.Future[UserConfirmation] = asyncio.Future()
 
         # Register callback
         self.callback_registry[callback_id] = lambda confirmation: confirmation_future.set_result(confirmation)

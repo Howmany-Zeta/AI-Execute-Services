@@ -101,7 +101,7 @@ class WorldBankProvider(BaseAPIProvider):
         Returns:
             Dictionary containing indicator data and metadata
         """
-        params = {
+        params: Dict[str, Any] = {
             "indicator_code": indicator_code,
             "country_code": country_code,
         }
@@ -127,7 +127,7 @@ class WorldBankProvider(BaseAPIProvider):
         Returns:
             Dictionary containing search results and metadata
         """
-        params = {"search_text": search_text}
+        params: Dict[str, Any] = {"search_text": search_text}
         if limit:
             params["limit"] = limit
 
@@ -226,7 +226,7 @@ class WorldBankProvider(BaseAPIProvider):
         elif operation == "search_indicators":
             # World Bank doesn't have direct search, so we list and filter
             endpoint = f"{self.BASE_URL}/indicator"
-            query_params = {"format": "json", "per_page": 1000}
+            query_params: Dict[str, Any] = {"format": "json", "per_page": "1000"}
 
         else:
             raise ValueError(f"Unknown operation: {operation}")

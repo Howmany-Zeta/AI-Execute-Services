@@ -224,10 +224,11 @@ class AIDocumentOrchestrator(BaseTool):
             content = self._prepare_content_for_ai(parsed_result, processing_mode)
 
             # Step 3: Process with AI
+            provider = ai_provider or AIProvider(self.config.default_ai_provider)
             ai_result = self._process_with_ai(
                 content,
                 processing_mode,
-                ai_provider or self.config.default_ai_provider,
+                provider,
                 processing_params or {},
                 ai_params or {},
             )
@@ -366,7 +367,8 @@ class AIDocumentOrchestrator(BaseTool):
                 prompt = f"Perform {analysis_type} analysis on the following document:\n\n{content}"
 
             # Process with AI
-            ai_result = self._call_ai_provider(prompt, ai_provider or self.config.default_ai_provider, {})
+            provider = ai_provider or AIProvider(self.config.default_ai_provider)
+            ai_result = self._call_ai_provider(prompt, provider, {})
 
             return {
                 "source": source,

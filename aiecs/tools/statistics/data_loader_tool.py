@@ -15,7 +15,7 @@ from typing import Dict, Any, List, Optional, Union, Iterator
 from enum import Enum
 from pathlib import Path
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 from pydantic import BaseModel, Field, ConfigDict
 
 from aiecs.tools.base_tool import BaseTool
@@ -432,7 +432,7 @@ class DataLoaderTool(BaseTool):
             return pd.read_sas(source)
         elif source_type == DataSourceType.SPSS:
             try:
-                import pyreadstat
+                import pyreadstat  # type: ignore[import-untyped]
 
                 df, meta = pyreadstat.read_sav(source)
                 return df

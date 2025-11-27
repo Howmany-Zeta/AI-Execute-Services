@@ -6,7 +6,10 @@ providing seamless community-aware agent management and collaboration.
 """
 
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from aiecs.domain.context.context_engine import ContextEngine
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 import asyncio
@@ -26,7 +29,11 @@ class CommunityIntegration:
     Integration layer for community collaboration features.
     """
 
-    def __init__(self, agent_manager=None, context_engine=None):
+    def __init__(
+        self,
+        agent_manager: Optional[Any] = None,
+        context_engine: Optional["ContextEngine"] = None,
+    ) -> None:
         """
         Initialize community integration.
 
@@ -176,6 +183,10 @@ class CommunityIntegration:
             elif community.coordinators:
                 coordinator_member = self.community_manager.members.get(community.coordinators[0])
                 leader_agent_id = coordinator_member.agent_id if coordinator_member else None
+
+        # Ensure we have a leader agent ID
+        if not leader_agent_id:
+            raise ValueError("Cannot start collaborative session: no leader agent ID available")
 
         # Start collaborative session
         session_id = await self.workflow_engine.start_collaborative_session(
@@ -658,10 +669,14 @@ class CommunityIntegration:
                 community_role=CommunityRole.CONTRIBUTOR,
             )
 
+        # Ensure we have at least one agent
+        if not agent_ids:
+            raise ValueError("Cannot start brainstorming session: no agents provided")
+
         # Start brainstorming session
         session_id = await self.workflow_engine.start_collaborative_session(
             community_id=community_id,
-            session_leader_id=agent_ids[0] if agent_ids else None,
+            session_leader_id=agent_ids[0],
             session_type="brainstorming",
             purpose=f"Brainstorm ideas for {topic}",
             participants=[mid for mid in self.community_manager.communities[community_id].members],

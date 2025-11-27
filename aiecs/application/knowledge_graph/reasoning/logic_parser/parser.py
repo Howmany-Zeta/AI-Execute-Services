@@ -28,11 +28,11 @@ try:
     LARK_AVAILABLE = True
 except ImportError:
     LARK_AVAILABLE = False
-    Lark = None  # type: ignore[misc]
-    LarkError = Exception  # type: ignore[misc]
-    UnexpectedInput = Exception  # type: ignore[misc]
-    UnexpectedToken = Exception  # type: ignore[misc]
-    UnexpectedCharacters = Exception  # type: ignore[misc]
+    Lark = None  # type: ignore[assignment]
+    LarkError = Exception  # type: ignore[assignment]
+    UnexpectedInput = Exception  # type: ignore[assignment]
+    UnexpectedToken = Exception  # type: ignore[assignment]
+    UnexpectedCharacters = Exception  # type: ignore[assignment]
 
 # AST node types imported for type hints in docstrings
 # from .ast_nodes import ASTNode, QueryNode, FindNode, TraversalNode, FilterNode
@@ -47,7 +47,7 @@ try:
     QUERY_PLAN_AVAILABLE = True
 except ImportError:
     QUERY_PLAN_AVAILABLE = False
-    QueryPlan = None  # type: ignore[misc]
+    QueryPlan = None  # type: ignore[assignment]
 
 
 class LogicQueryParser:

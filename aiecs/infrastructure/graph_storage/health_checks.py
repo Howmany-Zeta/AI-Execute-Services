@@ -43,8 +43,8 @@ class HealthCheckResult:
     status: HealthStatus
     message: str
     response_time_ms: float = 0.0
-    timestamp: datetime = None
-    details: Dict[str, Any] = None
+    timestamp: Optional[datetime] = None
+    details: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
     def __post_init__(self):
@@ -117,8 +117,8 @@ class HealthChecker:
             HealthCheckResult with status and details
         """
         start_time = asyncio.get_event_loop().time()
-        details = {}
-        errors = []
+        details: Dict[str, Any] = {}
+        errors: List[str] = []
 
         try:
             # Check 1: Store initialization
@@ -305,7 +305,7 @@ class HealthMonitor:
         self.health_history: List[HealthCheckResult] = []
         self.max_history = 100
         self._monitoring = False
-        self._task = None
+        self._task: Optional[asyncio.Task[None]] = None
 
     async def start(self) -> None:
         """Start continuous monitoring"""

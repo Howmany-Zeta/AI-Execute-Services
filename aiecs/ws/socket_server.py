@@ -1,4 +1,4 @@
-import socketio
+import socketio  # type: ignore[import-untyped]
 from aiecs.config.config import get_settings
 
 settings = get_settings()
@@ -15,7 +15,7 @@ sio = socketio.AsyncServer(cors_allowed_origins="*", async_mode="asgi")
 # be mounted there
 
 # Store connected clients by user ID
-connected_clients = {}
+connected_clients: Dict[str, Any] = {}
 
 
 @sio.event

@@ -97,7 +97,7 @@ class AIDataAnalysisOrchestrator(BaseTool):
         self._init_ai_providers()
 
         # Workflow cache
-        self.workflow_cache = {}
+        self.workflow_cache: Dict[str, Any] = {}
 
     def _init_foundation_tools(self):
         """Initialize foundation data analysis tools"""
@@ -351,7 +351,7 @@ class AIDataAnalysisOrchestrator(BaseTool):
 
     def _design_workflow(self, question: str, mode: AnalysisMode, data_source: str) -> Dict[str, Any]:
         """Design analysis workflow based on question and mode"""
-        workflow = {"question": question, "mode": mode.value, "steps": []}
+        workflow: Dict[str, Any] = {"question": question, "mode": mode.value, "steps": []}
 
         # Standard workflow steps based on mode
         if mode == AnalysisMode.EXPLORATORY:
@@ -437,7 +437,7 @@ class AIDataAnalysisOrchestrator(BaseTool):
 
     def _execute_workflow(self, workflow: Dict[str, Any], data_source: str, max_iterations: int) -> Dict[str, Any]:
         """Execute workflow steps"""
-        results = {"log": [], "data": None, "outputs": {}}
+        results: Dict[str, Any] = {"log": [], "data": None, "outputs": {}}
 
         current_data = None
 

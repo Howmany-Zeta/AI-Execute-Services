@@ -11,7 +11,7 @@ from aiecs.application.knowledge_graph.extractors.base import RelationExtractor
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.relation import Relation
 from aiecs.domain.knowledge_graph.schema.graph_schema import GraphSchema
-from aiecs.llm import get_llm_manager, AIProvider
+from aiecs.llm import get_llm_manager, AIProvider, LLMClientManager
 
 
 class LLMRelationExtractor(RelationExtractor):
@@ -73,7 +73,7 @@ class LLMRelationExtractor(RelationExtractor):
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
-        self._llm_manager = None  # Lazy-loaded in async methods
+        self._llm_manager: Optional[LLMClientManager] = None  # Lazy-loaded in async methods
 
     async def extract_relations(
         self,

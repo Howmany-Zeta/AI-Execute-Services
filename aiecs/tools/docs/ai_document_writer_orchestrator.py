@@ -377,11 +377,12 @@ class AIDocumentWriterOrchestrator(BaseTool):
             self.logger.info(f"Starting AI write operation {operation_id}: {target_path}")
 
             # Step 1: Generate content using AI
+            provider = ai_provider or AIProvider(self.config.default_ai_provider)
             ai_result = self._generate_content_with_ai(
                 content_requirements,
                 generation_mode,
                 document_format,
-                ai_provider or self.config.default_ai_provider,
+                provider,
                 generation_params or {},
             )
 
@@ -485,10 +486,11 @@ class AIDocumentWriterOrchestrator(BaseTool):
             existing_content = self._read_existing_document(source_path)
 
             # Step 2: Generate enhanced content
+            provider = ai_provider or AIProvider(self.config.default_ai_provider)
             ai_result = self._enhance_content_with_ai(
                 existing_content,
                 enhancement_goals,
-                ai_provider or self.config.default_ai_provider,
+                provider,
             )
 
             # Step 3: Write enhanced content
@@ -621,7 +623,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
                 edit_operation,
                 edit_instructions,
                 analysis_result,
-                ai_provider or self.config.default_ai_provider,
+                ai_provider or AIProvider(self.config.default_ai_provider),
             )
 
             # Step 4: Execute editing operations
@@ -920,7 +922,7 @@ Please provide a detailed editing plan with:
             # Read edited content
             edited_content = self._read_document_for_editing(target_path)
 
-            validation = {
+            validation: Dict[str, Any] = {
                 "original_length": len(original_content),
                 "edited_length": len(edited_content),
                 "successful_operations": sum(1 for r in edit_results if r.get("success")),
@@ -946,7 +948,7 @@ Please provide a detailed editing plan with:
         analysis: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Generate fallback editing plan when AI is not available"""
-        plan = {"edit_actions": []}
+        plan: Dict[str, Any] = {"edit_actions": []}
 
         if operation == AIEditOperation.AUTO_BOLD_KEYWORDS:
             # Auto-bold common keywords
@@ -1029,7 +1031,7 @@ Please provide a detailed editing plan with:
         """Parse AI response into structured editing plan"""
         # This is a simplified parser - could be enhanced with more
         # sophisticated parsing
-        plan = {"edit_actions": []}
+        plan: Dict[str, Any] = {"edit_actions": []}
 
         # Try to extract structured actions from AI response
         # For now, return a basic plan
@@ -1102,7 +1104,7 @@ Please provide a detailed editing plan with:
     def _analyze_keywords(self, content: str, params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """Analyze content keywords"""
         words = content.lower().split()
-        word_freq = {}
+        word_freq: Dict[str, int] = {}
         for word in words:
             word_freq[word] = word_freq.get(word, 0) + 1
 
@@ -1515,7 +1517,7 @@ Please provide a detailed editing plan with:
                         item.get("requirements", ""),
                         ContentGenerationMode.GENERATE,
                         "markdown",
-                        self.config.default_ai_provider,
+                        AIProvider(self.config.default_ai_provider),
                         item.get("generation_params", {}),
                     )
 
@@ -1620,7 +1622,7 @@ Please provide a detailed editing plan with:
         preferences: Optional[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """Generate charts from data sources"""
-        results = []
+        results: List[Dict[str, Any]] = []
 
         if "content" not in self.creation_tools:
             return results
@@ -1669,7 +1671,7 @@ Please provide a detailed editing plan with:
         content_plan: Dict[str, Any],
     ) -> List[Dict[str, Any]]:
         """Insert generated charts into document"""
-        results = []
+        results: List[Dict[str, Any]] = []
 
         if "content" not in self.creation_tools:
             return results
@@ -1716,7 +1718,7 @@ Please provide a detailed editing plan with:
                 analysis_prompt,
                 ContentGenerationMode.GENERATE,
                 "markdown",
-                self.config.default_ai_provider,
+                AIProvider(self.config.default_ai_provider),
                 {},
             )
 
@@ -1882,7 +1884,7 @@ Please provide a detailed editing plan with:
                     f"Template: {template_name}",
                     ContentGenerationMode.TEMPLATE_FILL,
                     "txt",
-                    self.config.default_ai_provider,
+                    AIProvider(self.config.default_ai_provider),
                     {
                         "template": template_info["content"],
                         "data": template_data,

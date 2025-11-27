@@ -12,7 +12,7 @@ This is ideal for:
 """
 
 from typing import List, Optional, Dict
-import networkx as nx
+import networkx as nx  # type: ignore[import-untyped]
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.relation import Relation
 from aiecs.infrastructure.graph_storage.base import GraphStore
@@ -55,7 +55,7 @@ class InMemoryGraphStore(GraphStore):
         ```
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize in-memory graph store"""
         self.graph: Optional[nx.DiGraph] = None
         self.entities: Dict[str, Entity] = {}

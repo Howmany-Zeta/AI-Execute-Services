@@ -229,7 +229,7 @@ class TracingManager:
         except Exception as e:
             logger.debug(f"Error adding function args to span: {e}")
 
-    def trace_database_operation(self, operation: str, table: str = None, query: str = None):
+    def trace_database_operation(self, operation: str, table: Optional[str] = None, query: Optional[str] = None):
         """Database operation tracing decorator"""
 
         def decorator(func):
@@ -267,7 +267,7 @@ class TracingManager:
 
         return decorator
 
-    def trace_external_call(self, service_name: str, endpoint: str = None):
+    def trace_external_call(self, service_name: str, endpoint: Optional[str] = None):
         """External service call tracing decorator"""
 
         def decorator(func):

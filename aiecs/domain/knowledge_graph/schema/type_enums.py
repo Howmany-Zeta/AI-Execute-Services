@@ -109,8 +109,12 @@ class TypeEnumGenerator:
             # Create enum name (convert to uppercase with underscores)
             enum_member_name = self._to_enum_name(entity_type_name)
 
-            # Create enum class
-            enum_class = EntityTypeEnum(entity_type_name + "Enum", {enum_member_name: entity_type_name})
+            # Create enum class dynamically using type()
+            enum_class = type(
+                entity_type_name + "Enum",
+                (EntityTypeEnum,),
+                {enum_member_name: entity_type_name}
+            )
 
             enums[entity_type_name] = enum_class
 
@@ -140,10 +144,11 @@ class TypeEnumGenerator:
             # Create enum name (convert to uppercase with underscores)
             enum_member_name = self._to_enum_name(relation_type_name)
 
-            # Create enum class
-            enum_class = RelationTypeEnum(
+            # Create enum class dynamically using type()
+            enum_class = type(
                 relation_type_name + "Enum",
-                {enum_member_name: relation_type_name},
+                (RelationTypeEnum,),
+                {enum_member_name: relation_type_name}
             )
 
             enums[relation_type_name] = enum_class
@@ -163,9 +168,10 @@ class TypeEnumGenerator:
             >>> PersonEnum = enums["entity_types"]["Person"]
             >>> WorksForEnum = enums["relation_types"]["WORKS_FOR"]
         """
+        from typing import cast
         return {
-            "entity_types": self.generate_entity_type_enums(),
-            "relation_types": self.generate_relation_type_enums(),
+            "entity_types": cast(Dict[str, Type[Enum]], self.generate_entity_type_enums()),
+            "relation_types": cast(Dict[str, Type[Enum]], self.generate_relation_type_enums()),
         }
 
     @staticmethod

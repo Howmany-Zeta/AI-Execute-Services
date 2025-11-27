@@ -206,35 +206,35 @@ class VertexAIClient(BaseLLMClient):
                                         # Check for thinking content that needs
                                         # formatting
                                         needs_thinking_format = False
-                                        # Ensure part is a string
-                                        part: str = str(part_raw) if not isinstance(part_raw, str) else part_raw
+                                        # Ensure part is a string (use different name to avoid redefinition)
+                                        part_str: str = str(part_raw) if not isinstance(part_raw, str) else part_raw
 
-                                        if "<thinking>" in part and "</thinking>" not in part:  # type: ignore[operator]
+                                        if "<thinking>" in part_str and "</thinking>" not in part_str:  # type: ignore[operator]
                                             # Incomplete <thinking> tag: add
                                             # closing tag
-                                            part = part + "\n</thinking>"  # type: ignore[operator]
+                                            part_str = part_str + "\n</thinking>"  # type: ignore[operator]
                                             needs_thinking_format = True
                                             self.logger.debug(f"  Part {i+1}: Incomplete <thinking> tag fixed")
-                                        elif part.startswith("thinking") and "</thinking>" not in part:  # type: ignore[operator]
+                                        elif isinstance(part_str, str) and part_str.startswith("thinking") and "</thinking>" not in part_str:  # type: ignore[operator]
                                             # thinking\n format: convert to
                                             # <thinking>...</thinking>
-                                            if part.startswith("thinking\n"):
+                                            if part_str.startswith("thinking\n"):
                                                 # thinking\n格式：提取内容并包装
                                                 # 跳过 "thinking\n"
-                                                content = part[8:]
+                                                content = part_str[8:]
                                             else:
                                                 # thinking开头但无换行：提取内容并包装
                                                 # 跳过 "thinking"
-                                                content = part[7:]
+                                                content = part_str[7:]
 
-                                            part = f"<thinking>\n{content}\n</thinking>"
+                                            part_str = f"<thinking>\n{content}\n</thinking>"
                                             needs_thinking_format = True
                                             self.logger.debug(f"  Part {i+1}: thinking\\n format converted to <thinking> tags")
 
                                         if needs_thinking_format:
                                             fixed_count += 1
 
-                                        processed_parts.append(part)
+                                        processed_parts.append(part_str)
 
                                     # Merge in original order
                                     content = "\n".join(processed_parts)

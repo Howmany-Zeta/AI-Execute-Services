@@ -7,7 +7,12 @@ including brainstorming, problem-solving, and knowledge synthesis.
 
 import logging
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .community_manager import CommunityManager
+    from .resource_manager import ResourceManager
+    from .decision_engine import DecisionEngine
 import asyncio
 
 from .models.community_models import CollaborationSession
@@ -23,10 +28,10 @@ class CollaborativeWorkflowEngine:
 
     def __init__(
         self,
-        community_manager=None,
-        resource_manager=None,
-        decision_engine=None,
-    ):
+        community_manager: Optional["CommunityManager"] = None,
+        resource_manager: Optional["ResourceManager"] = None,
+        decision_engine: Optional["DecisionEngine"] = None,
+    ) -> None:
         """
         Initialize the collaborative workflow engine.
 

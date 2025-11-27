@@ -9,9 +9,9 @@ Provides production-grade graph storage using PostgreSQL with:
 """
 
 import json
-import asyncpg
+import asyncpg  # type: ignore[import-untyped]
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 from contextlib import asynccontextmanager
 import numpy as np
 
@@ -413,7 +413,8 @@ class PostgresGraphStore(GraphStore):
 
         # Deserialize
         properties = json.loads(row["properties"]) if isinstance(row["properties"], str) else row["properties"]
-        embedding = self._deserialize_embedding(row["embedding"]) if row["embedding"] else None
+        embedding_raw = self._deserialize_embedding(row["embedding"]) if row["embedding"] else None
+        embedding: Optional[List[float]] = cast(List[float], embedding_raw.tolist()) if embedding_raw is not None else None
 
         return Entity(
             id=row["id"],
@@ -642,7 +643,8 @@ class PostgresGraphStore(GraphStore):
         entities = []
         for row in rows:
             properties = json.loads(row["properties"]) if isinstance(row["properties"], str) else row["properties"]
-            embedding = self._deserialize_embedding(row["embedding"]) if row["embedding"] else None
+            embedding_raw = self._deserialize_embedding(row["embedding"]) if row["embedding"] else None
+            embedding: Optional[List[float]] = cast(List[float], embedding_raw.tolist()) if embedding_raw is not None else None
             entities.append(
                 Entity(
                     id=row["id"],
@@ -660,7 +662,7 @@ class PostgresGraphStore(GraphStore):
             raise RuntimeError("GraphStore not initialized")
 
         query = "SELECT id, entity_type, properties, embedding FROM graph_entities"
-        params = []
+        params: List[Any] = []
 
         if entity_type:
             query += " WHERE entity_type = $1"
@@ -680,7 +682,8 @@ class PostgresGraphStore(GraphStore):
         entities = []
         for row in rows:
             properties = json.loads(row["properties"]) if isinstance(row["properties"], str) else row["properties"]
-            embedding = self._deserialize_embedding(row["embedding"]) if row["embedding"] else None
+            embedding_raw = self._deserialize_embedding(row["embedding"]) if row["embedding"] else None
+            embedding: Optional[List[float]] = cast(List[float], embedding_raw.tolist()) if embedding_raw is not None else None
             entities.append(
                 Entity(
                     id=row["id"],

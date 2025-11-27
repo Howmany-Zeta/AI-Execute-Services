@@ -17,7 +17,7 @@ def main():
     import uvicorn
     from aiecs.main import app
     from aiecs.ws.socket_server import sio
-    import socketio
+    import socketio  # type: ignore[import-untyped]
 
     # Create the combined Socket.IO + FastAPI app
     socket_app = socketio.ASGIApp(sio, other_asgi_app=app)

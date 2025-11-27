@@ -5,12 +5,15 @@ Combines vector similarity search with graph structure traversal
 to provide enhanced search results.
 """
 
+import logging
 from typing import List, Optional, Dict, Tuple
 from enum import Enum
 from pydantic import BaseModel, Field
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.path import Path
 from aiecs.infrastructure.graph_storage.base import GraphStore
+
+logger = logging.getLogger(__name__)
 
 
 class SearchMode(str, Enum):
@@ -267,25 +270,49 @@ class HybridSearchStrategy:
         Returns:
             List of (entity, score) tuples with combined scores
         """
-        # Step 1: Vector search
-        vector_results = await self._vector_search(
-            query_embedding,
-            config,
-            max_results=config.max_results * 2,  # Get more for expansion
-        )
+        # Step 1: Vector search with fallback to graph-only
+        vector_results = []
+        vector_scores: Dict[str, float] = {}
 
-        # Create score dictionaries
-        vector_scores: Dict[str, float] = {entity.id: score for entity, score in vector_results}
+        try:
+            vector_results = await self._vector_search(
+                query_embedding,
+                config,
+                max_results=config.max_results * 2,  # Get more for expansion
+            )
+            # Create score dictionaries
+            vector_scores = {entity.id: score for entity, score in vector_results}
+
+        except Exception as e:
+            logger.warning(
+                f"Vector search failed, falling back to graph-only search: {e}",
+                exc_info=True
+            )
+            # Fallback to graph-only search if vector search fails
+            if seed_entity_ids:
+                logger.info("Using graph-only search with provided seed entities")
+                return await self._graph_search(seed_entity_ids, config)
+            else:
+                logger.warning("No seed entities available for graph-only fallback, returning empty results")
+                return []
 
         # Step 2: Graph expansion (if enabled)
         graph_scores: Dict[str, float] = {}
 
         if config.expand_results:
-            # Use top vector results as seeds
-            seeds = seed_entity_ids or [entity.id for entity, _ in vector_results[:5]]
+            try:
+                # Use top vector results as seeds
+                seeds = seed_entity_ids or [entity.id for entity, _ in vector_results[:5]]
 
-            graph_results = await self._graph_search(seeds, config)
-            graph_scores = {entity.id: score for entity, score in graph_results}
+                graph_results = await self._graph_search(seeds, config)
+                graph_scores = {entity.id: score for entity, score in graph_results}
+
+            except Exception as e:
+                logger.warning(
+                    f"Graph expansion failed, continuing with vector results only: {e}",
+                    exc_info=True
+                )
+                # Continue with vector results only if graph expansion fails
 
         # Step 3: Combine scores
         combined_scores = await self._combine_scores(vector_scores, graph_scores, config)
@@ -297,9 +324,13 @@ class HybridSearchStrategy:
             if combined_score < config.min_combined_score:
                 continue
 
-            entity = await self.graph_store.get_entity(entity_id)
-            if entity:
-                results.append((entity, combined_score))
+            try:
+                entity = await self.graph_store.get_entity(entity_id)
+                if entity:
+                    results.append((entity, combined_score))
+            except Exception as e:
+                logger.warning(f"Failed to retrieve entity {entity_id}: {e}")
+                # Continue with other entities
 
         # Sort by combined score descending
         results.sort(key=lambda x: x[1], reverse=True)

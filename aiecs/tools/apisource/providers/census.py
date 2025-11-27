@@ -95,7 +95,7 @@ class CensusProvider(BaseAPIProvider):
         Returns:
             Dictionary containing ACS data and metadata
         """
-        params = {"variables": variables, "geography": geography}
+        params: Dict[str, Any] = {"variables": variables, "geography": geography}
         if year:
             params["year"] = year
 
@@ -116,7 +116,7 @@ class CensusProvider(BaseAPIProvider):
         Returns:
             Dictionary containing population data
         """
-        params = {"geography": geography}
+        params: Dict[str, Any] = {"geography": geography}
         if year:
             params["year"] = year
 
@@ -143,7 +143,7 @@ class CensusProvider(BaseAPIProvider):
         Returns:
             Dictionary containing economic data
         """
-        params = {"variables": variables}
+        params: Dict[str, Any] = {"variables": variables}
         if geography:
             params["geography"] = geography
         if year:
@@ -179,7 +179,7 @@ class CensusProvider(BaseAPIProvider):
         Returns:
             Dictionary containing list of variables
         """
-        params = {}
+        params: Dict[str, Any] = {}
         if dataset:
             params["dataset"] = dataset
         if year:

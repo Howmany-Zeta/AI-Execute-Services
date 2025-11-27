@@ -7,7 +7,7 @@ Includes BM25, Jaccard, cosine similarity, Levenshtein distance, and fuzzy match
 
 import re
 import math
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Callable, Any
 from collections import Counter
 from difflib import SequenceMatcher
 
@@ -37,7 +37,7 @@ class BM25Scorer:
         corpus: List[str],
         k1: float = 1.5,
         b: float = 0.75,
-        tokenizer: Optional[callable] = None,
+        tokenizer: Optional[Callable[[str], List[str]]] = None,
     ):
         """
         Initialize BM25 scorer
@@ -153,7 +153,7 @@ def jaccard_similarity(set1: set, set2: set) -> float:
     return intersection / union
 
 
-def jaccard_similarity_text(text1: str, text2: str, tokenizer: Optional[callable] = None) -> float:
+def jaccard_similarity_text(text1: str, text2: str, tokenizer: Optional[Callable[[str], Any]] = None) -> float:
     """
     Calculate Jaccard similarity between two text strings
 
@@ -183,7 +183,7 @@ def jaccard_similarity_text(text1: str, text2: str, tokenizer: Optional[callable
     return jaccard_similarity(set1, set2)
 
 
-def cosine_similarity_text(text1: str, text2: str, tokenizer: Optional[callable] = None) -> float:
+def cosine_similarity_text(text1: str, text2: str, tokenizer: Optional[Callable[[str], List[str]]] = None) -> float:
     """
     Calculate cosine similarity between two text strings
 
@@ -354,7 +354,7 @@ class TextSimilarity:
         ```
     """
 
-    def __init__(self, tokenizer: Optional[callable] = None):
+    def __init__(self, tokenizer: Optional[Callable[[str], List[str]]] = None):
         """
         Initialize TextSimilarity
 

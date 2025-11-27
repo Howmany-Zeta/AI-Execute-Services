@@ -23,10 +23,10 @@ try:
     GCS_AVAILABLE = True
 except ImportError:
     GCS_AVAILABLE = False
-    storage = None  # type: ignore[misc]
-    NotFound = Exception  # type: ignore[misc]
-    GoogleCloudError = Exception  # type: ignore[misc]
-    DefaultCredentialsError = Exception  # type: ignore[misc]
+    storage = None  # type: ignore[assignment]
+    NotFound = Exception  # type: ignore[assignment]
+    GoogleCloudError = Exception  # type: ignore[assignment]
+    DefaultCredentialsError = Exception  # type: ignore[assignment]
 
 from ..monitoring.global_metrics_manager import get_global_metrics
 
@@ -87,8 +87,8 @@ class FileStorage:
         self.config = FileStorageConfig(config)
         self._gcs_client = None
         self._gcs_bucket = None
-        self._cache = {}
-        self._cache_timestamps = {}
+        self._cache: Dict[str, Any] = {}
+        self._cache_timestamps: Dict[str, datetime] = {}
         self._initialized = False
 
         # Metrics - use global metrics manager
@@ -228,7 +228,7 @@ class FileStorage:
                 success = await self._store_gcs(key, serialized_data, metadata, compressed)
                 if success:
                     if self.metrics:
-                        self.metrics.record_operation("gcs_store_success", 1)
+                        self.metrics.record_operation("gcs_store_success", True)
                         duration = (datetime.utcnow() - start_time).total_seconds()
                         self.metrics.record_duration("gcs_store_duration", duration)
                     return True
@@ -238,19 +238,19 @@ class FileStorage:
                 success = await self._store_local(key, serialized_data, metadata, compressed)
                 if success:
                     if self.metrics:
-                        self.metrics.record_operation("local_store_success", 1)
+                        self.metrics.record_operation("local_store_success", True)
                         duration = (datetime.utcnow() - start_time).total_seconds()
                         self.metrics.record_duration("local_store_duration", duration)
                     return True
 
             if self.metrics:
-                self.metrics.record_operation("store_failure", 1)
+                self.metrics.record_operation("store_failure", False)
             return False
 
         except Exception as e:
             logger.error(f"Failed to store data for key {key}: {e}")
             if self.metrics:
-                self.metrics.record_operation("store_error", 1)
+                self.metrics.record_operation("store_error", False)
             raise FileStorageError(f"Storage failed: {e}")
 
     async def retrieve(self, key: str) -> Optional[Union[str, bytes, Dict[str, Any]]]:
@@ -272,9 +272,9 @@ class FileStorage:
             # Check cache first
             if self.config.enable_cache and key in self._cache:
                 cache_time = self._cache_timestamps.get(key)
-                if cache_time and (datetime.utcnow() - cache_time).total_seconds() < self.config.cache_ttl_seconds:
+                if cache_time and (datetime.utcnow() - cache_time).total_seconds() < float(self.config.cache_ttl_seconds):
                     if self.metrics:
-                        self.metrics.record_operation("cache_hit", 1)
+                        self.metrics.record_operation("cache_hit", True)
                     return self._cache[key]["data"]
                 else:
                     # Remove expired cache entry
@@ -286,7 +286,7 @@ class FileStorage:
                 data = await self._retrieve_gcs(key)
                 if data is not None:
                     if self.metrics:
-                        self.metrics.record_operation("gcs_retrieve_success", 1)
+                        self.metrics.record_operation("gcs_retrieve_success", True)
                         duration = (datetime.utcnow() - start_time).total_seconds()
                         self.metrics.record_duration("gcs_retrieve_duration", duration)
 
@@ -302,7 +302,7 @@ class FileStorage:
                 data = await self._retrieve_local(key)
                 if data is not None:
                     if self.metrics:
-                        self.metrics.record_operation("local_retrieve_success", 1)
+                        self.metrics.record_operation("local_retrieve_success", True)
                         duration = (datetime.utcnow() - start_time).total_seconds()
                         self.metrics.record_duration("local_retrieve_duration", duration)
 
@@ -314,13 +314,13 @@ class FileStorage:
                     return data
 
             if self.metrics:
-                self.metrics.record_operation("retrieve_not_found", 1)
+                self.metrics.record_operation("retrieve_not_found", False)
             return None
 
         except Exception as e:
             logger.error(f"Failed to retrieve data for key {key}: {e}")
             if self.metrics:
-                self.metrics.record_operation("retrieve_error", 1)
+                self.metrics.record_operation("retrieve_error", False)
             raise FileStorageError(f"Retrieval failed: {e}")
 
     async def delete(self, key: str) -> bool:
@@ -349,7 +349,7 @@ class FileStorage:
                 gcs_success = await self._delete_gcs(key)
                 if gcs_success:
                     if self.metrics:
-                        self.metrics.record_operation("gcs_delete_success", 1)
+                        self.metrics.record_operation("gcs_delete_success", True)
                 else:
                     success = False
 
@@ -358,22 +358,22 @@ class FileStorage:
                 local_success = await self._delete_local(key)
                 if local_success:
                     if self.metrics:
-                        self.metrics.record_operation("local_delete_success", 1)
+                        self.metrics.record_operation("local_delete_success", True)
                 else:
                     success = False
 
             if self.metrics:
                 if success:
-                    self.metrics.record_operation("delete_success", 1)
+                    self.metrics.record_operation("delete_success", True)
                 else:
-                    self.metrics.record_operation("delete_failure", 1)
+                    self.metrics.record_operation("delete_failure", False)
 
             return success
 
         except Exception as e:
             logger.error(f"Failed to delete data for key {key}: {e}")
             if self.metrics:
-                self.metrics.record_operation("delete_error", 1)
+                self.metrics.record_operation("delete_error", False)
             raise FileStorageError(f"Deletion failed: {e}")
 
     async def exists(self, key: str) -> bool:
@@ -393,7 +393,7 @@ class FileStorage:
             # Check cache first
             if self.config.enable_cache and key in self._cache:
                 cache_time = self._cache_timestamps.get(key)
-                if cache_time and (datetime.utcnow() - cache_time).total_seconds() < self.config.cache_ttl_seconds:
+                if cache_time and (datetime.utcnow() - cache_time).total_seconds() < float(self.config.cache_ttl_seconds):
                     return True
 
             # Check GCS

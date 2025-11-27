@@ -24,7 +24,7 @@ def _init_heavy_dependencies():
 
     if rake_nltk is None:
         try:
-            import rake_nltk as _rake_nltk
+            import rake_nltk as _rake_nltk  # type: ignore[import-untyped]
 
             rake_nltk = _rake_nltk
         except ImportError:
@@ -234,9 +234,9 @@ class ClassifierTool(BaseTool):
         self.logger.setLevel(logging.INFO)
 
         # Initialize resources
-        self._spacy_nlp = {}  # Language -> spaCy pipeline
+        self._spacy_nlp: Dict[str, Any] = {}  # Language -> spaCy pipeline
         self._metrics = {"requests": 0, "cache_hits": 0, "processing_time": []}
-        self._request_timestamps = []
+        self._request_timestamps: List[float] = []
 
     def _get_sentiment_lexicon(self, language: str) -> Dict[str, float]:
         """
@@ -828,7 +828,7 @@ class ClassifierTool(BaseTool):
         # Prepare operations to execute in batch
         operations = []
         for text in texts:
-            kwargs = {"text": text}
+            kwargs: Dict[str, Any] = {"text": text}
             if language:
                 kwargs["language"] = language
             if model and operation == "classify":
@@ -855,7 +855,11 @@ class ClassifierTool(BaseTool):
             "metrics": {
                 "requests": self._metrics["requests"],
                 "cache_hits": self._metrics["cache_hits"],
-                "avg_processing_time": (sum(self._metrics["processing_time"]) / len(self._metrics["processing_time"]) if self._metrics["processing_time"] else 0.0),
+                "avg_processing_time": (
+                    sum(float(t) for t in processing_times) / len(processing_times)
+                    if (processing_times := self._metrics.get("processing_time")) and isinstance(processing_times, list) and len(processing_times) > 0
+                    else 0.0
+                ),
             },
             "config": {
                 "max_workers": self.config.max_workers,

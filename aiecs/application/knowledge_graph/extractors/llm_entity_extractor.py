@@ -7,11 +7,14 @@ Uses AIECS's LLM client infrastructure for provider-agnostic extraction.
 
 import json
 import uuid
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union, TYPE_CHECKING
 from aiecs.application.knowledge_graph.extractors.base import EntityExtractor
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.schema.graph_schema import GraphSchema
-from aiecs.llm import get_llm_manager, AIProvider
+from aiecs.llm import get_llm_manager, AIProvider, LLMClientManager, LLMClientFactory
+
+if TYPE_CHECKING:
+    from aiecs.llm.protocols import LLMClientProtocol
 
 
 class LLMEntityExtractor(EntityExtractor):
@@ -50,10 +53,11 @@ class LLMEntityExtractor(EntityExtractor):
     def __init__(
         self,
         schema: Optional[GraphSchema] = None,
-        provider: Optional[AIProvider] = None,
+        provider: Optional[Union[AIProvider, str]] = None,
         model: Optional[str] = None,
         temperature: float = 0.1,  # Low temperature for more deterministic extraction
         max_tokens: Optional[int] = 2000,
+        llm_client: Optional["LLMClientProtocol"] = None,
     ):
         """
         Initialize LLM entity extractor
@@ -61,16 +65,95 @@ class LLMEntityExtractor(EntityExtractor):
         Args:
             schema: Optional GraphSchema to guide extraction (provides entity types and properties)
             provider: LLM provider to use (default: Vertex AI via AIECS configuration)
+                     Can be AIProvider enum or custom provider name string
             model: Specific model to use (default: from AIECS configuration)
             temperature: LLM temperature (0.1 = more deterministic, good for extraction)
             max_tokens: Maximum tokens in response
+            llm_client: Optional custom LLM client implementing LLMClientProtocol
+                       If provided, this client will be used directly instead of creating one via provider
         """
         self.schema = schema
         self.provider = provider
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
-        self._llm_manager = None  # Lazy-loaded in async methods
+        self.llm_client = llm_client
+        self._llm_manager: Optional[LLMClientManager] = None  # Lazy-loaded in async methods
+
+    @staticmethod
+    def from_config(
+        schema: Optional[GraphSchema] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> "LLMEntityExtractor":
+        """
+        Create LLMEntityExtractor from configuration.
+
+        This method resolves the LLM client from the provider name using LLMClientFactory,
+        supporting both standard and custom providers.
+
+        Args:
+            schema: Optional GraphSchema to guide extraction
+            provider: LLM provider name (standard or custom)
+            model: Specific model to use
+            temperature: LLM temperature
+            max_tokens: Maximum tokens in response
+
+        Returns:
+            LLMEntityExtractor instance with resolved client
+
+        Example:
+            ```python
+            # Using standard provider
+            extractor = LLMEntityExtractor.from_config(
+                provider="OpenAI",
+                model="gpt-4",
+                temperature=0.1
+            )
+
+            # Using custom provider
+            LLMClientFactory.register_custom_provider("my-llm", custom_client)
+            extractor = LLMEntityExtractor.from_config(
+                provider="my-llm",
+                model="custom-model"
+            )
+            ```
+        """
+        from aiecs.config import get_settings
+
+        settings = get_settings()
+
+        # Use config values if not provided
+        if provider is None:
+            provider = settings.kg_entity_extraction_llm_provider or None
+        if model is None:
+            model = settings.kg_entity_extraction_llm_model or None
+        if temperature is None:
+            temperature = settings.kg_entity_extraction_temperature
+        if max_tokens is None:
+            max_tokens = settings.kg_entity_extraction_max_tokens
+
+        # Resolve client from provider name if provider is specified
+        llm_client = None
+        if provider:
+            client = LLMClientFactory.get_client(provider)
+            # Cast to LLMClientProtocol since BaseLLMClient implements the protocol
+            from typing import cast
+            from aiecs.llm.protocols import LLMClientProtocol
+            llm_client = cast(LLMClientProtocol, client) if client else None
+        else:
+            llm_client = None
+
+        return LLMEntityExtractor(
+            schema=schema,
+            provider=provider,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            llm_client=llm_client,
+        )
 
     async def extract_entities(self, text: str, entity_types: Optional[List[str]] = None, **kwargs) -> List[Entity]:
         """
@@ -91,22 +174,35 @@ class LLMEntityExtractor(EntityExtractor):
         if not text or not text.strip():
             raise ValueError("Input text cannot be empty")
 
-        # Lazy-load LLM manager
-        if self._llm_manager is None:
-            self._llm_manager = await get_llm_manager()
-
         # Build extraction prompt
         prompt = self._build_extraction_prompt(text, entity_types)
 
         # Call LLM
         try:
-            response = await self._llm_manager.generate_text(
-                messages=prompt,
-                provider=self.provider,
-                model=self.model,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-            )
+            # Use custom client if provided
+            if self.llm_client is not None:
+                # Convert string prompt to list of LLMMessage
+                from aiecs.llm.clients.base_client import LLMMessage
+                messages = [LLMMessage(role="user", content=prompt)]
+                response = await self.llm_client.generate_text(
+                    messages=messages,
+                    model=self.model,
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens,
+                )
+            # Otherwise use LLM manager with provider
+            else:
+                # Lazy-load LLM manager
+                if self._llm_manager is None:
+                    self._llm_manager = await get_llm_manager()
+
+                response = await self._llm_manager.generate_text(
+                    messages=prompt,
+                    provider=self.provider,
+                    model=self.model,
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens,
+                )
 
             # Parse LLM response to Entity objects
             entities = self._parse_llm_response(response.content)

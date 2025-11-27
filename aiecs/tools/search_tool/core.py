@@ -18,16 +18,16 @@ from aiecs.config.config import get_settings
 
 # Import Google API with graceful fallback
 try:
-    from googleapiclient.discovery import build
-    from googleapiclient.errors import HttpError
+    from googleapiclient.discovery import build  # type: ignore[import-untyped]
+    from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
     from google.auth.exceptions import GoogleAuthError
     from google.oauth2 import service_account
 
     GOOGLE_API_AVAILABLE = True
 except ImportError:
     GOOGLE_API_AVAILABLE = False
-    HttpError = Exception  # type: ignore[misc]
-    GoogleAuthError = Exception  # type: ignore[misc]
+    HttpError = Exception  # type: ignore[assignment,misc]
+    GoogleAuthError = Exception  # type: ignore[assignment,misc]
 
 # Import search tool components
 from .constants import (

@@ -68,7 +68,7 @@ class AgentPersistence(Protocol):
 class InMemoryPersistence:
     """In-memory agent persistence (for testing/development)."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize in-memory storage."""
         self._storage: Dict[str, Dict[str, Any]] = {}
         logger.info("InMemoryPersistence initialized")

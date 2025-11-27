@@ -14,7 +14,7 @@ import tempfile
 from typing import Dict, Any, List, Optional, Union
 from enum import Enum
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 import numpy as np
 from pydantic import BaseModel, Field, ConfigDict
 

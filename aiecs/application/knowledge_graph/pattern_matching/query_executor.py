@@ -279,7 +279,7 @@ class CustomQueryExecutor:
         """
         if group_by:
             # Group results
-            groups = {}
+            groups: Dict[Any, List[Dict[str, Any]]] = {}
 
             for result in results:
                 # Create group key

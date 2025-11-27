@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 import logging
 import os
 from typing import Optional
-import socketio
+import socketio  # type: ignore[import-untyped]
 
 # Import configuration
 from aiecs.config.config import get_settings
