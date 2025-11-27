@@ -183,16 +183,20 @@ class ContextEngineAdapter:
         messages = await self.context_engine.get_conversation_history(session_id=session_id, limit=limit)
 
         # Convert ConversationMessage objects to dictionaries
+        # messages is List[Dict[str, Any]] from get_conversation_history
         result = []
         for msg in messages:
-            result.append(
-                {
-                    "role": msg.role,
-                    "content": msg.content,
-                    "timestamp": (msg.timestamp.isoformat() if hasattr(msg.timestamp, "isoformat") else str(msg.timestamp)),
-                    "metadata": msg.metadata,
-                }
-            )
+            if isinstance(msg, dict):
+                result.append(msg)
+            else:
+                result.append(
+                    {
+                        "role": getattr(msg, "role", ""),
+                        "content": getattr(msg, "content", ""),
+                        "timestamp": (getattr(msg, "timestamp", "").isoformat() if hasattr(getattr(msg, "timestamp", None), "isoformat") else str(getattr(msg, "timestamp", ""))),
+                        "metadata": getattr(msg, "metadata", {}),
+                    }
+                )
 
         logger.debug(f"Loaded {len(result)} messages from session {session_id}")
         return result
@@ -475,14 +479,18 @@ class ContextEngineAdapter:
             # Convert ConversationMessage objects to dictionaries
             result = []
             for msg in messages:
-                result.append(
-                    {
-                        "role": msg.role,
-                        "content": msg.content,
-                        "timestamp": (msg.timestamp.isoformat() if hasattr(msg.timestamp, "isoformat") else str(msg.timestamp)),
-                        "metadata": msg.metadata,
-                    }
-                )
+                # messages is List[Dict[str, Any]] from get_conversation_history
+                if isinstance(msg, dict):
+                    result.append(msg)
+                else:
+                    result.append(
+                        {
+                            "role": getattr(msg, "role", ""),
+                            "content": getattr(msg, "content", ""),
+                            "timestamp": (getattr(msg, "timestamp", "").isoformat() if hasattr(getattr(msg, "timestamp", None), "isoformat") else str(getattr(msg, "timestamp", ""))),
+                            "metadata": getattr(msg, "metadata", {}),
+                        }
+                    )
 
             logger.debug(f"Retrieved {len(result)} messages from session {session_id}")
             return result

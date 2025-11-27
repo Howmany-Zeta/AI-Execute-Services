@@ -191,6 +191,12 @@ class PostgresGraphStore(GraphStore):
         self._is_initialized = False
         self._transaction_conn: Optional[asyncpg.Connection] = None
 
+    def _ensure_pool(self) -> asyncpg.Pool:
+        """Ensure pool is initialized and return it."""
+        if self.pool is None:
+            raise RuntimeError("Connection pool not initialized")
+        return self.pool
+
     async def initialize(self):
         """Initialize PostgreSQL connection pool and create schema"""
         try:
@@ -222,7 +228,8 @@ class PostgresGraphStore(GraphStore):
                 logger.info("Using external PostgreSQL connection pool (shared with AIECS DatabaseManager)")
 
             # Create schema
-            async with self.pool.acquire() as conn:
+            pool = self._ensure_pool()
+            async with pool.acquire() as conn:
                 # Optionally enable pgvector first
                 if self.enable_pgvector:
                     try:
@@ -317,7 +324,8 @@ class PostgresGraphStore(GraphStore):
         if not self._is_initialized:
             raise RuntimeError("GraphStore not initialized")
 
-        async with self.pool.acquire() as conn:
+        pool = self._ensure_pool()
+        async with pool.acquire() as conn:
             async with conn.transaction():
                 # Store connection for use within transaction
                 old_conn = self._transaction_conn
@@ -365,7 +373,8 @@ class PostgresGraphStore(GraphStore):
                 embedding_blob,
             )
         else:
-            async with self.pool.acquire() as conn:
+            pool = self._ensure_pool()
+            async with pool.acquire() as conn:
                 await conn.execute(
                     """
                     INSERT INTO graph_entities (id, entity_type, properties, embedding)
@@ -398,7 +407,8 @@ class PostgresGraphStore(GraphStore):
                 entity_id,
             )
         else:
-            async with self.pool.acquire() as conn:
+            pool = self._ensure_pool()
+            async with pool.acquire() as conn:
                 row = await conn.fetchrow(
                     """
                     SELECT id, entity_type, properties, embedding
@@ -445,7 +455,8 @@ class PostgresGraphStore(GraphStore):
                 embedding_blob,
             )
         else:
-            async with self.pool.acquire() as conn:
+            pool = self._ensure_pool()
+            async with pool.acquire() as conn:
                 result = await conn.execute(
                     """
                     UPDATE graph_entities
@@ -470,7 +481,8 @@ class PostgresGraphStore(GraphStore):
             conn = self._transaction_conn
             result = await conn.execute("DELETE FROM graph_entities WHERE id = $1", entity_id)
         else:
-            async with self.pool.acquire() as conn:
+            pool = self._ensure_pool()
+            async with pool.acquire() as conn:
                 result = await conn.execute("DELETE FROM graph_entities WHERE id = $1", entity_id)
 
         if result == "DELETE 0":
@@ -505,7 +517,8 @@ class PostgresGraphStore(GraphStore):
                 relation.weight,
             )
         else:
-            async with self.pool.acquire() as conn:
+            pool = self._ensure_pool()
+            async with pool.acquire() as conn:
                 await conn.execute(
                     """
                     INSERT INTO graph_relations (id, relation_type, source_id, target_id, properties, weight)
@@ -542,7 +555,8 @@ class PostgresGraphStore(GraphStore):
                 relation_id,
             )
         else:
-            async with self.pool.acquire() as conn:
+            pool = self._ensure_pool()
+            async with pool.acquire() as conn:
                 row = await conn.fetchrow(
                     """
                     SELECT id, relation_type, source_id, target_id, properties, weight
@@ -575,7 +589,8 @@ class PostgresGraphStore(GraphStore):
             conn = self._transaction_conn
             result = await conn.execute("DELETE FROM graph_relations WHERE id = $1", relation_id)
         else:
-            async with self.pool.acquire() as conn:
+            pool = self._ensure_pool()
+            async with pool.acquire() as conn:
                 result = await conn.execute("DELETE FROM graph_relations WHERE id = $1", relation_id)
 
         if result == "DELETE 0":
@@ -637,7 +652,8 @@ class PostgresGraphStore(GraphStore):
             conn = self._transaction_conn
             rows = await conn.fetch(query, *params)
         else:
-            async with self.pool.acquire() as conn:
+            pool = self._ensure_pool()
+            async with pool.acquire() as conn:
                 rows = await conn.fetch(query, *params)
 
         entities = []
@@ -676,7 +692,8 @@ class PostgresGraphStore(GraphStore):
             conn = self._transaction_conn
             rows = await conn.fetch(query, *params)
         else:
-            async with self.pool.acquire() as conn:
+            pool = self._ensure_pool()
+            async with pool.acquire() as conn:
                 rows = await conn.fetch(query, *params)
 
         entities = []
@@ -707,7 +724,8 @@ class PostgresGraphStore(GraphStore):
             entity_types = await conn.fetch("SELECT entity_type, COUNT(*) as count FROM graph_entities GROUP BY entity_type")
             relation_types = await conn.fetch("SELECT relation_type, COUNT(*) as count FROM graph_relations GROUP BY relation_type")
         else:
-            async with self.pool.acquire() as conn:
+            pool = self._ensure_pool()
+            async with pool.acquire() as conn:
                 entity_count = await conn.fetchval("SELECT COUNT(*) FROM graph_entities")
                 relation_count = await conn.fetchval("SELECT COUNT(*) FROM graph_relations")
                 entity_types = await conn.fetch("SELECT entity_type, COUNT(*) as count FROM graph_entities GROUP BY entity_type")
@@ -785,7 +803,8 @@ class PostgresGraphStore(GraphStore):
             conn = self._transaction_conn
             rows = await conn.fetch(query, source_id, target_id, max_depth, limit or 10)
         else:
-            async with self.pool.acquire() as conn:
+            pool = self._ensure_pool()
+            async with pool.acquire() as conn:
                 rows = await conn.fetch(query, source_id, target_id, max_depth, limit or 10)
 
         paths = []

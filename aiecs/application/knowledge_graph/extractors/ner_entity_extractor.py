@@ -236,4 +236,6 @@ class NEREntityExtractor(EntityExtractor):
         Returns:
             List of spaCy NER labels
         """
-        return self.nlp.get_pipe("ner").labels
+        ner_pipe = self.nlp.get_pipe("ner")
+        # spaCy NER pipe has labels attribute
+        return ner_pipe.labels if hasattr(ner_pipe, "labels") else []  # type: ignore[attr-defined]

@@ -633,8 +633,8 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 logger.error(f"Failed to get session from Redis: {e}")
 
         # Fallback to memory
-        session: Optional[SessionMetrics] = self._memory_sessions.get(session_id)
-        return session.to_dict() if session else None
+        memory_session: Optional[SessionMetrics] = self._memory_sessions.get(session_id)
+        return memory_session.to_dict() if memory_session else None
 
     async def update_session(
         self,
@@ -1877,13 +1877,16 @@ Summary:"""
             # Format as string
             lines = []
             for msg in messages:
-                timestamp = msg.timestamp.strftime("%Y-%m-%d %H:%M:%S")
-                lines.append(f"[{timestamp}] {msg.role}: {msg.content}")
+                # messages is List[Dict[str, Any]] from get_conversation_history
+                timestamp = msg.get("timestamp", "").strftime("%Y-%m-%d %H:%M:%S") if isinstance(msg.get("timestamp"), datetime) else str(msg.get("timestamp", ""))
+                role = msg.get("role", "")
+                content = msg.get("content", "")
+                lines.append(f"[{timestamp}] {role}: {content}")
             return "\n\n".join(lines)
 
         elif format == "dict":
-            # Return as list of dicts
-            return [self._sanitize_for_json(msg.to_dict()) for msg in messages]
+            # Return as list of dicts (already dicts from get_conversation_history)
+            return [self._sanitize_for_json(msg) for msg in messages]
 
         else:
             raise ValueError(f"Invalid format '{format}'. Must be 'messages', 'string', or 'dict'")

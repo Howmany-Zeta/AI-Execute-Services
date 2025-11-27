@@ -461,7 +461,7 @@ class GraphReasoningTool(BaseTool):
             ],
             "constraints": [
                 {
-                    "type": c.constraint_type.value,
+                    "type": c.constraint_type.value if hasattr(c.constraint_type, "value") else str(c.constraint_type),
                     "variable": c.variable.name,
                     "value": c.value,
                 }

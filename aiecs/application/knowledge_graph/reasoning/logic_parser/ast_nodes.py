@@ -34,11 +34,21 @@ try:
     QUERY_PLAN_AVAILABLE = True
 except ImportError:
     QUERY_PLAN_AVAILABLE = False
-    QueryPlan = None  # type: ignore[assignment]
-    QueryStep = None  # type: ignore[assignment]
-    QueryOperation = None  # type: ignore[assignment]
-    GraphQuery = None  # type: ignore[assignment]
-    QueryType = None  # type: ignore[assignment]
+    # Use TYPE_CHECKING to avoid redefinition errors
+    if TYPE_CHECKING:
+        from typing import Any
+        QueryPlan: Any  # type: ignore[assignment,no-redef]
+        QueryStep: Any  # type: ignore[assignment,no-redef]
+        QueryOperation: Any  # type: ignore[assignment,no-redef]
+        GraphQuery: Any  # type: ignore[assignment,no-redef]
+        QueryType: Any  # type: ignore[assignment,no-redef]
+    else:
+        from typing import Any
+        QueryPlan = None  # type: ignore[assignment]
+        QueryStep = None  # type: ignore[assignment]
+        QueryOperation = None  # type: ignore[assignment]
+        GraphQuery = None  # type: ignore[assignment]
+        QueryType = None  # type: ignore[assignment]
 
 # Placeholder for ValidationError (will be defined in error_handler.py)
 

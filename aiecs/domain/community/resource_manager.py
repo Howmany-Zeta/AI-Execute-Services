@@ -96,6 +96,8 @@ class ResourceManager:
         if related_resources:
             resource_content["related_resources"] = related_resources
 
+        if self.community_manager is None:
+            raise ValueError("CommunityManager not initialized")
         resource_id = await self.community_manager.create_community_resource(
             community_id=community_id,
             owner_member_id=owner_member_id,
@@ -150,6 +152,8 @@ class ResourceManager:
             "version": "1.0",
         }
 
+        if self.community_manager is None:
+            raise ValueError("CommunityManager not initialized")
         resource_id = await self.community_manager.create_community_resource(
             community_id=community_id,
             owner_member_id=owner_member_id,
@@ -203,6 +207,8 @@ class ResourceManager:
             "experience_type": "case_study",
         }
 
+        if self.community_manager is None:
+            raise ValueError("CommunityManager not initialized")
         resource_id = await self.community_manager.create_community_resource(
             community_id=community_id,
             owner_member_id=owner_member_id,

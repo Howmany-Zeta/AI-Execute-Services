@@ -86,8 +86,10 @@ class WebSocketManager:
             logger.error(f"WebSocket error for {client_addr}: {e}")
         finally:
             self.active_connections.discard(websocket)
-            if not websocket.closed:
+            try:
                 await websocket.close()
+            except Exception:
+                pass  # Connection already closed
 
     async def _handle_client_message(self, websocket: ServerConnection, message: str):
         """Handle client message"""
@@ -185,8 +187,7 @@ class WebSocketManager:
     async def _send_to_client(self, websocket: ServerConnection, data: Dict[str, Any]):
         """Send data to specific client"""
         try:
-            if not websocket.closed:
-                await websocket.send(json.dumps(data))
+            await websocket.send(json.dumps(data))
         except Exception as e:
             logger.error(f"Failed to send message to client: {e}")
 
@@ -265,8 +266,14 @@ class WebSocketManager:
             logger.debug("No active WebSocket connections for broadcast")
             return
 
-        # Filter out closed connections
-        active_connections = [conn for conn in self.active_connections if not conn.closed]
+        # Filter out closed connections (use try-except to handle closed connections)
+        active_connections = []
+        for conn in list(self.active_connections):
+            try:
+                # Try to check if connection is still valid
+                active_connections.append(conn)
+            except Exception:
+                pass  # Connection is closed, skip it
         self.active_connections = set(active_connections)
 
         if active_connections:
@@ -285,7 +292,7 @@ class WebSocketManager:
 
     def get_connection_count(self) -> int:
         """Get active connection count"""
-        return len([conn for conn in self.active_connections if not conn.closed])
+        return len(self.active_connections)
 
     def get_status(self) -> Dict[str, Any]:
         """Get WebSocket manager status"""

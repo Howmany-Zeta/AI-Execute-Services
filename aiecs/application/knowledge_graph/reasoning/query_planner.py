@@ -31,8 +31,13 @@ try:
     LOGIC_PARSER_AVAILABLE = True
 except ImportError:
     LOGIC_PARSER_AVAILABLE = False
-    LogicQueryParser = None  # type: ignore[assignment]
-    ParserError = None  # type: ignore[assignment]
+    from typing import Any, TYPE_CHECKING
+    if TYPE_CHECKING:
+        LogicQueryParser: Any  # type: ignore[assignment,no-redef]
+        ParserError: Any  # type: ignore[assignment,no-redef]
+    else:
+        LogicQueryParser = None  # type: ignore[assignment]
+        ParserError = None  # type: ignore[assignment]
 
 
 class QueryPlanner:
@@ -86,23 +91,28 @@ class QueryPlanner:
 
         # Advanced query optimizer
         self._enable_advanced_optimization = enable_advanced_optimization
+        # Type annotations for optional attributes
+        self._optimizer: Optional[QueryOptimizer]
+        self._statistics_collector: Optional[QueryStatisticsCollector]
+        self._logic_parser: Optional[LogicQueryParser]
+        
         if enable_advanced_optimization:
             # Collect statistics from graph store
             collector = QueryStatisticsCollector()
             statistics = collector.collect_from_graph_store(graph_store)
 
             # Initialize optimizer
-            self._optimizer: Optional[QueryOptimizer] = QueryOptimizer(statistics=statistics)
-            self._statistics_collector: Optional[QueryStatisticsCollector] = collector
+            self._optimizer = QueryOptimizer(statistics=statistics)
+            self._statistics_collector = collector
         else:
-            self._optimizer: Optional[QueryOptimizer] = None
+            self._optimizer = None
+            self._statistics_collector = None
 
         # Logic query parser (if available)
         if LOGIC_PARSER_AVAILABLE and schema is not None:
-            self._logic_parser: Optional[LogicQueryParser] = LogicQueryParser(schema=schema)
+            self._logic_parser = LogicQueryParser(schema=schema)  # type: ignore[assignment]
         else:
-            self._logic_parser: Optional[LogicQueryParser] = None
-            self._statistics_collector: Optional[QueryStatisticsCollector] = None
+            self._logic_parser = None
 
     def _initialize_query_patterns(self) -> List[Dict[str, Any]]:
         """Initialize query pattern matchers"""

@@ -258,10 +258,13 @@ class LLMEntityExtractor(EntityExtractor):
             if self.schema and self.schema.has_entity_type(entity_type):
                 # Use schema definition
                 schema_type = self.schema.get_entity_type(entity_type)
-                properties = list(schema_type.properties.keys()) if schema_type.properties else []
-                prop_str = ", ".join(properties) if properties else "any relevant properties"
-                desc = f"- {entity_type}: {schema_type.description or 'Extract properties: ' + prop_str}"
-                type_descriptions.append(desc)
+                if schema_type is not None:
+                    properties = list(schema_type.properties.keys()) if schema_type.properties else []
+                    prop_str = ", ".join(properties) if properties else "any relevant properties"
+                    desc = f"- {entity_type}: {schema_type.description or 'Extract properties: ' + prop_str}"
+                    type_descriptions.append(desc)
+                else:
+                    type_descriptions.append(f"- {entity_type}: Extract name and any relevant properties")
             else:
                 # Generic description
                 type_descriptions.append(f"- {entity_type}: Extract name and any relevant properties")

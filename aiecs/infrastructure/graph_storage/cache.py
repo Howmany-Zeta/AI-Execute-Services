@@ -162,9 +162,10 @@ class RedisCacheBackend(CacheBackend):
         try:
             import redis.asyncio as aioredis
 
-            self.redis = await aioredis.from_url(self.redis_url, encoding="utf-8", decode_responses=True)
+            redis_client = await aioredis.from_url(self.redis_url, encoding="utf-8", decode_responses=True)
             # Test connection
-            await self.redis.ping()
+            await redis_client.ping()
+            self.redis = redis_client
             self._initialized = True
             logger.info(f"Redis cache initialized: {self.redis_url}")
             return True
@@ -346,7 +347,7 @@ class GraphStoreCache:
             try:
                 cached_value = json.dumps(value)
                 await self.backend.set(key, cached_value, ttl or self.config.ttl)
-            except (TypeError, json.JSONEncodeError) as e:
+            except (TypeError, ValueError) as e:
                 logger.warning(f"Failed to cache value for key {key}: {e}")
 
         return value

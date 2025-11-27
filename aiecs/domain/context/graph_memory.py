@@ -203,6 +203,8 @@ class GraphMemoryMixin:
 
     async def _get_session_entities(self, session_id: str) -> List[Entity]:
         """Get all entities mentioned in this session."""
+        if self.graph_store is None:
+            return []
         try:
             session_entity_id = f"session_{session_id}"
 
