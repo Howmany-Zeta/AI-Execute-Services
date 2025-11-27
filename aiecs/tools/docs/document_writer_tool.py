@@ -707,8 +707,8 @@ class DocumentWriterTool(BaseTool):
                     file_mode += "b"
 
                 # Handle both EncodingType enum and string
-                enc_value: Optional[str] = None if isinstance(content, bytes) else (encoding.value if hasattr(encoding, "value") else str(encoding))
-                with open(target_path, file_mode, encoding=enc_value) as f:
+                file_enc_value: Optional[str] = None if isinstance(content, bytes) else (encoding.value if hasattr(encoding, "value") else str(encoding))
+                with open(target_path, file_mode, encoding=file_enc_value) as f:
                     f.write(content)
 
             # Get file stats

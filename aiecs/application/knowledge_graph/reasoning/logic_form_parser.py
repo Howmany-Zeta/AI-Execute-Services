@@ -114,11 +114,13 @@ class LogicFormParser:
             schema_manager: Optional schema manager for type validation
         """
         self.schema_manager = schema_manager
+        # Type annotation for optional attribute
+        self.query_parser: Optional[LogicQueryParser]
         if schema_manager:
-            self.query_parser: Optional[LogicQueryParser] = LogicQueryParser(schema_manager)
+            self.query_parser = LogicQueryParser(schema_manager)  # type: ignore[assignment]
         else:
             # Create a minimal schema manager if none provided
-            self.query_parser: Optional[LogicQueryParser] = None
+            self.query_parser = None
 
     def parse(self, query: str) -> LogicalQuery:
         """

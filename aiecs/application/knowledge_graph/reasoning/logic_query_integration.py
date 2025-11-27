@@ -22,10 +22,17 @@ try:
     LOGIC_PARSER_AVAILABLE = True
 except ImportError:
     LOGIC_PARSER_AVAILABLE = False
-    LogicQueryParser = None  # type: ignore[assignment]
-    ParserError = None  # type: ignore[assignment]
-    QueryPlan = None  # type: ignore[assignment]
-    GraphStore = None  # type: ignore[assignment]
+    from typing import Any, TYPE_CHECKING
+    if TYPE_CHECKING:
+        LogicQueryParser: Any  # type: ignore[assignment,no-redef]
+        ParserError: Any  # type: ignore[assignment,no-redef]
+        QueryPlan: Any  # type: ignore[assignment,no-redef]
+        GraphStore: Any  # type: ignore[assignment,no-redef]
+    else:
+        LogicQueryParser = None  # type: ignore[assignment]
+        ParserError = None  # type: ignore[assignment]
+        QueryPlan = None  # type: ignore[assignment]
+        GraphStore = None  # type: ignore[assignment]
 
 
 class LogicQueryIntegration:

@@ -710,7 +710,7 @@ class ContentInsertionTool(BaseTool):
 
             self.logger.info(f"Starting batch insertion {batch_id} for: {document_path}")
 
-            results = {
+            results: Dict[str, Any] = {
                 "batch_id": batch_id,
                 "document_path": document_path,
                 "total_items": len(content_items),

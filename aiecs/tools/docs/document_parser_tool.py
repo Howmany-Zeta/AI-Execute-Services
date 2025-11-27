@@ -238,7 +238,7 @@ class DocumentParserTool(BaseTool):
             Dict containing detected type and confidence
         """
         try:
-            result = {
+            result: Dict[str, Any] = {
                 "source": source,
                 "is_url": self._is_url(source),
                 "detected_type": DocumentType.UNKNOWN,

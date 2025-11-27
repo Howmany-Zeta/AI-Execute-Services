@@ -375,7 +375,7 @@ class DataVisualizerTool(BaseTool):
         # Both numeric: scatter or line
         if x_is_numeric and y_is_numeric:
             # Check if x looks like time series
-            if x and "date" in x.lower() or "time" in x.lower():
+            if x and (("date" in x.lower()) or ("time" in x.lower())):
                 return ChartType.TIME_SERIES, "Time series data detected"
             return ChartType.SCATTER, "Two numeric variables"
 

@@ -699,7 +699,12 @@ class ConversationMemory:
                 # Convert ConversationMessage to LLMMessage
                 llm_messages = []
                 for msg in messages:
-                    llm_messages.append(LLMMessage(role=msg.role, content=msg.content))
+                    # messages is List[Dict[str, Any]] from ContextEngine
+                    if isinstance(msg, dict):
+                        llm_messages.append(LLMMessage(role=msg.get("role", "user"), content=msg.get("content", "")))
+                    else:
+                        # Fallback for ConversationMessage objects
+                        llm_messages.append(LLMMessage(role=msg.role, content=msg.content))
 
                 logger.debug(f"Retrieved {len(llm_messages)} messages from session {session_id} via ContextEngine")
                 return llm_messages
@@ -902,27 +907,65 @@ class ConversationMemory:
                 session_metrics = await self.context_engine.get_session(session_id)
 
                 if session_metrics:
+                    # session_metrics is Dict[str, Any] from ContextEngine
                     # Check if we have it in memory
                     if session_id in self._sessions:
                         # Update in-memory session with ContextEngine metrics
                         session = self._sessions[session_id]
-                        session.request_count = session_metrics.request_count
-                        session.error_count = session_metrics.error_count
-                        session.total_processing_time = session_metrics.total_processing_time
-                        session.status = session_metrics.status
+                        if isinstance(session_metrics, dict):
+                            session.request_count = session_metrics.get("request_count", 0)
+                            session.error_count = session_metrics.get("error_count", 0)
+                            session.total_processing_time = session_metrics.get("total_processing_time", 0.0)
+                            session.status = session_metrics.get("status", "active")
+                        else:
+                            session.request_count = session_metrics.request_count
+                            session.error_count = session_metrics.error_count
+                            session.total_processing_time = session_metrics.total_processing_time
+                            session.status = session_metrics.status
                         return session
                     else:
                         # Create in-memory session from ContextEngine data
-                        session = Session(
-                            session_id=session_id,
-                            agent_id=self.agent_id,
-                            created_at=session_metrics.created_at,
-                            last_activity=session_metrics.last_activity,
-                            status=session_metrics.status,
-                            request_count=session_metrics.request_count,
-                            error_count=session_metrics.error_count,
-                            total_processing_time=session_metrics.total_processing_time,
-                        )
+                        if isinstance(session_metrics, dict):
+                            # Convert datetime strings to datetime objects if needed
+                            created_at_val = session_metrics.get("created_at")
+                            if isinstance(created_at_val, str):
+                                try:
+                                    created_at_val = datetime.fromisoformat(created_at_val.replace("Z", "+00:00"))
+                                except (ValueError, AttributeError):
+                                    created_at_val = datetime.utcnow()
+                            elif created_at_val is None:
+                                created_at_val = datetime.utcnow()
+                            
+                            last_activity_val = session_metrics.get("last_activity")
+                            if isinstance(last_activity_val, str):
+                                try:
+                                    last_activity_val = datetime.fromisoformat(last_activity_val.replace("Z", "+00:00"))
+                                except (ValueError, AttributeError):
+                                    last_activity_val = datetime.utcnow()
+                            elif last_activity_val is None:
+                                last_activity_val = datetime.utcnow()
+                            
+                            session = Session(
+                                session_id=session_id,
+                                agent_id=self.agent_id,
+                                created_at=created_at_val if isinstance(created_at_val, datetime) else datetime.utcnow(),
+                                last_activity=last_activity_val if isinstance(last_activity_val, datetime) else datetime.utcnow(),
+                                status=session_metrics.get("status", "active"),
+                                request_count=session_metrics.get("request_count", 0),
+                                error_count=session_metrics.get("error_count", 0),
+                                total_processing_time=session_metrics.get("total_processing_time", 0.0),
+                            )
+                        else:
+                            session = Session(
+                                session_id=session_id,
+                                agent_id=self.agent_id,
+                                created_at=session_metrics.created_at,
+                                last_activity=session_metrics.last_activity,
+                                status=session_metrics.status,
+                                request_count=session_metrics.request_count,
+                                error_count=session_metrics.error_count,
+                                total_processing_time=session_metrics.total_processing_time,
+                            )
                         self._sessions[session_id] = session
                         return session
 

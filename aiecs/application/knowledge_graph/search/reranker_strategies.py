@@ -279,7 +279,8 @@ class StructuralReranker(RerankerStrategy):
 
         # Use all entities as seeds for global PageRank
         # In practice, you might want to use seed entities from query context
-        all_entities = await self.graph_store.get_all_entities()
+        # get_all_entities is available via PaginationMixinProtocol
+        all_entities = await self.graph_store.get_all_entities()  # type: ignore[attr-defined]
         seed_ids = [e.id for e in all_entities[: min(10, len(all_entities))]]
 
         if not seed_ids:

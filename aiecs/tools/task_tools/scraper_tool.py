@@ -189,7 +189,7 @@ class ScraperTool(BaseTool):
                 import csv
 
                 with open(path, "w", newline="", encoding="utf-8") as f:
-                    writer: Union[csv.Writer, csv.DictWriter]
+                    writer: Union[Any, Any]  # csv.writer or csv.DictWriter instance
                     if isinstance(content, dict):
                         writer = csv.writer(f)
                         writer.writerow(content.keys())

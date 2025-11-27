@@ -118,7 +118,7 @@ class StructuredDataPipeline:
             skip_errors: Whether to skip rows with errors and continue processing
         """
         # Validate mapping
-        validation_errors = mapping.validate()
+        validation_errors = mapping.validate_mapping()
         if validation_errors:
             raise ValueError(f"Invalid schema mapping: {validation_errors}")
 

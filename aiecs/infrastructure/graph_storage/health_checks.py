@@ -59,7 +59,7 @@ class HealthCheckResult:
             "status": self.status.value,
             "message": self.message,
             "response_time_ms": round(self.response_time_ms, 2),
-            "timestamp": self.timestamp.isoformat(),
+            "timestamp": self.timestamp.isoformat() if self.timestamp is not None else None,
             "details": self.details,
             "error": self.error,
         }
@@ -369,7 +369,7 @@ class HealthMonitor:
         """
         cutoff = datetime.utcnow() - timedelta(minutes=window_minutes)
 
-        recent = [r for r in self.health_history if r.timestamp >= cutoff]
+        recent = [r for r in self.health_history if r.timestamp is not None and r.timestamp >= cutoff]
 
         if not recent:
             return 0.0

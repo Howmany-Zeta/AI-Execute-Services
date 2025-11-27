@@ -101,6 +101,8 @@ class InMemoryGraphStore(GraphStore):
             raise ValueError(f"Entity with ID '{entity.id}' already exists")
 
         # Add to networkx graph
+        if self.graph is None:
+            raise RuntimeError("GraphStore not initialized. Call initialize() first.")
         self.graph.add_node(entity.id, entity=entity)
 
         # Add to entity index
@@ -145,6 +147,8 @@ class InMemoryGraphStore(GraphStore):
             raise ValueError(f"Target entity '{relation.target_id}' not found")
 
         # Add to networkx graph
+        if self.graph is None:
+            raise RuntimeError("GraphStore not initialized. Call initialize() first.")
         self.graph.add_edge(
             relation.source_id,
             relation.target_id,
@@ -486,6 +490,8 @@ class InMemoryGraphStore(GraphStore):
         if not self._initialized:
             return {"nodes": 0, "edges": 0, "entities": 0, "relations": 0}
 
+        if self.graph is None:
+            return {"nodes": 0, "edges": 0, "entities": 0, "relations": 0}
         return {
             "nodes": self.graph.number_of_nodes(),
             "edges": self.graph.number_of_edges(),
@@ -495,7 +501,7 @@ class InMemoryGraphStore(GraphStore):
 
     def clear(self) -> None:
         """Clear all data from the graph"""
-        if self._initialized:
+        if self._initialized and self.graph is not None:
             self.graph.clear()
             self.entities.clear()
             self.relations.clear()

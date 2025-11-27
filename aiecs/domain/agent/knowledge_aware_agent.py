@@ -31,6 +31,7 @@ if TYPE_CHECKING:
         ConfigManagerProtocol,
         CheckpointerProtocol,
     )
+    from aiecs.application.knowledge_graph.search.hybrid_search import SearchMode
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +177,11 @@ class KnowledgeAwareAgent(HybridAgent):
         self._cache_misses: int = 0
 
         # Graph metrics
-        self._graph_metrics: GraphMetrics = GraphMetrics()
+        self._graph_metrics: GraphMetrics = GraphMetrics(
+            min_graph_query_time=None,
+            max_graph_query_time=None,
+            last_reset_at=None
+        )
 
         # Prometheus metrics (initialized lazily)
         self._prometheus_metrics: Optional[Dict[str, Any]] = None
@@ -360,14 +365,15 @@ Use graph reasoning proactively when questions involve:
         from aiecs.llm import LLMClientFactory
 
         # Check if strategy selection LLM is configured
+        config = self.get_config()
         if (
-            self.config.strategy_selection_llm_provider is not None
-            and self.config.strategy_selection_llm_provider.strip()
+            config.strategy_selection_llm_provider is not None
+            and config.strategy_selection_llm_provider.strip()
         ):
             try:
                 # Resolve LLM client from provider name
                 client = LLMClientFactory.get_client(
-                    self.config.strategy_selection_llm_provider
+                    config.strategy_selection_llm_provider
                 )
                 # Cast to LLMClientProtocol since BaseLLMClient implements the protocol
                 from typing import cast
@@ -382,7 +388,7 @@ Use graph reasoning proactively when questions involve:
 
                 logger.info(
                     f"Created QueryIntentClassifier with provider: "
-                    f"{self.config.strategy_selection_llm_provider}"
+                    f"{config.strategy_selection_llm_provider}"
                 )
                 return classifier
 
@@ -544,7 +550,7 @@ Use graph reasoning proactively when questions involve:
                         self.created_at = None
                         if data.get("timestamp"):
                             try:
-                                from dateutil import parser
+                                from dateutil import parser  # type: ignore[import-untyped]
                                 self.created_at = parser.parse(data["timestamp"])
                             except:
                                 pass
@@ -904,7 +910,7 @@ Use graph reasoning proactively when questions involve:
                 strategy = context["retrieval_strategy"]
 
             # Step 3: Check cache for this query
-            cache_key = self._generate_cache_key(task, strategy)
+            cache_key = self._generate_cache_key("knowledge_retrieval", {"task": task, "strategy": strategy})
             cached_entities = await self._get_cached_knowledge(cache_key)
             if cached_entities is not None:
                 logger.debug(f"Cache hit for knowledge retrieval (key: {cache_key})")
@@ -1249,20 +1255,25 @@ Use graph reasoning proactively when questions involve:
         logger.debug(f"Auto-selected HYBRID mode (default)")
         return SearchMode.HYBRID
 
-    def _generate_cache_key(self, task: str, strategy: str) -> str:
+    def _generate_cache_key(self, tool_name: str, parameters: Dict[str, Any]) -> str:
         """
         Generate cache key for knowledge retrieval.
 
-        Uses hash of task description and strategy to create a unique key.
+        Overrides base class method to handle knowledge retrieval cache keys.
+        Expects parameters dict with 'task' and 'strategy' keys.
 
         Args:
-            task: Task description
-            strategy: Retrieval strategy
+            tool_name: Name of the tool (unused for knowledge retrieval)
+            parameters: Tool parameters dict containing 'task' and 'strategy'
 
         Returns:
             Cache key string
         """
         import hashlib
+
+        # Extract task and strategy from parameters
+        task = parameters.get("task", "")
+        strategy = parameters.get("strategy", "")
 
         # Create hash of task description
         task_hash = hashlib.md5(task.encode()).hexdigest()[:16]
@@ -1654,7 +1665,11 @@ Use graph reasoning proactively when questions involve:
 
     def reset_graph_metrics(self) -> None:
         """Reset graph metrics to initial state."""
-        self._graph_metrics = GraphMetrics()
+        self._graph_metrics = GraphMetrics(
+            min_graph_query_time=None,
+            max_graph_query_time=None,
+            last_reset_at=None
+        )
         logger.debug(f"Reset graph metrics for agent {self.agent_id}")
 
     def get_comprehensive_status(self) -> Dict[str, Any]:

@@ -192,8 +192,11 @@ class LLMRelationExtractor(RelationExtractor):
         for rel_type in types_to_extract:
             if self.schema and self.schema.has_relation_type(rel_type):
                 schema_rel = self.schema.get_relation_type(rel_type)
-                desc = schema_rel.description or f"'{rel_type}' relation"
-                relation_descriptions.append(f"- {rel_type}: {desc}")
+                if schema_rel is not None:
+                    desc = schema_rel.description or f"'{rel_type}' relation"
+                    relation_descriptions.append(f"- {rel_type}: {desc}")
+                else:
+                    relation_descriptions.append(f"- {rel_type}: Extract this type of relationship")
             else:
                 relation_descriptions.append(f"- {rel_type}: Extract this type of relationship")
 

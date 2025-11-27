@@ -85,11 +85,15 @@ def resolve_llm_client(
             logger.info(f"Resolved LLM client for provider: {cache_key}")
 
         # Cache the client if caching is enabled
+        # Cast to LLMClientProtocol since BaseLLMClient implements the protocol
         if use_cache:
-            _client_cache[cache_key] = client
+            from typing import cast
+            _client_cache[cache_key] = cast("LLMClientProtocol", client)
             logger.debug(f"Cached client for provider: {cache_key}")
 
-        return client
+        # Cast return value to match return type annotation
+        from typing import cast
+        return cast("LLMClientProtocol", client)
 
     except ValueError as e:
         logger.error(f"Failed to resolve LLM client for provider: {cache_key}")

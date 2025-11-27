@@ -955,7 +955,7 @@ class DocumentLayoutTool(BaseTool):
         optimization_goals: List[str],
     ) -> Dict[str, Any]:
         """Generate layout optimization plan"""
-        plan = {
+        plan: Dict[str, Any] = {
             "optimizations": [],
             "goals": optimization_goals,
             "current_layout": current_layout,

@@ -6,7 +6,7 @@ Automatically generate Pydantic Schema from method signatures and type annotatio
 
 import inspect
 import logging
-from typing import Any, Dict, Optional, Type, get_type_hints, Callable
+from typing import Any, Dict, Optional, Type, get_type_hints, Callable, List
 from pydantic import BaseModel, Field, create_model, ConfigDict
 
 logger = logging.getLogger(__name__)

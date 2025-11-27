@@ -1597,14 +1597,16 @@ Please provide a detailed editing plan with:
             "generate_toc": True,
             "insertions": [],
         }
+        # Explicitly type plan to allow append operations
+        plan_dict: Dict[str, Any] = plan
 
         if include_analysis:
-            plan["sections"].append({"title": "Analysis", "level": 2, "required": True})
-            plan["sections"].append({"title": "Insights", "level": 2, "required": True})
+            plan_dict["sections"].append({"title": "Analysis", "level": 2, "required": True})
+            plan_dict["sections"].append({"title": "Insights", "level": 2, "required": True})
 
         # Add chart insertions for each data source
         for i, data_source in enumerate(data_sources):
-            plan["insertions"].append(
+            plan_dict["insertions"].append(
                 {
                     "content_type": "chart",
                     "chart_data": data_source.get("data", {}),
@@ -1614,7 +1616,7 @@ Please provide a detailed editing plan with:
                 }
             )
 
-        return plan
+        return plan_dict
 
     def _generate_charts_from_data(
         self,

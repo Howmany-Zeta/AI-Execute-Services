@@ -35,6 +35,7 @@ class LLMConfigLoader:
     _instance: Optional["LLMConfigLoader"] = None
     _lock = Lock()
     _config_lock = Lock()
+    _initialized: bool = False
 
     def __new__(cls):
         """Ensure singleton instance"""

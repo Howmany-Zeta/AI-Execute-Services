@@ -16,17 +16,24 @@ import gzip
 import pickle
 
 try:
-    from google.cloud import storage
+    from google.cloud import storage  # type: ignore[attr-defined]
     from google.cloud.exceptions import NotFound, GoogleCloudError
     from google.auth.exceptions import DefaultCredentialsError
 
     GCS_AVAILABLE = True
 except ImportError:
     GCS_AVAILABLE = False
-    storage = None  # type: ignore[assignment]
-    NotFound = Exception  # type: ignore[assignment]
-    GoogleCloudError = Exception  # type: ignore[assignment]
-    DefaultCredentialsError = Exception  # type: ignore[assignment]
+    from typing import Any, TYPE_CHECKING
+    if TYPE_CHECKING:
+        storage: Any  # type: ignore[assignment,no-redef]
+        NotFound: Any  # type: ignore[assignment,no-redef]
+        GoogleCloudError: Any  # type: ignore[assignment,no-redef]
+        DefaultCredentialsError: Any  # type: ignore[assignment,no-redef]
+    else:
+        storage = None  # type: ignore[assignment]
+        NotFound = Exception  # type: ignore[assignment]
+        GoogleCloudError = Exception  # type: ignore[assignment]
+        DefaultCredentialsError = Exception  # type: ignore[assignment]
 
 from ..monitoring.global_metrics_manager import get_global_metrics
 
@@ -459,6 +466,9 @@ class FileStorage:
         compressed: bool,
     ) -> bool:
         """Store data in Google Cloud Storage."""
+        if self._gcs_bucket is None:
+            logger.error("GCS bucket not initialized")
+            return False
         try:
             blob = self._gcs_bucket.blob(key)
 
@@ -478,6 +488,9 @@ class FileStorage:
 
     async def _retrieve_gcs(self, key: str) -> Optional[Any]:
         """Retrieve data from Google Cloud Storage."""
+        if self._gcs_bucket is None:
+            logger.error("GCS bucket not initialized")
+            return None
         try:
             blob = self._gcs_bucket.blob(key)
 
@@ -502,6 +515,9 @@ class FileStorage:
 
     async def _delete_gcs(self, key: str) -> bool:
         """Delete data from Google Cloud Storage."""
+        if self._gcs_bucket is None:
+            logger.error("GCS bucket not initialized")
+            return False
         try:
             blob = self._gcs_bucket.blob(key)
             blob.delete()
@@ -515,6 +531,9 @@ class FileStorage:
 
     async def _exists_gcs(self, key: str) -> bool:
         """Check if data exists in Google Cloud Storage."""
+        if self._gcs_bucket is None:
+            logger.error("GCS bucket not initialized")
+            return False
         try:
             blob = self._gcs_bucket.blob(key)
             return blob.exists()
@@ -525,6 +544,9 @@ class FileStorage:
 
     async def _list_keys_gcs(self, prefix: Optional[str], limit: Optional[int]) -> List[str]:
         """List keys from Google Cloud Storage."""
+        if self._gcs_bucket is None:
+            logger.error("GCS bucket not initialized")
+            return []
         try:
             blobs = self._gcs_bucket.list_blobs(prefix=prefix, max_results=limit)
             return [blob.name for blob in blobs]

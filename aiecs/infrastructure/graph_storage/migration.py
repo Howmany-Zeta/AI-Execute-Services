@@ -62,7 +62,7 @@ class GraphStorageMigrator:
         """
         logger.info(f"Starting migration from {type(self.source).__name__} to {type(self.target).__name__}")
 
-        stats = {
+        stats: Dict[str, Any] = {
             "entities_migrated": 0,
             "relations_migrated": 0,
             "errors": [],
@@ -103,15 +103,16 @@ class GraphStorageMigrator:
 
         except Exception as e:
             logger.error(f"Migration failed: {e}")
-            stats["errors"].append(str(e))
+            if isinstance(stats, dict) and "errors" in stats:
+                stats["errors"].append(str(e))
             raise
 
         return stats
 
     async def _migrate_entities(self, batch_size: int, show_progress: bool) -> int:
         """Migrate all entities from source to target"""
-        # Get all entities from source
-        entities = await self.source.get_all_entities()
+        # Get all entities from source (available via PaginationMixinProtocol)
+        entities = await self.source.get_all_entities()  # type: ignore[attr-defined]
         total = len(entities)
 
         if total == 0:
@@ -129,7 +130,8 @@ class GraphStorageMigrator:
             batch = entities[i : i + batch_size]
 
             try:
-                async with self.target.transaction():
+                # transaction() available via TransactionMixinProtocol
+                async with self.target.transaction():  # type: ignore[attr-defined]
                     for entity in batch:
                         try:
                             await self.target.add_entity(entity)
@@ -153,8 +155,8 @@ class GraphStorageMigrator:
         """Migrate all relations from source to target"""
         # Get all relations by getting all entities and their neighbors
         # This is a workaround since we don't have a direct get_all_relations
-        # method
-        all_entities = await self.source.get_all_entities()
+        # method (available via PaginationMixinProtocol)
+        all_entities = await self.source.get_all_entities()  # type: ignore[attr-defined]
         relations = []
 
         # Collect all unique relations
@@ -187,12 +189,13 @@ class GraphStorageMigrator:
             batch = relations[i : i + batch_size]
 
             try:
-                async with self.target.transaction():
+                # transaction() available via TransactionMixinProtocol
+                async with self.target.transaction():  # type: ignore[attr-defined]
                     for relation in batch:
                         try:
                             await self.target.add_relation(relation)
                             migrated += 1
-                            if show_progress:
+                            if show_progress and hasattr(iterator, "update"):
                                 iterator.update(1)
                         except Exception as e:
                             error_msg = f"Failed to migrate relation {relation.id}: {e}"
@@ -214,6 +217,8 @@ class GraphStorageMigrator:
 
         if isinstance(store, SQLiteGraphStore):
             # SQLite direct query
+            if store.conn is None:
+                raise RuntimeError("SQLite connection not initialized")
             cursor = await store.conn.execute("SELECT id, relation_type, source_id, target_id, properties, weight FROM relations")
             rows = await cursor.fetchall()
 
@@ -233,6 +238,8 @@ class GraphStorageMigrator:
 
         elif isinstance(store, PostgresGraphStore):
             # PostgreSQL direct query
+            if store.pool is None:
+                raise RuntimeError("PostgreSQL connection pool not initialized")
             async with store.pool.acquire() as conn:
                 rows = await conn.fetch(
                     """
@@ -258,9 +265,9 @@ class GraphStorageMigrator:
     async def _verify_migration(self) -> Dict[str, Any]:
         """Verify migration integrity"""
         try:
-            # Get counts from both stores
-            source_stats = await self.source.get_stats()
-            target_stats = await self.target.get_stats()
+            # Get counts from both stores (available via StatsMixinProtocol)
+            source_stats = await self.source.get_stats()  # type: ignore[attr-defined]
+            target_stats = await self.target.get_stats()  # type: ignore[attr-defined]
 
             entity_match = source_stats["entity_count"] == target_stats["entity_count"]
             relation_match = source_stats["relation_count"] == target_stats["relation_count"]

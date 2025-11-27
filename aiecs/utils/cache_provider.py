@@ -511,7 +511,8 @@ class RedisCacheProvider(ICacheProvider):
             return cls._instance
 
         try:
-            from aiecs.infrastructure.persistence import get_redis_client
+            # get_redis_client may not be available in all installations
+            from aiecs.infrastructure.persistence import get_redis_client  # type: ignore[attr-defined]
 
             redis_client = await get_redis_client()
 
