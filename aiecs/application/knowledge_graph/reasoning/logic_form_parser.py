@@ -115,10 +115,10 @@ class LogicFormParser:
         """
         self.schema_manager = schema_manager
         if schema_manager:
-            self.query_parser = LogicQueryParser(schema_manager)
+            self.query_parser: Optional[LogicQueryParser] = LogicQueryParser(schema_manager)
         else:
             # Create a minimal schema manager if none provided
-            self.query_parser = None
+            self.query_parser: Optional[LogicQueryParser] = None
 
     def parse(self, query: str) -> LogicalQuery:
         """

@@ -394,6 +394,8 @@ class GraphSearchTool(BaseTool):
                 initial_max_results = max(rerank_top_k, max_results)
 
             if mode == SearchModeEnum.VECTOR:
+                if query_embedding is None:
+                    raise ValueError("query_embedding is required for vector search mode")
                 results = await self._vector_search(
                     query_embedding,
                     entity_type,
@@ -767,6 +769,8 @@ class GraphSearchTool(BaseTool):
         await self._initialize()
         if query and not query_embedding:
             query_embedding = [0.1] * 128  # Placeholder
+        if query_embedding is None:
+            raise ValueError("query_embedding is required for vector search")
         results = await self._vector_search(query_embedding, entity_type, max_results, vector_threshold)
         return {
             "success": True,

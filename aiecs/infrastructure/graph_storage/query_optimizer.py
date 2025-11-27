@@ -518,7 +518,7 @@ class QueryStatisticsCollector:
         ```
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize statistics collector"""
         self._execution_times: List[float] = []
 
@@ -532,7 +532,7 @@ class QueryStatisticsCollector:
         Returns:
             Query statistics
         """
-        from aiecs.domain.knowledge_graph.graph_store import GraphStore
+        from aiecs.domain.knowledge_graph.graph_store import GraphStore  # type: ignore[import-untyped]
 
         if not isinstance(graph_store, GraphStore):
             logger.warning("Invalid graph store type")

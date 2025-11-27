@@ -183,10 +183,10 @@ class ContentInsertionTool(BaseTool):
         self._init_external_tools()
 
         # Track insertions
-        self._insertions = []
+        self._insertions: List[Any] = []
 
         # Content registry for cross-references
-        self._content_registry = {}
+        self._content_registry: Dict[str, Any] = {}
 
     def _init_directories(self):
         """Initialize required directories"""

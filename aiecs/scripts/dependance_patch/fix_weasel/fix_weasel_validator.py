@@ -14,7 +14,7 @@ import re
 def get_weasel_path():
     """Get the weasel package path in the current Python environment."""
     try:
-        import weasel
+        import weasel  # type: ignore[import-untyped]
         import inspect
 
         weasel_file = inspect.getfile(weasel)

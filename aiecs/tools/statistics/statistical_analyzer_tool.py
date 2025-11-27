@@ -13,9 +13,9 @@ import logging
 from typing import Dict, Any, List, Optional, Union
 from enum import Enum
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 import numpy as np
-from scipy import stats as scipy_stats
+from scipy import stats as scipy_stats  # type: ignore[import-untyped]
 from pydantic import BaseModel, Field, ConfigDict
 
 from aiecs.tools.base_tool import BaseTool
@@ -369,8 +369,8 @@ class StatisticalAnalyzerTool(BaseTool):
         params: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Perform linear regression"""
-        from sklearn.linear_model import LinearRegression
-        from sklearn.metrics import r2_score, mean_squared_error
+        from sklearn.linear_model import LinearRegression  # type: ignore[import-untyped]
+        from sklearn.metrics import r2_score, mean_squared_error  # type: ignore[import-untyped]
 
         dependent = variables.get("dependent")
         independent = variables.get("independent", [])

@@ -7,7 +7,10 @@ resource sharing, and collaborative decision-making.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Set, Protocol
+from typing import Dict, List, Any, Optional, Set, Protocol, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from aiecs.domain.context.context_engine import ContextEngine
 import uuid
 
 from .models.community_models import (
@@ -72,7 +75,7 @@ class CommunityManager:
     Manager for agent communities, handling governance, collaboration, and resource sharing.
     """
 
-    def __init__(self, context_engine=None):
+    def __init__(self, context_engine: Optional["ContextEngine"] = None) -> None:
         """
         Initialize the community manager.
 

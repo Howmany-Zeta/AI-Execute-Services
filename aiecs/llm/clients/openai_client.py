@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, List, AsyncGenerator
+from typing import Optional, List, AsyncGenerator, cast, Any
 from openai import AsyncOpenAI
 from tenacity import (
     retry,
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 class OpenAIClient(BaseLLMClient):
     """OpenAI provider client"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__("OpenAI")
         self.settings = get_settings()
         self._client: Optional[AsyncOpenAI] = None
@@ -62,13 +62,15 @@ class OpenAIClient(BaseLLMClient):
         try:
             response = await client.chat.completions.create(
                 model=model,
-                messages=openai_messages,
+                messages=cast(Any, openai_messages),  # type: ignore[arg-type]
                 temperature=temperature,
                 max_tokens=max_tokens,
                 **kwargs,
             )
 
             content = response.choices[0].message.content
+            if content is None:
+                content = ""
             tokens_used = response.usage.total_tokens if response.usage else None
 
             # Estimate cost using config
@@ -108,16 +110,18 @@ class OpenAIClient(BaseLLMClient):
         try:
             stream = await client.chat.completions.create(
                 model=model,
-                messages=openai_messages,
+                messages=cast(Any, openai_messages),  # type: ignore[arg-type]
                 temperature=temperature,
                 max_tokens=max_tokens,
                 stream=True,
                 **kwargs,
             )
 
-            async for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
+            # Type narrowing: check if stream is async iterable
+            if hasattr(stream, "__aiter__"):
+                async for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        yield chunk.choices[0].delta.content
 
         except Exception as e:
             if "rate_limit" in str(e).lower():

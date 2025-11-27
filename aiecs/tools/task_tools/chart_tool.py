@@ -8,9 +8,9 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 import numpy as np
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 import matplotlib.pyplot as plt
-import seaborn as sns
+import seaborn as sns  # type: ignore[import-untyped]
 
 from aiecs.tools import register_tool
 from aiecs.tools.base_tool import BaseTool
@@ -197,17 +197,17 @@ class ChartTool(BaseTool):
 
         try:
             if ext == ".sav":
-                import pyreadstat
+                import pyreadstat  # type: ignore[import-untyped]
 
                 df, meta = pyreadstat.read_sav(file_path)
                 return df
             elif ext == ".sas7bdat":
-                import pyreadstat
+                import pyreadstat  # type: ignore[import-untyped]
 
                 df, meta = pyreadstat.read_sas7bdat(file_path)
                 return df
             elif ext == ".por":
-                import pyreadstat
+                import pyreadstat  # type: ignore[import-untyped]
 
                 df, meta = pyreadstat.read_por(file_path)
                 return df
@@ -226,7 +226,7 @@ class ChartTool(BaseTool):
         except Exception as e:
             raise ValueError(f"Error reading file {file_path}: {str(e)}")
 
-    def _export_result(self, result: Dict[str, Any], path: str, format: ExportFormat) -> None:
+    def _export_result(self, result: Dict[str, Any], path: str, format: ExportFormat) -> str:
         """
         Export results to the specified format
 
@@ -269,7 +269,7 @@ class ChartTool(BaseTool):
                     data_to_export.to_csv(path, index=False)
                 else:
                     # Fallback: convert the entire result to a flat structure
-                    flat_data = {}
+                    flat_data: Dict[str, Any] = {}
                     for k, v in result.items():
                         if not isinstance(v, (dict, list, pd.DataFrame)):
                             flat_data[k] = v
@@ -601,11 +601,12 @@ class ChartTool(BaseTool):
             dpi,
         )
 
-        # Create result
+        # Create result - filter out None values from variables
+        var_list = variables or [v for v in [x, y, hue] if v is not None]
         result = {
             "plot_type": plot_type,
             "output_path": output_path,
-            "variables": variables or [x, y, hue],
+            "variables": var_list,
             "title": title or f"{plot_type.capitalize()} Plot",
         }
 

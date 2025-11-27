@@ -22,10 +22,10 @@ try:
     LOGIC_PARSER_AVAILABLE = True
 except ImportError:
     LOGIC_PARSER_AVAILABLE = False
-    LogicQueryParser = None  # type: ignore[misc]
-    ParserError = None  # type: ignore[misc]
-    QueryPlan = None  # type: ignore[misc]
-    GraphStore = None  # type: ignore[misc]
+    LogicQueryParser = None  # type: ignore[assignment]
+    ParserError = None  # type: ignore[assignment]
+    QueryPlan = None  # type: ignore[assignment]
+    GraphStore = None  # type: ignore[assignment]
 
 
 class LogicQueryIntegration:

@@ -2,7 +2,7 @@ import json
 import asyncio
 import threading
 import time
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, MutableMapping
 from cachetools import LRUCache
 from contextlib import contextmanager
 import logging
@@ -36,7 +36,7 @@ class ExecutionUtils:
         self.cache_ttl = cache_ttl
         self.retry_attempts = retry_attempts
         self.retry_backoff = retry_backoff
-        self._cache = LRUCache(maxsize=self.cache_size) if cache_size > 0 else None
+        self._cache: Optional[MutableMapping[str, Any]] = LRUCache(maxsize=self.cache_size) if cache_size > 0 else None
         self._cache_lock = threading.Lock()
         self._cache_ttl_dict: Dict[str, float] = {}
 
@@ -144,7 +144,7 @@ class ExecutionUtils:
             TimeoutError: If operation exceeds timeout duration
         """
         loop = asyncio.get_event_loop()
-        future = asyncio.Future()
+        future: asyncio.Future[None] = asyncio.Future()
         handle = loop.call_later(
             seconds,
             lambda: future.set_exception(TimeoutError(f"Operation timed out after {seconds}s")),

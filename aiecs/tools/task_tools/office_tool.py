@@ -5,15 +5,15 @@ from pptx.util import Inches
 from pptx import Presentation
 from docx.shared import Pt
 from docx import Document as DocxDocument
-from tika import parser
+from tika import parser  # type: ignore[import-untyped]
 import os
 import logging
 import warnings
 from typing import List, Dict, Optional, Any
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 import pdfplumber
-import pytesseract
+import pytesseract  # type: ignore[import-untyped]
 from PIL import Image
 
 # Configure Tika log path to user-writable directory before importing
@@ -347,7 +347,7 @@ class OfficeTool(BaseTool):
             FileOperationError: If image text extraction fails.
         """
         try:
-            image = Image.open(file_path)
+            image: Image.Image = Image.open(file_path)
             # Convert to RGB if necessary
             if image.mode != "RGB":
                 image = image.convert("RGB")

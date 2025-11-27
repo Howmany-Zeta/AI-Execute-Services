@@ -1,7 +1,7 @@
 import re
 import json
 import logging
-from typing import Dict, List, Any, Callable
+from typing import Dict, List, Any, Callable, Optional
 from aiecs.domain.execution.model import TaskStepResult, TaskStatus, ErrorCode
 
 logger = logging.getLogger(__name__)
@@ -35,9 +35,9 @@ class DSLProcessor:
         self,
         condition: str,
         intent_categories: List[str],
-        context: Dict[str, Any] = None,
-        input_data: Dict[str, Any] = None,
-        results: List[TaskStepResult] = None,
+        context: Optional[Dict[str, Any]] = None,
+        input_data: Optional[Dict[str, Any]] = None,
+        results: Optional[List[TaskStepResult]] = None,
     ) -> bool:
         """
         Evaluate condition expression, supporting multiple condition types
@@ -182,7 +182,7 @@ class DSLProcessor:
         context: Dict,
         execute_single_task: Callable,
         execute_batch_task: Callable,
-        results: List[TaskStepResult] = None,
+        results: Optional[List[TaskStepResult]] = None,
     ) -> TaskStepResult:
         """
         Execute DSL step based on step type (if, parallel, task, sequence)
@@ -255,7 +255,7 @@ class DSLProcessor:
         execute_single_task: Callable,
         execute_batch_task: Callable,
         span=None,
-        results: List[TaskStepResult] = None,
+        results: Optional[List[TaskStepResult]] = None,
     ) -> TaskStepResult:
         """Handle conditional 'if' step"""
         condition = step["if"]
@@ -376,7 +376,7 @@ class DSLProcessor:
         execute_single_task: Callable,
         execute_batch_task: Callable,
         span=None,
-        results: List[TaskStepResult] = None,
+        results: Optional[List[TaskStepResult]] = None,
     ) -> TaskStepResult:
         """Handle sequential execution steps"""
         sequence_steps = step["sequence"]
@@ -463,7 +463,7 @@ class DSLProcessor:
         execute_single_task: Callable,
         execute_batch_task: Callable,
         span=None,
-        results: List[TaskStepResult] = None,
+        results: Optional[List[TaskStepResult]] = None,
     ) -> TaskStepResult:
         """Handle loop step"""
         loop_config = step["loop"]

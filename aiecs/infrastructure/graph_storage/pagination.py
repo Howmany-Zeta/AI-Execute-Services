@@ -8,12 +8,15 @@ enabling efficient navigation through millions of entities and relations.
 import base64
 import json
 import logging
-from typing import Generic, TypeVar, List, Optional, Dict, Any
+from typing import Generic, TypeVar, List, Optional, Dict, Any, TYPE_CHECKING
 from dataclasses import dataclass
 from enum import Enum
 
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.relation import Relation
+
+if TYPE_CHECKING:
+    from aiecs.infrastructure.graph_storage.protocols import PaginationMixinProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +155,9 @@ class PaginationMixin:
 
     Adds cursor-based and offset-based pagination methods for entities and relations.
 
+    This mixin expects the class it's mixed into to implement `PaginationMixinProtocol`,
+    specifically the `get_all_entities()` method.
+
     Example:
         ```python
         class MyGraphStore(GraphStore, PaginationMixin):
@@ -170,6 +176,14 @@ class PaginationMixin:
         page = await store.paginate_entities_offset(page=1, page_size=100)
         ```
     """
+
+    if TYPE_CHECKING:
+        # Type hint for mypy: this mixin expects PaginationMixinProtocol
+        def get_all_entities(
+            self, entity_type: Optional[str] = None, limit: Optional[int] = None
+        ) -> List[Entity]:
+            """Expected method from PaginationMixinProtocol"""
+            ...
 
     async def paginate_entities(
         self,
@@ -424,7 +438,7 @@ class PaginationMixin:
         """
         # Default implementation - not efficient, should be overridden
         # This is just a placeholder
-        relations = []
+        relations: List[Any] = []
 
         # For now, return empty list
         # Backends should implement efficient relation pagination

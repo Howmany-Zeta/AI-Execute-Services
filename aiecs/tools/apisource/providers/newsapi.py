@@ -96,7 +96,7 @@ class NewsAPIProvider(BaseAPIProvider):
         Returns:
             Dictionary containing news articles and metadata
         """
-        params = {}
+        params: Dict[str, Any] = {}
         if q:
             params["q"] = q
         if country:
@@ -137,7 +137,7 @@ class NewsAPIProvider(BaseAPIProvider):
         Returns:
             Dictionary containing search results and metadata
         """
-        params = {"q": q}
+        params: Dict[str, Any] = {"q": q}
         if from_date:
             params["from"] = from_date
         if to_date:

@@ -15,7 +15,7 @@ from jinja2 import FileSystemLoader, sandbox
 
 # from weasyprint import HTML  # TODO: Re-enable when deployment issues
 # are resolved
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 from pptx import Presentation
 from pptx.util import Pt
 from docx import Document
@@ -217,6 +217,8 @@ class ReportTool(BaseTool):
                 os.path.join(self.config.templates_dir, template_path)
                 tmpl = self._jinja_env.get_template(template_path)
             else:
+                if template_str is None:
+                    raise FileOperationError("Either template_path or template_str must be provided")
                 tmpl = self._jinja_env.from_string(template_str)
             html = tmpl.render(**context)
             csrf_meta = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; script-src 'self'; object-src 'none'\">\n"
@@ -417,6 +419,8 @@ class ReportTool(BaseTool):
             if template_path:
                 tmpl = self._jinja_env.get_template(template_path)
             else:
+                if template_str is None:
+                    raise FileOperationError("Either template_path or template_str must be provided")
                 tmpl = self._jinja_env.from_string(template_str)
             markdown_content = tmpl.render(**context)
             with open(output_path, "w", encoding="utf-8") as f:
@@ -460,6 +464,8 @@ class ReportTool(BaseTool):
             if template_path:
                 tmpl = self._jinja_env.get_template(template_path)
             else:
+                if template_str is None:
+                    raise FileOperationError("Either template_path or template_str must be provided")
                 tmpl = self._jinja_env.from_string(template_str)
             content = tmpl.render(**context)
             doc = Document()
@@ -526,7 +532,8 @@ class ReportTool(BaseTool):
                     labels=df[x_col] if x_col else labels,
                     autopct="%1.1f%%",
                 )
-                plt.title(title)
+                if title:
+                    plt.title(title)
             plt.savefig(output_path)
             plt.close()
             self._temp_manager.register_file(output_path)
@@ -561,40 +568,60 @@ class ReportTool(BaseTool):
         try:
             tasks = []
             input_data = contexts or datasets or slides
+            if input_data is None:
+                raise ValueError("At least one of contexts, datasets, or slides must be provided")
+            if not isinstance(input_data, list):
+                raise ValueError("input_data must be a list")
             for i, output_path in enumerate(output_paths):
-                op_params = {"output_path": output_path}
+                op_params: Dict[str, Any] = {"output_path": output_path}
+                
+                # Type narrowing: ensure input_data[i] is a dict for operations that need it
                 if operation in (
                     "generate_html",
                     "generate_markdown",
                     "generate_word",
                 ):
-                    op_params.update(input_data[i])
-                    op_params["template_path"] = input_data[i].get("template_path")
-                    op_params["template_str"] = input_data[i].get("template_str")
-                    if operation == "generate_word":
-                        op_params["font"] = input_data[i].get("font")
-                        op_params["font_size"] = input_data[i].get("font_size")
-                        op_params["font_color"] = input_data[i].get("font_color")
+                    item = input_data[i]
+                    if isinstance(item, dict):
+                        op_params.update(item)
+                        op_params["template_path"] = item.get("template_path")
+                        op_params["template_str"] = item.get("template_str")
+                        if operation == "generate_word":
+                            op_params["font"] = item.get("font")
+                            op_params["font_size"] = item.get("font_size")
+                            op_params["font_color"] = item.get("font_color")
                 elif operation == "generate_excel":
-                    op_params["sheets"] = input_data[i]
-                    op_params["styles"] = input_data[i].get("styles")
+                    item = input_data[i]
+                    op_params["sheets"] = item
+                    if isinstance(item, dict):
+                        op_params["styles"] = item.get("styles")
                 elif operation == "generate_pptx":
-                    op_params["slides"] = input_data[i]
-                    op_params["default_font"] = input_data[i][0].get("font") if input_data[i] else None
-                    op_params["default_font_size"] = input_data[i][0].get("font_size") if input_data[i] else None
-                    op_params["default_font_color"] = input_data[i][0].get("font_color") if input_data[i] else None
+                    item = input_data[i]
+                    op_params["slides"] = item
+                    if isinstance(item, list) and len(item) > 0 and isinstance(item[0], dict):
+                        op_params["default_font"] = item[0].get("font")
+                        op_params["default_font_size"] = item[0].get("font_size")
+                        op_params["default_font_color"] = item[0].get("font_color")
+                    else:
+                        op_params["default_font"] = None
+                        op_params["default_font_size"] = None
+                        op_params["default_font_color"] = None
                 elif operation == "generate_image":
-                    op_params.update(input_data[i])
+                    item = input_data[i]
+                    if isinstance(item, dict):
+                        op_params.update(item)
                 elif operation == "generate_pdf":
-                    op_params["html"] = input_data[i].get("html")
-                    op_params["html_schema"] = input_data[i] if input_data[i].get("context") else None
-                    op_params["page_size"] = input_data[i].get("page_size")
+                    item = input_data[i]
+                    if isinstance(item, dict):
+                        op_params["html"] = item.get("html")
+                        op_params["html_schema"] = item if item.get("context") else None
+                        op_params["page_size"] = item.get("page_size")
                 tasks.append({"op": operation, "kwargs": op_params})
             # Execute tasks synchronously for batch generation
             results = []
             for task in tasks:
                 op_name = task["op"]
-                kwargs = task["kwargs"]
+                kwargs: Dict[str, Any] = task["kwargs"]  # type: ignore[assignment]
 
                 if op_name == "generate_html":
                     result = self.generate_html(**kwargs)

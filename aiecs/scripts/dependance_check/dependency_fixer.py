@@ -360,7 +360,7 @@ def main():
 
     # Import and run dependency checker first
     try:
-        from aiecs.scripts.dependency_checker import DependencyChecker
+        from aiecs.scripts.dependency_checker import DependencyChecker  # type: ignore[import-untyped]
 
         checker = DependencyChecker()
         tools = checker.check_all_dependencies()

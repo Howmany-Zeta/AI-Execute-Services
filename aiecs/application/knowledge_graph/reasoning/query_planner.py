@@ -31,8 +31,8 @@ try:
     LOGIC_PARSER_AVAILABLE = True
 except ImportError:
     LOGIC_PARSER_AVAILABLE = False
-    LogicQueryParser = None  # type: ignore[misc]
-    ParserError = None  # type: ignore[misc]
+    LogicQueryParser = None  # type: ignore[assignment]
+    ParserError = None  # type: ignore[assignment]
 
 
 class QueryPlanner:
@@ -92,17 +92,17 @@ class QueryPlanner:
             statistics = collector.collect_from_graph_store(graph_store)
 
             # Initialize optimizer
-            self._optimizer = QueryOptimizer(statistics=statistics)
-            self._statistics_collector = collector
+            self._optimizer: Optional[QueryOptimizer] = QueryOptimizer(statistics=statistics)
+            self._statistics_collector: Optional[QueryStatisticsCollector] = collector
         else:
-            self._optimizer = None
+            self._optimizer: Optional[QueryOptimizer] = None
 
         # Logic query parser (if available)
         if LOGIC_PARSER_AVAILABLE and schema is not None:
-            self._logic_parser = LogicQueryParser(schema=schema)
+            self._logic_parser: Optional[LogicQueryParser] = LogicQueryParser(schema=schema)
         else:
-            self._logic_parser = None
-            self._statistics_collector = None
+            self._logic_parser: Optional[LogicQueryParser] = None
+            self._statistics_collector: Optional[QueryStatisticsCollector] = None
 
     def _initialize_query_patterns(self) -> List[Dict[str, Any]]:
         """Initialize query pattern matchers"""

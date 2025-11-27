@@ -839,7 +839,11 @@ class DecisionEngine:
             decision.votes_against = []
             decision.abstentions = []
             decision.status = DecisionStatus.PROPOSED
-            decision.voting_ends_at = datetime.utcnow() + timedelta(days=int(current_escalation["timeline"].split()[0]))
+            timeline_str = current_escalation.get("timeline", "0 days")
+            if isinstance(timeline_str, str):
+                decision.voting_ends_at = datetime.utcnow() + timedelta(days=int(timeline_str.split()[0]))
+            else:
+                decision.voting_ends_at = datetime.utcnow() + timedelta(days=7)  # Default to 7 days
 
         logger.info(f"Decision {decision_id} escalated to level {next_level}: {current_escalation['name']}")
         return result

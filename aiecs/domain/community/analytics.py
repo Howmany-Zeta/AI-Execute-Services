@@ -7,7 +7,10 @@ and collaboration effectiveness.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Any
+from typing import Dict, Any, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .community_manager import CommunityManager
 from collections import defaultdict
 
 from .models.community_models import DecisionStatus
@@ -20,7 +23,7 @@ class CommunityAnalytics:
     Analytics engine for tracking community health and effectiveness.
     """
 
-    def __init__(self, community_manager=None):
+    def __init__(self, community_manager: Optional["CommunityManager"] = None) -> None:
         """
         Initialize community analytics.
 
@@ -168,10 +171,10 @@ class CommunityAnalytics:
 
         # Calculate aggregate metrics
         total_members = len(member_metrics)
-        active_members = sum(1 for m in member_metrics.values() if m["is_active"])
-        total_votes = sum(m["votes_cast"] for m in member_metrics.values())
-        total_proposals = sum(m["proposals_made"] for m in member_metrics.values())
-        total_resources = sum(m["resources_created"] for m in member_metrics.values())
+        active_members = sum(1 for m in member_metrics.values() if m.get("is_active", False))
+        total_votes = sum(int(m.get("votes_cast", 0)) for m in member_metrics.values())
+        total_proposals = sum(int(m.get("proposals_made", 0)) for m in member_metrics.values())
+        total_resources = sum(int(m.get("resources_created", 0)) for m in member_metrics.values())
 
         # Identify top contributors
         top_voters = sorted(
