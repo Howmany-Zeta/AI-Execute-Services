@@ -332,7 +332,7 @@ class ToolRegistry:
         # Add parameter information
         if schema:
             try:
-                fields_raw = schema.__fields__ if hasattr(schema, "__fields__") else {}
+                fields_raw: Any = schema.__fields__ if hasattr(schema, "__fields__") else {}
                 # Type narrowing: ensure fields is a dict
                 fields: Dict[str, Any] = fields_raw if isinstance(fields_raw, dict) else {}
                 if isinstance(fields, dict) and fields:
@@ -489,7 +489,7 @@ def check_langchain_compatibility() -> Dict[str, Any]:
     Returns:
         Compatibility check results
     """
-    result = {
+    result: Dict[str, Any] = {
         "langchain_available": LANGCHAIN_AVAILABLE,
         "total_base_tools": len(list_tools()),
         "compatible_tools": [],

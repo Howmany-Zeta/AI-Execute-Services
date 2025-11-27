@@ -78,7 +78,7 @@ class ErrorContext:
             "relation_id": self.relation_id,
             "query": (self.query[:100] + "..." if self.query and len(self.query) > 100 else self.query),
             "parameters": self.parameters,
-            "timestamp": self.timestamp.isoformat(),
+            "timestamp": self.timestamp.isoformat() if self.timestamp is not None else None,
             "severity": self.severity.value,
         }
 

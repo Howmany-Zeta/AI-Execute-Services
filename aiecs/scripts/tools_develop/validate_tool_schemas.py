@@ -183,7 +183,7 @@ def analyze_tool_schemas(tool_name: str, tool_class: Type) -> Dict[str, Any]:
             schema = generate_schema_from_method(method, method_name)
             schema_type = "auto"
 
-        method_info = {
+        method_info: Dict[str, Any] = {
             "name": method_name,
             "schema": schema,
             "schema_type": schema_type,

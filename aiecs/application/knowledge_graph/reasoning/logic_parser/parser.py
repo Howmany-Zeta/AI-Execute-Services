@@ -28,11 +28,19 @@ try:
     LARK_AVAILABLE = True
 except ImportError:
     LARK_AVAILABLE = False
-    Lark = None  # type: ignore[assignment]
-    LarkError = Exception  # type: ignore[assignment]
-    UnexpectedInput = Exception  # type: ignore[assignment]
-    UnexpectedToken = Exception  # type: ignore[assignment]
-    UnexpectedCharacters = Exception  # type: ignore[assignment]
+    from typing import Any, TYPE_CHECKING
+    if TYPE_CHECKING:
+        Lark: Any  # type: ignore[assignment,no-redef]
+        LarkError: Any  # type: ignore[assignment,no-redef]
+        UnexpectedInput: Any  # type: ignore[assignment,no-redef]
+        UnexpectedToken: Any  # type: ignore[assignment,no-redef]
+        UnexpectedCharacters: Any  # type: ignore[assignment,no-redef]
+    else:
+        Lark = None  # type: ignore[assignment]
+        LarkError = Exception  # type: ignore[assignment]
+        UnexpectedInput = Exception  # type: ignore[assignment]
+        UnexpectedToken = Exception  # type: ignore[assignment]
+        UnexpectedCharacters = Exception  # type: ignore[assignment]
 
 # AST node types imported for type hints in docstrings
 # from .ast_nodes import ASTNode, QueryNode, FindNode, TraversalNode, FilterNode
@@ -47,7 +55,11 @@ try:
     QUERY_PLAN_AVAILABLE = True
 except ImportError:
     QUERY_PLAN_AVAILABLE = False
-    QueryPlan = None  # type: ignore[assignment]
+    from typing import TYPE_CHECKING
+    if TYPE_CHECKING:
+        QueryPlan: Any  # type: ignore[assignment,no-redef]
+    else:
+        QueryPlan = None  # type: ignore[assignment]
 
 
 class LogicQueryParser:

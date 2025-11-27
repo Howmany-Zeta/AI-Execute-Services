@@ -124,6 +124,8 @@ class BatchOperationsMixin:
         copy_data.seek(0)
 
         # Execute COPY
+        if self.pool is None:
+            raise RuntimeError("Connection pool not initialized")
         async with self.pool.acquire() as conn:
             try:
                 result = await conn.copy_to_table(
@@ -189,6 +191,8 @@ class BatchOperationsMixin:
                 updated_at = CURRENT_TIMESTAMP
         """
 
+        if self.pool is None:
+            raise RuntimeError("Connection pool not initialized")
         async with self.pool.acquire() as conn:
             try:
                 await conn.execute(query, *values)
@@ -271,6 +275,8 @@ class BatchOperationsMixin:
         copy_data.seek(0)
 
         # Execute COPY
+        if self.pool is None:
+            raise RuntimeError("Connection pool not initialized")
         async with self.pool.acquire() as conn:
             try:
                 result = await conn.copy_to_table(
@@ -346,6 +352,8 @@ class BatchOperationsMixin:
                 updated_at = CURRENT_TIMESTAMP
         """
 
+        if self.pool is None:
+            raise RuntimeError("Connection pool not initialized")
         async with self.pool.acquire() as conn:
             try:
                 await conn.execute(query, *values)
@@ -379,6 +387,8 @@ class BatchOperationsMixin:
             # Use ANY() for efficient batch delete
             query = "DELETE FROM graph_entities WHERE id = ANY($1)"
 
+            if self.pool is None:
+                raise RuntimeError("Connection pool not initialized")
             async with self.pool.acquire() as conn:
                 result = await conn.execute(query, batch)
                 # Parse result: "DELETE n"
@@ -413,6 +423,8 @@ class BatchOperationsMixin:
             # Use ANY() for efficient batch delete
             query = "DELETE FROM graph_relations WHERE id = ANY($1)"
 
+            if self.pool is None:
+                raise RuntimeError("Connection pool not initialized")
             async with self.pool.acquire() as conn:
                 result = await conn.execute(query, batch)
                 # Parse result: "DELETE n"

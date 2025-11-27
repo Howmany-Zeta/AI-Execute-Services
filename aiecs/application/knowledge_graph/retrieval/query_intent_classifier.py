@@ -124,6 +124,10 @@ Respond with ONLY the strategy name (e.g., "MULTI_HOP"). No explanation needed."
         messages = [LLMMessage(role="user", content=prompt)]
 
         # Call LLM
+        if self.llm_client is None:
+            # Fallback to rule-based classification if no LLM client
+            return self._classify_with_rules(query)
+        
         response = await self.llm_client.generate_text(
             messages=messages,
             temperature=0.0,  # Deterministic classification

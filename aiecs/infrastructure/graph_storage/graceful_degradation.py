@@ -280,8 +280,8 @@ class GracefulDegradationStore:
             # Try to reinitialize primary
             await self.primary_store.initialize()
 
-            # Test with a simple operation
-            await self.primary_store.get_stats()
+            # Test with a simple operation (available via StatsMixinProtocol)
+            await self.primary_store.get_stats()  # type: ignore[attr-defined]
 
             self.status.primary_available = True
             self.status.mode = DegradationMode.NORMAL

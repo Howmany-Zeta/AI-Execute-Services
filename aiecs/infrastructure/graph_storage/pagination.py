@@ -179,7 +179,7 @@ class PaginationMixin:
 
     if TYPE_CHECKING:
         # Type hint for mypy: this mixin expects PaginationMixinProtocol
-        def get_all_entities(
+        async def get_all_entities(
             self, entity_type: Optional[str] = None, limit: Optional[int] = None
         ) -> List[Entity]:
             """Expected method from PaginationMixinProtocol"""
