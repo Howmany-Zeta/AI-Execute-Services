@@ -3,40 +3,31 @@ Application API
 
 This section documents the application layer components.
 
-Orchestrator
-------------
+Application Executors
+---------------------
 
-Task Orchestrator
-~~~~~~~~~~~~~~~~~
-
-.. automodule:: aiecs.application.orchestrator
+.. automodule:: aiecs.application.executors
    :members:
    :undoc-members:
    :show-inheritance:
 
-Services
---------
+Knowledge Graph
+---------------
 
-Agent Service
-~~~~~~~~~~~~~
+.. note::
+   The knowledge graph module contains multiple submodules. See individual submodule documentation for details.
 
-.. automodule:: aiecs.application.services.agent_service
+.. automodule:: aiecs.application.knowledge_graph.builder
    :members:
    :undoc-members:
    :show-inheritance:
 
-Task Service
-~~~~~~~~~~~~
-
-.. automodule:: aiecs.application.services.task_service
+.. automodule:: aiecs.application.knowledge_graph.reasoning
    :members:
    :undoc-members:
    :show-inheritance:
 
-Tool Service
-~~~~~~~~~~~~
-
-.. automodule:: aiecs.application.services.tool_service
+.. automodule:: aiecs.application.knowledge_graph.search
    :members:
    :undoc-members:
    :show-inheritance:

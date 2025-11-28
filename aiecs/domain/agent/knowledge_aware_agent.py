@@ -893,7 +893,10 @@ Use graph reasoning proactively when questions involve:
 
         try:
             # Step 1: Extract entities from task description (with caching)
-            seed_entity_ids = await self._extract_seed_entities(task)
+            # Check if seed entities are provided in context first
+            seed_entity_ids = context.get("seed_entity_ids")
+            if not seed_entity_ids:
+                seed_entity_ids = await self._extract_seed_entities(task)
 
             # Emit entity_extraction_completed event
             if event_callback:
@@ -949,13 +952,7 @@ Use graph reasoning proactively when questions involve:
             logger.debug(f"Cache miss for knowledge retrieval (key: {cache_key})")
             self._cache_misses += 1
 
-            # Step 4: Generate embedding for task description
-            query_embedding = await self._get_query_embedding(task)
-            if not query_embedding:
-                logger.warning("Failed to generate query embedding, returning empty results")
-                return []
-
-            # Step 5: Configure search mode based on agent config
+            # Step 4: Configure search mode based on agent config
             from aiecs.application.knowledge_graph.search.hybrid_search import (
                 HybridSearchConfig,
                 SearchMode,
@@ -963,6 +960,18 @@ Use graph reasoning proactively when questions involve:
 
             # Convert strategy to search mode
             search_mode = self._select_search_mode(strategy, task)
+
+            # Step 5: Generate embedding for task description (not required for graph-only if we have seeds)
+            query_embedding = None
+            if search_mode != SearchMode.GRAPH_ONLY or not seed_entity_ids:
+                # Need embedding for vector search or hybrid search, or if no seed entities for graph search
+                query_embedding = await self._get_query_embedding(task)
+                if not query_embedding and search_mode != SearchMode.GRAPH_ONLY:
+                    logger.warning("Failed to generate query embedding, returning empty results")
+                    return []
+                elif not query_embedding and search_mode == SearchMode.GRAPH_ONLY and not seed_entity_ids:
+                    logger.warning("Failed to generate query embedding and no seed entities available for graph search")
+                    return []
 
             # Step 6: Create search configuration
             max_results = getattr(self._config, "max_context_size", 10)
@@ -1021,12 +1030,18 @@ Use graph reasoning proactively when questions involve:
             )
 
             # Then prune to keep only the most relevant
-            pruned_entities = self._prune_knowledge_context(
+            pruned_entities_with_scores = self._prune_knowledge_context(
                 prioritized_entities,
                 max_context_size=self._max_context_size,
                 relevance_threshold=self._relevance_threshold,
                 max_age_seconds=None,  # No age limit by default
             )
+
+            # Extract entities from (Entity, score) tuples for caching
+            pruned_entities = [
+                entity if isinstance(entity, Entity) else entity[0]
+                for entity in pruned_entities_with_scores
+            ]
 
             logger.debug(
                 f"Context management: {len(entities)} → {len(prioritized_entities)} prioritized → "
@@ -1096,8 +1111,20 @@ Use graph reasoning proactively when questions involve:
         """
         try:
             # Use LLM client to generate embeddings
+            # Check if client supports embeddings (check both method existence and callability)
             if not hasattr(self.llm_client, "get_embeddings"):
-                logger.warning("LLM client does not support embeddings")
+                logger.warning(
+                    f"LLM client ({type(self.llm_client).__name__}) does not support embeddings. "
+                    f"Available methods: {[m for m in dir(self.llm_client) if not m.startswith('_')]}"
+                )
+                return None
+            
+            # Verify the method is callable
+            get_embeddings_method = getattr(self.llm_client, "get_embeddings", None)
+            if not callable(get_embeddings_method):
+                logger.warning(
+                    f"LLM client ({type(self.llm_client).__name__}) has 'get_embeddings' attribute but it's not callable"
+                )
                 return None
 
             embeddings = await self.llm_client.get_embeddings(
@@ -1111,7 +1138,7 @@ Use graph reasoning proactively when questions involve:
             return None
 
         except Exception as e:
-            logger.error(f"Failed to generate query embedding: {e}")
+            logger.error(f"Failed to generate query embedding: {e}", exc_info=True)
             return None
 
     async def _extract_seed_entities(self, task: str) -> List[str]:

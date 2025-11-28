@@ -152,9 +152,22 @@ class HybridSearchStrategy:
             return await self._vector_search(query_embedding, config)
         elif config.mode == SearchMode.GRAPH_ONLY:
             if not seed_entity_ids:
-                # If no seeds provided, do vector search to find seeds
-                vector_results = await self._vector_search(query_embedding, config, max_results=5)
-                seed_entity_ids = [entity.id for entity, _ in vector_results]
+                # If no seeds provided, try vector search to find seeds
+                if query_embedding:
+                    try:
+                        vector_results = await self._vector_search(query_embedding, config, max_results=5)
+                        seed_entity_ids = [entity.id for entity, _ in vector_results]
+                    except Exception as e:
+                        logger.warning(f"Vector search failed while trying to find seed entities for graph search: {e}")
+                        seed_entity_ids = []
+                else:
+                    logger.warning("No seed entities provided and no query embedding available for graph search")
+                    seed_entity_ids = []
+            
+            if not seed_entity_ids:
+                logger.warning("No seed entities available for graph-only search, returning empty results")
+                return []
+            
             return await self._graph_search(seed_entity_ids, config)
         else:  # HYBRID
             return await self._hybrid_search(query_embedding, config, seed_entity_ids)
