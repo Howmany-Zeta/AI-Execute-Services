@@ -4,6 +4,108 @@
 
 This guide helps you integrate AIECS Knowledge Graph capabilities into your existing AIECS applications. Whether you're adding knowledge graphs to an existing agent, migrating from another graph system, or upgrading between versions, this guide covers the migration path.
 
+## Knowledge Retrieval Migration
+
+### Migrating to KnowledgeAwareAgent with Retrieval
+
+If you're upgrading from `HybridAgent` to `KnowledgeAwareAgent` with knowledge retrieval capabilities:
+
+#### Before (HybridAgent)
+
+```python
+from aiecs.domain.agent import HybridAgent, AgentConfiguration
+
+agent = HybridAgent(
+    agent_id="agent_1",
+    name="Standard Agent",
+    llm_client=llm_client,
+    tools=["web_search"],
+    config=AgentConfiguration()
+)
+await agent.initialize()
+```
+
+#### After (KnowledgeAwareAgent with Retrieval)
+
+```python
+from aiecs.domain.agent import KnowledgeAwareAgent, AgentConfiguration
+from aiecs.infrastructure.graph_storage import InMemoryGraphStore
+
+# Initialize graph store
+graph_store = InMemoryGraphStore()
+await graph_store.initialize()
+
+# Configure knowledge retrieval
+config = AgentConfiguration(
+    retrieval_strategy="hybrid",  # New: retrieval strategy
+    enable_knowledge_caching=True,  # New: caching option
+    cache_ttl=300,  # New: cache TTL
+    max_context_size=50  # New: max entities in context
+)
+
+# Create knowledge-aware agent
+agent = KnowledgeAwareAgent(
+    agent_id="agent_1",
+    name="Knowledge-Aware Agent",
+    llm_client=llm_client,
+    tools=["web_search"],
+    config=config,
+    graph_store=graph_store  # New: graph store required
+)
+await agent.initialize()
+```
+
+#### Key Changes
+
+1. **Import Change**: `HybridAgent` → `KnowledgeAwareAgent`
+2. **Graph Store Required**: Must provide `graph_store` parameter
+3. **New Configuration Options**:
+   - `retrieval_strategy`: Choose retrieval method ("vector", "graph", "hybrid", "auto")
+   - `enable_knowledge_caching`: Enable/disable caching
+   - `cache_ttl`: Cache time-to-live in seconds
+   - `max_context_size`: Maximum entities in context
+   - `entity_extraction_provider`: Entity extraction method
+
+#### Breaking Changes
+
+**None**: `KnowledgeAwareAgent` extends `HybridAgent`, so existing code continues to work. Knowledge retrieval is additive functionality.
+
+#### Migration Steps
+
+1. **Add Graph Store**: Initialize a graph store (InMemoryGraphStore, SQLiteGraphStore, etc.)
+2. **Update Agent Type**: Change `HybridAgent` to `KnowledgeAwareAgent`
+3. **Add Graph Store Parameter**: Pass `graph_store` to agent constructor
+4. **Configure Retrieval** (Optional): Set retrieval strategy and caching options
+5. **Test**: Verify agent behavior remains the same, with added knowledge retrieval
+
+#### Example: Gradual Migration
+
+```python
+# Step 1: Add graph store (no behavior change)
+graph_store = InMemoryGraphStore()
+await graph_store.initialize()
+
+# Step 2: Switch to KnowledgeAwareAgent (backward compatible)
+agent = KnowledgeAwareAgent(
+    agent_id="agent_1",
+    name="Agent",
+    llm_client=llm_client,
+    tools=["web_search"],
+    config=AgentConfiguration(),  # Default config works
+    graph_store=graph_store
+)
+await agent.initialize()
+
+# Step 3: Enable knowledge retrieval (optional)
+config = AgentConfiguration(
+    retrieval_strategy="hybrid",
+    enable_knowledge_caching=True
+)
+agent.config = config  # Update config
+```
+
+---
+
 ## For New Users
 
 If you're adding knowledge graph capabilities to an existing AIECS application for the first time:

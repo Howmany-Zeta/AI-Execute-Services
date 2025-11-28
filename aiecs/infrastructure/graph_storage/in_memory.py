@@ -228,6 +228,52 @@ class InMemoryGraphStore(GraphStore):
 
         return neighbors
 
+    def get_outgoing_relations(self, entity_id: str) -> List[Relation]:
+        """
+        Get all outgoing relations for an entity (synchronous method for query optimizer).
+
+        Args:
+            entity_id: Entity ID to get outgoing relations for
+
+        Returns:
+            List of outgoing Relation objects
+        """
+        if not self._initialized or self.graph is None or entity_id not in self.graph:
+            return []
+
+        relations = []
+        for target_id in self.graph.successors(entity_id):
+            edge_data = self.graph.get_edge_data(entity_id, target_id)
+            if edge_data:
+                relation = edge_data.get("relation")
+                if relation:
+                    relations.append(relation)
+
+        return relations
+
+    def get_incoming_relations(self, entity_id: str) -> List[Relation]:
+        """
+        Get all incoming relations for an entity (synchronous method for query optimizer).
+
+        Args:
+            entity_id: Entity ID to get incoming relations for
+
+        Returns:
+            List of incoming Relation objects
+        """
+        if not self._initialized or self.graph is None or entity_id not in self.graph:
+            return []
+
+        relations = []
+        for source_id in self.graph.predecessors(entity_id):
+            edge_data = self.graph.get_edge_data(source_id, entity_id)
+            if edge_data:
+                relation = edge_data.get("relation")
+                if relation:
+                    relations.append(relation)
+
+        return relations
+
     async def get_all_entities(self, entity_type: Optional[str] = None, limit: Optional[int] = None) -> List[Entity]:
         """
         Get all entities, optionally filtered by type

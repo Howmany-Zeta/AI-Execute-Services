@@ -12,14 +12,31 @@ AIECS 提供了一个统一的版本管理工具，可以同时更新项目中�
 
 ## 使用方法
 
+版本管理工具可以通过两种方式调用：
+
+1. **推荐方式**：使用 `aiecs-version` 命令（更简洁）
+2. **替代方式**：使用 Python 模块方式运行
+
 ### 1. 显示当前版本
 
+**推荐方式：**
+```bash
+poetry run aiecs-version --show
+```
+
+**替代方式：**
 ```bash
 poetry run python -m aiecs.scripts.aid.version_manager --show
 ```
 
 ### 2. 设置特定版本
 
+**推荐方式：**
+```bash
+poetry run aiecs-version --version 1.2.0
+```
+
+**替代方式：**
 ```bash
 poetry run python -m aiecs.scripts.aid.version_manager --version 1.2.0
 ```
@@ -27,18 +44,39 @@ poetry run python -m aiecs.scripts.aid.version_manager --version 1.2.0
 ### 3. 自动递增版本
 
 #### 补丁版本 (Patch)
+**推荐方式：**
+```bash
+poetry run aiecs-version --bump patch
+# 1.1.0 -> 1.1.1
+```
+
+**替代方式：**
 ```bash
 poetry run python -m aiecs.scripts.aid.version_manager --bump patch
 # 1.1.0 -> 1.1.1
 ```
 
 #### 次版本 (Minor)
+**推荐方式：**
+```bash
+poetry run aiecs-version --bump minor
+# 1.1.0 -> 1.2.0
+```
+
+**替代方式：**
 ```bash
 poetry run python -m aiecs.scripts.aid.version_manager --bump minor
 # 1.1.0 -> 1.2.0
 ```
 
 #### 主版本 (Major)
+**推荐方式：**
+```bash
+poetry run aiecs-version --bump major
+# 1.1.0 -> 2.0.0
+```
+
+**替代方式：**
 ```bash
 poetry run python -m aiecs.scripts.aid.version_manager --bump major
 # 1.1.0 -> 2.0.0
@@ -64,20 +102,23 @@ poetry run python -m aiecs.scripts.aid.version_manager --bump major
 ## 示例
 
 ```bash
-# 查看当前版本
-poetry run python -m aiecs.scripts.aid.version_manager --show
+# 查看当前版本（推荐方式）
+poetry run aiecs-version --show
 
 # 发布补丁版本
-poetry run python -m aiecs.scripts.aid.version_manager --bump patch
+poetry run aiecs-version --bump patch
 
 # 发布新功能版本
-poetry run python -m aiecs.scripts.aid.version_manager --bump minor
+poetry run aiecs-version --bump minor
 
 # 发布重大更新版本
-poetry run python -m aiecs.scripts.aid.version_manager --bump major
+poetry run aiecs-version --bump major
 
 # 手动设置版本
-poetry run python -m aiecs.scripts.aid.version_manager --version 2.1.0
+poetry run aiecs-version --version 2.1.0
+
+# 注意：也可以使用 Python 模块方式运行
+# poetry run python -m aiecs.scripts.aid.version_manager --show
 ```
 
 ## 注意事项
