@@ -19,8 +19,8 @@ class BM25Scorer:
     BM25 is a ranking function used to estimate the relevance of documents
     to a given search query. It's an improvement over TF-IDF.
 
-    Example:
-        ```python
+    Example::
+
         scorer = BM25Scorer(corpus=[
             "The quick brown fox jumps over the lazy dog",
             "A quick brown dog jumps over a lazy fox",
@@ -29,7 +29,6 @@ class BM25Scorer:
 
         scores = scorer.score("quick brown fox")
         # Returns scores for each document in corpus
-        ```
     """
 
     def __init__(
@@ -132,7 +131,7 @@ def jaccard_similarity(set1: set, set2: set) -> float:
     """
     Calculate Jaccard similarity between two sets
 
-    Jaccard similarity = |A ∩ B| / |A ∪ B|
+    Jaccard similarity = (size of intersection) / (size of union)
 
     Args:
         set1: First set
@@ -332,8 +331,8 @@ class TextSimilarity:
 
     Provides a unified interface for various text similarity methods.
 
-    Example:
-        ```python
+    Example::
+
         similarity = TextSimilarity()
 
         # Jaccard similarity
@@ -351,7 +350,6 @@ class TextSimilarity:
             ["python3", "pyton", "java", "pythn"],
             threshold=0.7
         )
-        ```
     """
 
     def __init__(self, tokenizer: Optional[Callable[[str], List[str]]] = None):

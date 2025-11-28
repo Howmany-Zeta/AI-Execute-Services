@@ -52,8 +52,8 @@ class QueryPlanner:
     - Query optimization (reorder operations for efficiency)
     - Cost estimation
 
-    Example:
-        ```python
+    Example::
+
         planner = QueryPlanner(graph_store)
 
         # Plan a complex query
@@ -66,7 +66,6 @@ class QueryPlanner:
             plan,
             strategy=OptimizationStrategy.MINIMIZE_COST
         )
-        ```
     """
 
     def __init__(
@@ -164,12 +163,11 @@ class QueryPlanner:
         Returns:
             Query execution plan
 
-        Example:
-            ```python
+        Example::
+
             plan = planner.plan_query(
                 "Find papers similar to 'Deep Learning' and their authors"
             )
-            ```
         """
         context = context or {}
         plan_id = f"plan_{uuid.uuid4().hex[:8]}"
@@ -587,13 +585,12 @@ class QueryPlanner:
         Returns:
             Optimized query plan
 
-        Example:
-            ```python
+        Example::
+
             optimized = planner.optimize_plan(
                 plan,
                 strategy=OptimizationStrategy.MINIMIZE_COST
             )
-            ```
         """
         if plan.optimized:
             return plan  # Already optimized
@@ -720,13 +717,12 @@ class QueryPlanner:
         Returns:
             Single graph query
 
-        Example:
-            ```python
+        Example::
+
             query = planner.translate_to_graph_query(
                 "Find entities similar to X",
                 context={"query_embedding": [0.1, 0.2, ...]}
             )
-            ```
         """
         context = context or {}
         query_lower = natural_language_query.lower()
@@ -828,8 +824,8 @@ class QueryPlanner:
         Returns:
             QueryPlan if successful, List[ParserError] if errors occurred
 
-        Example:
-            ```python
+        Example::
+
             plan = planner.plan_logic_query("Find(Person) WHERE age > 30")
 
             if isinstance(plan, list):
@@ -839,7 +835,6 @@ class QueryPlanner:
             else:
                 # Success - execute the plan
                 result = await graph_store.execute_plan(plan)
-            ```
         """
         if not LOGIC_PARSER_AVAILABLE:
             raise ImportError("Logic parser not available. Install lark-parser.")

@@ -28,14 +28,13 @@ class TextSimilarityReranker(RerankerStrategy):
     Combines BM25 (term-based relevance) and Jaccard (set overlap) scores
     to rerank entities based on text similarity to query.
 
-    Example:
-        ```python
+    Example::
+
         reranker = TextSimilarityReranker(
             bm25_weight=0.7,
             jaccard_weight=0.3
         )
         scores = await reranker.score("machine learning", entities)
-        ```
     """
 
     def __init__(
@@ -138,15 +137,14 @@ class SemanticReranker(RerankerStrategy):
 
     Uses entity embeddings to compute semantic similarity to query embedding.
 
-    Example:
-        ```python
+    Example::
+
         reranker = SemanticReranker()
         scores = await reranker.score(
             query="machine learning",
             entities=entities,
             query_embedding=[0.1, 0.2, ...]
         )
-        ```
     """
 
     def __init__(self):
@@ -225,11 +223,10 @@ class StructuralReranker(RerankerStrategy):
     Scores entities based on their structural importance in the graph.
     Uses PageRank scores and degree centrality.
 
-    Example:
-        ```python
+    Example::
+
         reranker = StructuralReranker(graph_store)
         scores = await reranker.score("query", entities)
-        ```
     """
 
     def __init__(
@@ -373,8 +370,8 @@ class HybridReranker(RerankerStrategy):
     Combines text similarity, semantic similarity, and structural importance
     into a single score.
 
-    Example:
-        ```python
+    Example::
+
         reranker = HybridReranker(
             graph_store=store,
             text_weight=0.4,
@@ -386,7 +383,6 @@ class HybridReranker(RerankerStrategy):
             entities=entities,
             query_embedding=[0.1, 0.2, ...]
         )
-        ```
     """
 
     def __init__(
@@ -467,11 +463,10 @@ class CrossEncoderReranker(RerankerStrategy):
     Note: This is a placeholder implementation. For production use,
     integrate with a cross-encoder model library (e.g., sentence-transformers).
 
-    Example:
-        ```python
+    Example::
+
         reranker = CrossEncoderReranker(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
         scores = await reranker.score("machine learning", entities)
-        ```
     """
 
     def __init__(self, model_name: Optional[str] = None, use_gpu: bool = False):

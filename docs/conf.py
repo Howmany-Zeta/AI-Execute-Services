@@ -33,10 +33,16 @@ extensions = [
     'sphinx.ext.intersphinx',       # Link to other project's documentation
     'sphinx.ext.todo',              # Support for todo items
     'sphinx.ext.coverage',          # Collect doc coverage stats
-    'sphinx_autodoc_typehints',     # Automatically document type hints
+    # 'sphinx_autodoc_typehints',     # Temporarily disabled due to docstring parsing issues
     'sphinx_copybutton',            # Add copy button to code blocks
     'myst_parser',                  # Support for Markdown files
 ]
+
+# Configure sphinx_autodoc_typehints to handle docstring parsing errors gracefully
+typehints_document_rtype = True
+typehints_fully_qualified = False
+# Don't process docstrings that already have type information to avoid conflicts
+typehints_description_target = 'documented'
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']

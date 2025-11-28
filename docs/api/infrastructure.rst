@@ -9,26 +9,23 @@ Persistence
 Database Manager
 ~~~~~~~~~~~~~~~~
 
-.. automodule:: aiecs.infrastructure.persistence.database
+.. automodule:: aiecs.infrastructure.persistence.database_manager
    :members:
    :undoc-members:
    :show-inheritance:
 
-Repository
-~~~~~~~~~~
+File Storage
+~~~~~~~~~~~~
 
-.. automodule:: aiecs.infrastructure.persistence.repository
+.. automodule:: aiecs.infrastructure.persistence.file_storage
    :members:
    :undoc-members:
    :show-inheritance:
 
-Cache
------
+Redis Client
+~~~~~~~~~~~~
 
-Cache Manager
-~~~~~~~~~~~~~
-
-.. automodule:: aiecs.infrastructure.cache.cache_manager
+.. automodule:: aiecs.infrastructure.persistence.redis_client
    :members:
    :undoc-members:
    :show-inheritance:
@@ -36,18 +33,26 @@ Cache Manager
 Monitoring
 ----------
 
-Metrics Collector
-~~~~~~~~~~~~~~~~~
+Executor Metrics
+~~~~~~~~~~~~~~~~
 
-.. automodule:: aiecs.infrastructure.monitoring.metrics_collector
+.. automodule:: aiecs.infrastructure.monitoring.executor_metrics
    :members:
    :undoc-members:
    :show-inheritance:
 
-Tracer
-~~~~~~
+Global Metrics Manager
+~~~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: aiecs.infrastructure.monitoring.tracer
+.. automodule:: aiecs.infrastructure.monitoring.global_metrics_manager
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Tracing Manager
+~~~~~~~~~~~~~~~
+
+.. automodule:: aiecs.infrastructure.monitoring.tracing_manager
    :members:
    :undoc-members:
    :show-inheritance:
@@ -55,18 +60,18 @@ Tracer
 Messaging
 ---------
 
-Message Queue
-~~~~~~~~~~~~~
+Celery Task Manager
+~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: aiecs.infrastructure.messaging.message_queue
+.. automodule:: aiecs.infrastructure.messaging.celery_task_manager
    :members:
    :undoc-members:
    :show-inheritance:
 
-Event Bus
-~~~~~~~~~
+WebSocket Manager
+~~~~~~~~~~~~~~~~~
 
-.. automodule:: aiecs.infrastructure.messaging.event_bus
+.. automodule:: aiecs.infrastructure.messaging.websocket_manager
    :members:
    :undoc-members:
    :show-inheritance:

@@ -390,6 +390,80 @@ class VertexAIClient(BaseLLMClient):
                     for rec in stats["recommendations"]:
                         self.logger.info(f"    • {rec}")
 
+    async def get_embeddings(
+        self,
+        texts: List[str],
+        model: Optional[str] = None,
+    ) -> List[List[float]]:
+        """
+        Generate embeddings using Vertex AI embedding model
+        
+        Args:
+            texts: List of texts to embed
+            model: Embedding model name (default: gemini-embedding-001)
+            
+        Returns:
+            List of embedding vectors (each is a list of floats)
+        """
+        self._init_vertex_ai()
+        
+        # Use gemini-embedding-001 as default
+        embedding_model_name = model or "gemini-embedding-001"
+        
+        try:
+            from google.cloud import aiplatform
+            from google.cloud.aiplatform.gapic import PredictionServiceClient
+            from google.protobuf import struct_pb2
+            
+            # Initialize prediction client
+            location = getattr(self.settings, "vertex_location", "us-central1")
+            endpoint = f"{location}-aiplatform.googleapis.com"
+            client = PredictionServiceClient(client_options={"api_endpoint": endpoint})
+            
+            # Model resource name
+            model_resource = f"projects/{self.settings.vertex_project_id}/locations/{location}/publishers/google/models/{embedding_model_name}"
+            
+            # Generate embeddings for each text
+            embeddings = []
+            for text in texts:
+                # Prepare instance
+                instance = struct_pb2.Struct()
+                instance.fields["content"].string_value = text
+                
+                # Make prediction request
+                response = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: client.predict(
+                        endpoint=model_resource,
+                        instances=[instance]
+                    )
+                )
+                
+                # Extract embedding
+                if response.predictions and len(response.predictions) > 0:
+                    prediction = response.predictions[0]
+                    if "embeddings" in prediction and "values" in prediction["embeddings"]:
+                        embedding = list(prediction["embeddings"]["values"])
+                        embeddings.append(embedding)
+                    else:
+                        self.logger.warning(f"Unexpected response format for embedding: {prediction}")
+                        # Return zero vector as fallback
+                        embeddings.append([0.0] * 768)
+                else:
+                    self.logger.warning("No predictions returned from embedding model")
+                    embeddings.append([0.0] * 768)
+            
+            return embeddings
+            
+        except ImportError as e:
+            self.logger.error(f"Required Vertex AI libraries not available: {e}")
+            # Return zero vectors as fallback
+            return [[0.0] * 768 for _ in texts]
+        except Exception as e:
+            self.logger.error(f"Error generating embeddings with Vertex AI: {e}")
+            # Return zero vectors as fallback
+            return [[0.0] * 768 for _ in texts]
+
     async def close(self):
         """Clean up resources"""
         # Log final statistics before cleanup

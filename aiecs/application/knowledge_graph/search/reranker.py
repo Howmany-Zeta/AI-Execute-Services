@@ -27,8 +27,8 @@ class RerankerStrategy(ABC):
     Each strategy computes a relevance score for entities given a query.
     Strategies can be combined using different combination methods.
 
-    Example:
-        ```python
+    Example::
+
         class TextSimilarityReranker(RerankerStrategy):
             async def score(
                 self,
@@ -37,7 +37,6 @@ class RerankerStrategy(ABC):
             ) -> List[float]:
                 # Compute BM25 scores
                 return scores
-        ```
     """
 
     @property
@@ -192,8 +191,8 @@ class ResultReranker:
 
     Combines multiple reranking strategies to improve search result relevance.
 
-    Example:
-        ```python
+    Example::
+
         # Create strategies
         text_reranker = TextSimilarityReranker()
         semantic_reranker = SemanticReranker()
@@ -210,7 +209,6 @@ class ResultReranker:
             query="machine learning",
             entities=search_results
         )
-        ```
     """
 
     def __init__(

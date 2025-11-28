@@ -2006,6 +2006,8 @@ class ToolObservation(BaseModel):
 
 ### Fields
 
+#### Field Descriptions
+
 ##### `tool_name: str`
 
 Name of the tool that was executed.
@@ -2035,6 +2037,8 @@ Execution time in milliseconds (None if not measured, must be >= 0).
 ISO format timestamp of execution (auto-generated if not provided).
 
 ### Methods
+
+#### Method Descriptions
 
 ##### `to_dict() -> Dict[str, Any]`
 

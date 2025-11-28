@@ -87,8 +87,8 @@ class GraphBuilder:
     - Provenance tracking
     - Configurable components
 
-    Example:
-        ```python
+    Example::
+
         # Initialize components
         entity_extractor = LLMEntityExtractor(schema)
         relation_extractor = LLMRelationExtractor(schema)
@@ -108,7 +108,6 @@ class GraphBuilder:
         )
 
         print(f"Added {result.entities_added} entities, {result.relations_added} relations")
-        ```
     """
 
     def __init__(
@@ -183,8 +182,8 @@ class GraphBuilder:
         Returns:
             GraphBuilder instance with configured embedding client
 
-        Example:
-            ```python
+        Example::
+
             from aiecs.config import get_settings
             from aiecs.llm.factory import LLMClientFactory
 
@@ -200,7 +199,6 @@ class GraphBuilder:
                 entity_extractor=extractor,
                 relation_extractor=rel_extractor
             )
-            ```
         """
         from aiecs.config import get_settings
         from aiecs.llm import resolve_llm_client

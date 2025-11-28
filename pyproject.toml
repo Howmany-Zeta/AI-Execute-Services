@@ -189,10 +189,10 @@ aiecs-version = "aiecs.scripts.aid.version_manager:main"
 aiecs-patch-weasel = "aiecs.scripts.dependance_patch.fix_weasel.fix_weasel_validator:main"
 aiecs-download-nlp-data = "aiecs.scripts.dependance_check.download_nlp_data:main"
 aiecs-check-deps = "aiecs.scripts.dependance_check.dependency_checker:main"
-aiecs-quick-check = "aiecs.scripts.dependance_check.quick_dependency_check:main"
 aiecs-fix-deps = "aiecs.scripts.dependance_check.dependency_fixer:main"
 aiecs-tools-check-annotations = "aiecs.scripts.tools_develop.check_type_annotations:main"
 aiecs-tools-validate-schemas = "aiecs.scripts.tools_develop.validate_tool_schemas:main"
+aiecs-check-modules = "aiecs.scripts.aid.module_checker:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

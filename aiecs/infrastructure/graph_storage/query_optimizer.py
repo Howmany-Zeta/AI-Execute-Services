@@ -532,15 +532,28 @@ class QueryStatisticsCollector:
         Returns:
             Query statistics
         """
-        from aiecs.domain.knowledge_graph.graph_store import GraphStore  # type: ignore[import-untyped]
+        from aiecs.infrastructure.graph_storage.base import GraphStore  # type: ignore[import-untyped]
 
-        if not isinstance(graph_store, GraphStore):
-            logger.warning("Invalid graph store type")
-            return QueryStatistics()
+        # Use duck typing to check if graph_store has required attributes
+        # Some graph stores may not expose entities/relations directly
+        if not hasattr(graph_store, 'entities') or not hasattr(graph_store, 'relations'):
+            # Try to use isinstance check as fallback
+            try:
+                from aiecs.infrastructure.graph_storage.base import GraphStore as GS
+                if not isinstance(graph_store, GS):
+                    logger.debug("Graph store does not expose entities/relations attributes, skipping statistics collection")
+                    return QueryStatistics()
+            except Exception:
+                logger.debug("Could not validate graph store type, skipping statistics collection")
+                return QueryStatistics()
 
         # Count entities and relations
-        entity_count = len(graph_store.entities)
-        relation_count = len(graph_store.relations)
+        try:
+            entity_count = len(graph_store.entities)
+            relation_count = len(graph_store.relations)
+        except (AttributeError, TypeError):
+            logger.debug("Graph store entities/relations not accessible, skipping statistics collection")
+            return QueryStatistics()
 
         # Count by type
         entity_type_counts: Dict[str, int] = {}

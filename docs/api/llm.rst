@@ -3,37 +3,37 @@ LLM API
 
 This section documents the LLM integration components.
 
-LLM Integration
----------------
+Client Factory
+--------------
 
-.. automodule:: aiecs.llm.llm_integration
+.. automodule:: aiecs.llm.client_factory
    :members:
    :undoc-members:
    :show-inheritance:
 
-Providers
----------
+LLM Clients
+-----------
 
-OpenAI Provider
-~~~~~~~~~~~~~~~
+OpenAI Client
+~~~~~~~~~~~~~
 
-.. automodule:: aiecs.llm.providers.openai_provider
+.. automodule:: aiecs.llm.clients.openai_client
    :members:
    :undoc-members:
    :show-inheritance:
 
-Vertex AI Provider
-~~~~~~~~~~~~~~~~~~
+Vertex AI Client
+~~~~~~~~~~~~~~~~
 
-.. automodule:: aiecs.llm.providers.vertex_provider
+.. automodule:: aiecs.llm.clients.vertex_client
    :members:
    :undoc-members:
    :show-inheritance:
 
-xAI Provider
-~~~~~~~~~~~~
+xAI Client
+~~~~~~~~~~
 
-.. automodule:: aiecs.llm.providers.xai_provider
+.. automodule:: aiecs.llm.clients.xai_client
    :members:
    :undoc-members:
    :show-inheritance:
@@ -41,10 +41,18 @@ xAI Provider
 Configuration
 -------------
 
-LLM Configuration
-~~~~~~~~~~~~~~~~~
+Model Config
+~~~~~~~~~~~~
 
-.. automodule:: aiecs.llm.llm_config
+.. automodule:: aiecs.llm.config.model_config
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Config Loader
+~~~~~~~~~~~~~
+
+.. automodule:: aiecs.llm.config.config_loader
    :members:
    :undoc-members:
    :show-inheritance:

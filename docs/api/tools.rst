@@ -38,62 +38,21 @@ Document Writer
    :undoc-members:
    :show-inheritance:
 
-Web Tools
----------
-
-Web Scraper
-~~~~~~~~~~~
-
-.. automodule:: aiecs.tools.web.web_scraper_tool
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 Search Tool
-~~~~~~~~~~~
-
-.. automodule:: aiecs.tools.web.search_tool
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Data Tools
-----------
-
-Pandas Tool
-~~~~~~~~~~~
-
-.. automodule:: aiecs.tools.data.pandas_tool
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Chart Tool
-~~~~~~~~~~
-
-.. automodule:: aiecs.tools.data.chart_tool
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Image Tools
 -----------
 
-Image Tool
-~~~~~~~~~~
-
-.. automodule:: aiecs.tools.image.image_tool
+.. automodule:: aiecs.tools.search_tool
    :members:
    :undoc-members:
    :show-inheritance:
 
-API Tools
----------
+API Source Tool
+---------------
 
 API Source Tool
 ~~~~~~~~~~~~~~~
 
-.. automodule:: aiecs.tools.api.apisource_tool
+.. automodule:: aiecs.tools.apisource.tool
    :members:
    :undoc-members:
    :show-inheritance:

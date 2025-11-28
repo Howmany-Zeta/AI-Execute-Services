@@ -247,6 +247,27 @@ The `KnowledgeAwareAgent` uses an enhanced ReAct loop:
 - Automatic knowledge retrieval
 - Transparent process (visible in reasoning steps)
 
+### Retrieval Strategies
+
+The agent supports multiple retrieval strategies configured via `AgentConfiguration.retrieval_strategy`:
+
+- **`"vector"`**: Semantic similarity search using embeddings
+- **`"graph"`**: Graph traversal from seed entities
+- **`"hybrid"`**: Combined vector + graph search (default)
+- **`"auto"`**: Automatic strategy selection based on query
+
+See [Knowledge Retrieval Configuration Guide](./KNOWLEDGE_RETRIEVAL_CONFIGURATION.md) for details.
+
+### Caching
+
+Knowledge retrieval results are cached by default to improve performance:
+
+- **Cache Backend**: Redis (if available) or in-memory fallback
+- **Cache TTL**: Configurable via `AgentConfiguration.cache_ttl` (default: 300 seconds)
+- **Cache Key**: Based on query text and retrieval strategy
+
+See [Metrics and Monitoring Guide](./METRICS_AND_MONITORING.md) for cache performance tracking.
+
 ## Best Practices
 
 ### 1. Graph Store Initialization
