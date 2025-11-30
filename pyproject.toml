@@ -170,8 +170,8 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/aiecs-team/aiecs"
-"Bug Tracker" = "https://github.com/aiecs-team/aiecs/issues"
+"Homepage" = "https://github.com/Howmany-Zeta/AI-Execute-Services"
+"Bug Tracker" = "https://github.com/Howmany-Zeta/AI-Execute-Services/issues"
 "Documentation" = "https://aiecs.readthedocs.io"
 
 [project.optional-dependencies]
