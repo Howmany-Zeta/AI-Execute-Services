@@ -58,7 +58,7 @@ class KGBuilderInput(BaseModel):
     )
     data_path: Optional[str] = Field(
         None,
-        description="Path to structured data file (CSV or JSON) for 'build_from_structured_data' action",
+        description="Path to structured data file (CSV, JSON, SPSS, or Excel) for 'build_from_structured_data' action",
     )
     schema_mapping: Optional[Dict[str, Any]] = Field(
         None,
@@ -341,7 +341,7 @@ class KnowledgeGraphBuilderTool(BaseTool):
 
     async def _build_from_structured_data(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Build knowledge graph from structured data (CSV or JSON)
+        Build knowledge graph from structured data (CSV, JSON, SPSS, or Excel)
 
         Args:
             kwargs: Tool input parameters
@@ -391,10 +391,14 @@ class KnowledgeGraphBuilderTool(BaseTool):
                 result = await pipeline.import_from_csv(data_path)
             elif data_path.endswith(".json"):
                 result = await pipeline.import_from_json(data_path)
+            elif data_path.endswith(".sav") or data_path.endswith(".por"):
+                result = await pipeline.import_from_spss(data_path)
+            elif data_path.endswith(".xlsx") or data_path.endswith(".xls"):
+                result = await pipeline.import_from_excel(data_path)
             else:
                 return {
                     "success": False,
-                    "error": "Unsupported file format. Supported: .csv, .json",
+                    "error": "Unsupported file format. Supported: .csv, .json, .sav, .por, .xlsx, .xls",
                 }
 
             return {

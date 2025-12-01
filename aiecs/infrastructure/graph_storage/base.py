@@ -163,6 +163,56 @@ class GraphStore(ABC):
         """
 
     # =========================================================================
+    # BULK OPERATIONS - Default implementations (can be optimized)
+    # =========================================================================
+
+    async def add_entities_bulk(self, entities: List[Entity]) -> int:
+        """
+        Add multiple entities in bulk.
+
+        Default implementation calls add_entity() for each entity.
+        Override for better performance with database-specific bulk inserts.
+
+        Args:
+            entities: List of entities to add
+
+        Returns:
+            Number of entities successfully added
+        """
+        added = 0
+        for entity in entities:
+            try:
+                await self.add_entity(entity)
+                added += 1
+            except ValueError:
+                # Entity already exists, skip
+                pass
+        return added
+
+    async def add_relations_bulk(self, relations: List[Relation]) -> int:
+        """
+        Add multiple relations in bulk.
+
+        Default implementation calls add_relation() for each relation.
+        Override for better performance with database-specific bulk inserts.
+
+        Args:
+            relations: List of relations to add
+
+        Returns:
+            Number of relations successfully added
+        """
+        added = 0
+        for relation in relations:
+            try:
+                await self.add_relation(relation)
+                added += 1
+            except ValueError:
+                # Relation already exists or entities don't exist, skip
+                pass
+        return added
+
+    # =========================================================================
     # TIER 2: ADVANCED INTERFACE - HAS DEFAULTS (Template Method Pattern)
     # =========================================================================
 
