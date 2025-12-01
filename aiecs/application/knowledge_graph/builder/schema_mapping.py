@@ -5,7 +5,7 @@ Maps structured data (CSV, JSON) columns to knowledge graph entity and relation 
 with support for property transformations.
 """
 
-from typing import Dict, List, Optional, Any, cast
+from typing import Dict, List, Optional, Any, cast, Callable
 from enum import Enum
 from pydantic import BaseModel, Field, field_validator
 from aiecs.domain.knowledge_graph.schema.property_schema import PropertyType
@@ -361,6 +361,64 @@ class RelationMapping(BaseModel):
         }
 
 
+class AggregationFunction(str, Enum):
+    """Statistical aggregation functions"""
+
+    MEAN = "mean"
+    STD = "std"
+    MIN = "min"
+    MAX = "max"
+    COUNT = "count"
+    SUM = "sum"
+    MEDIAN = "median"
+    VARIANCE = "variance"
+
+
+class AggregationConfig(BaseModel):
+    """
+    Configuration for statistical aggregation during import
+
+    Defines how to compute aggregated statistics from source data
+    and store them as entity properties.
+    """
+
+    source_property: str = Field(..., description="Source property to aggregate")
+
+    function: AggregationFunction = Field(..., description="Aggregation function to apply")
+
+    target_property: str = Field(..., description="Target property name for aggregated value")
+
+    group_by: Optional[List[str]] = Field(
+        default=None,
+        description="Columns to group by (for grouped aggregations)",
+    )
+
+    filter_condition: Optional[str] = Field(
+        default=None,
+        description="Optional filter condition (e.g., 'value > 0')",
+    )
+
+
+class EntityAggregation(BaseModel):
+    """
+    Aggregation configuration for an entity type
+
+    Defines aggregations to compute for entities of a specific type.
+    """
+
+    entity_type: str = Field(..., description="Entity type to aggregate")
+
+    aggregations: List[AggregationConfig] = Field(
+        default_factory=list,
+        description="List of aggregations to compute",
+    )
+
+    incremental: bool = Field(
+        default=True,
+        description="Whether to compute aggregations incrementally during batch processing",
+    )
+
+
 class SchemaMapping(BaseModel):
     """
     Schema mapping configuration
@@ -371,6 +429,16 @@ class SchemaMapping(BaseModel):
     entity_mappings: List[EntityMapping] = Field(default_factory=list, description="Entity type mappings")
 
     relation_mappings: List[RelationMapping] = Field(default_factory=list, description="Relation type mappings")
+
+    aggregations: List[EntityAggregation] = Field(
+        default_factory=list,
+        description="Statistical aggregations to compute during import",
+    )
+
+    validation_config: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Data quality validation configuration",
+    )
 
     description: Optional[str] = Field(default=None, description="Human-readable description of this mapping")
 
@@ -477,4 +545,19 @@ class SchemaMapping(BaseModel):
         for mapping in self.relation_mappings:
             if mapping.relation_type == relation_type:
                 return mapping
+        return None
+
+    def get_aggregations(self, entity_type: str) -> Optional[EntityAggregation]:
+        """
+        Get aggregation configuration for entity type
+
+        Args:
+            entity_type: Entity type name
+
+        Returns:
+            EntityAggregation or None if not found
+        """
+        for agg in self.aggregations:
+            if agg.entity_type == entity_type:
+                return agg
         return None

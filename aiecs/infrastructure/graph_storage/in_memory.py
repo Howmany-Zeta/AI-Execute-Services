@@ -11,11 +11,16 @@ This is ideal for:
 - Scenarios where persistence is not required
 """
 
-from typing import List, Optional, Dict
+from typing import Any, List, Optional, Dict, Set
 import networkx as nx  # type: ignore[import-untyped]
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.relation import Relation
 from aiecs.infrastructure.graph_storage.base import GraphStore
+from aiecs.infrastructure.graph_storage.property_storage import (
+    PropertyOptimizer,
+    PropertyStorageConfig,
+    PropertyIndex,
+)
 
 
 class InMemoryGraphStore(GraphStore):
@@ -55,12 +60,26 @@ class InMemoryGraphStore(GraphStore):
         ```
     """
 
-    def __init__(self) -> None:
-        """Initialize in-memory graph store"""
+    def __init__(
+        self,
+        property_storage_config: Optional[PropertyStorageConfig] = None,
+    ) -> None:
+        """
+        Initialize in-memory graph store
+
+        Args:
+            property_storage_config: Optional configuration for property storage optimization.
+                                     Enables sparse storage, compression, and indexing.
+        """
         self.graph: Optional[nx.DiGraph] = None
         self.entities: Dict[str, Entity] = {}
         self.relations: Dict[str, Relation] = {}
         self._initialized = False
+
+        # Property storage optimization
+        self._property_optimizer: Optional[PropertyOptimizer] = None
+        if property_storage_config is not None:
+            self._property_optimizer = PropertyOptimizer(property_storage_config)
 
     # =========================================================================
     # TIER 1 IMPLEMENTATION - Core CRUD Operations
@@ -99,6 +118,13 @@ class InMemoryGraphStore(GraphStore):
 
         if entity.id in self.entities:
             raise ValueError(f"Entity with ID '{entity.id}' already exists")
+
+        # Apply property optimization if enabled
+        if self._property_optimizer is not None:
+            # Apply sparse storage (remove None values)
+            entity.properties = self._property_optimizer.optimize_properties(entity.properties)
+            # Index properties for fast lookup
+            self._property_optimizer.index_entity(entity.id, entity.properties)
 
         # Add to networkx graph
         if self.graph is None:
@@ -299,6 +325,80 @@ class InMemoryGraphStore(GraphStore):
             entities = entities[:limit]
 
         return entities
+
+    # =========================================================================
+    # BULK OPERATIONS - Optimized implementations
+    # =========================================================================
+
+    async def add_entities_bulk(self, entities: List[Entity]) -> int:
+        """
+        Add multiple entities in bulk (optimized).
+
+        Bypasses individual add_entity() calls for better performance.
+
+        Args:
+            entities: List of entities to add
+
+        Returns:
+            Number of entities successfully added
+        """
+        if not self._initialized:
+            raise RuntimeError("GraphStore not initialized. Call initialize() first.")
+
+        added = 0
+        for entity in entities:
+            if entity.id in self.entities:
+                continue  # Skip existing entities
+
+            # Apply property optimization if enabled
+            if self._property_optimizer is not None:
+                entity.properties = self._property_optimizer.optimize_properties(entity.properties)
+                self._property_optimizer.index_entity(entity.id, entity.properties)
+
+            # Add to graph and index
+            self.graph.add_node(entity.id, entity=entity)
+            self.entities[entity.id] = entity
+            added += 1
+
+        return added
+
+    async def add_relations_bulk(self, relations: List[Relation]) -> int:
+        """
+        Add multiple relations in bulk (optimized).
+
+        Bypasses individual add_relation() calls for better performance.
+
+        Args:
+            relations: List of relations to add
+
+        Returns:
+            Number of relations successfully added
+        """
+        if not self._initialized:
+            raise RuntimeError("GraphStore not initialized. Call initialize() first.")
+
+        added = 0
+        for relation in relations:
+            if relation.id in self.relations:
+                continue  # Skip existing relations
+
+            # Validate entities exist
+            if relation.source_id not in self.entities:
+                continue
+            if relation.target_id not in self.entities:
+                continue
+
+            # Add edge
+            self.graph.add_edge(
+                relation.source_id,
+                relation.target_id,
+                key=relation.id,
+                relation=relation,
+            )
+            self.relations[relation.id] = relation
+            added += 1
+
+        return added
 
     # =========================================================================
     # TIER 2 METHODS - Inherited from base class
@@ -551,6 +651,82 @@ class InMemoryGraphStore(GraphStore):
             self.graph.clear()
             self.entities.clear()
             self.relations.clear()
+            if self._property_optimizer is not None:
+                self._property_optimizer.property_index.clear()
+
+    # =========================================================================
+    # PROPERTY OPTIMIZATION METHODS
+    # =========================================================================
+
+    @property
+    def property_optimizer(self) -> Optional[PropertyOptimizer]:
+        """Get the property optimizer if configured"""
+        return self._property_optimizer
+
+    def lookup_by_property(self, property_name: str, value: Any) -> Set[str]:
+        """
+        Look up entity IDs by property value using the property index.
+
+        This is much faster than scanning all entities when the property is indexed.
+
+        Args:
+            property_name: Property name to search
+            value: Property value to match
+
+        Returns:
+            Set of matching entity IDs
+        """
+        if self._property_optimizer is None:
+            return set()
+        return self._property_optimizer.lookup_by_property(property_name, value)
+
+    async def get_entities_by_property(
+        self,
+        property_name: str,
+        value: Any,
+    ) -> List[Entity]:
+        """
+        Get entities by property value.
+
+        Uses property index if available, otherwise scans all entities.
+
+        Args:
+            property_name: Property name to search
+            value: Property value to match
+
+        Returns:
+            List of matching entities
+        """
+        # Try indexed lookup first
+        if self._property_optimizer is not None:
+            entity_ids = self._property_optimizer.lookup_by_property(property_name, value)
+            if entity_ids:
+                return [self.entities[eid] for eid in entity_ids if eid in self.entities]
+
+        # Fall back to scan
+        return [
+            entity for entity in self.entities.values()
+            if entity.properties.get(property_name) == value
+        ]
+
+    def add_indexed_property(self, property_name: str) -> None:
+        """
+        Add a property to the index for fast lookups.
+
+        Args:
+            property_name: Property name to index
+        """
+        if self._property_optimizer is None:
+            self._property_optimizer = PropertyOptimizer()
+
+        self._property_optimizer.add_indexed_property(property_name)
+
+        # Index existing entities
+        for entity_id, entity in self.entities.items():
+            if property_name in entity.properties:
+                self._property_optimizer.property_index.add_to_index(
+                    entity_id, property_name, entity.properties[property_name]
+                )
 
     def __str__(self) -> str:
         stats = self.get_stats()
