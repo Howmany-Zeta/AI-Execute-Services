@@ -1,0 +1,23 @@
+# Document Parser Tool Configuration
+# Runtime configuration for DocumentParserTool
+# This file is automatically loaded by ToolConfigLoader
+
+# HTTP Request Configuration
+timeout: 60
+user_agent: "DocumentParser/2.0"
+
+# File Processing Limits
+max_file_size: 104857600  # 100MB
+max_pages: 2000
+
+# Text Processing Configuration
+default_encoding: "utf-8"
+
+# Temporary Directory Configuration
+temp_dir: "/tmp/document_parser"
+
+# Cloud Storage Configuration
+enable_cloud_storage: true
+gcs_bucket_name: "my-documents-bucket"
+# gcs_project_id should be set via environment variable DOC_PARSER_GCS_PROJECT_ID
+

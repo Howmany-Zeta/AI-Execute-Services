@@ -11,7 +11,8 @@ import time
 from typing import Dict, Any, List, Optional, Tuple
 from enum import Enum
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Lazy imports for heavy dependencies
 rake_nltk = None
@@ -78,8 +79,14 @@ class ClassifierTool(BaseTool):
     """
 
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the classifier tool"""
+    class Config(BaseSettings):
+        """Configuration for the classifier tool
+        
+        Automatically reads from environment variables with CLASSIFIER_TOOL_ prefix.
+        Example: CLASSIFIER_TOOL_MAX_WORKERS -> max_workers
+        """
+
+        model_config = SettingsConfigDict(env_prefix="CLASSIFIER_TOOL_")
 
         max_workers: int = Field(
             default=min(32, (os.cpu_count() or 4) * 2),
@@ -101,8 +108,6 @@ class ClassifierTool(BaseTool):
         rate_limit_requests: int = Field(default=100, description="Maximum requests per window")
         rate_limit_window: int = Field(default=60, description="Rate limit window in seconds")
         use_rake_for_english: bool = Field(default=True, description="Use RAKE for English phrase extraction")
-
-        model_config = ConfigDict(env_prefix="CLASSIFIER_TOOL_")  # type: ignore[typeddict-unknown-key]
 
     # Base schema for text operations
     class BaseTextSchema(BaseModel):
@@ -219,11 +224,18 @@ class ClassifierTool(BaseTool):
 
         Raises:
             ValueError: If config contains invalid settings.
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/classifier.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
         """
         super().__init__(config)
 
-        # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         # Set up logger
         self.logger = logging.getLogger(__name__)

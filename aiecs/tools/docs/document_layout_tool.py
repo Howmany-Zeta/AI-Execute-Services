@@ -22,7 +22,8 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from enum import Enum
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -121,10 +122,14 @@ class DocumentLayoutTool(BaseTool):
     """
 
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the document layout tool"""
+    class Config(BaseSettings):
+        """Configuration for the document layout tool
+        
+        Automatically reads from environment variables with DOC_LAYOUT_ prefix.
+        Example: DOC_LAYOUT_TEMP_DIR -> temp_dir
+        """
 
-        model_config = ConfigDict(env_prefix="DOC_LAYOUT_")  # type: ignore[typeddict-unknown-key]
+        model_config = SettingsConfigDict(env_prefix="DOC_LAYOUT_")
 
         temp_dir: str = Field(
             default=os.path.join(tempfile.gettempdir(), "document_layouts"),
@@ -146,11 +151,19 @@ class DocumentLayoutTool(BaseTool):
         )
 
     def __init__(self, config: Optional[Dict] = None):
-        """Initialize Document Layout Tool with settings"""
+        """Initialize Document Layout Tool with settings
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/document_layout.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
+        """
         super().__init__(config)
 
-        # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
 

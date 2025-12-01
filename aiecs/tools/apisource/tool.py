@@ -18,7 +18,8 @@ Enhanced Features:
 import logging
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aiecs.tools import register_tool
 from aiecs.tools.base_tool import BaseTool
@@ -75,10 +76,16 @@ class APISourceTool(BaseTool):
     """
 
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the API Source Tool"""
+    class Config(BaseSettings):
+        """Configuration for the API Source Tool
+        
+        Automatically reads from environment variables with APISOURCE_TOOL_ prefix.
+        Example: APISOURCE_TOOL_FRED_API_KEY -> fred_api_key
+        
+        Sensitive fields (API keys) are loaded from .env files via dotenv.
+        """
 
-        model_config = ConfigDict(env_prefix="APISOURCE_TOOL_")  # type: ignore[typeddict-unknown-key]
+        model_config = SettingsConfigDict(env_prefix="APISOURCE_TOOL_")
 
         cache_ttl: int = Field(
             default=300,
@@ -121,11 +128,20 @@ class APISourceTool(BaseTool):
 
         Args:
             config: Configuration dictionary with API keys and settings
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/apisource.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
+        
+        Sensitive fields (API keys) are loaded from .env files.
         """
         super().__init__(config)
 
-        # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:

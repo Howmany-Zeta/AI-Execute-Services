@@ -22,7 +22,8 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from enum import Enum
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -115,10 +116,14 @@ class DocumentCreatorTool(BaseTool):
     """
 
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the document creator tool"""
+    class Config(BaseSettings):
+        """Configuration for the document creator tool
+        
+        Automatically reads from environment variables with DOC_CREATOR_ prefix.
+        Example: DOC_CREATOR_TEMPLATES_DIR -> templates_dir
+        """
 
-        model_config = ConfigDict(env_prefix="DOC_CREATOR_")  # type: ignore[typeddict-unknown-key]
+        model_config = SettingsConfigDict(env_prefix="DOC_CREATOR_")
 
         templates_dir: str = Field(
             default=os.path.join(tempfile.gettempdir(), "document_templates"),
@@ -144,11 +149,19 @@ class DocumentCreatorTool(BaseTool):
         )
 
     def __init__(self, config: Optional[Dict] = None):
-        """Initialize Document Creator Tool with settings"""
+        """Initialize Document Creator Tool with settings
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/document_creator.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
+        """
         super().__init__(config)
 
-        # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
 

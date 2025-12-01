@@ -1,0 +1,47 @@
+# Document Parser Tool Configuration
+# This file demonstrates runtime configuration for the DocumentParserTool.
+# Runtime configuration includes timeouts, limits, feature flags, and other
+# non-sensitive settings that can be version-controlled.
+
+# Tool-specific configuration file: config/tools/document_parser_tool.yaml
+# Global configuration file: config/tools.yaml
+# 
+# NOTE: This is an example file. Copy it to your project's config/tools/ directory to use it.
+# This file is located in examples/config/tools/ for reference.
+# Configuration precedence: explicit config dict > YAML config > environment variables > defaults
+
+# HTTP Request Configuration
+timeout: 60  # Timeout for HTTP requests in seconds (default: 30)
+user_agent: "DocumentParser/2.0"  # User agent for HTTP requests (default: "DocumentParser/1.0")
+
+# File Processing Limits
+max_file_size: 104857600  # Maximum file size in bytes (default: 50MB)
+max_pages: 2000  # Maximum number of pages to process for large documents (default: 1000)
+
+# Text Processing Configuration
+default_encoding: "utf-8"  # Default encoding for text files (default: "utf-8")
+
+# Temporary Directory Configuration
+# Note: temp_dir can be set here or via environment variable DOC_PARSER_TEMP_DIR
+# The path will be created automatically if it doesn't exist
+temp_dir: "/tmp/document_parser"  # Temporary directory for document processing
+
+# Cloud Storage Configuration
+# Note: Sensitive values like API keys should be set via .env files, not YAML
+enable_cloud_storage: true  # Whether to enable cloud storage integration (default: true)
+gcs_bucket_name: "my-documents-bucket"  # Google Cloud Storage bucket name (default: "aiecs-documents")
+# gcs_project_id should be set via environment variable DOC_PARSER_GCS_PROJECT_ID (sensitive)
+
+# Nested Configuration Example
+# The configuration loader supports nested structures if your Config class uses nested models
+# processing:
+#   batch_size: 100
+#   retry_attempts: 3
+#   retry_delay: 5
+
+# Feature Flags Example
+# features:
+#   enable_ocr: true
+#   enable_metadata_extraction: true
+#   enable_content_chunking: true
+

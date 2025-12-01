@@ -10,11 +10,11 @@ import os
 import time
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools.tool_executor import cache_result_with_strategy
-from aiecs.config.config import get_settings
 
 # Import Google API with graceful fallback
 try:
@@ -80,10 +80,16 @@ class SearchTool(BaseTool):
     """
 
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the search tool"""
+    class Config(BaseSettings):
+        """Configuration for the search tool
+        
+        Automatically reads from environment variables with SEARCH_TOOL_ prefix.
+        Example: SEARCH_TOOL_GOOGLE_API_KEY -> google_api_key
+        
+        Sensitive fields (API keys, credentials) are loaded from .env files via dotenv.
+        """
 
-        model_config = ConfigDict(env_prefix="SEARCH_TOOL_")  # type: ignore[typeddict-unknown-key]
+        model_config = SettingsConfigDict(env_prefix="SEARCH_TOOL_")
 
         google_api_key: Optional[str] = Field(default=None, description="Google API key for Custom Search")
         google_cse_id: Optional[str] = Field(default=None, description="Custom Search Engine ID")
@@ -142,26 +148,23 @@ class SearchTool(BaseTool):
         Raises:
             AuthenticationError: If Google API libraries not available
             ValidationError: If configuration is invalid
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/search.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
+        
+        Sensitive fields (API keys, credentials) are loaded from .env files.
         """
         super().__init__(config)
 
         if not GOOGLE_API_AVAILABLE:
             raise AuthenticationError("Google API client libraries not available. " "Install with: pip install google-api-python-client google-auth google-auth-httplib2")
 
-        # Load settings
-        global_settings = get_settings()
-
-        # Merge configuration
-        merged_config = {
-            "google_api_key": global_settings.google_api_key,
-            "google_cse_id": global_settings.google_cse_id,
-            "google_application_credentials": global_settings.google_application_credentials,
-        }
-        if config:
-            merged_config.update(config)
-
-        # Parse configuration
-        self.config = self.Config(**merged_config)
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         # Initialize logger
         self.logger = logging.getLogger(__name__)

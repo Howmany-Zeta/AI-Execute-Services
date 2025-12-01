@@ -14,7 +14,8 @@ from typing import Dict, Any, List, Optional
 from enum import Enum
 from datetime import datetime
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -62,10 +63,14 @@ class AIDataAnalysisOrchestrator(BaseTool):
     """
 
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the AI data analysis orchestrator tool"""
+    class Config(BaseSettings):
+        """Configuration for the AI data analysis orchestrator tool
+        
+        Automatically reads from environment variables with AI_DATA_ORCHESTRATOR_ prefix.
+        Example: AI_DATA_ORCHESTRATOR_DEFAULT_MODE -> default_mode
+        """
 
-        model_config = ConfigDict(env_prefix="AI_DATA_ORCHESTRATOR_")  # type: ignore[typeddict-unknown-key]
+        model_config = SettingsConfigDict(env_prefix="AI_DATA_ORCHESTRATOR_")
 
         default_mode: str = Field(default="exploratory", description="Default analysis mode to use")
         max_iterations: int = Field(default=10, description="Maximum number of analysis iterations")
@@ -77,11 +82,19 @@ class AIDataAnalysisOrchestrator(BaseTool):
         enable_caching: bool = Field(default=True, description="Whether to enable result caching")
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
-        """Initialize AI Data Analysis Orchestrator"""
+        """Initialize AI Data Analysis Orchestrator
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/ai_data_analysis_orchestrator.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
+        """
         super().__init__(config)
 
-        # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:

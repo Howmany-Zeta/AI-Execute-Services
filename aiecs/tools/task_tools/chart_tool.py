@@ -6,7 +6,8 @@ import logging
 from typing import Dict, Any, List, Optional, Union, Tuple
 from enum import Enum
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
 import matplotlib.pyplot as plt
@@ -42,10 +43,14 @@ class ChartTool(BaseTool):
     """Chart and visualization tool: creates charts and exports data in various formats."""
 
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the chart tool"""
+    class Config(BaseSettings):
+        """Configuration for the chart tool
+        
+        Automatically reads from environment variables with CHART_TOOL_ prefix.
+        Example: CHART_TOOL_EXPORT_DIR -> export_dir
+        """
 
-        model_config = ConfigDict(env_prefix="CHART_TOOL_")  # type: ignore[typeddict-unknown-key]
+        model_config = SettingsConfigDict(env_prefix="CHART_TOOL_")
 
         export_dir: str = Field(
             default=os.path.join(tempfile.gettempdir(), "chart_exports"),
@@ -160,11 +165,18 @@ class ChartTool(BaseTool):
 
         Args:
             config: Optional configuration for the tool
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/chart.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
         """
         super().__init__(config)
 
-        # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         # Create export directory if it doesn't exist
         os.makedirs(self.config.export_dir, exist_ok=True)

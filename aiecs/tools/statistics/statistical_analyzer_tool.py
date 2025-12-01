@@ -16,7 +16,8 @@ from enum import Enum
 import pandas as pd  # type: ignore[import-untyped]
 import numpy as np
 from scipy import stats as scipy_stats  # type: ignore[import-untyped]
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -56,10 +57,14 @@ class StatisticalAnalyzerTool(BaseTool):
     """
 
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the statistical analyzer tool"""
+    class Config(BaseSettings):
+        """Configuration for the statistical analyzer tool
+        
+        Automatically reads from environment variables with STATISTICAL_ANALYZER_ prefix.
+        Example: STATISTICAL_ANALYZER_SIGNIFICANCE_LEVEL -> significance_level
+        """
 
-        model_config = ConfigDict(env_prefix="STATISTICAL_ANALYZER_")  # type: ignore[typeddict-unknown-key]
+        model_config = SettingsConfigDict(env_prefix="STATISTICAL_ANALYZER_")
 
         significance_level: float = Field(
             default=0.05,
@@ -75,11 +80,19 @@ class StatisticalAnalyzerTool(BaseTool):
         )
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
-        """Initialize StatisticalAnalyzerTool with settings"""
+        """Initialize StatisticalAnalyzerTool with settings
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/statistical_analyzer.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
+        """
         super().__init__(config)
 
-        # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:

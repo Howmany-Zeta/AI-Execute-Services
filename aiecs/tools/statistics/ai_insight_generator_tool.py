@@ -17,7 +17,8 @@ from datetime import datetime
 import pandas as pd  # type: ignore[import-untyped]
 import numpy as np
 from scipy import stats as scipy_stats  # type: ignore[import-untyped]
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -56,10 +57,14 @@ class AIInsightGeneratorTool(BaseTool):
     """
 
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the AI insight generator tool"""
+    class Config(BaseSettings):
+        """Configuration for the AI insight generator tool
+        
+        Automatically reads from environment variables with AI_INSIGHT_GENERATOR_ prefix.
+        Example: AI_INSIGHT_GENERATOR_MIN_CONFIDENCE -> min_confidence
+        """
 
-        model_config = ConfigDict(env_prefix="AI_INSIGHT_GENERATOR_")  # type: ignore[typeddict-unknown-key]
+        model_config = SettingsConfigDict(env_prefix="AI_INSIGHT_GENERATOR_")
 
         min_confidence: float = Field(
             default=0.7,
@@ -79,11 +84,19 @@ class AIInsightGeneratorTool(BaseTool):
         )
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
-        """Initialize AI Insight Generator Tool"""
+        """Initialize AI Insight Generator Tool
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/ai_insight_generator.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
+        """
         super().__init__(config)
 
-        # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:

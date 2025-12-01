@@ -2,7 +2,8 @@ import logging
 from typing import Dict, Any, List, Optional, Set
 import spacy
 from spacy.language import Language
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from collections import Counter
 from scipy.stats import pearsonr  # type: ignore[import-untyped]
 import os
@@ -39,10 +40,14 @@ class ResearchTool(BaseTool):
     """
 
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the research tool"""
+    class Config(BaseSettings):
+        """Configuration for the research tool
+        
+        Automatically reads from environment variables with RESEARCH_TOOL_ prefix.
+        Example: RESEARCH_TOOL_SPACY_MODEL -> spacy_model
+        """
 
-        model_config = ConfigDict(env_prefix="RESEARCH_TOOL_")  # type: ignore[typeddict-unknown-key]
+        model_config = SettingsConfigDict(env_prefix="RESEARCH_TOOL_")
 
         max_workers: int = Field(
             default=min(32, (os.cpu_count() or 4) * 2),
@@ -64,11 +69,18 @@ class ResearchTool(BaseTool):
 
         Raises:
             ValueError: If config contains invalid settings.
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/research.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
         """
         super().__init__(config)
 
-        # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:

@@ -6,6 +6,7 @@ AIECS tool for searching knowledge graphs with multiple search modes.
 
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from enum import Enum
 
 from aiecs.tools.base_tool import BaseTool
@@ -296,10 +297,53 @@ class GraphSearchTool(BaseTool):
     - Filter entities by specific criteria
     """
 
+    # Configuration schema
+    class Config(BaseSettings):
+        """Configuration for the Graph Search Tool
+        
+        Automatically reads from environment variables with GRAPH_SEARCH_ prefix.
+        Example: GRAPH_SEARCH_CACHE_MAX_SIZE -> cache_max_size
+        """
+
+        model_config = SettingsConfigDict(env_prefix="GRAPH_SEARCH_")
+
+        cache_max_size: int = Field(
+            default=100,
+            description="Maximum cache size for retrieval results",
+        )
+        cache_ttl: int = Field(
+            default=300,
+            description="Cache time-to-live in seconds",
+        )
+        default_max_results: int = Field(
+            default=10,
+            description="Default maximum number of search results",
+        )
+        default_max_depth: int = Field(
+            default=2,
+            description="Default maximum traversal depth",
+        )
+
     input_schema: type[BaseModel] = GraphSearchInput
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize Graph Search Tool.
+
+        Args:
+            config (Dict, optional): Configuration overrides for Graph Search Tool.
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/graph_search.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
+        """
+        super().__init__(config)
+
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         # Graph store (shared with KG builder)
         self.graph_store = None
@@ -333,7 +377,7 @@ class GraphSearchTool(BaseTool):
         self.traversal_strategy = EnhancedTraversal(self.graph_store)
 
         # Initialize cache
-        self.cache = RetrievalCache(max_size=100, ttl=300)
+        self.cache = RetrievalCache(max_size=self.config.cache_max_size, ttl=self.config.cache_ttl)
 
         # Initialize reranking strategies
         self._rerankers = {

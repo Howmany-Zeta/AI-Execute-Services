@@ -35,7 +35,16 @@ _AVAILABLE_TOOLS = [
 ]
 
 # Add office_tool conditionally
-if not os.getenv("SKIP_OFFICE_TOOL", "").lower() in ("true", "1", "yes"):
+# Check environment variable via settings (preferred) or direct check
+try:
+    from aiecs.config.config import get_settings
+    settings = get_settings()
+    skip_office_tool = getattr(settings, "skip_office_tool", False)
+except Exception:
+    # Fallback to direct env check if settings not available
+    skip_office_tool = os.getenv("SKIP_OFFICE_TOOL", "").lower() in ("true", "1", "yes")
+
+if not skip_office_tool:
     _AVAILABLE_TOOLS.append("office_tool")
 
 # Track which tools have been loaded

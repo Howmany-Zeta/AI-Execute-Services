@@ -512,16 +512,42 @@ class BaseAPIProvider(ABC):
 
         Returns:
             API key or None if not found
+        
+        Note: When used through APISourceTool, API keys are loaded from .env files
+        via BaseSettings and passed via config dict. This fallback is for backward
+        compatibility and independent provider usage.
         """
         import os
 
-        # Try config first
+        # Try config first (primary path - API keys come from APISourceTool's BaseSettings)
         if "api_key" in self.config:
             return self.config["api_key"]
 
-        # Try environment variable
+        # Fallback: Try environment variable (ensures .env files are loaded)
+        # Use ToolConfigLoader to ensure .env files are loaded if not already
+        try:
+            from aiecs.config.tool_config import get_tool_config_loader
+            
+            loader = get_tool_config_loader()
+            loader.load_env_config()  # Ensures .env files are loaded
+        except Exception:
+            # If loader is unavailable, try direct dotenv load as fallback
+            try:
+                from dotenv import load_dotenv
+                from pathlib import Path
+                
+                # Try to load .env files from common locations
+                for env_file in [".env", ".env.local"]:
+                    env_path = Path(env_file)
+                    if env_path.exists():
+                        load_dotenv(env_path, override=False)
+                        break
+            except Exception:
+                pass  # If dotenv is unavailable, continue with os.environ
+
+        # Try environment variable (now includes values from .env files)
         env_var = key_name or f"{self.name.upper()}_API_KEY"
-        return os.getenv(env_var)
+        return os.environ.get(env_var)
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """
