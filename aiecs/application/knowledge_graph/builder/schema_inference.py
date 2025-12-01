@@ -232,7 +232,7 @@ class SchemaInference:
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", UserWarning)
-                pd.to_datetime(sample, errors='raise')
+            pd.to_datetime(sample, errors='raise')
             return True
         except (ValueError, TypeError):
             return False

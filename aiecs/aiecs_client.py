@@ -203,11 +203,28 @@ class AIECS:
         if not tool:
             raise ValueError(f"Tool '{tool_name}' not found")
 
-        # Prepare parameters with operation
-        tool_params = {**params, "op": operation}
-
-        # Execute tool
-        return await tool.execute(tool_params)
+        # Check if tool has execute() method (some tools like KnowledgeGraphBuilderTool)
+        if hasattr(tool, "execute") and callable(getattr(tool, "execute")):
+            # Tools with execute() method expect kwargs unpacked
+            # Some tools use "op", others use "action" - include both for compatibility
+            tool_params = {**params, "op": operation, "action": operation}
+            return await tool.execute(**tool_params)
+        
+        # Check if tool has run_async() method (BaseTool-based tools)
+        elif hasattr(tool, "run_async") and callable(getattr(tool, "run_async")):
+            # BaseTool.run_async expects op as first parameter, then kwargs
+            return await tool.run_async(operation, **params)
+        
+        # Check if tool has run() method (synchronous BaseTool)
+        elif hasattr(tool, "run") and callable(getattr(tool, "run")):
+            # BaseTool.run expects op as first parameter, then kwargs
+            return tool.run(operation, **params)
+        
+        else:
+            raise ValueError(
+                f"Tool '{tool_name}' does not have an 'execute()', 'run_async()', or 'run()' method. "
+                f"Available methods: {[m for m in dir(tool) if not m.startswith('_')]}"
+            )
 
     async def get_available_tools(self) -> List[Dict[str, Any]]:
         """Get list of all available tools"""
