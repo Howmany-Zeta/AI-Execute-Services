@@ -7,7 +7,8 @@ from dataclasses import dataclass
 
 import pandas as pd  # type: ignore[import-untyped]
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -63,10 +64,14 @@ class StatsTool(BaseTool):
     """Enhanced statistical analysis tool for various data formats and operations."""
 
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the stats tool"""
+    class Config(BaseSettings):
+        """Configuration for the stats tool
+        
+        Automatically reads from environment variables with STATS_TOOL_ prefix.
+        Example: STATS_TOOL_MAX_FILE_SIZE_MB -> max_file_size_mb
+        """
 
-        model_config = ConfigDict(env_prefix="STATS_TOOL_")  # type: ignore[typeddict-unknown-key]
+        model_config = SettingsConfigDict(env_prefix="STATS_TOOL_")
 
         max_file_size_mb: int = Field(default=200, description="Maximum file size in megabytes")
         allowed_extensions: List[str] = Field(
@@ -85,10 +90,23 @@ class StatsTool(BaseTool):
         )
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize StatsTool with settings and resources.
+
+        Args:
+            config (Dict, optional): Configuration overrides for StatsTool.
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/stats.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
+        """
         super().__init__(config)
 
-        # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:

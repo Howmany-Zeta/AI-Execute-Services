@@ -4,7 +4,8 @@ from typing import Dict, Any, List, Optional, Callable
 from enum import Enum
 from datetime import datetime
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -59,10 +60,14 @@ class AIDocumentOrchestrator(BaseTool):
     """
 
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the AI document orchestrator tool"""
+    class Config(BaseSettings):
+        """Configuration for the AI document orchestrator tool
+        
+        Automatically reads from environment variables with AI_DOC_ORCHESTRATOR_ prefix.
+        Example: AI_DOC_ORCHESTRATOR_DEFAULT_AI_PROVIDER -> default_ai_provider
+        """
 
-        model_config = ConfigDict(env_prefix="AI_DOC_ORCHESTRATOR_")  # type: ignore[typeddict-unknown-key]
+        model_config = SettingsConfigDict(env_prefix="AI_DOC_ORCHESTRATOR_")
 
         default_ai_provider: str = Field(default="openai", description="Default AI provider to use")
         max_chunk_size: int = Field(default=4000, description="Maximum chunk size for AI processing")
@@ -72,11 +77,19 @@ class AIDocumentOrchestrator(BaseTool):
         timeout: int = Field(default=60, description="Timeout in seconds for AI operations")
 
     def __init__(self, config: Optional[Dict] = None):
-        """Initialize AI Document Orchestrator with settings"""
+        """Initialize AI Document Orchestrator with settings
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/ai_document_orchestrator.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
+        """
         super().__init__(config)
 
-        # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
 

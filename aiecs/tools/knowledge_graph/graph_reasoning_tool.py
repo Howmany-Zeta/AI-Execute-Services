@@ -8,6 +8,7 @@ Provides query planning, multi-hop reasoning, inference, and evidence synthesis.
 from __future__ import annotations
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from enum import Enum
 
 from aiecs.tools.base_tool import BaseTool
@@ -188,14 +189,53 @@ class GraphReasoningTool(BaseTool):
         ```
     """
 
-    def __init__(self, graph_store: GraphStore):
+    # Configuration schema
+    class Config(BaseSettings):
+        """Configuration for the Graph Reasoning Tool
+        
+        Automatically reads from environment variables with GRAPH_REASONING_ prefix.
+        Example: GRAPH_REASONING_DEFAULT_MAX_HOPS -> default_max_hops
+        """
+
+        model_config = SettingsConfigDict(env_prefix="GRAPH_REASONING_")
+
+        default_max_hops: int = Field(
+            default=3,
+            description="Default maximum hops for multi-hop reasoning",
+        )
+        default_confidence_threshold: float = Field(
+            default=0.5,
+            description="Default confidence threshold for evidence",
+        )
+        default_inference_max_steps: int = Field(
+            default=3,
+            description="Default maximum inference steps",
+        )
+        enable_default_rules: bool = Field(
+            default=False,
+            description="Enable default inference rules by default",
+        )
+
+    def __init__(self, graph_store: GraphStore, config: Optional[Dict[str, Any]] = None):
         """
         Initialize Graph Reasoning Tool
 
         Args:
             graph_store: Graph storage backend
+            config (Dict, optional): Configuration overrides for Graph Reasoning Tool.
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/graph_reasoning.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
         """
-        super().__init__()
+        super().__init__(config)
+
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
+        
         self.graph_store = graph_store
         self.query_planner = QueryPlanner(graph_store)
         self.reasoning_engine = ReasoningEngine(graph_store)

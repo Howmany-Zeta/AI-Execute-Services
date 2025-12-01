@@ -2,7 +2,8 @@ from io import StringIO
 import pandas as pd  # type: ignore[import-untyped]
 import numpy as np
 from typing import List, Dict, Union, Optional, cast
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 import logging
 
 from aiecs.tools.base_tool import BaseTool
@@ -51,10 +52,14 @@ class PandasTool(BaseTool):
     """
 
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the pandas tool"""
+    class Config(BaseSettings):
+        """Configuration for the pandas tool
+        
+        Automatically reads from environment variables with PANDAS_TOOL_ prefix.
+        Example: PANDAS_TOOL_CSV_DELIMITER -> csv_delimiter
+        """
 
-        model_config = ConfigDict(env_prefix="PANDAS_TOOL_")  # type: ignore[typeddict-unknown-key]
+        model_config = SettingsConfigDict(env_prefix="PANDAS_TOOL_")
 
         csv_delimiter: str = Field(default=",", description="Delimiter for CSV files")
         encoding: str = Field(default="utf-8", description="Encoding for file operations")
@@ -78,11 +83,18 @@ class PandasTool(BaseTool):
 
         Raises:
             ValueError: If config is invalid.
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/pandas.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
         """
         super().__init__(config)
 
-        # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:

@@ -10,9 +10,9 @@ from pydantic import (
     BaseModel,
     ValidationError,
     field_validator,
-    ConfigDict,
     Field,
 )
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from PIL import Image, ExifTags, ImageFilter
 from queue import Queue
 
@@ -197,10 +197,14 @@ class ImageTool(BaseTool):
     """
 
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the image tool"""
+    class Config(BaseSettings):
+        """Configuration for the image tool
+        
+        Automatically reads from environment variables with IMAGE_TOOL_ prefix.
+        Example: IMAGE_TOOL_MAX_FILE_SIZE_MB -> max_file_size_mb
+        """
 
-        model_config = ConfigDict(env_prefix="IMAGE_TOOL_")  # type: ignore[typeddict-unknown-key]
+        model_config = SettingsConfigDict(env_prefix="IMAGE_TOOL_")
 
         max_file_size_mb: int = Field(default=50, description="Maximum file size in megabytes")
         allowed_extensions: List[str] = Field(
@@ -218,11 +222,18 @@ class ImageTool(BaseTool):
 
         Raises:
             ValueError: If config contains invalid settings.
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/image.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
         """
         super().__init__(config)
 
-        # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:

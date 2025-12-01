@@ -12,7 +12,8 @@ from contextlib import contextmanager
 from aiecs.utils.execution_utils import ExecutionUtils
 from aiecs.utils.cache_provider import ICacheProvider, LRUCacheProvider
 import re
-from pydantic import BaseModel, ValidationError, ConfigDict
+from pydantic import BaseModel, ValidationError
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +43,12 @@ class TimeoutError(ToolExecutionError):
 # Configuration for the executor
 
 
-class ExecutorConfig(BaseModel):
+class ExecutorConfig(BaseSettings):
     """
     Configuration for the ToolExecutor.
+    
+    Automatically reads from environment variables with TOOL_EXECUTOR_ prefix.
+    Example: TOOL_EXECUTOR_MAX_WORKERS -> max_workers
 
     Attributes:
         enable_cache (bool): Enable caching of operation results.
@@ -66,6 +70,8 @@ class ExecutorConfig(BaseModel):
         l1_cache_ttl (int): L1 cache TTL in seconds (for dual-layer cache).
     """
 
+    model_config = SettingsConfigDict(env_prefix="TOOL_EXECUTOR_")
+
     enable_cache: bool = True
     cache_size: int = 100
     cache_ttl: int = 3600
@@ -85,8 +91,6 @@ class ExecutorConfig(BaseModel):
     enable_redis_cache: bool = False
     redis_cache_ttl: int = 86400  # 1 day
     l1_cache_ttl: int = 300  # 5 minutes
-
-    model_config = ConfigDict(env_prefix="TOOL_EXECUTOR_")  # type: ignore[typeddict-unknown-key]
 
 
 # Metrics counter

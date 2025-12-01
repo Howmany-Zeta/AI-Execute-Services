@@ -6,6 +6,7 @@ AIECS tool for building knowledge graphs from text and documents.
 
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -137,6 +138,41 @@ class KnowledgeGraphBuilderTool(BaseTool):
         ```
     """
 
+    # Configuration schema
+    class Config(BaseSettings):
+        """Configuration for the Knowledge Graph Builder Tool
+        
+        Automatically reads from environment variables with KG_BUILDER_ prefix.
+        Example: KG_BUILDER_CHUNK_SIZE -> chunk_size
+        """
+
+        model_config = SettingsConfigDict(env_prefix="KG_BUILDER_")
+
+        chunk_size: int = Field(
+            default=2000,
+            description="Chunk size for document processing",
+        )
+        enable_deduplication: bool = Field(
+            default=True,
+            description="Enable entity deduplication",
+        )
+        enable_linking: bool = Field(
+            default=True,
+            description="Enable entity linking",
+        )
+        enable_chunking: bool = Field(
+            default=True,
+            description="Enable document chunking",
+        )
+        batch_size: int = Field(
+            default=100,
+            description="Batch size for structured data import",
+        )
+        skip_errors: bool = Field(
+            default=True,
+            description="Skip errors during structured data import",
+        )
+
     name: str = "kg_builder"
     description: str = """Build knowledge graphs from text and documents.
 
@@ -152,8 +188,24 @@ class KnowledgeGraphBuilderTool(BaseTool):
 
     input_schema: type[BaseModel] = KGBuilderInput
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize Knowledge Graph Builder Tool.
+
+        Args:
+            config (Dict, optional): Configuration overrides for KG Builder Tool.
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/kg_builder.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
+        """
+        super().__init__(config)
+
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         # Initialize graph store (in-memory for now)
         # In production, this would be configurable (SQLite, PostgreSQL, etc.)
@@ -180,15 +232,15 @@ class KnowledgeGraphBuilderTool(BaseTool):
             graph_store=self.graph_store,
             entity_extractor=entity_extractor,
             relation_extractor=relation_extractor,
-            enable_deduplication=True,
-            enable_linking=True,
+            enable_deduplication=self.config.enable_deduplication,
+            enable_linking=self.config.enable_linking,
         )
 
         # Initialize document builder
         self.document_builder = DocumentGraphBuilder(
             graph_builder=self.graph_builder,
-            chunk_size=2000,
-            enable_chunking=True,
+            chunk_size=self.config.chunk_size,
+            enable_chunking=self.config.enable_chunking,
         )
 
         self._initialized = True
@@ -330,8 +382,8 @@ class KnowledgeGraphBuilderTool(BaseTool):
             pipeline = StructuredDataPipeline(
                 mapping=schema_mapping,
                 graph_store=self.graph_store,
-                batch_size=100,
-                skip_errors=True,
+                batch_size=self.config.batch_size,
+                skip_errors=self.config.skip_errors,
             )
 
             # Import data based on file extension

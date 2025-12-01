@@ -80,14 +80,41 @@ class DocumentParserTool(BaseTool):
     - ScraperTool for URL downloading
     - OfficeTool for Office document parsing
     - ImageTool for image OCR
+
+    Configuration:
+    Configuration is automatically loaded by BaseTool from:
+    1. Explicit config dict (highest priority) - passed to constructor
+    2. YAML config files - config/tools/document_parser_tool.yaml or config/tools.yaml (see examples/config/tools/ for examples)
+    3. Environment variables - from .env files via dotenv (DOC_PARSER_ prefix)
+    4. Tool defaults - defined in Config class Field defaults (lowest priority)
+
+    Example usage:
+        # Basic usage (automatic configuration)
+        tool = get_tool("document_parser")
+
+        # With explicit config override
+        tool = get_tool("document_parser", config={"timeout": 120})
+
+        # Configuration files:
+        # - Runtime config: config/tools/document_parser_tool.yaml (see examples/config/tools/ for examples)
+        # - Sensitive config: .env file with DOC_PARSER_* variables
+
+    See docs/developer/TOOLS/TOOL_CONFIGURATION_EXAMPLES.md for more examples.
     """
 
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the document parser tool
 
-        Automatically reads from environment variables with DOC_PARSER_ prefix.
+        Configuration is automatically loaded by BaseTool using ToolConfigLoader.
+        Supports loading from:
+        - YAML files: config/tools/document_parser_tool.yaml (see examples/config/tools/ for examples)
+        - Environment variables: DOC_PARSER_* (from .env files via dotenv)
+        - Explicit config dict: passed to constructor
+
+        Environment variable prefix: DOC_PARSER_
         Example: DOC_PARSER_GCS_PROJECT_ID -> gcs_project_id
+        Example: DOC_PARSER_TIMEOUT -> timeout
         """
 
         model_config = SettingsConfigDict(env_prefix="DOC_PARSER_")

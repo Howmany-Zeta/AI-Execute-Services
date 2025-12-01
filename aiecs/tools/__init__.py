@@ -13,6 +13,9 @@ logger = logging.getLogger(__name__)
 # Global tool registry
 TOOL_REGISTRY: Dict[str, Any] = {}
 TOOL_CLASSES: Dict[str, Any] = {}
+# TOOL_CONFIGS: Legacy configuration dictionary.
+# Values here are passed as explicit config to tools (highest precedence).
+# Prefer using YAML config files (config/tools/{tool_name}.yaml) or .env files instead.
 TOOL_CONFIGS: Dict[str, Any] = {}
 
 
@@ -61,9 +64,15 @@ def get_tool(name):
 
         if current_tool is None or is_placeholder:
             # Lazy instantiation of BaseTool subclasses, replace placeholder
+            # Configuration is loaded automatically by BaseTool using ToolConfigLoader:
+            # 1. TOOL_CONFIGS values (explicit config, highest precedence)
+            # 2. YAML config files (config/tools/{tool_name}.yaml or config/tools.yaml)
+            # 3. Environment variables (via dotenv from .env files)
+            # 4. Tool defaults (lowest priority)
             tool_class = TOOL_CLASSES[name]
             config = TOOL_CONFIGS.get(name, {})
-            TOOL_REGISTRY[name] = tool_class(config)
+            # Pass tool name to BaseTool for config file discovery (used for YAML file lookup)
+            TOOL_REGISTRY[name] = tool_class(config=config, tool_name=name)
             logger.debug(f"Instantiated tool '{name}' from class {tool_class.__name__}")
 
     if name not in TOOL_REGISTRY:
