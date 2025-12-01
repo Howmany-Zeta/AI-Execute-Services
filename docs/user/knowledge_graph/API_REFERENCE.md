@@ -779,11 +779,15 @@ optimized_plan = optimizer.optimize(query_plan)
 
 ### StructuredDataPipeline
 
-Import CSV and JSON data into knowledge graphs.
+Import CSV, JSON, SPSS, and Excel data into knowledge graphs with automatic schema inference, data reshaping, statistical aggregation, and quality validation.
 
 ```python
 from aiecs.application.knowledge_graph.builder.structured_pipeline import (
     StructuredDataPipeline,
+    ImportResult,
+    PerformanceMetrics
+)
+from aiecs.application.knowledge_graph.builder.schema_mapping import (
     SchemaMapping,
     EntityMapping,
     RelationMapping
@@ -793,8 +797,386 @@ pipeline = StructuredDataPipeline(
     mapping=schema_mapping,
     graph_store=store,
     batch_size=100,
-    skip_errors=True
+    skip_errors=True,
+    enable_parallel=False,  # Enable parallel processing
+    validation_config=None,  # Data quality validation
+    auto_tune_batch_size=False  # Auto-tune batch size
 )
+```
+
+**Parameters:**
+- `mapping` (SchemaMapping): Schema mapping configuration (optional if using inference)
+- `graph_store` (GraphStore): Graph storage backend
+- `batch_size` (int): Number of rows per batch (default: 100)
+- `skip_errors` (bool): Continue on errors (default: True)
+- `enable_parallel` (bool): Enable parallel batch processing (default: False)
+- `max_workers` (int): Number of worker processes (default: CPU count - 1)
+- `validation_config` (ValidationConfig): Data quality validation rules
+- `auto_tune_batch_size` (bool): Auto-tune batch size (default: False)
+- `streaming` (bool): Enable streaming mode for large files (default: False)
+
+**Methods:**
+
+#### `import_from_csv(file_path, encoding="utf-8", delimiter=",", header=True) -> ImportResult`
+
+Import data from CSV file.
+
+**Example:**
+```python
+result = await pipeline.import_from_csv("data.csv")
+print(f"Added {result.entities_added} entities")
+```
+
+#### `import_from_json(file_path, encoding="utf-8", array_key=None) -> ImportResult`
+
+Import data from JSON file.
+
+**Example:**
+```python
+result = await pipeline.import_from_json("data.json")
+```
+
+#### `import_from_spss(file_path) -> ImportResult`
+
+Import data from SPSS (.sav, .por) file.
+
+**Example:**
+```python
+result = await pipeline.import_from_spss("survey_data.sav")
+# SPSS metadata (variable labels, value labels) are automatically preserved
+```
+
+#### `import_from_excel(file_path, sheet_name=None) -> ImportResult`
+
+Import data from Excel (.xlsx, .xls) file.
+
+**Example:**
+```python
+# Import from specific sheet
+result = await pipeline.import_from_excel("workbook.xlsx", sheet_name="Sheet1")
+
+# Import from all sheets
+result = await pipeline.import_from_excel("workbook.xlsx", sheet_name=None)
+```
+
+#### `import_from_file(file_path, **kwargs) -> ImportResult`
+
+Auto-detect file format and import.
+
+**Example:**
+```python
+# Automatically detects format from extension
+result = await pipeline.import_from_file("data.sav")  # SPSS
+result = await pipeline.import_from_file("data.xlsx")  # Excel
+result = await pipeline.import_from_file("data.csv")  # CSV
+```
+
+#### `import_from_dataframe(df) -> ImportResult`
+
+Import data from pandas DataFrame.
+
+**Example:**
+```python
+import pandas as pd
+df = pd.read_csv("data.csv")
+result = await pipeline.import_from_dataframe(df)
+```
+
+#### `create_with_auto_inference(file_path, graph_store, entity_type_hint=None, **kwargs) -> StructuredDataPipeline`
+
+Create pipeline with automatic schema inference.
+
+**Example:**
+```python
+pipeline = await StructuredDataPipeline.create_with_auto_inference(
+    file_path="data.csv",
+    graph_store=store,
+    entity_type_hint="Employee"
+)
+result = await pipeline.import_from_file("data.csv")
+```
+
+#### `create_with_auto_reshape(file_path, graph_store, entity_type_hint=None, reshape_threshold=50, **kwargs) -> StructuredDataPipeline`
+
+Create pipeline with automatic wide format detection and reshaping suggestion.
+
+**Example:**
+```python
+pipeline = await StructuredDataPipeline.create_with_auto_reshape(
+    file_path="wide_data.csv",
+    graph_store=store,
+    reshape_threshold=50
+)
+```
+
+#### `reshape_and_import(file_path, id_vars, value_vars, entity_type, variable_type, relation_type, **kwargs) -> ImportResult`
+
+Reshape wide format data and import with normalized structure.
+
+**Example:**
+```python
+result = await pipeline.reshape_and_import(
+    file_path="wide_data.csv",
+    id_vars=["sample_id"],
+    value_vars=[f"option_{i}" for i in range(1, 201)],
+    entity_type="Sample",
+    variable_type="Option",
+    relation_type="HAS_VALUE"
+)
+```
+
+**Returns:** `ImportResult` with:
+- `success` (bool): Whether import completed successfully
+- `entities_added` (int): Number of entities added
+- `relations_added` (int): Number of relations added
+- `rows_processed` (int): Number of rows processed
+- `rows_failed` (int): Number of rows that failed
+- `errors` (List[str]): List of errors
+- `warnings` (List[str]): List of warnings
+- `quality_report` (QualityReport): Data quality validation report (if enabled)
+- `performance_metrics` (PerformanceMetrics): Performance metrics (if enabled)
+- `duration_seconds` (float): Total duration
+
+### SchemaInference
+
+Automatically infer schema mappings from data structure.
+
+**Module**: `aiecs.application.knowledge_graph.builder.schema_inference`
+
+```python
+from aiecs.application.knowledge_graph.builder.schema_inference import SchemaInference
+
+inference = SchemaInference(sample_size=1000)
+```
+
+**Methods:**
+
+#### `infer_from_csv(file_path) -> InferredSchema`
+
+Infer schema from CSV file.
+
+**Example:**
+```python
+inferred = inference.infer_from_csv("data.csv")
+mapping = inferred.to_schema_mapping()
+```
+
+#### `infer_from_spss(file_path) -> InferredSchema`
+
+Infer schema from SPSS file (uses variable labels and value labels).
+
+**Example:**
+```python
+inferred = inference.infer_from_spss("survey_data.sav")
+# Uses SPSS variable labels as property names
+# Uses SPSS value labels for categorical data
+```
+
+#### `infer_from_excel(file_path, sheet_name=None) -> InferredSchema`
+
+Infer schema from Excel file.
+
+**Example:**
+```python
+inferred = inference.infer_from_excel("workbook.xlsx", sheet_name="Sheet1")
+```
+
+#### `infer_from_dataframe(df, entity_type_hint=None, metadata=None) -> InferredSchema`
+
+Infer schema from pandas DataFrame.
+
+**Example:**
+```python
+import pandas as pd
+df = pd.read_csv("data.csv")
+inferred = inference.infer_from_dataframe(df, entity_type_hint="Employee")
+```
+
+#### `merge_with_user_mapping(inferred, user_mapping) -> SchemaMapping`
+
+Merge inferred schema with user-provided mappings.
+
+**Example:**
+```python
+user_mapping = SchemaMapping(entity_mappings=[...])
+merged = inference.merge_with_user_mapping(inferred, user_mapping)
+```
+
+**Returns:** `InferredSchema` with:
+- `entity_mappings` (List[EntityMapping]): Inferred entity mappings
+- `relation_mappings` (List[RelationMapping]): Inferred relation mappings
+- `confidence_scores` (Dict[str, float]): Confidence scores (0-1)
+- `warnings` (List[str]): Warnings about inference
+- `to_schema_mapping()`: Convert to SchemaMapping
+
+### DataReshaping
+
+Reshape data between wide and long formats for normalized graph structures.
+
+**Module**: `aiecs.application.knowledge_graph.builder.data_reshaping`
+
+```python
+from aiecs.application.knowledge_graph.builder.data_reshaping import DataReshaping
+
+reshaping = DataReshaping()
+```
+
+**Methods:**
+
+#### `melt_wide_to_long(df, id_vars, value_vars, var_name="variable", value_name="value") -> ReshapeResult`
+
+Convert wide format to long format.
+
+**Example:**
+```python
+result = reshaping.melt_wide_to_long(
+    df=df_wide,
+    id_vars=["sample_id"],
+    value_vars=[f"option_{i}" for i in range(1, 201)],
+    var_name="option_id",
+    value_name="value"
+)
+```
+
+#### `pivot_long_to_wide(df, index, columns, values) -> ReshapeResult`
+
+Convert long format to wide format.
+
+**Example:**
+```python
+result = reshaping.pivot_long_to_wide(
+    df=df_long,
+    index="sample_id",
+    columns="option_id",
+    values="value"
+)
+```
+
+#### `detect_wide_format(df, threshold_columns=50) -> bool`
+
+Detect if DataFrame is in wide format.
+
+**Example:**
+```python
+is_wide = reshaping.detect_wide_format(df, threshold_columns=50)
+```
+
+#### `generate_normalized_mapping(id_column, entity_type, variable_type, relation_type) -> SchemaMapping`
+
+Generate schema mapping for normalized structure.
+
+**Example:**
+```python
+mapping = reshaping.generate_normalized_mapping(
+    id_column="sample_id",
+    entity_type="Sample",
+    variable_type="Option",
+    relation_type="HAS_VALUE"
+)
+```
+
+**Returns:** `ReshapeResult` with:
+- `data` (DataFrame): Reshaped DataFrame
+- `original_shape` (tuple): Original (rows, cols) shape
+- `new_shape` (tuple): New (rows, cols) shape
+- `id_columns` (List[str]): ID columns used
+- `variable_column` (str): Variable column name (for melt)
+- `value_column` (str): Value column name (for melt)
+- `warnings` (List[str]): Warnings
+
+### DataQualityValidator
+
+Validate data quality during import.
+
+**Module**: `aiecs.application.knowledge_graph.builder.data_quality`
+
+```python
+from aiecs.application.knowledge_graph.builder.data_quality import (
+    DataQualityValidator,
+    ValidationConfig,
+    RangeRule,
+    OutlierRule,
+    QualityReport
+)
+```
+
+**ValidationConfig:**
+
+```python
+validation_config = ValidationConfig(
+    rules={
+        "EntityType": {
+            "property_name": RangeRule(min=0.0, max=1.0)
+        }
+    },
+    outlier_detection={
+        "EntityType": {
+            "property_name": OutlierRule(method="zscore", threshold=3.0)
+        }
+    },
+    required_properties={
+        "EntityType": ["property1", "property2"]
+    },
+    fail_on_violations=False
+)
+```
+
+**Methods:**
+
+#### `validate_row(row, row_idx) -> bool`
+
+Validate a single row.
+
+**Example:**
+```python
+validator = DataQualityValidator(validation_config)
+is_valid = validator.validate_row(row, row_idx=0)
+```
+
+#### `validate_dataframe(df) -> QualityReport`
+
+Validate entire DataFrame.
+
+**Example:**
+```python
+report = validator.validate_dataframe(df)
+print(f"Violations: {len(report.range_violations)}")
+print(f"Completeness: {report.completeness}")
+```
+
+**Returns:** `QualityReport` with:
+- `range_violations` (List[QualityViolation]): Range validation violations
+- `outliers` (List[Outlier]): Detected outliers
+- `completeness` (Dict[str, float]): Completeness percentage per property
+- `summary` (Dict[str, Any]): Summary statistics
+
+### PerformanceMetrics
+
+Track import performance metrics.
+
+**Module**: `aiecs.application.knowledge_graph.builder.import_optimizer`
+
+```python
+from aiecs.application.knowledge_graph.builder.import_optimizer import PerformanceMetrics
+
+metrics = result.performance_metrics
+```
+
+**Attributes:**
+- `total_time` (float): Total import time in seconds
+- `read_time` (float): File reading time
+- `transform_time` (float): Data transformation time
+- `write_time` (float): Graph store write time
+- `rows_per_second` (float): Import throughput
+- `peak_memory_mb` (float): Peak memory usage in MB
+- `optimal_batch_size` (int): Optimal batch size used
+
+**Example:**
+```python
+if result.performance_metrics:
+    metrics = result.performance_metrics
+    print(f"Throughput: {metrics.rows_per_second:.0f} rows/sec")
+    print(f"Peak memory: {metrics.peak_memory_mb:.1f} MB")
 ```
 
 **Methods:**

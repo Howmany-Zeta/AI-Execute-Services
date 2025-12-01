@@ -1,6 +1,6 @@
 # StructuredDataPipeline Usage Guide
 
-This guide explains how to use the `StructuredDataPipeline` to import structured data (CSV, JSON) into knowledge graphs.
+This guide explains how to use the `StructuredDataPipeline` to import structured data (CSV, JSON, SPSS, Excel) into knowledge graphs.
 
 ## Table of Contents
 
@@ -8,10 +8,16 @@ This guide explains how to use the `StructuredDataPipeline` to import structured
 2. [Basic Usage](#basic-usage)
 3. [CSV Import](#csv-import)
 4. [JSON Import](#json-import)
-5. [Batch Processing](#batch-processing)
-6. [Error Handling](#error-handling)
-7. [Advanced Features](#advanced-features)
-8. [Performance Tips](#performance-tips)
+5. [SPSS Import](#spss-import)
+6. [Excel Import](#excel-import)
+7. [Automatic Schema Inference](#automatic-schema-inference)
+8. [Data Reshaping](#data-reshaping)
+9. [Statistical Aggregation](#statistical-aggregation)
+10. [Data Quality Validation](#data-quality-validation)
+11. [Batch Processing](#batch-processing)
+12. [Error Handling](#error-handling)
+13. [Advanced Features](#advanced-features)
+14. [Performance Tips](#performance-tips)
 
 ## Quick Start
 
@@ -176,6 +182,396 @@ result = await pipeline.import_from_csv(
     file_path="data_latin1.csv",
     encoding="latin-1"
 )
+```
+
+## SPSS Import
+
+### Basic SPSS Import
+
+Import data directly from SPSS (.sav) files:
+
+```python
+result = await pipeline.import_from_spss("survey_data.sav")
+print(f"Added {result.entities_added} entities")
+```
+
+### SPSS Import with Schema Mapping
+
+```python
+mapping = SchemaMapping(
+    entity_mappings=[
+        EntityMapping(
+            source_columns=["respondent_id", "age", "gender"],
+            entity_type="Respondent",
+            property_mapping={
+                "respondent_id": "id",
+                "age": "age",
+                "gender": "gender"
+            },
+            id_column="respondent_id"
+        )
+    ]
+)
+
+pipeline = StructuredDataPipeline(mapping=mapping, graph_store=store)
+result = await pipeline.import_from_spss("survey_data.sav")
+```
+
+### SPSS Metadata Preservation
+
+SPSS files contain variable labels and value labels that are automatically preserved:
+
+```python
+result = await pipeline.import_from_spss("survey_data.sav")
+
+# Variable labels are stored in entity properties as "_spss_variable_labels"
+# Value labels are stored as "_spss_value_labels"
+entity = await store.get_entity("respondent_001")
+print(entity.properties.get("_spss_variable_labels", {}))
+```
+
+### Auto-detect File Format
+
+Use `import_from_file()` to automatically detect and import any supported format:
+
+```python
+# Automatically detects format from extension
+result = await pipeline.import_from_file("data.sav")  # SPSS
+result = await pipeline.import_from_file("data.xlsx")  # Excel
+result = await pipeline.import_from_file("data.csv")  # CSV
+result = await pipeline.import_from_file("data.json")  # JSON
+```
+
+## Excel Import
+
+### Basic Excel Import
+
+Import data from Excel files:
+
+```python
+result = await pipeline.import_from_excel("employees.xlsx")
+print(f"Added {result.entities_added} entities")
+```
+
+### Excel Import with Specific Sheet
+
+```python
+# Import from specific sheet
+result = await pipeline.import_from_excel(
+    "workbook.xlsx",
+    sheet_name="Sheet1"
+)
+```
+
+### Excel Import with Multiple Sheets
+
+```python
+# Import from all sheets
+result = await pipeline.import_from_excel(
+    "workbook.xlsx",
+    sheet_name=None  # None = all sheets
+)
+
+# Or import sheets sequentially
+for sheet in ["Sheet1", "Sheet2", "Sheet3"]:
+    result = await pipeline.import_from_excel(
+        "workbook.xlsx",
+        sheet_name=sheet
+    )
+    print(f"{sheet}: {result.entities_added} entities")
+```
+
+### Excel Data Types
+
+Excel data types (dates, numbers, text) are automatically handled:
+
+```python
+# Dates are converted to ISO format strings
+# Numbers are preserved as numeric types
+# Text is preserved as strings
+result = await pipeline.import_from_excel("data.xlsx")
+```
+
+## Automatic Schema Inference
+
+### Infer Schema from Data
+
+Automatically generate schema mappings from data structure:
+
+```python
+from aiecs.application.knowledge_graph.builder.schema_inference import SchemaInference
+
+# Infer schema from CSV
+inference = SchemaInference()
+inferred = inference.infer_from_csv("data.csv")
+
+# Review inferred schema
+print(f"Inferred {len(inferred.entity_mappings)} entity types")
+print(f"Inferred {len(inferred.relation_mappings)} relation types")
+print(f"Confidence scores: {inferred.confidence_scores}")
+
+# Use inferred schema
+mapping = inferred.to_schema_mapping()
+pipeline = StructuredDataPipeline(mapping=mapping, graph_store=store)
+result = await pipeline.import_from_csv("data.csv")
+```
+
+### Infer Schema from SPSS
+
+SPSS files provide rich metadata for better inference:
+
+```python
+inference = SchemaInference()
+inferred = inference.infer_from_spss("survey_data.sav")
+
+# SPSS variable labels are used as property names
+# SPSS value labels are preserved for categorical data
+mapping = inferred.to_schema_mapping()
+```
+
+### Partial Schema Inference
+
+Provide some mappings and let the system infer the rest:
+
+```python
+# User provides partial mapping
+user_mapping = SchemaMapping(
+    entity_mappings=[
+        EntityMapping(
+            source_columns=["id", "name"],
+            entity_type="Person",
+            property_mapping={"id": "id", "name": "name"},
+            id_column="id"
+        )
+    ]
+)
+
+# Infer remaining mappings
+inference = SchemaInference()
+inferred = inference.infer_from_csv("data.csv")
+
+# Merge user-provided and inferred mappings
+merged = inference.merge_with_user_mapping(inferred, user_mapping)
+```
+
+### Import with Auto-Inference
+
+Use `create_with_auto_inference()` for one-step import:
+
+```python
+pipeline = await StructuredDataPipeline.create_with_auto_inference(
+    file_path="data.csv",
+    graph_store=store,
+    entity_type_hint="Employee"  # Optional hint
+)
+
+result = await pipeline.import_from_file("data.csv")
+```
+
+## Data Reshaping
+
+### Wide-to-Long Conversion for Normalized Structures
+
+Convert wide format data (many columns) to normalized graph structure:
+
+```python
+from aiecs.application.knowledge_graph.builder.data_reshaping import DataReshaping
+
+# Wide format: 1000 rows × 200 columns
+# Convert to normalized: Sample entities + Option entities + HAS_VALUE relations
+
+reshaping = DataReshaping()
+reshape_result = reshaping.melt_wide_to_long(
+    df=df_wide,
+    id_vars=["sample_id"],
+    value_vars=[f"option_{i:03d}" for i in range(1, 201)],
+    var_name="option_id",
+    value_name="value"
+)
+
+# Generate normalized schema mapping
+mapping = reshaping.generate_normalized_mapping(
+    id_column="sample_id",
+    entity_type="Sample",
+    variable_type="Option",
+    relation_type="HAS_VALUE"
+)
+
+# Import normalized data
+pipeline = StructuredDataPipeline(mapping=mapping, graph_store=store)
+result = await pipeline.import_from_dataframe(reshape_result.data)
+```
+
+### Automatic Reshaping During Import
+
+Detect and reshape wide format data automatically:
+
+```python
+# Pipeline automatically detects wide format and suggests normalization
+pipeline = await StructuredDataPipeline.create_with_auto_reshape(
+    file_path="wide_data.csv",
+    graph_store=store,
+    reshape_threshold=50  # Threshold for wide format detection
+)
+
+result = await pipeline.import_from_file("wide_data.csv")
+```
+
+### Reshape and Import in One Step
+
+```python
+# Reshape wide format and import with normalized structure
+result = await pipeline.reshape_and_import(
+    file_path="wide_data.csv",
+    id_vars=["sample_id"],
+    value_vars=option_columns,
+    entity_type="Sample",
+    variable_type="Option",
+    relation_type="HAS_VALUE"
+)
+```
+
+## Statistical Aggregation
+
+### Compute Statistics During Import
+
+Compute mean, standard deviation, and other statistics during import:
+
+```python
+from aiecs.application.knowledge_graph.builder.schema_mapping import AggregationConfig
+
+mapping = SchemaMapping(
+    entity_mappings=[
+        EntityMapping(
+            source_columns=["sample_id"] + [f"option_{i}" for i in range(1, 201)],
+            entity_type="Sample",
+            property_mapping={"sample_id": "id"},
+            id_column="sample_id"
+        )
+    ],
+    aggregations={
+        "Sample": {
+            "option_values": {
+                "mean": "avg_value",
+                "std": "std_value",
+                "min": "min_value",
+                "max": "max_value"
+            }
+        }
+    }
+)
+
+pipeline = StructuredDataPipeline(mapping=mapping, graph_store=store)
+result = await pipeline.import_from_csv("data.csv")
+
+# Aggregated values are stored as entity properties
+sample = await store.get_entity("sample_001")
+print(f"Average: {sample.properties['avg_value']}")
+print(f"Std Dev: {sample.properties['std_value']}")
+```
+
+### Grouped Aggregation
+
+Compute statistics per group:
+
+```python
+mapping = SchemaMapping(
+    aggregations={
+        "Employee": {
+            "salary": {
+                "mean": "avg_salary",
+                "std": "std_salary"
+            }
+        }
+    },
+    group_by="department"  # Group by department
+)
+
+# Aggregated values are stored on group entities
+```
+
+## Data Quality Validation
+
+### Range Validation
+
+Validate numeric values are within specified ranges:
+
+```python
+from aiecs.application.knowledge_graph.builder.data_quality import (
+    DataQualityValidator,
+    ValidationConfig,
+    RangeRule
+)
+
+validation_config = ValidationConfig(
+    rules={
+        "Sample": {
+            "option_1": RangeRule(min=0.0, max=1.0),
+            "option_2": RangeRule(min=-10.0, max=10.0)
+        }
+    },
+    fail_on_violations=False  # Continue import, log violations
+)
+
+pipeline = StructuredDataPipeline(
+    mapping=mapping,
+    graph_store=store,
+    validation_config=validation_config
+)
+
+result = await pipeline.import_from_csv("data.csv")
+
+# Check quality report
+if result.quality_report:
+    print(f"Range violations: {result.quality_report.range_violations}")
+    print(f"Completeness: {result.quality_report.completeness}")
+```
+
+### Outlier Detection
+
+Detect and flag outliers:
+
+```python
+validation_config = ValidationConfig(
+    outlier_detection={
+        "Sample": {
+            "option_1": {"method": "zscore", "threshold": 3.0}
+        }
+    },
+    exclude_outliers=False  # Flag but don't exclude
+)
+
+pipeline = StructuredDataPipeline(
+    mapping=mapping,
+    graph_store=store,
+    validation_config=validation_config
+)
+
+result = await pipeline.import_from_csv("data.csv")
+
+# Check outliers
+if result.quality_report:
+    print(f"Outliers detected: {len(result.quality_report.outliers)}")
+```
+
+### Completeness Checks
+
+Check for missing values:
+
+```python
+validation_config = ValidationConfig(
+    required_properties={
+        "Sample": ["sample_id", "option_1", "option_2"]
+    }
+)
+
+result = await pipeline.import_from_csv("data.csv")
+
+# Check completeness
+if result.quality_report:
+    completeness = result.quality_report.completeness
+    for prop, pct in completeness.items():
+        print(f"{prop}: {pct:.1f}% complete")
 ```
 
 ## JSON Import
@@ -390,6 +786,97 @@ result2 = await pipeline.import_from_csv("updates.csv")
 print(f"Updates: {result2.entities_added} entities")
 ```
 
+## Performance Optimization
+
+### Parallel Processing
+
+Enable parallel batch processing for faster imports:
+
+```python
+pipeline = StructuredDataPipeline(
+    mapping=mapping,
+    graph_store=store,
+    enable_parallel=True,  # Enable parallel processing
+    max_workers=4  # Number of worker processes (default: CPU count - 1)
+)
+
+result = await pipeline.import_from_csv("large_file.csv")
+print(f"Throughput: {result.performance_metrics.rows_per_second:.0f} rows/sec")
+```
+
+**When to use**:
+- Large datasets (>10,000 rows)
+- Multi-core systems
+- CPU-bound transformations
+
+**Performance**: 2-3x speedup on multi-core systems
+
+### Bulk Write Operations
+
+Use bulk writes for faster storage:
+
+```python
+# Bulk writes are automatically used when available
+# No code changes needed - works transparently
+
+pipeline = StructuredDataPipeline(
+    mapping=mapping,
+    graph_store=store,
+    batch_size=1000  # Larger batches = better bulk write performance
+)
+
+result = await pipeline.import_from_csv("large_file.csv")
+```
+
+**Performance**: 80%+ overhead reduction for bulk operations
+
+### Streaming Import for Large Files
+
+Import files larger than available memory:
+
+```python
+pipeline = StructuredDataPipeline(
+    mapping=mapping,
+    graph_store=store,
+    streaming=True  # Enable streaming mode
+)
+
+# Works with files >1GB without loading entire file into memory
+result = await pipeline.import_from_csv("very_large_file.csv")
+```
+
+### Batch Size Auto-Tuning
+
+Let the system automatically optimize batch size:
+
+```python
+pipeline = StructuredDataPipeline(
+    mapping=mapping,
+    graph_store=store,
+    auto_tune_batch_size=True  # Auto-tune based on memory and schema
+)
+
+result = await pipeline.import_from_csv("data.csv")
+print(f"Used batch size: {result.performance_metrics.optimal_batch_size}")
+```
+
+### Performance Metrics
+
+Track import performance:
+
+```python
+result = await pipeline.import_from_csv("data.csv")
+
+if result.performance_metrics:
+    metrics = result.performance_metrics
+    print(f"Total time: {metrics.total_time:.2f}s")
+    print(f"Read time: {metrics.read_time:.2f}s")
+    print(f"Transform time: {metrics.transform_time:.2f}s")
+    print(f"Write time: {metrics.write_time:.2f}s")
+    print(f"Throughput: {metrics.rows_per_second:.0f} rows/sec")
+    print(f"Peak memory: {metrics.peak_memory_mb:.1f} MB")
+```
+
 ## Performance Tips
 
 ### 1. Use Batch Processing
@@ -576,4 +1063,9 @@ if __name__ == "__main__":
 - See [Schema Mapping Guide](./SCHEMA_MAPPING_GUIDE.md) for detailed mapping configuration
 - See [CSV-to-Graph Tutorial](./examples/csv_to_graph_tutorial.md) for complete CSV example
 - See [JSON-to-Graph Tutorial](./examples/json_to_graph_tutorial.md) for complete JSON example
+- See [Example Scripts](./examples/) for complete working examples:
+  - `18_spss_import_with_inference.py` - SPSS import with automatic schema inference
+  - `19_wide_format_normalization.py` - Reshape wide format to normalized structure
+  - `20_statistical_aggregation.py` - Statistical aggregation during import
+  - `21_data_quality_validation.py` - Data quality validation
 

@@ -230,16 +230,36 @@ Test Results (Phase 1):
 
 ## Examples
 
-See [CSV-to-Graph Tutorial](./examples/csv_to_graph_tutorial.md) and [JSON-to-Graph Tutorial](./examples/json_to_graph_tutorial.md) for complete working examples and step-by-step guides.
+### Tutorials
+- [CSV-to-Graph Tutorial](./examples/csv_to_graph_tutorial.md) - Step-by-step CSV import guide
+- [JSON-to-Graph Tutorial](./examples/json_to_graph_tutorial.md) - Step-by-step JSON import guide
+
+### Example Scripts
+Complete working examples demonstrating new features:
+
+- **[18_spss_import_with_inference.py](./examples/18_spss_import_with_inference.py)** - Import SPSS files with automatic schema inference
+- **[19_wide_format_normalization.py](./examples/19_wide_format_normalization.py)** - Reshape wide format data to normalized graph structure
+- **[20_statistical_aggregation.py](./examples/20_statistical_aggregation.py)** - Compute statistics during import
+- **[21_data_quality_validation.py](./examples/21_data_quality_validation.py)** - Validate data quality during import
+
+See all examples in the [examples directory](./examples/) for complete working code.
 
 ## Structured Data Import
 
-Import CSV and JSON data into knowledge graphs:
+Import CSV, JSON, SPSS, and Excel data into knowledge graphs:
 
 - **[Schema Mapping Guide](./SCHEMA_MAPPING_GUIDE.md)**: Complete guide to configuring schema mappings
 - **[StructuredDataPipeline Guide](./STRUCTURED_DATA_PIPELINE.md)**: Usage guide for importing structured data
 - **[CSV-to-Graph Tutorial](./examples/csv_to_graph_tutorial.md)**: Step-by-step CSV import tutorial
 - **[JSON-to-Graph Tutorial](./examples/json_to_graph_tutorial.md)**: Step-by-step JSON import tutorial
+
+**New Features:**
+- **SPSS/Excel Support**: Direct import from `.sav`, `.por`, `.xlsx`, `.xls` files
+- **Automatic Schema Inference**: Automatically generate schema mappings from data
+- **Data Reshaping**: Convert wide format to normalized graph structures
+- **Statistical Aggregation**: Compute mean, std dev, min, max during import
+- **Data Quality Validation**: Range checks, outlier detection, completeness validation
+- **Performance Optimization**: Parallel processing, bulk writes, streaming import
 
 ### Quick Example
 

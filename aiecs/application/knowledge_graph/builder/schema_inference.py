@@ -9,6 +9,7 @@ from pathlib import Path
 from dataclasses import dataclass
 import re
 import logging
+import warnings
 
 from aiecs.application.knowledge_graph.builder.schema_mapping import (
     SchemaMapping,
@@ -226,8 +227,12 @@ class SchemaInference:
             return False
 
         # Try to parse as dates
+        # Suppress UserWarning about dateutil fallback - this is expected behavior
+        # when pandas can't infer the date format automatically
         try:
-            pd.to_datetime(sample, errors='raise')
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                pd.to_datetime(sample, errors='raise')
             return True
         except (ValueError, TypeError):
             return False
