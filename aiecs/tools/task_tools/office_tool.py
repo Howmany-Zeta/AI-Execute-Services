@@ -1,6 +1,7 @@
 from aiecs.tools import register_tool
 from aiecs.tools.base_tool import BaseTool
-from pydantic import BaseModel, field_validator, ConfigDict, Field
+from pydantic import BaseModel, field_validator, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pptx.util import Inches
 from pptx import Presentation
 from docx.shared import Pt
@@ -16,9 +17,7 @@ import pdfplumber
 import pytesseract  # type: ignore[import-untyped]
 from PIL import Image
 
-# Configure Tika log path to user-writable directory before importing
-os.environ["TIKA_LOG_PATH"] = os.path.expanduser("~/.cache/tika")
-os.makedirs(os.path.expanduser("~/.cache/tika"), exist_ok=True)
+# Tika log path will be configured via Config class
 
 # Suppress pkg_resources deprecation warning from tika
 warnings.filterwarnings("ignore", category=UserWarning, module="tika")
@@ -170,14 +169,22 @@ class OfficeTool(BaseTool):
     """
 
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the office tool"""
+    class Config(BaseSettings):
+        """Configuration for the office tool
+        
+        Automatically reads from environment variables with OFFICE_TOOL_ prefix.
+        Example: OFFICE_TOOL_MAX_FILE_SIZE_MB -> max_file_size_mb
+        """
 
-        model_config = ConfigDict(env_prefix="OFFICE_TOOL_")  # type: ignore[typeddict-unknown-key]
+        model_config = SettingsConfigDict(env_prefix="OFFICE_TOOL_")
 
         max_file_size_mb: int = Field(default=100, description="Maximum file size in megabytes")
         default_font: str = Field(default="Arial", description="Default font for documents")
         default_font_size: int = Field(default=12, description="Default font size in points")
+        tika_log_path: str = Field(
+            default=os.path.expanduser("~/.cache/tika"),
+            description="Tika log directory path",
+        )
         allowed_extensions: List[str] = Field(
             default=[
                 ".docx",
@@ -197,6 +204,12 @@ class OfficeTool(BaseTool):
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         Initialize OfficeTool with configuration.
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/office_tool.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
 
         Args:
             config (Dict, optional): Configuration overrides for OfficeTool.
@@ -206,8 +219,13 @@ class OfficeTool(BaseTool):
         """
         super().__init__(config)
 
-        # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
+        
+        # Configure Tika log path from config
+        os.environ["TIKA_LOG_PATH"] = self.config.tika_log_path
+        os.makedirs(self.config.tika_log_path, exist_ok=True)
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:

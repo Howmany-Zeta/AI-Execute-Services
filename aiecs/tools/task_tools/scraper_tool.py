@@ -11,7 +11,8 @@ from enum import Enum
 import httpx
 from bs4 import BeautifulSoup
 from urllib import request as urllib_request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -97,10 +98,14 @@ class ScraperTool(BaseTool):
     """
 
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the scraper tool"""
+    class Config(BaseSettings):
+        """Configuration for the scraper tool
+        
+        Automatically reads from environment variables with SCRAPER_TOOL_ prefix.
+        Example: SCRAPER_TOOL_USER_AGENT -> user_agent
+        """
 
-        model_config = ConfigDict(env_prefix="SCRAPER_TOOL_")  # type: ignore[typeddict-unknown-key]
+        model_config = SettingsConfigDict(env_prefix="SCRAPER_TOOL_")
 
         user_agent: str = Field(
             default="PythonMiddlewareScraper/2.0",
@@ -131,11 +136,18 @@ class ScraperTool(BaseTool):
 
         Raises:
             ValueError: If config contains invalid settings.
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/scraper.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
         """
         super().__init__(config)
 
-        # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:

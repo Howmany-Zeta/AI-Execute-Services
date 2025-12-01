@@ -21,7 +21,8 @@ from pptx.util import Pt
 from docx import Document
 from docx.shared import Pt as DocxPt
 import matplotlib.pyplot as plt
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 import tempfile
 import logging
 
@@ -91,10 +92,14 @@ class ReportTool(BaseTool):
     """
 
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the report tool"""
+    class Config(BaseSettings):
+        """Configuration for the report tool
+        
+        Automatically reads from environment variables with REPORT_TOOL_ prefix.
+        Example: REPORT_TOOL_TEMPLATES_DIR -> templates_dir
+        """
 
-        model_config = ConfigDict(env_prefix="REPORT_TOOL_")  # type: ignore[typeddict-unknown-key]
+        model_config = SettingsConfigDict(env_prefix="REPORT_TOOL_")
 
         templates_dir: str = Field(default=os.getcwd(), description="Directory for Jinja2 templates")
         default_output_dir: str = Field(
@@ -173,11 +178,18 @@ class ReportTool(BaseTool):
 
         Raises:
             ValueError: If config contains invalid settings.
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/report.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
         """
         super().__init__(config)
 
-        # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:

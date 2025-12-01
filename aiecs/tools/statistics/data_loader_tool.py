@@ -16,7 +16,8 @@ from enum import Enum
 from pathlib import Path
 
 import pandas as pd  # type: ignore[import-untyped]
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -76,10 +77,14 @@ class DataLoaderTool(BaseTool):
     """
 
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the data loader tool"""
+    class Config(BaseSettings):
+        """Configuration for the data loader tool
+        
+        Automatically reads from environment variables with DATA_LOADER_ prefix.
+        Example: DATA_LOADER_MAX_FILE_SIZE_MB -> max_file_size_mb
+        """
 
-        model_config = ConfigDict(env_prefix="DATA_LOADER_")  # type: ignore[typeddict-unknown-key]
+        model_config = SettingsConfigDict(env_prefix="DATA_LOADER_")
 
         max_file_size_mb: int = Field(default=500, description="Maximum file size in megabytes")
         default_chunk_size: int = Field(default=10000, description="Default chunk size for chunked loading")
@@ -100,14 +105,21 @@ class DataLoaderTool(BaseTool):
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         Initialize DataLoaderTool with settings.
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/data_loader.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
 
         Args:
             config: Optional configuration overrides
         """
         super().__init__(config)
 
-        # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:

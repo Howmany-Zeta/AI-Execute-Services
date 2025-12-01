@@ -3,6 +3,17 @@ Tools API
 
 This section documents the available tools in AIECS.
 
+Tool Configuration
+------------------
+
+Tool Config Loader
+~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: aiecs.config.tool_config
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Base Tool
 ---------
 

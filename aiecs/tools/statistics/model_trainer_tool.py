@@ -32,7 +32,8 @@ from sklearn.ensemble import (  # type: ignore[import-untyped]
 )
 from sklearn.linear_model import LogisticRegression, LinearRegression  # type: ignore[import-untyped]
 from sklearn.preprocessing import LabelEncoder  # type: ignore[import-untyped]
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aiecs.tools.base_tool import BaseTool
 from aiecs.tools import register_tool
@@ -78,10 +79,14 @@ class ModelTrainerTool(BaseTool):
     """
 
     # Configuration schema
-    class Config(BaseModel):
-        """Configuration for the model trainer tool"""
+    class Config(BaseSettings):
+        """Configuration for the model trainer tool
+        
+        Automatically reads from environment variables with MODEL_TRAINER_ prefix.
+        Example: MODEL_TRAINER_TEST_SIZE -> test_size
+        """
 
-        model_config = ConfigDict(env_prefix="MODEL_TRAINER_")  # type: ignore[typeddict-unknown-key]
+        model_config = SettingsConfigDict(env_prefix="MODEL_TRAINER_")
 
         test_size: float = Field(default=0.2, description="Proportion of data to use for testing")
         random_state: int = Field(default=42, description="Random state for reproducibility")
@@ -96,11 +101,19 @@ class ModelTrainerTool(BaseTool):
         )
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
-        """Initialize ModelTrainerTool with settings"""
+        """Initialize ModelTrainerTool with settings
+        
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/model_trainer.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
+        """
         super().__init__(config)
 
-        # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:

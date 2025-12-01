@@ -10,6 +10,7 @@ from aiecs.tools.tool_executor import (
     SecurityError,
     get_executor,
 )
+from aiecs.config.tool_config import get_tool_config_loader
 
 logger = logging.getLogger(__name__)
 
@@ -42,22 +43,108 @@ class BaseTool:
                 pass
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None, tool_name: Optional[str] = None):
         """
         Initialize the tool with optional configuration.
 
+        Configuration is automatically loaded from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/{tool_name}.yaml or config/tools.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
+
         Args:
-            config (Dict[str, Any], optional): Tool-specific configuration.
+            config (Dict[str, Any], optional): Tool-specific configuration that overrides
+                all other sources. If None, configuration is loaded automatically.
+            tool_name (str, optional): Registered tool name. If None, uses class name.
 
         Raises:
             ValueError: If config is invalid.
+            ValidationError: If config validation fails (when Config class exists).
         """
-        self._executor = get_executor(config)
-        self._config = config or {}
+        # Detect Config class if it exists
+        config_class = self._detect_config_class()
+        
+        # Determine tool name (for config file discovery)
+        if tool_name is None:
+            tool_name = self.__class__.__name__
+        
+        # Load configuration using ToolConfigLoader
+        if config_class:
+            # Tool has Config class - use loader to load and validate config
+            loader = get_tool_config_loader()
+            try:
+                loaded_config = loader.load_tool_config(
+                    tool_name=tool_name,
+                    config_schema=config_class,
+                    explicit_config=config,
+                )
+                # Instantiate Config class with loaded config
+                self._config_obj = config_class(**loaded_config)
+                self._config = loaded_config
+            except ValidationError as e:
+                logger.error(f"Configuration validation failed for {tool_name}: {e}")
+                raise
+            except Exception as e:
+                logger.warning(f"Failed to load configuration for {tool_name}: {e}. Using defaults.")
+                # Fallback to explicit config or empty dict
+                self._config = config or {}
+                try:
+                    self._config_obj = config_class(**self._config)
+                except Exception:
+                    # If even defaults fail, create empty config object
+                    self._config_obj = None
+        else:
+            # No Config class - backward compatibility mode
+            # Still try to load from YAML/env if config provided, otherwise use as-is
+            if config:
+                # Use explicit config as-is
+                self._config = config
+            else:
+                # Try to load from YAML/env even without Config class
+                loader = get_tool_config_loader()
+                try:
+                    self._config = loader.load_tool_config(
+                        tool_name=tool_name,
+                        config_schema=None,
+                        explicit_config=None,
+                    )
+                except Exception as e:
+                    logger.debug(f"Could not load config for {tool_name}: {e}. Using empty config.")
+                    self._config = {}
+            self._config_obj = None
+        
+        self._executor = get_executor(self._config)
         self._schemas: Dict[str, Type[BaseModel]] = {}
         self._async_methods: List[str] = []
         self._register_schemas()
         self._register_async_methods()
+
+    def _detect_config_class(self) -> Optional[Type[BaseModel]]:
+        """
+        Detect Config class in tool class hierarchy via introspection.
+
+        Looks for a class named 'Config' that inherits from BaseModel or BaseSettings.
+
+        Returns:
+            Config class if found, None otherwise
+        """
+        # Check current class and all base classes
+        for cls in [self.__class__] + list(self.__class__.__mro__):
+            if hasattr(cls, "Config"):
+                config_attr = getattr(cls, "Config")
+                # Check if Config is a class and inherits from BaseModel
+                if isinstance(config_attr, type):
+                    # Import BaseSettings here to avoid circular imports
+                    try:
+                        from pydantic_settings import BaseSettings
+                        if issubclass(config_attr, (BaseModel, BaseSettings)):
+                            return config_attr
+                    except ImportError:
+                        # Fallback if pydantic_settings not available
+                        if issubclass(config_attr, BaseModel):
+                            return config_attr
+        return None
 
     def _register_schemas(self) -> None:
         """
