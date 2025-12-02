@@ -3,15 +3,20 @@
 Automated script to download required NLP data for AIECS ClassifierTool.
 
 This script downloads:
-1. NLTK stopwords data package for keyword extraction
+1. NLTK stopwords data package for keyword extraction (to environment-specific location)
 2. spaCy English model (en_core_web_sm) for text processing
 3. spaCy Chinese model (zh_core_web_sm) for Chinese text processing
+
+All NLP data is downloaded to the current Poetry/virtual environment to ensure
+environment isolation. NLTK data is stored in <env_path>/nltk_data/ directory.
 """
 
 import sys
+import os
 import subprocess
 import logging
-from typing import List, Tuple
+from pathlib import Path
+from typing import List, Tuple, Optional
 
 
 def setup_logging():
@@ -53,6 +58,46 @@ def run_command(cmd: List[str], logger: logging.Logger) -> Tuple[bool, str]:
         return False, error_msg
 
 
+def get_environment_path(logger: logging.Logger) -> Optional[Path]:
+    """
+    Get the path to the current Python environment (virtual environment or Poetry environment).
+
+    Args:
+        logger: Logger instance
+
+    Returns:
+        Path to the environment if found, None otherwise
+    """
+    # Check VIRTUAL_ENV environment variable first (common for venv/virtualenv)
+    venv_path = os.environ.get("VIRTUAL_ENV")
+    if venv_path:
+        env_path = Path(venv_path)
+        if env_path.exists():
+            logger.info(f"Found virtual environment via VIRTUAL_ENV: {env_path}")
+            return env_path
+
+    # Check sys.prefix - this points to the virtual environment if we're in one
+    # In a virtual environment, sys.prefix != sys.base_prefix
+    if sys.prefix != sys.base_prefix:
+        env_path = Path(sys.prefix)
+        if env_path.exists():
+            logger.info(f"Found virtual environment via sys.prefix: {env_path}")
+            return env_path
+
+    # Check if we're in a Poetry environment by checking sys.executable path
+    # Poetry environments are typically in ~/.cache/pypoetry/virtualenvs/ or similar
+    exec_path = Path(sys.executable)
+    if "pypoetry" in str(exec_path) or exec_path.parts[-3:-1] == ("bin", "python"):
+        # Try to find the environment root (go up from bin/python)
+        potential_env = exec_path.parent.parent
+        if potential_env.exists() and (potential_env / "pyvenv.cfg").exists():
+            logger.info(f"Found Poetry/virtual environment: {potential_env}")
+            return potential_env
+
+    logger.warning("No virtual environment detected. NLTK data will be downloaded to user directory.")
+    return None
+
+
 def check_python_package(package_name: str, logger: logging.Logger) -> bool:
     """
     Check if a Python package is installed.
@@ -75,7 +120,7 @@ def check_python_package(package_name: str, logger: logging.Logger) -> bool:
 
 def download_nltk_data(logger: logging.Logger) -> bool:
     """
-    Download required NLTK data packages.
+    Download required NLTK data packages to the current environment.
 
     Args:
         logger: Logger instance
@@ -89,8 +134,23 @@ def download_nltk_data(logger: logging.Logger) -> bool:
         logger.error("NLTK is not installed. Please install it first with: pip install nltk")
         return False
 
+    # Get the environment path to store NLTK data environment-specifically
+    env_path = get_environment_path(logger)
+    nltk_data_path: Optional[Path] = None
+    original_nltk_data = os.environ.get("NLTK_DATA")
+
     try:
         import nltk  # type: ignore[import-untyped]
+
+        if env_path:
+            # Create nltk_data directory in the environment
+            nltk_data_path = env_path / "nltk_data"
+            nltk_data_path.mkdir(parents=True, exist_ok=True)
+            # Set NLTK_DATA environment variable to point to environment-specific location
+            os.environ["NLTK_DATA"] = str(nltk_data_path)
+            logger.info(f"Using environment-specific NLTK data directory: {nltk_data_path}")
+        else:
+            logger.info("No virtual environment detected. Using default NLTK data location (~/nltk_data)")
 
         # Download required NLTK data
         packages_to_download = [
@@ -108,13 +168,26 @@ def download_nltk_data(logger: logging.Logger) -> bool:
                 logger.info(f"Successfully downloaded NLTK package: {package}")
             except Exception as e:
                 logger.error(f"Failed to download NLTK package {package}: {e}")
+                # Restore original NLTK_DATA if we changed it
+                if original_nltk_data is not None:
+                    os.environ["NLTK_DATA"] = original_nltk_data
+                elif nltk_data_path:
+                    os.environ.pop("NLTK_DATA", None)
                 return False
 
         logger.info("All NLTK data packages downloaded successfully")
+        if nltk_data_path:
+            logger.info(f"NLTK data is stored in environment-specific location: {nltk_data_path}")
+            logger.info("Note: Set NLTK_DATA environment variable to this path if needed in other scripts")
         return True
 
     except Exception as e:
         logger.error(f"Error downloading NLTK data: {e}")
+        # Restore original NLTK_DATA if we changed it
+        if original_nltk_data is not None:
+            os.environ["NLTK_DATA"] = original_nltk_data
+        elif nltk_data_path:
+            os.environ.pop("NLTK_DATA", None)
         return False
 
 
@@ -264,10 +337,19 @@ def verify_installation(logger: logging.Logger) -> bool:
 
     # Test NLTK
     try:
+        # Ensure we check the environment-specific NLTK data location if it exists
+        env_path = get_environment_path(logger)
+        if env_path:
+            nltk_data_path = env_path / "nltk_data"
+            if nltk_data_path.exists():
+                os.environ["NLTK_DATA"] = str(nltk_data_path)
+
         from nltk.corpus import stopwords  # type: ignore[import-untyped]
 
         english_stopwords = stopwords.words("english")
         logger.info(f"NLTK verification successful. Loaded {len(english_stopwords)} English stopwords")
+        if env_path and (env_path / "nltk_data").exists():
+            logger.info(f"NLTK data is located in environment: {env_path / 'nltk_data'}")
     except Exception as e:
         logger.error(f"NLTK verification failed: {e}")
         success = False
