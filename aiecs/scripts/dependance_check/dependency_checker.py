@@ -296,12 +296,15 @@ class DependencyChecker:
         ]
         for data in nltk_data:
             status = self._check_nltk_data(data)
+            # Recommend using the proper download script that handles environment-specific paths
+            install_cmd = "aiecs-download-nlp-data --download  # Downloads to Poetry/virtual environment"
+            
             model_deps.append(
                 DependencyInfo(
                     name=f"NLTK {data}",
                     status=status,
                     description=f"NLTK data: {data}",
-                    install_command=f"python -c \"import nltk; nltk.download('{data}')\"",
+                    install_command=install_cmd,
                     impact=f"NLTK {data} functionality will be unavailable",
                     is_critical=True,
                 )

@@ -139,18 +139,24 @@ def download_nltk_data(logger: logging.Logger) -> bool:
     nltk_data_path: Optional[Path] = None
     original_nltk_data = os.environ.get("NLTK_DATA")
 
+    # Set NLTK_DATA environment variable BEFORE importing nltk
+    # This ensures nltk.data.path is initialized with the correct path
+    if env_path:
+        # Create nltk_data directory in the environment
+        nltk_data_path = env_path / "nltk_data"
+        nltk_data_path.mkdir(parents=True, exist_ok=True)
+        # Set NLTK_DATA environment variable BEFORE importing nltk
+        os.environ["NLTK_DATA"] = str(nltk_data_path)
+        logger.info(f"Using environment-specific NLTK data directory: {nltk_data_path}")
+    else:
+        logger.info("No virtual environment detected. Using default NLTK data location (~/nltk_data)")
+
     try:
         import nltk  # type: ignore[import-untyped]
 
-        if env_path:
-            # Create nltk_data directory in the environment
-            nltk_data_path = env_path / "nltk_data"
-            nltk_data_path.mkdir(parents=True, exist_ok=True)
-            # Set NLTK_DATA environment variable to point to environment-specific location
-            os.environ["NLTK_DATA"] = str(nltk_data_path)
-            logger.info(f"Using environment-specific NLTK data directory: {nltk_data_path}")
-        else:
-            logger.info("No virtual environment detected. Using default NLTK data location (~/nltk_data)")
+        # Ensure nltk.data.path includes our environment-specific path
+        if nltk_data_path and str(nltk_data_path) not in nltk.data.path:
+            nltk.data.path.insert(0, str(nltk_data_path))
 
         # Download required NLTK data
         packages_to_download = [
