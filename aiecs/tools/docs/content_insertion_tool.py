@@ -22,7 +22,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional, Union, Tuple
 from enum import Enum
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aiecs.tools.base_tool import BaseTool

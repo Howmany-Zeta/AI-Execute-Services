@@ -145,20 +145,19 @@ class DocumentParserTool(BaseTool):
         gcs_project_id: Optional[str] = Field(default=None, description="Google Cloud Storage project ID")
 
     def __init__(self, config: Optional[Dict] = None):
-        """Initialize DocumentParserTool with settings"""
+        """Initialize DocumentParserTool with settings
+
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/document_parser_tool.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
+        """
         super().__init__(config)
 
-        # Parse configuration with BaseSettings
-        # BaseSettings automatically reads from environment variables with DOC_PARSER_ prefix
-        # Config dict values override environment variables
-        if config:
-            # Filter out None values to allow env vars to be used for missing
-            # keys
-            filtered_config = {k: v for k, v in config.items() if v is not None}
-            self.config = self.Config(**filtered_config)
-        else:
-            # No config provided, read entirely from environment variables
-            self.config = self.Config()
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         os.makedirs(self.config.temp_dir, exist_ok=True)

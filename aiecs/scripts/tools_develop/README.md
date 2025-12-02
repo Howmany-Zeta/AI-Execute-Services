@@ -158,7 +158,131 @@ aiecs-tools-check-annotations pandas --verbose
 ====================================================================================================
 ```
 
-### 3. Schema 质量验证器 (`validate_tool_schemas.py`)
+### 3. 工具配置检查器 (`check_all_tools_config.py`)
+
+静态代码分析工具，检查所有工具的配置设置是否正确使用 `self._config_obj`。
+
+**用途**：
+- 验证工具是否正确使用 BaseTool 的配置机制
+- 检查是否有工具错误地重新创建 Config 对象
+- 确保配置分离机制正确实施
+
+**命令**：
+```bash
+# 从项目根目录运行
+poetry run python aiecs/scripts/tools_develop/check_all_tools_config.py
+
+# 或使用 python -m
+poetry run python -m aiecs.scripts.tools_develop.check_all_tools_config
+```
+
+**输出示例**：
+```
+================================================================================
+检查所有注册工具的配置设置
+================================================================================
+
+找到 29 个工具文件
+
+================================================================================
+检查结果
+================================================================================
+
+✅ 正确配置 (29 个):
+  ✓ DocumentParserTool
+    aiecs/tools/docs/document_parser_tool.py
+  ✓ DocumentWriterTool
+    aiecs/tools/docs/document_writer_tool.py
+  ...
+
+================================================================================
+总结
+================================================================================
+总工具数: 29
+✅ 正确配置: 29
+❌ 需要修复: 0
+📝 无需配置: 0
+
+✅ 所有工具配置正确！
+```
+
+### 4. 工具配置运行时测试 (`test_all_tools_config_runtime.py`)
+
+运行时测试工具，实际创建工具实例并验证配置分离机制。
+
+**用途**：
+- 实际测试工具配置加载
+- 验证 ExecutorConfig 字段过滤是否正确
+- 检测是否触发 `extra='forbid'` 验证错误
+
+**命令**：
+```bash
+# 从项目根目录运行
+poetry run python aiecs/scripts/tools_develop/test_all_tools_config_runtime.py
+```
+
+**输出示例**：
+```
+================================================================================
+运行时测试：所有工具配置加载
+================================================================================
+
+测试 27 个工具...
+
+测试 DocumentParserTool... ✓ 配置正确
+测试 DocumentWriterTool... ✓ 配置正确
+测试 ScraperTool... ✓ 配置正确
+...
+
+================================================================================
+测试总结
+================================================================================
+
+总计: 27 个工具
+✅ 通过: 24
+❌ 失败: 3
+
+✅ 所有工具配置测试通过！
+```
+
+### 5. ExecutorConfig 修复验证器 (`verify_executor_config_fix.py`)
+
+快速验证核心工具的 ExecutorConfig 配置是否正确。
+
+**用途**：
+- 快速验证关键工具的配置
+- 测试配置分离机制
+- 验证修复是否生效
+
+**命令**：
+```bash
+# 从项目根目录运行
+poetry run python aiecs/scripts/tools_develop/verify_executor_config_fix.py
+```
+
+**输出示例**：
+```
+================================================================================
+ExecutorConfig 字段过滤修复验证
+================================================================================
+
+验证 DocumentParserTool... ✓ 配置正确分离
+验证 DocumentWriterTool... ✓ 配置正确分离
+验证 ScraperTool... ✓ 配置正确分离
+
+================================================================================
+验证总结
+================================================================================
+✓ DocumentParserTool
+✓ DocumentWriterTool
+✓ ScraperTool
+
+================================================================================
+✅ 所有工具验证通过
+================================================================================
+```
+
+### 6. Schema 质量验证器 (`validate_tool_schemas.py`)
 
 验证自动生成的 Schema 质量，识别需要改进的文档字符串。
 
@@ -221,58 +345,91 @@ aiecs-tools-validate-schemas pandas --show-examples
 1. **编写工具类**
    ```python
    from aiecs.tools.base_tool import BaseTool
-   from typing import List, Dict
-   
+   from pydantic import Field
+   from pydantic_settings import BaseSettings, SettingsConfigDict
+   from typing import List, Dict, Optional
+
    class MyTool(BaseTool):
        """My custom tool"""
-       
+
+       class Config(BaseSettings):
+           """Tool configuration"""
+           model_config = SettingsConfigDict(env_prefix="MY_TOOL_")
+
+           my_setting: str = Field(default="default_value", description="My setting")
+
+       def __init__(self, config: Optional[Dict] = None):
+           """Initialize MyTool with settings
+
+           Configuration is automatically loaded by BaseTool from:
+           1. Explicit config dict (highest priority)
+           2. YAML config files (config/tools/my_tool.yaml)
+           3. Environment variables (via dotenv from .env files)
+           4. Tool defaults (lowest priority)
+           """
+           super().__init__(config)
+
+           # ✅ 使用 BaseTool 自动创建的配置对象
+           self.config = self._config_obj if self._config_obj else self.Config()
+
        def process(self, data: List[Dict], threshold: float = 0.5) -> Dict:
            """
            Process data with threshold.
-           
+
            Args:
                data: Input data to process
                threshold: Processing threshold (0.0 to 1.0)
-           
+
            Returns:
                Processing results
            """
            pass
    ```
 
-2. **检查类型注解**
+2. **检查配置设置**
+   ```bash
+   # 静态检查配置模式
+   poetry run python aiecs/scripts/tools_develop/check_all_tools_config.py
+
+   # 运行时测试配置加载
+   poetry run python aiecs/scripts/tools_develop/test_all_tools_config_runtime.py
+   ```
+
+   确保工具正确使用 `self._config_obj`。
+
+3. **检查类型注解**
    ```bash
    aiecs-tools-check-annotations my_tool --verbose
    ```
-   
+
    确保所有方法都有 ✅ 标记。
 
-3. **验证 Schema 质量**
+4. **验证 Schema 质量**
    ```bash
    aiecs-tools-validate-schemas my_tool --show-examples
    ```
-   
+
    目标：综合评分 ≥ 80% (B 良好)
 
-4. **改进文档字符串**
-   
+5. **改进文档字符串**
+
    根据验证器的建议，改进文档字符串：
    ```python
    def process(self, data: List[Dict], threshold: float = 0.5) -> Dict:
        """
        Process data with threshold filtering.
-       
+
        Args:
            data: List of data records to process (each record is a dict)
            threshold: Minimum confidence threshold for filtering (0.0 to 1.0, default: 0.5)
-       
+
        Returns:
            Dictionary containing processed results and statistics
        """
        pass
    ```
 
-5. **重新验证**
+6. **重新验证**
    ```bash
    aiecs-tools-validate-schemas my_tool
    ```
@@ -282,13 +439,18 @@ aiecs-tools-validate-schemas pandas --show-examples
 1. **定期检查**
    ```bash
    # 每次修改工具后运行
+   poetry run python aiecs/scripts/tools_develop/check_all_tools_config.py
    aiecs-tools-check-annotations my_tool
    aiecs-tools-validate-schemas my_tool
    ```
 
 2. **批量检查**
    ```bash
-   # 检查所有工具
+   # 检查所有工具的配置
+   poetry run python aiecs/scripts/tools_develop/check_all_tools_config.py
+   poetry run python aiecs/scripts/tools_develop/test_all_tools_config_runtime.py
+
+   # 检查类型注解和 Schema
    aiecs-tools-check-annotations
    aiecs-tools-validate-schemas
    ```
@@ -296,6 +458,7 @@ aiecs-tools-validate-schemas pandas --show-examples
 3. **持续改进**
    - 优先改进评分 < 80% 的工具
    - 为通用描述（如 "Parameter xxx"）添加有意义的说明
+   - 确保所有工具正确使用 `self._config_obj`
 
 ## 📊 质量标准
 
@@ -314,7 +477,42 @@ aiecs-tools-validate-schemas pandas --show-examples
 
 ## 💡 最佳实践
 
-### 1. 完整的类型注解
+### 1. 正确的配置模式
+
+**始终使用 `self._config_obj`**，不要重新创建 Config 对象：
+
+```python
+# ✅ 正确的做法
+def __init__(self, config: Optional[Dict] = None):
+    """Initialize tool with settings
+
+    Configuration is automatically loaded by BaseTool from:
+    1. Explicit config dict (highest priority)
+    2. YAML config files (config/tools/{tool_name}.yaml)
+    3. Environment variables (via dotenv from .env files)
+    4. Tool defaults (lowest priority)
+    """
+    super().__init__(config)
+
+    # ✅ 使用 BaseTool 自动创建的配置对象
+    self.config = self._config_obj if self._config_obj else self.Config()
+
+# ❌ 错误的做法
+def __init__(self, config: Optional[Dict] = None):
+    super().__init__(config)
+
+    # ❌ 不要重新创建 Config 对象
+    # 这会导致 ExecutorConfig 验证错误
+    self.config = self.Config(**config)  # 错误！
+    self.config = self.Config(**(config or {}))  # 错误！
+```
+
+**原因**：
+- `BaseTool` 已经自动分离了 executor 配置和工具配置
+- 重新创建 Config 对象会包含 executor 字段（如 `enable_cache`, `max_workers`）
+- 这会触发 Pydantic 的 `extra='forbid'` 验证错误
+
+### 2. 完整的类型注解
 
 ```python
 # ✅ 好的示例
@@ -329,7 +527,7 @@ def filter(self, records: List[Dict], condition):  # 部分缺失
     pass
 ```
 
-### 2. 详细的文档字符串
+### 3. 详细的文档字符串
 
 使用 Google 或 NumPy 风格：
 
@@ -368,7 +566,7 @@ def filter(self, records: List[Dict], condition: str) -> List[Dict]:
     pass
 ```
 
-### 3. 有意义的描述
+### 4. 有意义的描述
 
 ```python
 # ❌ 不好的描述
@@ -386,7 +584,7 @@ Args:
 """
 ```
 
-### 4. 处理复杂类型
+### 5. 处理复杂类型
 
 ```python
 from typing import List, Dict, Optional, Union
@@ -406,6 +604,30 @@ def process(self, data: List[Dict], config: Optional[Dict] = None) -> Dict:
 ```
 
 ## 🔧 故障排查
+
+### 问题：配置验证错误 - "Extra inputs are not permitted"
+
+**原因**：工具在 `__init__` 中重新创建了 Config 对象，包含了 executor 字段
+
+**解决**：
+1. 使用 `self._config_obj` 而不是重新创建 Config 对象
+2. 运行配置检查器验证：
+   ```bash
+   poetry run python aiecs/scripts/tools_develop/check_all_tools_config.py
+   ```
+
+**示例修复**：
+```python
+# ❌ 错误
+def __init__(self, config: Optional[Dict] = None):
+    super().__init__(config)
+    self.config = self.Config(**config)  # 包含 executor 字段
+
+# ✅ 正确
+def __init__(self, config: Optional[Dict] = None):
+    super().__init__(config)
+    self.config = self._config_obj if self._config_obj else self.Config()
+```
 
 ### 问题：类型注解检查失败
 
@@ -444,6 +666,6 @@ def process(self, data: List[Dict], config: Optional[Dict] = None) -> Dict:
 
 ---
 
-**维护者**: AIECS Tools Team  
-**最后更新**: 2025-10-02
+**维护者**: AIECS Tools Team
+**最后更新**: 2025-12-02
 

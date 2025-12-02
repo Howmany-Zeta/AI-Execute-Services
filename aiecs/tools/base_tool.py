@@ -9,6 +9,7 @@ from aiecs.tools.tool_executor import (
     InputValidationError,
     SecurityError,
     get_executor,
+    ExecutorConfig,
 )
 from aiecs.config.tool_config import get_tool_config_loader
 
@@ -114,11 +115,43 @@ class BaseTool:
                     self._config = {}
             self._config_obj = None
         
-        self._executor = get_executor(self._config)
+        # Extract only executor-related config fields to avoid passing tool-specific
+        # fields (e.g., user_agent, temp_dir) to ExecutorConfig
+        executor_config = self._extract_executor_config(self._config)
+        self._executor = get_executor(executor_config)
         self._schemas: Dict[str, Type[BaseModel]] = {}
         self._async_methods: List[str] = []
         self._register_schemas()
         self._register_async_methods()
+
+    def _extract_executor_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Extract only executor-related configuration fields from the full config.
+        
+        This prevents tool-specific fields (e.g., user_agent, temp_dir) from being
+        passed to ExecutorConfig, which would cause validation issues or be silently
+        ignored.
+        
+        Args:
+            config (Dict[str, Any]): Full configuration dictionary.
+            
+        Returns:
+            Dict[str, Any]: Filtered configuration containing only ExecutorConfig fields.
+        """
+        if not config:
+            return {}
+        
+        # Get all valid field names from ExecutorConfig
+        executor_fields = set(ExecutorConfig.model_fields.keys())
+        
+        # Filter config to only include executor-related fields
+        executor_config = {
+            key: value
+            for key, value in config.items()
+            if key in executor_fields
+        }
+        
+        return executor_config
 
     def _detect_config_class(self) -> Optional[Type[BaseModel]]:
         """

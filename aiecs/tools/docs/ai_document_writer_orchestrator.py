@@ -114,11 +114,19 @@ class AIDocumentWriterOrchestrator(BaseTool):
         )
 
     def __init__(self, config: Optional[Dict] = None):
-        """Initialize AI Document Writer Orchestrator with settings"""
+        """Initialize AI Document Writer Orchestrator with settings
+
+        Configuration is automatically loaded by BaseTool from:
+        1. Explicit config dict (highest priority)
+        2. YAML config files (config/tools/ai_document_writer_orchestrator.yaml)
+        3. Environment variables (via dotenv from .env files)
+        4. Tool defaults (lowest priority)
+        """
         super().__init__(config)
 
-        # Parse configuration
-        self.config = self.Config(**(config or {}))
+        # Configuration is automatically loaded by BaseTool into self._config_obj
+        # Access config via self._config_obj (BaseSettings instance)
+        self.config = self._config_obj if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
 
