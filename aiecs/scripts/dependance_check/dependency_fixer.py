@@ -7,10 +7,12 @@ dependency checker results.
 """
 
 import sys
+import os
 import subprocess
 import platform
 import logging
-from typing import Dict, List
+from pathlib import Path
+from typing import Dict, List, Optional
 
 
 class DependencyFixer:
@@ -34,6 +36,42 @@ class DependencyFixer:
             ],
         )
         return logging.getLogger(__name__)
+
+    def _get_environment_path(self) -> Optional[Path]:
+        """
+        Get the path to the current Python environment (virtual environment or Poetry environment).
+
+        Returns:
+            Path to the environment if found, None otherwise
+        """
+        # Check VIRTUAL_ENV environment variable first (common for venv/virtualenv)
+        venv_path = os.environ.get("VIRTUAL_ENV")
+        if venv_path:
+            env_path = Path(venv_path)
+            if env_path.exists():
+                self.logger.info(f"Found virtual environment via VIRTUAL_ENV: {env_path}")
+                return env_path
+
+        # Check sys.prefix - this points to the virtual environment if we're in one
+        # In a virtual environment, sys.prefix != sys.base_prefix
+        if sys.prefix != sys.base_prefix:
+            env_path = Path(sys.prefix)
+            if env_path.exists():
+                self.logger.info(f"Found virtual environment via sys.prefix: {env_path}")
+                return env_path
+
+        # Check if we're in a Poetry environment by checking sys.executable path
+        # Poetry environments are typically in ~/.cache/pypoetry/virtualenvs/ or similar
+        exec_path = Path(sys.executable)
+        if "pypoetry" in str(exec_path) or exec_path.parts[-3:-1] == ("bin", "python"):
+            # Try to find the environment root (go up from bin/python)
+            potential_env = exec_path.parent.parent
+            if potential_env.exists() and (potential_env / "pyvenv.cfg").exists():
+                self.logger.info(f"Found Poetry/virtual environment: {potential_env}")
+                return potential_env
+
+        self.logger.warning("No virtual environment detected. NLTK data will be downloaded to user directory.")
+        return None
 
     def _run_command(self, cmd: List[str], description: str) -> bool:
         """Run a command and return success status."""
@@ -243,15 +281,38 @@ class DependencyFixer:
         nltk_data = [m for m in missing_models if m.startswith("nltk_")]
         if nltk_data:
             if self._ask_confirmation(f"Download NLTK data: {', '.join(nltk_data)}?"):
+                # Get environment path for environment-specific NLTK data storage
+                env_path = self._get_environment_path()
+                nltk_data_path: Optional[Path] = None
+                original_nltk_data = os.environ.get("NLTK_DATA")
+
+                if env_path:
+                    # Create nltk_data directory in the environment
+                    nltk_data_path = env_path / "nltk_data"
+                    nltk_data_path.mkdir(parents=True, exist_ok=True)
+                    self.logger.info(f"Using environment-specific NLTK data directory: {nltk_data_path}")
+                else:
+                    self.logger.info("No virtual environment detected. Using default NLTK data location (~/nltk_data)")
+
                 for data in nltk_data:
                     data_name = data.replace("nltk_", "")
-                    cmd = [
-                        sys.executable,
-                        "-c",
-                        f"import nltk; nltk.download('{data_name}')",
-                    ]
+                    # Build Python command that sets NLTK_DATA if environment path is available
+                    if nltk_data_path:
+                        # Set NLTK_DATA environment variable in the subprocess
+                        python_code = (
+                            f"import os; "
+                            f"os.environ['NLTK_DATA'] = '{nltk_data_path}'; "
+                            f"import nltk; "
+                            f"nltk.download('{data_name}', quiet=True)"
+                        )
+                    else:
+                        python_code = f"import nltk; nltk.download('{data_name}', quiet=True)"
+
+                    cmd = [sys.executable, "-c", python_code]
                     if self._run_command(cmd, f"Download NLTK data: {data_name}"):
                         self.fixes_applied.append(f"NLTK data: {data_name}")
+                        if nltk_data_path:
+                            self.logger.info(f"NLTK data '{data_name}' stored in environment: {nltk_data_path}")
                     else:
                         self.fixes_failed.append(f"NLTK data: {data_name}")
 
