@@ -35,12 +35,14 @@ When building scalable AI service systems, service management faces the followin
 
 ### Component Positioning
 
-`registry.py` is the service registry center of the AIECS system, responsible for unified management of all AI service registration, discovery, and instantiation. As a core component of the infrastructure layer, it provides a decorator-based service registration mechanism.
+The service registry is the service registry center of the AIECS system, responsible for unified management of all AI service registration, discovery, and instantiation. As a core layer component, it provides a decorator-based service registration mechanism.
+
+> **Note**: Since v2.0, the service registry has been moved from `aiecs/config/registry.py` to `aiecs/core/registry/` module to prevent circular imports and enable module-level imports. The old import path `from aiecs.config import ...` still works (backward compatible).
 
 ## Component Type and Positioning
 
 ### Component Type
-**Infrastructure Component** - Located in the Infrastructure Layer, belongs to system foundation services
+**Core Component** - Located in the Core Layer, belongs to zero-dependency foundation services
 
 ### Architecture Layers
 ```
@@ -293,7 +295,11 @@ class OpenAIExecuteService(BaseAIService):
 
 ### 1. Basic Service Registration
 ```python
-from aiecs.config.registry import register_ai_service
+# Recommended: Import from core module (zero dependencies, supports module-level imports)
+from aiecs.core.registry import register_ai_service
+
+# Backward compatible: Old import path still works
+# from aiecs.config import register_ai_service
 
 @register_ai_service("execute", "openai")
 class OpenAIExecuteService:
@@ -321,7 +327,8 @@ class CustomAnalyzeService:
 
 ### 2. Service Discovery and Usage
 ```python
-from aiecs.config.registry import get_ai_service
+# Recommended: Import from core module
+from aiecs.core.registry import get_ai_service
 
 def execute_ai_task(mode: str, service: str, task_name: str, input_data: dict, context: dict):
     """Execute AI task"""
@@ -350,7 +357,8 @@ def execute_ai_task(mode: str, service: str, task_name: str, input_data: dict, c
 
 ### 3. Service List Query
 ```python
-from aiecs.config.registry import AI_SERVICE_REGISTRY
+# Recommended: Import from core module
+from aiecs.core.registry import AI_SERVICE_REGISTRY, list_registered_services
 
 def get_available_services():
     """Get all available services"""

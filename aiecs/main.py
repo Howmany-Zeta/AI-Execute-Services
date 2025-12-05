@@ -306,7 +306,7 @@ async def cancel_task(task_id: str):
 @app.get("/api/services")
 async def get_services():
     """Get available AI services"""
-    from aiecs.config.registry import AI_SERVICE_REGISTRY
+    from aiecs.core.registry import AI_SERVICE_REGISTRY
 
     services = []
     for (mode, service), cls in AI_SERVICE_REGISTRY.items():

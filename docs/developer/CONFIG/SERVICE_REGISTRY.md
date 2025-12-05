@@ -35,12 +35,14 @@
 
 ### 组件定位
 
-`registry.py` 是 AIECS 系统的服务注册中心，负责统一管理所有 AI 服务的注册、发现和实例化。作为基础设施层的核心组件，它提供了基于装饰器模式的服务注册机制。
+服务注册表是 AIECS 系统的服务注册中心，负责统一管理所有 AI 服务的注册、发现和实例化。作为核心层的组件，它提供了基于装饰器模式的服务注册机制。
+
+> **注意**: 自 v2.0 起，服务注册表已从 `aiecs/config/registry.py` 迁移至 `aiecs/core/registry/` 模块，以防止循环导入并支持模块级别导入。旧的导入路径 `from aiecs.config import ...` 仍然有效（向后兼容）。
 
 ## 组件类型与定位
 
 ### 组件类型
-**基础设施组件** - 位于基础设施层 (Infrastructure Layer)，属于系统基础服务
+**核心组件** - 位于核心层 (Core Layer)，属于零依赖基础服务
 
 ### 架构层次
 ```
@@ -293,7 +295,11 @@ class OpenAIExecuteService(BaseAIService):
 
 ### 1. 基本服务注册
 ```python
-from aiecs.config.registry import register_ai_service
+# 推荐: 从核心模块导入（零依赖，支持模块级别导入）
+from aiecs.core.registry import register_ai_service
+
+# 向后兼容: 旧的导入路径仍然有效
+# from aiecs.config import register_ai_service
 
 @register_ai_service("execute", "openai")
 class OpenAIExecuteService:
@@ -321,7 +327,8 @@ class CustomAnalyzeService:
 
 ### 2. 服务发现和使用
 ```python
-from aiecs.config.registry import get_ai_service
+# 推荐: 从核心模块导入
+from aiecs.core.registry import get_ai_service
 
 def execute_ai_task(mode: str, service: str, task_name: str, input_data: dict, context: dict):
     """执行 AI 任务"""
@@ -350,7 +357,8 @@ def execute_ai_task(mode: str, service: str, task_name: str, input_data: dict, c
 
 ### 3. 服务列表查询
 ```python
-from aiecs.config.registry import AI_SERVICE_REGISTRY
+# 推荐: 从核心模块导入
+from aiecs.core.registry import AI_SERVICE_REGISTRY, list_registered_services
 
 def get_available_services():
     """获取所有可用服务"""
