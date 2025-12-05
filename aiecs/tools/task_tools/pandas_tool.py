@@ -74,23 +74,24 @@ class PandasTool(BaseTool):
             description="Allowed file extensions",
         )
 
-    def __init__(self, config: Optional[Dict] = None):
+    def __init__(self, config: Optional[Dict] = None, **kwargs):
         """
         Initialize PandasTool with configuration.
 
         Args:
             config (Dict, optional): Configuration overrides for PandasTool.
+            **kwargs: Additional arguments passed to BaseTool (e.g., tool_name)
 
         Raises:
             ValueError: If config is invalid.
-        
+
         Configuration is automatically loaded by BaseTool from:
         1. Explicit config dict (highest priority)
         2. YAML config files (config/tools/pandas.yaml)
         3. Environment variables (via dotenv from .env files)
         4. Tool defaults (lowest priority)
         """
-        super().__init__(config)
+        super().__init__(config, **kwargs)
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)

@@ -144,7 +144,7 @@ class DocumentParserTool(BaseTool):
         )
         gcs_project_id: Optional[str] = Field(default=None, description="Google Cloud Storage project ID")
 
-    def __init__(self, config: Optional[Dict] = None):
+    def __init__(self, config: Optional[Dict] = None, **kwargs):
         """Initialize DocumentParserTool with settings
 
         Configuration is automatically loaded by BaseTool from:
@@ -152,8 +152,12 @@ class DocumentParserTool(BaseTool):
         2. YAML config files (config/tools/document_parser_tool.yaml)
         3. Environment variables (via dotenv from .env files)
         4. Tool defaults (lowest priority)
+
+        Args:
+            config: Optional configuration overrides
+            **kwargs: Additional arguments passed to BaseTool (e.g., tool_name)
         """
-        super().__init__(config)
+        super().__init__(config, **kwargs)
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)

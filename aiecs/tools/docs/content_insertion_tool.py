@@ -172,16 +172,20 @@ class ContentInsertionTool(BaseTool):
             description="Whether to automatically resize content to fit",
         )
 
-    def __init__(self, config: Optional[Dict] = None):
+    def __init__(self, config: Optional[Dict] = None, **kwargs):
         """Initialize Content Insertion Tool with settings
-        
+
         Configuration is automatically loaded by BaseTool from:
         1. Explicit config dict (highest priority)
         2. YAML config files (config/tools/content_insertion.yaml)
         3. Environment variables (via dotenv from .env files)
         4. Tool defaults (lowest priority)
+
+        Args:
+            config: Optional configuration overrides
+            **kwargs: Additional arguments passed to BaseTool (e.g., tool_name)
         """
-        super().__init__(config)
+        super().__init__(config, **kwargs)
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)

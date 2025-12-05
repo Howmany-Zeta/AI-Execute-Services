@@ -216,26 +216,46 @@ class GraphReasoningTool(BaseTool):
             description="Enable default inference rules by default",
         )
 
-    def __init__(self, graph_store: GraphStore, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, graph_store: Optional[GraphStore] = None, config: Optional[Dict[str, Any]] = None, **kwargs):
         """
         Initialize Graph Reasoning Tool
 
         Args:
-            graph_store: Graph storage backend
+            graph_store: Graph storage backend (optional, can be set via _initialize())
             config (Dict, optional): Configuration overrides for Graph Reasoning Tool.
-        
+            **kwargs: Additional arguments passed to BaseTool (e.g., tool_name)
+
         Configuration is automatically loaded by BaseTool from:
         1. Explicit config dict (highest priority)
         2. YAML config files (config/tools/graph_reasoning.yaml)
         3. Environment variables (via dotenv from .env files)
         4. Tool defaults (lowest priority)
+
+        Note:
+            If graph_store is not provided, you must call _initialize() before using
+            the tool. This allows the tool to be registered and instantiated via
+            get_tool() without requiring a graph_store at import time.
         """
-        super().__init__(config)
+        super().__init__(config, **kwargs)
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
         self.config = self._config_obj if self._config_obj else self.Config()
-        
+
+        # Initialize components (may be None if graph_store not provided)
+        self.graph_store = graph_store
+        self.query_planner = None
+        self.reasoning_engine = None
+        self.inference_engine = None
+        self.evidence_synthesizer = None
+        self._initialized = False
+
+        # If graph_store provided, initialize immediately (backward compatibility)
+        if graph_store is not None:
+            self._setup_components(graph_store)
+
+    def _setup_components(self, graph_store: GraphStore) -> None:
+        """Setup reasoning components with the given graph store."""
         self.graph_store = graph_store
         self.query_planner = QueryPlanner(graph_store)
         self.reasoning_engine = ReasoningEngine(graph_store)
@@ -244,6 +264,26 @@ class GraphReasoningTool(BaseTool):
 
         # Add default inference rules
         self._setup_default_rules()
+        self._initialized = True
+
+    async def _initialize(self, graph_store: Optional[GraphStore] = None) -> None:
+        """
+        Lazy initialization of components.
+
+        Args:
+            graph_store: Graph storage backend. If not provided, creates an
+                        InMemoryGraphStore.
+        """
+        if self._initialized:
+            return
+
+        # Use provided graph_store or create a default one
+        if graph_store is None:
+            from aiecs.infrastructure.graph_storage.in_memory import InMemoryGraphStore
+            graph_store = InMemoryGraphStore()
+            await graph_store.initialize()
+
+        self._setup_components(graph_store)
 
     def _setup_default_rules(self):
         """Setup default inference rules"""
@@ -306,7 +346,17 @@ class GraphReasoningTool(BaseTool):
 
         Returns:
             Reasoning results
+
+        Raises:
+            RuntimeError: If tool is not initialized (call _initialize() first)
         """
+        if not self._initialized:
+            raise RuntimeError(
+                "GraphReasoningTool is not initialized. "
+                "Call await tool._initialize(graph_store) first, or provide "
+                "graph_store in the constructor."
+            )
+
         mode = validated_input.mode
 
         if mode == ReasoningModeEnum.QUERY_PLAN:

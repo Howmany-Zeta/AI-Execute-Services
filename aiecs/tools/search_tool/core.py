@@ -138,26 +138,27 @@ class SearchTool(BaseTool):
     description = "Comprehensive web search tool using Google Custom Search API."
     category = "task"
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None, **kwargs):
         """
         Initialize SearchTool with enhanced capabilities.
 
         Args:
             config: Optional configuration overrides
+            **kwargs: Additional arguments passed to BaseTool (e.g., tool_name)
 
         Raises:
             AuthenticationError: If Google API libraries not available
             ValidationError: If configuration is invalid
-        
+
         Configuration is automatically loaded by BaseTool from:
         1. Explicit config dict (highest priority)
         2. YAML config files (config/tools/search.yaml)
         3. Environment variables (via dotenv from .env files)
         4. Tool defaults (lowest priority)
-        
+
         Sensitive fields (API keys, credentials) are loaded from .env files.
         """
-        super().__init__(config)
+        super().__init__(config, **kwargs)
 
         if not GOOGLE_API_AVAILABLE:
             raise AuthenticationError("Google API client libraries not available. " "Install with: pip install google-api-python-client google-auth google-auth-httplib2")

@@ -188,20 +188,21 @@ class KnowledgeGraphBuilderTool(BaseTool):
 
     input_schema: type[BaseModel] = KGBuilderInput
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None, **kwargs):
         """
         Initialize Knowledge Graph Builder Tool.
 
         Args:
             config (Dict, optional): Configuration overrides for KG Builder Tool.
-        
+            **kwargs: Additional arguments passed to BaseTool (e.g., tool_name)
+
         Configuration is automatically loaded by BaseTool from:
         1. Explicit config dict (highest priority)
         2. YAML config files (config/tools/kg_builder.yaml)
         3. Environment variables (via dotenv from .env files)
         4. Tool defaults (lowest priority)
         """
-        super().__init__(config)
+        super().__init__(config, **kwargs)
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)

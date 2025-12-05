@@ -96,16 +96,20 @@ class AIReportOrchestratorTool(BaseTool):
             description="Maximum number of insights to include per report",
         )
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None, **kwargs):
         """Initialize AI Report Orchestrator Tool
-        
+
         Configuration is automatically loaded by BaseTool from:
         1. Explicit config dict (highest priority)
         2. YAML config files (config/tools/ai_report_orchestrator.yaml)
         3. Environment variables (via dotenv from .env files)
         4. Tool defaults (lowest priority)
+
+        Args:
+            config: Optional configuration overrides
+            **kwargs: Additional arguments passed to BaseTool (e.g., tool_name)
         """
-        super().__init__(config)
+        super().__init__(config, **kwargs)
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
