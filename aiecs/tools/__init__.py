@@ -1,6 +1,7 @@
 # python-middleware/app/tools/__init__.py
 
 import importlib
+import inspect
 import logging
 import os
 import pkgutil
@@ -72,7 +73,15 @@ def get_tool(name):
             tool_class = TOOL_CLASSES[name]
             config = TOOL_CONFIGS.get(name, {})
             # Pass tool name to BaseTool for config file discovery (used for YAML file lookup)
-            TOOL_REGISTRY[name] = tool_class(config=config, tool_name=name)
+            # Check if tool class accepts tool_name parameter (for backward compatibility)
+            sig = inspect.signature(tool_class.__init__)
+            if "tool_name" in sig.parameters or any(
+                p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+            ):
+                TOOL_REGISTRY[name] = tool_class(config=config, tool_name=name)
+            else:
+                # Tool class doesn't accept tool_name, only pass config
+                TOOL_REGISTRY[name] = tool_class(config=config)
             logger.debug(f"Instantiated tool '{name}' from class {tool_class.__name__}")
 
     if name not in TOOL_REGISTRY:

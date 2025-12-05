@@ -122,22 +122,23 @@ class APISourceTool(BaseTool):
         newsapi_api_key: Optional[str] = Field(default=None, description="API key for News API")
         census_api_key: Optional[str] = Field(default=None, description="API key for US Census Bureau")
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None, **kwargs):
         """
         Initialize API Source Tool with enhanced intelligence features.
 
         Args:
             config: Configuration dictionary with API keys and settings
-        
+            **kwargs: Additional arguments passed to BaseTool (e.g., tool_name)
+
         Configuration is automatically loaded by BaseTool from:
         1. Explicit config dict (highest priority)
         2. YAML config files (config/tools/apisource.yaml)
         3. Environment variables (via dotenv from .env files)
         4. Tool defaults (lowest priority)
-        
+
         Sensitive fields (API keys) are loaded from .env files.
         """
-        super().__init__(config)
+        super().__init__(config, **kwargs)
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)

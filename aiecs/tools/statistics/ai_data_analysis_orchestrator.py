@@ -81,16 +81,20 @@ class AIDataAnalysisOrchestrator(BaseTool):
         default_ai_provider: str = Field(default="openai", description="Default AI provider to use")
         enable_caching: bool = Field(default=True, description="Whether to enable result caching")
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None, **kwargs):
         """Initialize AI Data Analysis Orchestrator
-        
+
         Configuration is automatically loaded by BaseTool from:
         1. Explicit config dict (highest priority)
         2. YAML config files (config/tools/ai_data_analysis_orchestrator.yaml)
         3. Environment variables (via dotenv from .env files)
         4. Tool defaults (lowest priority)
+
+        Args:
+            config: Optional configuration overrides
+            **kwargs: Additional arguments passed to BaseTool (e.g., tool_name)
         """
-        super().__init__(config)
+        super().__init__(config, **kwargs)
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
