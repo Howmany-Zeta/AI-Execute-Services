@@ -398,7 +398,9 @@ class LLMClientManager:
             collected_content = ""
 
             # Stream text
-            async for chunk in await client.stream_text(
+            # Note: stream_text is an async generator, not a coroutine,
+            # so we iterate directly without await
+            async for chunk in client.stream_text(
                 messages=messages,
                 model=final_model,
                 temperature=temperature,
