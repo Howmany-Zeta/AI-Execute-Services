@@ -4,6 +4,7 @@ Core module for the Python middleware application.
 This module provides the core interfaces and abstractions including:
 - Execution interfaces
 - Core abstractions
+- Service registry (no dependencies, safe to import anywhere)
 """
 
 # Core interfaces
@@ -24,6 +25,15 @@ from .interface.storage_interface import (
     ICheckpointerBackend,
 )
 
+# Service registry (zero dependencies, safe for module-level imports)
+from .registry import (
+    AI_SERVICE_REGISTRY,
+    register_ai_service,
+    get_ai_service,
+    list_registered_services,
+    clear_registry,
+)
+
 __all__ = [
     # Execution interfaces
     "ExecutionInterface",
@@ -38,6 +48,12 @@ __all__ = [
     "ITaskContextStorage",
     "IStorageBackend",
     "ICheckpointerBackend",
+    # Service registry
+    "AI_SERVICE_REGISTRY",
+    "register_ai_service",
+    "get_ai_service",
+    "list_registered_services",
+    "clear_registry",
 ]
 
 # Version information

@@ -1,8 +1,8 @@
 from aiecs.domain.execution.model import TaskStatus
 from celery import Celery  # type: ignore[import-untyped]
 from aiecs.config.config import get_settings
-from aiecs.config.registry import get_ai_service
 from aiecs.ws.socket_server import push_progress
+from aiecs.core.registry import get_ai_service
 import logging
 import asyncio
 from typing import Dict, Any
@@ -123,6 +123,8 @@ def _execute_service_task(
         )
 
         # 2. Get the service instance
+        # Note: get_ai_service is imported at module level from aiecs.core.registry
+        # The registry is now in the core layer to prevent circular imports
         service_cls = get_ai_service(mode, service)
         service_instance = service_cls()
 
