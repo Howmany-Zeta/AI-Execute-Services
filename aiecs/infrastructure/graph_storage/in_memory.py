@@ -254,9 +254,9 @@ class InMemoryGraphStore(GraphStore):
 
         return neighbors
 
-    def get_outgoing_relations(self, entity_id: str) -> List[Relation]:
+    async def get_outgoing_relations(self, entity_id: str) -> List[Relation]:
         """
-        Get all outgoing relations for an entity (synchronous method for query optimizer).
+        Get all outgoing relations for an entity.
 
         Args:
             entity_id: Entity ID to get outgoing relations for
@@ -277,9 +277,9 @@ class InMemoryGraphStore(GraphStore):
 
         return relations
 
-    def get_incoming_relations(self, entity_id: str) -> List[Relation]:
+    async def get_incoming_relations(self, entity_id: str) -> List[Relation]:
         """
-        Get all incoming relations for an entity (synchronous method for query optimizer).
+        Get all incoming relations for an entity.
 
         Args:
             entity_id: Entity ID to get incoming relations for
