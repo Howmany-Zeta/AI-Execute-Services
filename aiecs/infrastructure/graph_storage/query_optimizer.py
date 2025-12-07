@@ -566,11 +566,20 @@ class QueryStatisticsCollector:
             relation_type = relation.relation_type
             relation_type_counts[relation_type] = relation_type_counts.get(relation_type, 0) + 1
 
-        # Calculate average degree
+        # Calculate average degree by counting relations per entity
+        # We count each relation for both source (outgoing) and target (incoming)
+        outgoing_counts: Dict[str, int] = {}
+        incoming_counts: Dict[str, int] = {}
+        for relation in graph_store.relations.values():
+            source_id = relation.source_id
+            target_id = relation.target_id
+            outgoing_counts[source_id] = outgoing_counts.get(source_id, 0) + 1
+            incoming_counts[target_id] = incoming_counts.get(target_id, 0) + 1
+
         degree_sum = 0
         for entity_id in graph_store.entities:
-            outgoing = len(graph_store.get_outgoing_relations(entity_id))
-            incoming = len(graph_store.get_incoming_relations(entity_id))
+            outgoing = outgoing_counts.get(entity_id, 0)
+            incoming = incoming_counts.get(entity_id, 0)
             degree_sum += outgoing + incoming
 
         avg_degree = degree_sum / max(entity_count, 1)
