@@ -238,6 +238,91 @@ class Settings(BaseSettings):
         description="Conflict resolution strategy: most_complete, most_recent, most_confident, longest, keep_all",
     )
 
+    # Knowledge Fusion Matching Pipeline Configuration
+    # Threshold for alias-based matching (O(1) lookup via AliasIndex)
+    kg_fusion_alias_match_score: float = Field(
+        default=0.98,
+        alias="KG_FUSION_ALIAS_MATCH_SCORE",
+        description="Minimum score for alias-based matching (0.0-1.0, default: 0.98)",
+    )
+
+    # Threshold for abbreviation/acronym matching
+    kg_fusion_abbreviation_match_score: float = Field(
+        default=0.95,
+        alias="KG_FUSION_ABBREVIATION_MATCH_SCORE",
+        description="Minimum score for abbreviation matching (0.0-1.0, default: 0.95)",
+    )
+
+    # Threshold for normalized name matching
+    kg_fusion_normalization_match_score: float = Field(
+        default=0.90,
+        alias="KG_FUSION_NORMALIZATION_MATCH_SCORE",
+        description="Minimum score for normalized name matching (0.0-1.0, default: 0.90)",
+    )
+
+    # Threshold for semantic embedding matching
+    kg_fusion_semantic_threshold: float = Field(
+        default=0.85,
+        alias="KG_FUSION_SEMANTIC_THRESHOLD",
+        description="Minimum score for semantic embedding matching (0.0-1.0, default: 0.85)",
+    )
+
+    # Threshold for string similarity matching (fallback)
+    kg_fusion_string_similarity_threshold: float = Field(
+        default=0.80,
+        alias="KG_FUSION_STRING_SIMILARITY_THRESHOLD",
+        description="Minimum score for string similarity matching (0.0-1.0, default: 0.80)",
+    )
+
+    # Enable/disable semantic matching globally
+    kg_fusion_semantic_enabled: bool = Field(
+        default=True,
+        alias="KG_FUSION_SEMANTIC_ENABLED",
+        description="Enable semantic embedding matching (requires LLM provider)",
+    )
+
+    # Default enabled matching stages
+    kg_fusion_enabled_stages: str = Field(
+        default="exact,alias,abbreviation,normalized,semantic,string",
+        alias="KG_FUSION_ENABLED_STAGES",
+        description="Comma-separated list of enabled matching stages: exact,alias,abbreviation,normalized,semantic,string",
+    )
+
+    # Early exit threshold for pipeline optimization
+    kg_fusion_early_exit_threshold: float = Field(
+        default=0.95,
+        alias="KG_FUSION_EARLY_EXIT_THRESHOLD",
+        description="Skip remaining stages if match score >= this threshold (0.0-1.0)",
+    )
+
+    # AliasIndex backend configuration
+    kg_fusion_alias_backend: str = Field(
+        default="memory",
+        alias="KG_FUSION_ALIAS_BACKEND",
+        description="AliasIndex backend: memory (default for small graphs) or redis (for large/distributed)",
+    )
+
+    # Redis URL for AliasIndex (when backend is redis)
+    kg_fusion_alias_redis_url: str = Field(
+        default="redis://localhost:6379/1",
+        alias="KG_FUSION_ALIAS_REDIS_URL",
+        description="Redis URL for AliasIndex when using redis backend",
+    )
+
+    # Threshold for auto-switching from memory to Redis backend
+    kg_fusion_alias_redis_threshold: int = Field(
+        default=100000,
+        alias="KG_FUSION_ALIAS_REDIS_THRESHOLD",
+        description="Number of aliases before auto-switching to Redis backend",
+    )
+
+    # Path to per-entity-type configuration file (JSON or YAML)
+    kg_fusion_entity_type_config_path: str = Field(
+        default="",
+        alias="KG_FUSION_ENTITY_TYPE_CONFIG_PATH",
+        description="Path to JSON/YAML file with per-entity-type matching configuration",
+    )
+
     # Reranking configuration
     kg_reranking_default_strategy: str = Field(
         default="hybrid",
@@ -429,6 +514,41 @@ class Settings(BaseSettings):
             logger.warning(f"KG_VECTOR_DIMENSION is set to {v}, which is not a common embedding dimension. " f"Common dimensions are: {common_dims}")
         return v
 
+    @field_validator(
+        "kg_fusion_alias_match_score",
+        "kg_fusion_abbreviation_match_score",
+        "kg_fusion_normalization_match_score",
+        "kg_fusion_semantic_threshold",
+        "kg_fusion_string_similarity_threshold",
+        "kg_fusion_early_exit_threshold",
+    )
+    @classmethod
+    def validate_fusion_thresholds(cls, v: float) -> float:
+        """Validate fusion matching thresholds are in range [0.0, 1.0]"""
+        if not 0.0 <= v <= 1.0:
+            raise ValueError(f"Fusion threshold must be between 0.0 and 1.0, got {v}")
+        return v
+
+    @field_validator("kg_fusion_alias_backend")
+    @classmethod
+    def validate_fusion_alias_backend(cls, v: str) -> str:
+        """Validate AliasIndex backend selection"""
+        valid_backends = ["memory", "redis"]
+        if v not in valid_backends:
+            raise ValueError(f"Invalid KG_FUSION_ALIAS_BACKEND: {v}. Must be one of: {', '.join(valid_backends)}")
+        return v
+
+    @field_validator("kg_fusion_enabled_stages")
+    @classmethod
+    def validate_fusion_enabled_stages(cls, v: str) -> str:
+        """Validate enabled matching stages"""
+        valid_stages = {"exact", "alias", "abbreviation", "normalized", "semantic", "string"}
+        stages = [s.strip() for s in v.split(",") if s.strip()]
+        invalid = set(stages) - valid_stages
+        if invalid:
+            raise ValueError(f"Invalid matching stages: {invalid}. Valid stages are: {valid_stages}")
+        return v
+
     def validate_llm_models_config(self) -> bool:
         """
         Validate that LLM models configuration file exists.
@@ -454,6 +574,82 @@ class Settings(BaseSettings):
 
         # If not found, it's still okay - the config loader will try to find it
         return True
+
+    def get_fusion_matching_config(self) -> "FusionMatchingConfig":
+        """
+        Create FusionMatchingConfig from Settings with inheritance support.
+
+        Configuration load order:
+        1. System defaults (hardcoded in FusionMatchingConfig)
+        2. Global config (from Settings/environment variables)
+        3. Per-entity-type config (from kg_fusion_entity_type_config_path file)
+        4. Runtime overrides (can be passed to methods)
+
+        Returns:
+            FusionMatchingConfig instance initialized from Settings
+
+        Example:
+            ```python
+            settings = get_settings()
+            config = settings.get_fusion_matching_config()
+            person_config = config.get_config_for_type("Person")
+            ```
+        """
+        # Import here to avoid circular imports
+        from aiecs.application.knowledge_graph.fusion.matching_config import (
+            FusionMatchingConfig,
+            load_matching_config,
+        )
+
+        # Parse enabled stages from comma-separated string
+        enabled_stages = [
+            s.strip() for s in self.kg_fusion_enabled_stages.split(",") if s.strip()
+        ]
+
+        # Start with global config from Settings
+        config = FusionMatchingConfig(
+            alias_match_score=self.kg_fusion_alias_match_score,
+            abbreviation_match_score=self.kg_fusion_abbreviation_match_score,
+            normalization_match_score=self.kg_fusion_normalization_match_score,
+            semantic_threshold=self.kg_fusion_semantic_threshold,
+            string_similarity_threshold=self.kg_fusion_string_similarity_threshold,
+            enabled_stages=enabled_stages,
+            semantic_enabled=self.kg_fusion_semantic_enabled,
+        )
+
+        # Log configuration sources for debugging
+        logger.debug(
+            f"Fusion matching config loaded from Settings: "
+            f"alias={self.kg_fusion_alias_match_score}, "
+            f"abbreviation={self.kg_fusion_abbreviation_match_score}, "
+            f"normalization={self.kg_fusion_normalization_match_score}, "
+            f"semantic={self.kg_fusion_semantic_threshold}, "
+            f"string={self.kg_fusion_string_similarity_threshold}"
+        )
+
+        # Load per-entity-type config from file if specified
+        if self.kg_fusion_entity_type_config_path:
+            config_path = Path(self.kg_fusion_entity_type_config_path)
+            if config_path.exists():
+                try:
+                    file_config = load_matching_config(str(config_path))
+                    # Merge entity type configs from file
+                    for entity_type, type_config in file_config.entity_type_configs.items():
+                        config.add_entity_type_config(entity_type, type_config)
+                    logger.info(
+                        f"Loaded per-entity-type config from: {config_path} "
+                        f"({len(file_config.entity_type_configs)} types)"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to load entity type config from {config_path}: {e}"
+                    )
+            else:
+                logger.warning(
+                    f"Entity type config file not found: {config_path}"
+                )
+
+        return config
 
 
 @lru_cache()
