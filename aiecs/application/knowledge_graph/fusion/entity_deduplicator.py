@@ -4,9 +4,14 @@ Entity Deduplicator
 Identifies and merges duplicate entities based on similarity matching.
 """
 
-from typing import List, Dict, Tuple, Set
+from typing import List, Dict, Optional, Tuple, Set, TYPE_CHECKING
 from difflib import SequenceMatcher
 from aiecs.domain.knowledge_graph.models.entity import Entity
+
+if TYPE_CHECKING:
+    from aiecs.application.knowledge_graph.fusion.similarity_pipeline import (
+        SimilarityPipeline,
+    )
 
 
 class EntityDeduplicator:
@@ -50,6 +55,7 @@ class EntityDeduplicator:
         similarity_threshold: float = 0.85,
         use_embeddings: bool = True,
         embedding_threshold: float = 0.90,
+        similarity_pipeline: Optional["SimilarityPipeline"] = None,
     ):
         """
         Initialize entity deduplicator
@@ -58,10 +64,12 @@ class EntityDeduplicator:
             similarity_threshold: Minimum similarity score to consider entities as duplicates (0.0-1.0)
             use_embeddings: Whether to use embeddings for similarity (if available)
             embedding_threshold: Minimum embedding similarity for duplicates (0.0-1.0)
+            similarity_pipeline: Optional SimilarityPipeline for enhanced matching
         """
         self.similarity_threshold = similarity_threshold
         self.use_embeddings = use_embeddings
         self.embedding_threshold = embedding_threshold
+        self._similarity_pipeline = similarity_pipeline
 
     async def deduplicate(self, entities: List[Entity]) -> List[Entity]:
         """
@@ -136,7 +144,7 @@ class EntityDeduplicator:
         Compute similarity between two entities
 
         Uses multiple signals:
-        1. Name similarity (fuzzy string matching)
+        1. Name similarity (via SimilarityPipeline if available, else fuzzy string matching)
         2. Property overlap
         3. Embedding similarity (if available)
 
@@ -154,8 +162,18 @@ class EntityDeduplicator:
         if not name1 or not name2:
             return 0.0
 
-        # 1. Name-based similarity
-        name_similarity = self._string_similarity(name1, name2)
+        # 1. Name-based similarity (use pipeline if available)
+        if self._similarity_pipeline is not None:
+            # Use enhanced similarity pipeline with per-entity-type configuration
+            pipeline_result = await self._similarity_pipeline.compute_similarity(
+                name1=name1,
+                name2=name2,
+                entity_type=entity1.entity_type,
+            )
+            name_similarity = pipeline_result.final_score
+        else:
+            # Fallback to basic string similarity
+            name_similarity = self._string_similarity(name1, name2)
 
         # 2. Property overlap
         property_similarity = self._property_similarity(entity1.properties, entity2.properties)
@@ -172,6 +190,20 @@ class EntityDeduplicator:
         else:
             # No embeddings, rely on name and properties
             return 0.7 * name_similarity + 0.3 * property_similarity
+
+    def set_similarity_pipeline(self, pipeline: "SimilarityPipeline") -> None:
+        """
+        Set the similarity pipeline for enhanced matching.
+
+        Args:
+            pipeline: SimilarityPipeline instance
+        """
+        self._similarity_pipeline = pipeline
+
+    @property
+    def similarity_pipeline(self) -> Optional["SimilarityPipeline"]:
+        """Get the current similarity pipeline."""
+        return self._similarity_pipeline
 
     def _get_entity_name(self, entity: Entity) -> str:
         """Extract entity name from properties"""

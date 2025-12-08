@@ -4,9 +4,14 @@ Entity Linker
 Links newly extracted entities to existing entities in the knowledge graph.
 """
 
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.infrastructure.graph_storage.base import GraphStore
+
+if TYPE_CHECKING:
+    from aiecs.application.knowledge_graph.fusion.similarity_pipeline import (
+        SimilarityPipeline,
+    )
 
 
 class EntityLinker:
@@ -53,6 +58,7 @@ class EntityLinker:
         similarity_threshold: float = 0.85,
         use_embeddings: bool = True,
         embedding_threshold: float = 0.90,
+        similarity_pipeline: Optional["SimilarityPipeline"] = None,
     ):
         """
         Initialize entity linker
@@ -62,11 +68,13 @@ class EntityLinker:
             similarity_threshold: Minimum similarity to link entities (0.0-1.0)
             use_embeddings: Use embedding similarity for matching
             embedding_threshold: Minimum embedding similarity for linking (0.0-1.0)
+            similarity_pipeline: Optional SimilarityPipeline for enhanced matching
         """
         self.graph_store = graph_store
         self.similarity_threshold = similarity_threshold
         self.use_embeddings = use_embeddings
         self.embedding_threshold = embedding_threshold
+        self._similarity_pipeline = similarity_pipeline
 
     async def link_entity(self, new_entity: Entity, candidate_limit: int = 10) -> "LinkResult":
         """
@@ -267,23 +275,36 @@ class EntityLinker:
         if not name1 or not name2:
             return False
 
-        return self._name_similarity(name1, name2) >= self.similarity_threshold
+        return self._name_similarity(
+            name1, name2, entity_type=entity1.entity_type
+        ) >= self.similarity_threshold
 
     def _get_entity_name(self, entity: Entity) -> str:
         """Extract entity name from properties"""
         return entity.properties.get("name") or entity.properties.get("title") or entity.properties.get("text") or ""
 
-    def _name_similarity(self, name1: str, name2: str) -> float:
+    def _name_similarity(
+        self, name1: str, name2: str, entity_type: Optional[str] = None
+    ) -> float:
         """
-        Compute name similarity using fuzzy matching
+        Compute name similarity using fuzzy matching or SimilarityPipeline.
 
         Args:
             name1: First name
             name2: Second name
+            entity_type: Entity type for per-type configuration (optional)
 
         Returns:
             Similarity score (0.0-1.0)
         """
+        # Use pipeline if available (synchronous version for compatibility)
+        if self._similarity_pipeline is not None:
+            return self._similarity_pipeline.compute_similarity_sync(
+                name1=name1,
+                name2=name2,
+                entity_type=entity_type,
+            )
+
         from difflib import SequenceMatcher
 
         # Normalize
@@ -300,6 +321,45 @@ class EntityLinker:
 
         # Fuzzy match
         return SequenceMatcher(None, n1, n2).ratio()
+
+    async def _name_similarity_async(
+        self, name1: str, name2: str, entity_type: Optional[str] = None
+    ) -> float:
+        """
+        Compute name similarity using SimilarityPipeline (async version).
+
+        Args:
+            name1: First name
+            name2: Second name
+            entity_type: Entity type for per-type configuration (optional)
+
+        Returns:
+            Similarity score (0.0-1.0)
+        """
+        if self._similarity_pipeline is not None:
+            result = await self._similarity_pipeline.compute_similarity(
+                name1=name1,
+                name2=name2,
+                entity_type=entity_type,
+            )
+            return result.final_score
+
+        # Fallback to sync version
+        return self._name_similarity(name1, name2, entity_type)
+
+    def set_similarity_pipeline(self, pipeline: "SimilarityPipeline") -> None:
+        """
+        Set the similarity pipeline for enhanced matching.
+
+        Args:
+            pipeline: SimilarityPipeline instance
+        """
+        self._similarity_pipeline = pipeline
+
+    @property
+    def similarity_pipeline(self) -> Optional["SimilarityPipeline"]:
+        """Get the current similarity pipeline."""
+        return self._similarity_pipeline
 
 
 class LinkResult:
