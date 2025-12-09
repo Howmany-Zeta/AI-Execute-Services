@@ -9,18 +9,31 @@ This is ideal for:
 - Small graphs (< 100K nodes)
 - Prototyping
 - Scenarios where persistence is not required
+
+Multi-tenancy Support:
+- Tenant-partitioned graphs using OrderedDict for LRU tracking
+- Global graph for tenant_id=None (never evicted)
+- Configurable max_tenant_graphs with LRU eviction
+- Environment variable KG_INMEMORY_MAX_TENANTS for configuration
 """
 
-from typing import Any, List, Optional, Dict, Set
+import os
+from collections import OrderedDict
+from typing import Any, List, Optional, Dict, Set, Tuple
 import networkx as nx  # type: ignore[import-untyped]
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.relation import Relation
 from aiecs.infrastructure.graph_storage.base import GraphStore
+from aiecs.infrastructure.graph_storage.tenant import TenantContext, CrossTenantRelationError
 from aiecs.infrastructure.graph_storage.property_storage import (
     PropertyOptimizer,
     PropertyStorageConfig,
     PropertyIndex,
 )
+
+# Default maximum number of tenant graphs to keep in memory
+DEFAULT_MAX_TENANT_GRAPHS = 100
+ENV_MAX_TENANTS = "KG_INMEMORY_MAX_TENANTS"
 
 
 class InMemoryGraphStore(GraphStore):
@@ -40,6 +53,12 @@ class InMemoryGraphStore(GraphStore):
     - Full Python ecosystem integration
     - Rich graph algorithms from networkx
 
+    **Multi-Tenancy Support**:
+    - Tenant-partitioned graphs: Each tenant has its own nx.DiGraph
+    - Global graph for tenant_id=None (never evicted, backward compatible)
+    - LRU eviction: When max_tenant_graphs exceeded, least recently used tenant evicted
+    - Configure via max_tenant_graphs param or KG_INMEMORY_MAX_TENANTS env var
+
     **Limitations**:
     - Not persistent (lost on restart)
     - Limited by RAM
@@ -51,18 +70,24 @@ class InMemoryGraphStore(GraphStore):
         store = InMemoryGraphStore()
         await store.initialize()
 
-        # Add entities
+        # Single-tenant usage (backward compatible)
         entity = Entity(id="person_1", entity_type="Person", properties={"name": "Alice"})
         await store.add_entity(entity)
 
-        # Tier 2 methods work automatically
-        paths = await store.traverse("person_1", max_depth=3)
+        # Multi-tenant usage
+        from aiecs.infrastructure.graph_storage.tenant import TenantContext
+        context = TenantContext(tenant_id="acme-corp")
+        await store.add_entity(entity, context=context)
+
+        # Tier 2 methods work automatically with tenant isolation
+        paths = await store.traverse("person_1", max_depth=3, context=context)
         ```
     """
 
     def __init__(
         self,
         property_storage_config: Optional[PropertyStorageConfig] = None,
+        max_tenant_graphs: Optional[int] = None,
     ) -> None:
         """
         Initialize in-memory graph store
@@ -70,10 +95,39 @@ class InMemoryGraphStore(GraphStore):
         Args:
             property_storage_config: Optional configuration for property storage optimization.
                                      Enables sparse storage, compression, and indexing.
+            max_tenant_graphs: Maximum number of tenant graphs to keep in memory.
+                              When exceeded, least recently used tenant is evicted.
+                              Default: 100 (or KG_INMEMORY_MAX_TENANTS env var)
         """
+        # Determine max tenant graphs from param, env var, or default
+        if max_tenant_graphs is not None:
+            self._max_tenant_graphs = max_tenant_graphs
+        else:
+            env_value = os.environ.get(ENV_MAX_TENANTS)
+            if env_value:
+                try:
+                    self._max_tenant_graphs = int(env_value)
+                except ValueError:
+                    self._max_tenant_graphs = DEFAULT_MAX_TENANT_GRAPHS
+            else:
+                self._max_tenant_graphs = DEFAULT_MAX_TENANT_GRAPHS
+
+        # Global graph for tenant_id=None (never evicted)
+        self._global_graph: Optional[nx.DiGraph] = None
+        self._global_entities: Dict[str, Entity] = {}
+        self._global_relations: Dict[str, Relation] = {}
+
+        # Tenant-partitioned storage with LRU tracking
+        # OrderedDict maintains insertion order; move_to_end() for LRU
+        self._tenant_graphs: OrderedDict[str, nx.DiGraph] = OrderedDict()
+        self._tenant_entities: Dict[str, Dict[str, Entity]] = {}
+        self._tenant_relations: Dict[str, Dict[str, Relation]] = {}
+
+        # Legacy attributes for backward compatibility
         self.graph: Optional[nx.DiGraph] = None
         self.entities: Dict[str, Entity] = {}
         self.relations: Dict[str, Relation] = {}
+
         self._initialized = False
 
         # Property storage optimization
@@ -90,24 +144,154 @@ class InMemoryGraphStore(GraphStore):
         if self._initialized:
             return
 
-        self.graph = nx.DiGraph()
-        self.entities = {}
-        self.relations = {}
+        # Initialize global graph (for tenant_id=None)
+        self._global_graph = nx.DiGraph()
+        self._global_entities = {}
+        self._global_relations = {}
+
+        # Initialize tenant storage
+        self._tenant_graphs = OrderedDict()
+        self._tenant_entities = {}
+        self._tenant_relations = {}
+
+        # Legacy references point to global storage for backward compatibility
+        self.graph = self._global_graph
+        self.entities = self._global_entities
+        self.relations = self._global_relations
+
         self._initialized = True
 
     async def close(self) -> None:
         """Close and cleanup (nothing to do for in-memory)"""
+        # Clear global storage
+        self._global_graph = None
+        self._global_entities = {}
+        self._global_relations = {}
+
+        # Clear tenant storage
+        self._tenant_graphs.clear()
+        self._tenant_entities.clear()
+        self._tenant_relations.clear()
+
+        # Clear legacy references
         self.graph = None
         self.entities = {}
         self.relations = {}
+
         self._initialized = False
 
-    async def add_entity(self, entity: Entity) -> None:
+    # =========================================================================
+    # MULTI-TENANCY HELPERS
+    # =========================================================================
+
+    def _get_tenant_id(self, context: Optional[TenantContext]) -> Optional[str]:
+        """Extract tenant_id from context, returns None for global namespace."""
+        return context.tenant_id if context else None
+
+    def _get_graph(self, tenant_id: Optional[str]) -> nx.DiGraph:
+        """
+        Get the graph for a tenant with LRU tracking.
+
+        Args:
+            tenant_id: Tenant ID or None for global namespace
+
+        Returns:
+            networkx DiGraph for the tenant
+
+        Note:
+            - Global graph (tenant_id=None) is never evicted
+            - Tenant graphs are evicted LRU when max_tenant_graphs exceeded
+        """
+        if tenant_id is None:
+            # Global namespace - never evicted
+            if self._global_graph is None:
+                self._global_graph = nx.DiGraph()
+            return self._global_graph
+
+        # Tenant-specific graph
+        if tenant_id in self._tenant_graphs:
+            # Move to end for LRU tracking (most recently used)
+            self._tenant_graphs.move_to_end(tenant_id)
+            return self._tenant_graphs[tenant_id]
+
+        # Create new tenant graph
+        self._evict_if_needed()
+        graph = nx.DiGraph()
+        self._tenant_graphs[tenant_id] = graph
+        self._tenant_entities[tenant_id] = {}
+        self._tenant_relations[tenant_id] = {}
+        return graph
+
+    def _get_entities_dict(self, tenant_id: Optional[str], update_lru: bool = True) -> Dict[str, Entity]:
+        """Get entities dict for a tenant.
+        
+        Args:
+            tenant_id: Tenant ID or None for global namespace
+            update_lru: Whether to update LRU tracking (default: True)
+        """
+        if tenant_id is None:
+            return self._global_entities
+        # Update LRU tracking if tenant exists
+        if update_lru and tenant_id in self._tenant_graphs:
+            self._tenant_graphs.move_to_end(tenant_id)
+        if tenant_id not in self._tenant_entities:
+            self._tenant_entities[tenant_id] = {}
+        return self._tenant_entities[tenant_id]
+
+    def _get_relations_dict(self, tenant_id: Optional[str], update_lru: bool = True) -> Dict[str, Relation]:
+        """Get relations dict for a tenant.
+        
+        Args:
+            tenant_id: Tenant ID or None for global namespace
+            update_lru: Whether to update LRU tracking (default: True)
+        """
+        if tenant_id is None:
+            return self._global_relations
+        # Update LRU tracking if tenant exists
+        if update_lru and tenant_id in self._tenant_graphs:
+            self._tenant_graphs.move_to_end(tenant_id)
+        if tenant_id not in self._tenant_relations:
+            self._tenant_relations[tenant_id] = {}
+        return self._tenant_relations[tenant_id]
+
+    def _evict_if_needed(self) -> None:
+        """Evict least recently used tenant if max_tenant_graphs exceeded."""
+        while len(self._tenant_graphs) >= self._max_tenant_graphs:
+            # Pop the first item (least recently used)
+            evicted_tenant_id, _ = self._tenant_graphs.popitem(last=False)
+            # Clean up associated data
+            self._tenant_entities.pop(evicted_tenant_id, None)
+            self._tenant_relations.pop(evicted_tenant_id, None)
+
+    def get_tenant_count(self) -> int:
+        """
+        Get the number of tenant graphs currently in memory.
+
+        Returns:
+            Number of tenant graphs (excludes global graph)
+        """
+        return len(self._tenant_graphs)
+
+    def get_tenant_ids(self) -> List[str]:
+        """
+        Get list of tenant IDs currently in memory.
+
+        Returns:
+            List of tenant IDs (excludes global namespace)
+        """
+        return list(self._tenant_graphs.keys())
+
+    # =========================================================================
+    # TIER 1 CRUD OPERATIONS
+    # =========================================================================
+
+    async def add_entity(self, entity: Entity, context: Optional[TenantContext] = None) -> None:
         """
         Add entity to graph
 
         Args:
             entity: Entity to add
+            context: Optional tenant context for multi-tenant isolation
 
         Raises:
             ValueError: If entity already exists
@@ -116,8 +300,16 @@ class InMemoryGraphStore(GraphStore):
         if not self._initialized:
             raise RuntimeError("GraphStore not initialized. Call initialize() first.")
 
-        if entity.id in self.entities:
+        tenant_id = self._get_tenant_id(context)
+        graph = self._get_graph(tenant_id)
+        entities = self._get_entities_dict(tenant_id)
+
+        if entity.id in entities:
             raise ValueError(f"Entity with ID '{entity.id}' already exists")
+
+        # Set tenant_id on entity if context provided and entity doesn't have one
+        if tenant_id is not None and entity.tenant_id is None:
+            entity.tenant_id = tenant_id
 
         # Apply property optimization if enabled
         if self._property_optimizer is not None:
@@ -127,19 +319,18 @@ class InMemoryGraphStore(GraphStore):
             self._property_optimizer.index_entity(entity.id, entity.properties)
 
         # Add to networkx graph
-        if self.graph is None:
-            raise RuntimeError("GraphStore not initialized. Call initialize() first.")
-        self.graph.add_node(entity.id, entity=entity)
+        graph.add_node(entity.id, entity=entity)
 
         # Add to entity index
-        self.entities[entity.id] = entity
+        entities[entity.id] = entity
 
-    async def get_entity(self, entity_id: str) -> Optional[Entity]:
+    async def get_entity(self, entity_id: str, context: Optional[TenantContext] = None) -> Optional[Entity]:
         """
         Get entity by ID
 
         Args:
             entity_id: Entity ID
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             Entity if found, None otherwise
@@ -147,35 +338,56 @@ class InMemoryGraphStore(GraphStore):
         if not self._initialized:
             return None
 
-        return self.entities.get(entity_id)
+        tenant_id = self._get_tenant_id(context)
+        entities = self._get_entities_dict(tenant_id)
+        return entities.get(entity_id)
 
-    async def add_relation(self, relation: Relation) -> None:
+    async def add_relation(self, relation: Relation, context: Optional[TenantContext] = None) -> None:
         """
         Add relation to graph
 
         Args:
             relation: Relation to add
+            context: Optional tenant context for multi-tenant isolation
 
         Raises:
             ValueError: If relation already exists or entities don't exist
+            CrossTenantRelationError: If source and target entities belong to different tenants
             RuntimeError: If store not initialized
         """
         if not self._initialized:
             raise RuntimeError("GraphStore not initialized. Call initialize() first.")
 
-        if relation.id in self.relations:
+        tenant_id = self._get_tenant_id(context)
+        graph = self._get_graph(tenant_id)
+        entities = self._get_entities_dict(tenant_id)
+        relations = self._get_relations_dict(tenant_id)
+
+        if relation.id in relations:
             raise ValueError(f"Relation with ID '{relation.id}' already exists")
 
-        # Validate entities exist
-        if relation.source_id not in self.entities:
+        # Validate entities exist within the same tenant scope
+        source_entity = entities.get(relation.source_id)
+        target_entity = entities.get(relation.target_id)
+
+        if source_entity is None:
             raise ValueError(f"Source entity '{relation.source_id}' not found")
-        if relation.target_id not in self.entities:
+        if target_entity is None:
             raise ValueError(f"Target entity '{relation.target_id}' not found")
 
+        # Enforce same-tenant constraint
+        if tenant_id is not None:
+            source_tenant = source_entity.tenant_id
+            target_tenant = target_entity.tenant_id
+            if source_tenant != target_tenant:
+                raise CrossTenantRelationError(source_tenant, target_tenant)
+
+        # Set tenant_id on relation if context provided and relation doesn't have one
+        if tenant_id is not None and relation.tenant_id is None:
+            relation.tenant_id = tenant_id
+
         # Add to networkx graph
-        if self.graph is None:
-            raise RuntimeError("GraphStore not initialized. Call initialize() first.")
-        self.graph.add_edge(
+        graph.add_edge(
             relation.source_id,
             relation.target_id,
             key=relation.id,
@@ -183,14 +395,15 @@ class InMemoryGraphStore(GraphStore):
         )
 
         # Add to relation index
-        self.relations[relation.id] = relation
+        relations[relation.id] = relation
 
-    async def get_relation(self, relation_id: str) -> Optional[Relation]:
+    async def get_relation(self, relation_id: str, context: Optional[TenantContext] = None) -> Optional[Relation]:
         """
         Get relation by ID
 
         Args:
             relation_id: Relation ID
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             Relation if found, None otherwise
@@ -198,13 +411,16 @@ class InMemoryGraphStore(GraphStore):
         if not self._initialized:
             return None
 
-        return self.relations.get(relation_id)
+        tenant_id = self._get_tenant_id(context)
+        relations = self._get_relations_dict(tenant_id)
+        return relations.get(relation_id)
 
     async def get_neighbors(
         self,
         entity_id: str,
         relation_type: Optional[str] = None,
         direction: str = "outgoing",
+        context: Optional[TenantContext] = None,
     ) -> List[Entity]:
         """
         Get neighboring entities
@@ -213,63 +429,78 @@ class InMemoryGraphStore(GraphStore):
             entity_id: Entity ID to get neighbors for
             relation_type: Optional filter by relation type
             direction: "outgoing", "incoming", or "both"
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             List of neighboring entities
         """
-        if not self._initialized or self.graph is None or entity_id not in self.graph:
+        if not self._initialized:
+            return []
+
+        tenant_id = self._get_tenant_id(context)
+        graph = self._get_graph(tenant_id)
+        entities = self._get_entities_dict(tenant_id)
+
+        if entity_id not in graph:
             return []
 
         neighbors = []
 
         # Get outgoing neighbors
         if direction in ("outgoing", "both"):
-            for target_id in self.graph.successors(entity_id):
+            for target_id in graph.successors(entity_id):
                 # Check relation type filter
                 if relation_type:
-                    edge_data = self.graph.get_edge_data(entity_id, target_id)
+                    edge_data = graph.get_edge_data(entity_id, target_id)
                     if edge_data:
                         relation = edge_data.get("relation")
                         if relation and relation.relation_type == relation_type:
-                            if target_id in self.entities:
-                                neighbors.append(self.entities[target_id])
+                            if target_id in entities:
+                                neighbors.append(entities[target_id])
                 else:
-                    if target_id in self.entities:
-                        neighbors.append(self.entities[target_id])
+                    if target_id in entities:
+                        neighbors.append(entities[target_id])
 
         # Get incoming neighbors
         if direction in ("incoming", "both"):
-            for source_id in self.graph.predecessors(entity_id):
+            for source_id in graph.predecessors(entity_id):
                 # Check relation type filter
                 if relation_type:
-                    edge_data = self.graph.get_edge_data(source_id, entity_id)
+                    edge_data = graph.get_edge_data(source_id, entity_id)
                     if edge_data:
                         relation = edge_data.get("relation")
                         if relation and relation.relation_type == relation_type:
-                            if source_id in self.entities:
-                                neighbors.append(self.entities[source_id])
+                            if source_id in entities:
+                                neighbors.append(entities[source_id])
                 else:
-                    if source_id in self.entities:
-                        neighbors.append(self.entities[source_id])
+                    if source_id in entities:
+                        neighbors.append(entities[source_id])
 
         return neighbors
 
-    async def get_outgoing_relations(self, entity_id: str) -> List[Relation]:
+    async def get_outgoing_relations(self, entity_id: str, context: Optional[TenantContext] = None) -> List[Relation]:
         """
         Get all outgoing relations for an entity.
 
         Args:
             entity_id: Entity ID to get outgoing relations for
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             List of outgoing Relation objects
         """
-        if not self._initialized or self.graph is None or entity_id not in self.graph:
+        if not self._initialized:
+            return []
+
+        tenant_id = self._get_tenant_id(context)
+        graph = self._get_graph(tenant_id)
+
+        if entity_id not in graph:
             return []
 
         relations = []
-        for target_id in self.graph.successors(entity_id):
-            edge_data = self.graph.get_edge_data(entity_id, target_id)
+        for target_id in graph.successors(entity_id):
+            edge_data = graph.get_edge_data(entity_id, target_id)
             if edge_data:
                 relation = edge_data.get("relation")
                 if relation:
@@ -277,22 +508,29 @@ class InMemoryGraphStore(GraphStore):
 
         return relations
 
-    async def get_incoming_relations(self, entity_id: str) -> List[Relation]:
+    async def get_incoming_relations(self, entity_id: str, context: Optional[TenantContext] = None) -> List[Relation]:
         """
         Get all incoming relations for an entity.
 
         Args:
             entity_id: Entity ID to get incoming relations for
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             List of incoming Relation objects
         """
-        if not self._initialized or self.graph is None or entity_id not in self.graph:
+        if not self._initialized:
+            return []
+
+        tenant_id = self._get_tenant_id(context)
+        graph = self._get_graph(tenant_id)
+
+        if entity_id not in graph:
             return []
 
         relations = []
-        for source_id in self.graph.predecessors(entity_id):
-            edge_data = self.graph.get_edge_data(source_id, entity_id)
+        for source_id in graph.predecessors(entity_id):
+            edge_data = graph.get_edge_data(source_id, entity_id)
             if edge_data:
                 relation = edge_data.get("relation")
                 if relation:
@@ -300,13 +538,19 @@ class InMemoryGraphStore(GraphStore):
 
         return relations
 
-    async def get_all_entities(self, entity_type: Optional[str] = None, limit: Optional[int] = None) -> List[Entity]:
+    async def get_all_entities(
+        self,
+        entity_type: Optional[str] = None,
+        limit: Optional[int] = None,
+        context: Optional[TenantContext] = None,
+    ) -> List[Entity]:
         """
         Get all entities, optionally filtered by type
 
         Args:
             entity_type: Optional filter by entity type
             limit: Optional limit on number of entities
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             List of entities
@@ -314,7 +558,9 @@ class InMemoryGraphStore(GraphStore):
         if not self._initialized:
             return []
 
-        entities = list(self.entities.values())
+        tenant_id = self._get_tenant_id(context)
+        entities_dict = self._get_entities_dict(tenant_id)
+        entities = list(entities_dict.values())
 
         # Filter by entity type if specified
         if entity_type:
@@ -330,7 +576,7 @@ class InMemoryGraphStore(GraphStore):
     # BULK OPERATIONS - Optimized implementations
     # =========================================================================
 
-    async def add_entities_bulk(self, entities: List[Entity]) -> int:
+    async def add_entities_bulk(self, entities: List[Entity], context: Optional[TenantContext] = None) -> int:
         """
         Add multiple entities in bulk (optimized).
 
@@ -338,6 +584,7 @@ class InMemoryGraphStore(GraphStore):
 
         Args:
             entities: List of entities to add
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             Number of entities successfully added
@@ -345,10 +592,18 @@ class InMemoryGraphStore(GraphStore):
         if not self._initialized:
             raise RuntimeError("GraphStore not initialized. Call initialize() first.")
 
+        tenant_id = self._get_tenant_id(context)
+        graph = self._get_graph(tenant_id)
+        entities_dict = self._get_entities_dict(tenant_id)
+
         added = 0
         for entity in entities:
-            if entity.id in self.entities:
+            if entity.id in entities_dict:
                 continue  # Skip existing entities
+
+            # Set tenant_id on entity if context provided
+            if tenant_id is not None and entity.tenant_id is None:
+                entity.tenant_id = tenant_id
 
             # Apply property optimization if enabled
             if self._property_optimizer is not None:
@@ -356,13 +611,13 @@ class InMemoryGraphStore(GraphStore):
                 self._property_optimizer.index_entity(entity.id, entity.properties)
 
             # Add to graph and index
-            self.graph.add_node(entity.id, entity=entity)
-            self.entities[entity.id] = entity
+            graph.add_node(entity.id, entity=entity)
+            entities_dict[entity.id] = entity
             added += 1
 
         return added
 
-    async def add_relations_bulk(self, relations: List[Relation]) -> int:
+    async def add_relations_bulk(self, relations: List[Relation], context: Optional[TenantContext] = None) -> int:
         """
         Add multiple relations in bulk (optimized).
 
@@ -370,6 +625,7 @@ class InMemoryGraphStore(GraphStore):
 
         Args:
             relations: List of relations to add
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             Number of relations successfully added
@@ -377,38 +633,120 @@ class InMemoryGraphStore(GraphStore):
         if not self._initialized:
             raise RuntimeError("GraphStore not initialized. Call initialize() first.")
 
+        tenant_id = self._get_tenant_id(context)
+        graph = self._get_graph(tenant_id)
+        entities_dict = self._get_entities_dict(tenant_id)
+        relations_dict = self._get_relations_dict(tenant_id)
+
         added = 0
         for relation in relations:
-            if relation.id in self.relations:
+            if relation.id in relations_dict:
                 continue  # Skip existing relations
 
             # Validate entities exist
-            if relation.source_id not in self.entities:
+            if relation.source_id not in entities_dict:
                 continue
-            if relation.target_id not in self.entities:
+            if relation.target_id not in entities_dict:
                 continue
 
+            # Set tenant_id on relation if context provided
+            if tenant_id is not None and relation.tenant_id is None:
+                relation.tenant_id = tenant_id
+
             # Add edge
-            self.graph.add_edge(
+            graph.add_edge(
                 relation.source_id,
                 relation.target_id,
                 key=relation.id,
                 relation=relation,
             )
-            self.relations[relation.id] = relation
+            relations_dict[relation.id] = relation
             added += 1
 
         return added
 
     # =========================================================================
-    # TIER 2 METHODS - Inherited from base class
+    # TIER 2 METHODS - Optimized overrides with multi-tenancy support
     # =========================================================================
-    # traverse(), find_paths(), subgraph_query(), execute_query()
-    # work automatically through default implementations!
 
-    # =========================================================================
-    # OPTIONAL: Override Tier 2 methods for optimization
-    # =========================================================================
+    async def traverse(
+        self,
+        start_entity_id: str,
+        relation_type: Optional[str] = None,
+        max_depth: int = 3,
+        max_results: int = 100,
+        context: Optional[TenantContext] = None,
+    ) -> List:
+        """
+        Optimized graph traversal using BFS within tenant boundaries.
+
+        Args:
+            start_entity_id: Starting entity ID
+            relation_type: Optional filter by relation type
+            max_depth: Maximum traversal depth
+            max_results: Maximum number of paths to return
+            context: Optional tenant context for multi-tenant isolation
+
+        Returns:
+            List of paths found during traversal
+        """
+        from collections import deque
+        from aiecs.domain.knowledge_graph.models.path import Path
+
+        if not self._initialized:
+            return []
+
+        tenant_id = self._get_tenant_id(context)
+        graph = self._get_graph(tenant_id)
+        entities_dict = self._get_entities_dict(tenant_id)
+
+        start_entity = entities_dict.get(start_entity_id)
+        if start_entity is None:
+            return []
+
+        paths: List[Path] = []
+        visited: Set[str] = set()
+        queue: deque = deque([(start_entity, [])])  # (entity, edges_path)
+
+        while queue and len(paths) < max_results:
+            current_entity, edges_path = queue.popleft()
+            current_depth = len(edges_path)
+
+            if current_entity.id in visited:
+                continue
+            visited.add(current_entity.id)
+
+            # Create path for this node
+            if current_depth > 0:  # Don't add single-node paths
+                nodes_path = [entities_dict[start_entity_id]]
+                for edge in edges_path:
+                    target_entity = entities_dict.get(edge.target_id)
+                    if target_entity:
+                        nodes_path.append(target_entity)
+
+                if len(nodes_path) == len(edges_path) + 1:
+                    paths.append(Path(nodes=nodes_path, edges=edges_path))
+
+            # Explore neighbors if not at max depth
+            if current_depth < max_depth:
+                for target_id in graph.successors(current_entity.id):
+                    if target_id in visited:
+                        continue
+
+                    # Get edge data for relation type filtering
+                    edge_data = graph.get_edge_data(current_entity.id, target_id)
+                    if edge_data:
+                        relation = edge_data.get("relation")
+                        if relation:
+                            # Filter by relation type if specified
+                            if relation_type and relation.relation_type != relation_type:
+                                continue
+
+                            target_entity = entities_dict.get(target_id)
+                            if target_entity:
+                                queue.append((target_entity, edges_path + [relation]))
+
+        return paths
 
     async def vector_search(
         self,
@@ -416,7 +754,8 @@ class InMemoryGraphStore(GraphStore):
         entity_type: Optional[str] = None,
         max_results: int = 10,
         score_threshold: float = 0.0,
-    ) -> List[tuple]:
+        context: Optional[TenantContext] = None,
+    ) -> List[Tuple[Entity, float]]:
         """
         Optimized vector search for in-memory store
 
@@ -427,6 +766,7 @@ class InMemoryGraphStore(GraphStore):
             entity_type: Optional filter by entity type
             max_results: Maximum number of results
             score_threshold: Minimum similarity score (0.0-1.0)
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             List of (entity, similarity_score) tuples, sorted descending
@@ -439,15 +779,18 @@ class InMemoryGraphStore(GraphStore):
 
         import numpy as np
 
+        tenant_id = self._get_tenant_id(context)
+        entities_dict = self._get_entities_dict(tenant_id)
+
         query_vec = np.array(query_embedding, dtype=np.float32)
         query_norm = np.linalg.norm(query_vec)
 
         if query_norm == 0:
             return []
 
-        scored_entities = []
+        scored_entities: List[Tuple[Entity, float]] = []
 
-        for entity in self.entities.values():
+        for entity in entities_dict.values():
             # Filter by entity type if specified
             if entity_type and entity.entity_type != entity_type:
                 continue
@@ -483,7 +826,8 @@ class InMemoryGraphStore(GraphStore):
         max_results: int = 10,
         score_threshold: float = 0.0,
         method: str = "bm25",
-    ) -> List[tuple]:
+        context: Optional[TenantContext] = None,
+    ) -> List[Tuple[Entity, float]]:
         """
         Optimized text search for in-memory store
 
@@ -496,6 +840,7 @@ class InMemoryGraphStore(GraphStore):
             max_results: Maximum number of results
             score_threshold: Minimum similarity score (0.0-1.0)
             method: Similarity method ("bm25", "jaccard", "cosine", "levenshtein")
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             List of (entity, similarity_score) tuples, sorted descending
@@ -513,15 +858,18 @@ class InMemoryGraphStore(GraphStore):
             normalized_levenshtein_similarity,
         )
 
+        tenant_id = self._get_tenant_id(context)
+        entities_dict = self._get_entities_dict(tenant_id)
+
         # Get candidate entities
-        entities = list(self.entities.values())
+        entities = list(entities_dict.values())
         if entity_type:
             entities = [e for e in entities if e.entity_type == entity_type]
 
         if not entities:
             return []
 
-        scored_entities = []
+        scored_entities: List[Tuple[Entity, float]] = []
 
         # Extract text from entities (combine properties into searchable text)
         entity_texts = []
@@ -577,37 +925,52 @@ class InMemoryGraphStore(GraphStore):
         target_entity_id: str,
         max_depth: int = 5,
         max_paths: int = 10,
+        context: Optional[TenantContext] = None,
     ) -> List:
         """
         Optimized path finding using networkx algorithms
 
         Overrides default implementation to use networkx.all_simple_paths
         for better performance.
+
+        Args:
+            source_entity_id: Source entity ID
+            target_entity_id: Target entity ID
+            max_depth: Maximum path length
+            max_paths: Maximum number of paths to return
+            context: Optional tenant context for multi-tenant isolation
+
+        Returns:
+            List of paths between source and target
         """
         from aiecs.domain.knowledge_graph.models.path import Path
 
         if not self._initialized:
             return []
 
-        if self.graph is None or source_entity_id not in self.graph or target_entity_id not in self.graph:
+        tenant_id = self._get_tenant_id(context)
+        graph = self._get_graph(tenant_id)
+        entities_dict = self._get_entities_dict(tenant_id)
+
+        if source_entity_id not in graph or target_entity_id not in graph:
             return []
 
         try:
             # Use networkx's optimized path finding
             paths = []
             for node_path in nx.all_simple_paths(
-                self.graph,
+                graph,
                 source_entity_id,
                 target_entity_id,
                 cutoff=max_depth,
             ):
                 # Convert node IDs to Entity and Relation objects
-                entities = [self.entities[node_id] for node_id in node_path if node_id in self.entities]
+                entities = [entities_dict[node_id] for node_id in node_path if node_id in entities_dict]
 
                 # Get relations between consecutive nodes
                 edges = []
                 for i in range(len(node_path) - 1):
-                    edge_data = self.graph.get_edge_data(node_path[i], node_path[i + 1])
+                    edge_data = graph.get_edge_data(node_path[i], node_path[i + 1])
                     if edge_data and "relation" in edge_data:
                         edges.append(edge_data["relation"])
 
@@ -626,33 +989,73 @@ class InMemoryGraphStore(GraphStore):
     # UTILITY METHODS
     # =========================================================================
 
-    def get_stats(self) -> Dict[str, int]:
+    def get_stats(self, context: Optional[TenantContext] = None) -> Dict[str, int]:
         """
         Get graph statistics
+
+        Args:
+            context: Optional tenant context for tenant-scoped stats
 
         Returns:
             Dictionary with node count, edge count, etc.
         """
         if not self._initialized:
-            return {"nodes": 0, "edges": 0, "entities": 0, "relations": 0}
+            return {"nodes": 0, "edges": 0, "entities": 0, "relations": 0, "tenant_count": 0}
 
-        if self.graph is None:
-            return {"nodes": 0, "edges": 0, "entities": 0, "relations": 0}
+        tenant_id = self._get_tenant_id(context)
+        graph = self._get_graph(tenant_id)
+        entities_dict = self._get_entities_dict(tenant_id)
+        relations_dict = self._get_relations_dict(tenant_id)
+
         return {
-            "nodes": self.graph.number_of_nodes(),
-            "edges": self.graph.number_of_edges(),
-            "entities": len(self.entities),
-            "relations": len(self.relations),
+            "nodes": graph.number_of_nodes(),
+            "edges": graph.number_of_edges(),
+            "entities": len(entities_dict),
+            "relations": len(relations_dict),
+            "tenant_count": len(self._tenant_graphs),
         }
 
-    def clear(self) -> None:
-        """Clear all data from the graph"""
-        if self._initialized and self.graph is not None:
-            self.graph.clear()
-            self.entities.clear()
-            self.relations.clear()
+    async def clear(self, context: Optional[TenantContext] = None) -> None:
+        """
+        Clear data from the graph
+
+        Args:
+            context: Optional tenant context for multi-tenant isolation.
+                    If provided, clears only data for the specified tenant.
+                    If None, clears all data including global and all tenants.
+        """
+        if not self._initialized:
+            return
+
+        tenant_id = self._get_tenant_id(context)
+
+        if tenant_id is None:
+            # Clear all data (global + all tenants)
+            if self._global_graph is not None:
+                self._global_graph.clear()
+            self._global_entities.clear()
+            self._global_relations.clear()
+
+            # Clear all tenant data
+            for tid in list(self._tenant_graphs.keys()):
+                self._tenant_graphs[tid].clear()
+            self._tenant_graphs.clear()
+            self._tenant_entities.clear()
+            self._tenant_relations.clear()
+
             if self._property_optimizer is not None:
                 self._property_optimizer.property_index.clear()
+        else:
+            # Clear only tenant-specific data
+            if tenant_id in self._tenant_graphs:
+                self._tenant_graphs[tenant_id].clear()
+                del self._tenant_graphs[tenant_id]
+            if tenant_id in self._tenant_entities:
+                self._tenant_entities[tenant_id].clear()
+                del self._tenant_entities[tenant_id]
+            if tenant_id in self._tenant_relations:
+                self._tenant_relations[tenant_id].clear()
+                del self._tenant_relations[tenant_id]
 
     # =========================================================================
     # PROPERTY OPTIMIZATION METHODS
@@ -663,7 +1066,7 @@ class InMemoryGraphStore(GraphStore):
         """Get the property optimizer if configured"""
         return self._property_optimizer
 
-    def lookup_by_property(self, property_name: str, value: Any) -> Set[str]:
+    def lookup_by_property(self, property_name: str, value: Any, context: Optional[TenantContext] = None) -> Set[str]:
         """
         Look up entity IDs by property value using the property index.
 
@@ -672,18 +1075,27 @@ class InMemoryGraphStore(GraphStore):
         Args:
             property_name: Property name to search
             value: Property value to match
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             Set of matching entity IDs
         """
         if self._property_optimizer is None:
             return set()
-        return self._property_optimizer.lookup_by_property(property_name, value)
+
+        # Get all matching IDs from the index
+        all_ids = self._property_optimizer.lookup_by_property(property_name, value)
+
+        # Filter by tenant
+        tenant_id = self._get_tenant_id(context)
+        entities_dict = self._get_entities_dict(tenant_id)
+        return {eid for eid in all_ids if eid in entities_dict}
 
     async def get_entities_by_property(
         self,
         property_name: str,
         value: Any,
+        context: Optional[TenantContext] = None,
     ) -> List[Entity]:
         """
         Get entities by property value.
@@ -693,36 +1105,44 @@ class InMemoryGraphStore(GraphStore):
         Args:
             property_name: Property name to search
             value: Property value to match
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             List of matching entities
         """
+        tenant_id = self._get_tenant_id(context)
+        entities_dict = self._get_entities_dict(tenant_id)
+
         # Try indexed lookup first
         if self._property_optimizer is not None:
             entity_ids = self._property_optimizer.lookup_by_property(property_name, value)
             if entity_ids:
-                return [self.entities[eid] for eid in entity_ids if eid in self.entities]
+                return [entities_dict[eid] for eid in entity_ids if eid in entities_dict]
 
         # Fall back to scan
         return [
-            entity for entity in self.entities.values()
+            entity for entity in entities_dict.values()
             if entity.properties.get(property_name) == value
         ]
 
-    def add_indexed_property(self, property_name: str) -> None:
+    def add_indexed_property(self, property_name: str, context: Optional[TenantContext] = None) -> None:
         """
         Add a property to the index for fast lookups.
 
         Args:
             property_name: Property name to index
+            context: Optional tenant context to index specific tenant's entities
         """
         if self._property_optimizer is None:
             self._property_optimizer = PropertyOptimizer()
 
         self._property_optimizer.add_indexed_property(property_name)
 
+        tenant_id = self._get_tenant_id(context)
+        entities_dict = self._get_entities_dict(tenant_id)
+
         # Index existing entities
-        for entity_id, entity in self.entities.items():
+        for entity_id, entity in entities_dict.items():
             if property_name in entity.properties:
                 self._property_optimizer.property_index.add_to_index(
                     entity_id, property_name, entity.properties[property_name]
@@ -730,7 +1150,10 @@ class InMemoryGraphStore(GraphStore):
 
     def __str__(self) -> str:
         stats = self.get_stats()
-        return f"InMemoryGraphStore(entities={stats['entities']}, relations={stats['relations']})"
+        return (
+            f"InMemoryGraphStore(global_entities={stats['entities']}, "
+            f"global_relations={stats['relations']}, tenant_count={stats['tenant_count']})"
+        )
 
     def __repr__(self) -> str:
         return self.__str__()

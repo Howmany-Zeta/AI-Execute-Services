@@ -7,6 +7,7 @@ Links newly extracted entities to existing entities in the knowledge graph.
 from typing import List, Optional, TYPE_CHECKING
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.infrastructure.graph_storage.base import GraphStore
+from aiecs.infrastructure.graph_storage.tenant import TenantContext
 
 if TYPE_CHECKING:
     from aiecs.application.knowledge_graph.fusion.similarity_pipeline import (
@@ -76,63 +77,94 @@ class EntityLinker:
         self.embedding_threshold = embedding_threshold
         self._similarity_pipeline = similarity_pipeline
 
-    async def link_entity(self, new_entity: Entity, candidate_limit: int = 10) -> "LinkResult":
+    async def link_entity(
+        self,
+        new_entity: Entity,
+        candidate_limit: int = 10,
+        context: Optional[TenantContext] = None,
+    ) -> "LinkResult":
         """
         Link a new entity to existing entity in graph (if match found)
+
+        **Tenant Isolation**: When context is provided, linking only searches for
+        matches within the specified tenant. Cross-tenant linking is prevented.
 
         Args:
             new_entity: Entity to link
             candidate_limit: Maximum number of candidates to consider
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             LinkResult with linking decision and matched entity (if any)
         """
         # Try exact ID match first
-        existing = await self.graph_store.get_entity(new_entity.id)
+        existing = await self.graph_store.get_entity(new_entity.id, context=context)
         if existing:
-            return LinkResult(
-                linked=True,
-                existing_entity=existing,
-                new_entity=new_entity,
-                similarity=1.0,
-                link_type="exact_id",
-            )
+            # Validate tenant match if context provided
+            if context and existing.tenant_id != context.tenant_id:
+                # ID match but wrong tenant - treat as not linked
+                pass
+            else:
+                return LinkResult(
+                    linked=True,
+                    existing_entity=existing,
+                    new_entity=new_entity,
+                    similarity=1.0,
+                    link_type="exact_id",
+                )
 
         # Try embedding-based search (fast, semantic)
         if self.use_embeddings and new_entity.embedding:
-            link_result = await self._link_by_embedding(new_entity, candidate_limit)
+            link_result = await self._link_by_embedding(
+                new_entity, candidate_limit, context
+            )
             if link_result.linked:
                 return link_result
 
         # Try name-based search (fallback)
-        link_result = await self._link_by_name(new_entity, candidate_limit)
+        link_result = await self._link_by_name(new_entity, candidate_limit, context)
 
         return link_result
 
-    async def link_entities(self, new_entities: List[Entity], candidate_limit: int = 10) -> List["LinkResult"]:
+    async def link_entities(
+        self,
+        new_entities: List[Entity],
+        candidate_limit: int = 10,
+        context: Optional[TenantContext] = None,
+    ) -> List["LinkResult"]:
         """
         Link multiple entities in batch
+
+        **Tenant Isolation**: When context is provided, all linking operations
+        are scoped to the specified tenant.
 
         Args:
             new_entities: List of entities to link
             candidate_limit: Maximum candidates per entity
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             List of LinkResult objects (one per input entity)
         """
         results = []
         for entity in new_entities:
-            result = await self.link_entity(entity, candidate_limit)
+            result = await self.link_entity(entity, candidate_limit, context)
             results.append(result)
         return results
 
-    async def _link_by_embedding(self, new_entity: Entity, candidate_limit: int) -> "LinkResult":
+    async def _link_by_embedding(
+        self,
+        new_entity: Entity,
+        candidate_limit: int,
+        context: Optional[TenantContext] = None,
+    ) -> "LinkResult":
         """
         Link entity using embedding similarity search
 
         Args:
             new_entity: Entity to link
             candidate_limit: Maximum candidates to consider
+            context: Optional tenant context for scoping search
 
         Returns:
             LinkResult
@@ -141,12 +173,13 @@ class EntityLinker:
             return LinkResult(linked=False, new_entity=new_entity)
 
         try:
-            # Vector search in graph
+            # Vector search in graph (with tenant context)
             candidates = await self.graph_store.vector_search(
                 query_embedding=new_entity.embedding,
                 entity_type=new_entity.entity_type,
                 max_results=candidate_limit,
                 score_threshold=self.embedding_threshold,
+                context=context,
             )
 
             if not candidates:
@@ -178,7 +211,12 @@ class EntityLinker:
 
         return LinkResult(linked=False, new_entity=new_entity)
 
-    async def _link_by_name(self, new_entity: Entity, candidate_limit: int) -> "LinkResult":
+    async def _link_by_name(
+        self,
+        new_entity: Entity,
+        candidate_limit: int,
+        context: Optional[TenantContext] = None,
+    ) -> "LinkResult":
         """
         Link entity using name-based matching
 
@@ -192,6 +230,7 @@ class EntityLinker:
         Args:
             new_entity: Entity to link
             candidate_limit: Maximum candidates to consider
+            context: Optional tenant context for scoping search
 
         Returns:
             LinkResult
@@ -201,10 +240,12 @@ class EntityLinker:
             return LinkResult(linked=False, new_entity=new_entity)
 
         try:
-            # Get candidate entities of same type
+            # Get candidate entities of same type (with tenant context)
             # Note: This is a simplified implementation
             # In production, you'd want an indexed search or LIKE query
-            candidates = await self._get_candidate_entities(new_entity.entity_type, candidate_limit)
+            candidates = await self._get_candidate_entities(
+                new_entity.entity_type, candidate_limit, context
+            )
 
             if not candidates:
                 return LinkResult(linked=False, new_entity=new_entity)
@@ -236,7 +277,9 @@ class EntityLinker:
 
         return LinkResult(linked=False, new_entity=new_entity)
 
-    async def _get_candidate_entities(self, entity_type: str, limit: int) -> List[Entity]:
+    async def _get_candidate_entities(
+        self, entity_type: str, limit: int, context: Optional[TenantContext] = None
+    ) -> List[Entity]:
         """
         Get candidate entities for linking
 
@@ -248,14 +291,16 @@ class EntityLinker:
         Args:
             entity_type: Entity type to filter by
             limit: Maximum candidates
+            context: Optional tenant context for scoping search
 
         Returns:
-            List of candidate entities
+            List of candidate entities (filtered by tenant if context provided)
         """
         # TODO: Implement efficient candidate retrieval
         # For now, return empty list (will rely on embedding search primarily)
         # In Phase 3 (SQLite) and Phase 6 (PostgreSQL), we'll implement
         # efficient queries for this
+        # When implemented, pass context to ensure tenant filtering
         return []
 
     def _check_name_similarity(self, entity1: Entity, entity2: Entity) -> bool:

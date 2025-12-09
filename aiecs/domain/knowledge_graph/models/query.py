@@ -2,6 +2,11 @@
 Query Domain Models
 
 Models for specifying graph queries and their results.
+
+Multi-Tenancy Support:
+    GraphQuery now supports tenant_id field for filtering queries to a specific tenant.
+    When tenant_id is provided, queries will only return entities and relations
+    belonging to that tenant.
 """
 
 from typing import Any, List, Optional, Dict
@@ -40,6 +45,7 @@ class GraphQuery(BaseModel):
         max_results: Maximum number of results to return
         max_depth: Maximum traversal depth for path queries
         score_threshold: Minimum score threshold for results
+        tenant_id: Tenant ID for multi-tenant filtering (None for global/single-tenant)
 
     Example:
         ```python
@@ -52,17 +58,24 @@ class GraphQuery(BaseModel):
             score_threshold=0.7
         )
 
-        # Traversal query
+        # Multi-tenant traversal query
         query = GraphQuery(
             query_type=QueryType.TRAVERSAL,
             entity_id="person_001",
             relation_type="KNOWS",
-            max_depth=3
+            max_depth=3,
+            tenant_id="acme-corp"
         )
         ```
     """
 
     query_type: QueryType = Field(..., description="Type of query to execute")
+
+    # Multi-tenancy support
+    tenant_id: Optional[str] = Field(
+        default=None,
+        description="Tenant ID for multi-tenant filtering (None for global/single-tenant mode)",
+    )
 
     # Entity lookup
     entity_id: Optional[str] = Field(default=None, description="Entity ID for entity lookup queries")

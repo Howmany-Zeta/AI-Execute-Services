@@ -2,7 +2,7 @@
 Alias Index
 
 Provides O(1) lookup for entity aliases and abbreviations.
-Supports in-memory HashMap and Redis backends.
+Supports in-memory HashMap and Redis backends with tenant isolation.
 """
 
 import asyncio
@@ -30,6 +30,7 @@ class AliasEntry:
     entity_id: str
     match_type: MatchType
     original_name: Optional[str] = None  # Original form before normalization
+    tenant_id: Optional[str] = None  # Tenant ID for multi-tenant isolation
 
 
 @dataclass
@@ -122,20 +123,44 @@ class TransactionContext:
 
 
 class InMemoryBackend(AliasIndexBackend):
-    """In-memory HashMap backend for O(1) lookup"""
+    """In-memory HashMap backend for O(1) lookup with tenant isolation"""
 
     def __init__(self):
         self._index: Dict[str, AliasEntry] = {}
         self._entity_aliases: Dict[str, Set[str]] = {}  # entity_id -> set of aliases
         self._lock = asyncio.Lock()
 
+    def _make_key(self, alias: str, tenant_id: Optional[str] = None) -> str:
+        """
+        Create tenant-prefixed key for alias lookup.
+        
+        Args:
+            alias: The alias string
+            tenant_id: Optional tenant ID for multi-tenant isolation
+            
+        Returns:
+            Tenant-prefixed key (e.g., "tenant_123:apple" or "apple" for global)
+        """
+        normalized = alias.lower()
+        if tenant_id:
+            return f"{tenant_id}:{normalized}"
+        return normalized
+
     async def get(self, alias: str) -> Optional[AliasEntry]:
         """Get entity entry for an alias - O(1)"""
-        return self._index.get(alias.lower())
+        # For backward compatibility, try both with and without tenant prefix
+        # First try as-is (may contain tenant prefix already)
+        entry = self._index.get(alias.lower())
+        if entry:
+            return entry
+        # If alias contains ":", it might already be prefixed
+        if ":" in alias:
+            return self._index.get(alias.lower())
+        return None
 
     async def set(self, alias: str, entry: AliasEntry) -> None:
         """Set alias to entity mapping - O(1)"""
-        key = alias.lower()
+        key = self._make_key(alias, entry.tenant_id)
         self._index[key] = entry
         # Track reverse mapping
         if entry.entity_id not in self._entity_aliases:
@@ -221,18 +246,36 @@ class RedisBackend(AliasIndexBackend):
                 )
         self._initialized = True
 
+    def _make_key(self, alias: str, tenant_id: Optional[str] = None) -> str:
+        """
+        Create tenant-prefixed key for alias lookup.
+        
+        Args:
+            alias: The alias string
+            tenant_id: Optional tenant ID for multi-tenant isolation
+            
+        Returns:
+            Tenant-prefixed key (e.g., "tenant_123:apple" or "apple" for global)
+        """
+        normalized = alias.lower()
+        if tenant_id:
+            return f"{tenant_id}:{normalized}"
+        return normalized
+
     async def get(self, alias: str) -> Optional[AliasEntry]:
         """Get entity entry for an alias - O(1)"""
         await self._ensure_client()
         import json
 
+        # Try to get with the key as-is (may already be prefixed)
         data = await self._client.hget(self.ALIAS_KEY, alias.lower())
         if data:
             entry_dict = json.loads(data)
             return AliasEntry(
                 entity_id=entry_dict["entity_id"],
                 match_type=MatchType(entry_dict["match_type"]),
-                original_name=entry_dict.get("original_name")
+                original_name=entry_dict.get("original_name"),
+                tenant_id=entry_dict.get("tenant_id")
             )
         return None
 
@@ -241,11 +284,12 @@ class RedisBackend(AliasIndexBackend):
         await self._ensure_client()
         import json
 
-        key = alias.lower()
+        key = self._make_key(alias, entry.tenant_id)
         entry_dict = {
             "entity_id": entry.entity_id,
             "match_type": entry.match_type.value,
-            "original_name": entry.original_name
+            "original_name": entry.original_name,
+            "tenant_id": entry.tenant_id
         }
         await self._client.hset(self.ALIAS_KEY, key, json.dumps(entry_dict))
         # Track reverse mapping
@@ -380,18 +424,29 @@ class AliasIndex:
                 self._backend = InMemoryBackend()
         return self._backend
 
-    async def lookup(self, alias: str) -> Optional[AliasEntry]:
+    async def lookup(
+        self, alias: str, tenant_id: Optional[str] = None
+    ) -> Optional[AliasEntry]:
         """
         Look up an alias - O(1).
 
+        **Tenant Isolation**: When tenant_id is provided, lookup uses tenant-prefixed
+        keys to ensure isolation between tenants.
+
         Args:
             alias: The alias to look up (case-insensitive)
+            tenant_id: Optional tenant ID for multi-tenant isolation
 
         Returns:
             AliasEntry if found, None otherwise
         """
         backend = await self._get_backend()
-        return await backend.get(alias)
+        # Create tenant-prefixed key if tenant_id provided
+        if tenant_id:
+            key = f"{tenant_id}:{alias.lower()}"
+        else:
+            key = alias.lower()
+        return await backend.get(key)
 
     async def add_alias(
         self,
@@ -399,36 +454,53 @@ class AliasIndex:
         entity_id: str,
         match_type: MatchType = MatchType.ALIAS,
         original_name: Optional[str] = None,
+        tenant_id: Optional[str] = None,
     ) -> None:
         """
         Add an alias for an entity.
+
+        **Tenant Isolation**: When tenant_id is provided, the alias is stored with
+        a tenant-prefixed key to ensure isolation.
 
         Args:
             alias: The alias string
             entity_id: ID of the entity this alias refers to
             match_type: Type of match (exact, alias, abbreviation, normalized)
             original_name: Original form before normalization
+            tenant_id: Optional tenant ID for multi-tenant isolation
         """
         backend = await self._get_backend()
         entry = AliasEntry(
             entity_id=entity_id,
             match_type=match_type,
-            original_name=original_name
+            original_name=original_name,
+            tenant_id=tenant_id
         )
         await backend.set(alias, entry)
 
-    async def remove_alias(self, alias: str) -> bool:
+    async def remove_alias(
+        self, alias: str, tenant_id: Optional[str] = None
+    ) -> bool:
         """
         Remove an alias.
 
+        **Tenant Isolation**: When tenant_id is provided, removes the alias from
+        the tenant-specific namespace.
+
         Args:
             alias: The alias to remove
+            tenant_id: Optional tenant ID for multi-tenant isolation
 
         Returns:
             True if alias existed and was removed
         """
         backend = await self._get_backend()
-        return await backend.delete(alias)
+        # Create tenant-prefixed key if tenant_id provided
+        if tenant_id:
+            key = f"{tenant_id}:{alias.lower()}"
+        else:
+            key = alias.lower()
+        return await backend.delete(key)
 
     async def get_entity_aliases(self, entity_id: str) -> List[str]:
         """

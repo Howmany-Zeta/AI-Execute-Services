@@ -6,8 +6,10 @@ Represents a node/entity in the knowledge graph with properties and embeddings.
 
 from typing import Any, Optional
 from datetime import datetime
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 import numpy as np
+
+from aiecs.infrastructure.graph_storage.tenant import validate_tenant_id, InvalidTenantIdError
 
 
 class Entity(BaseModel):
@@ -61,6 +63,11 @@ class Entity(BaseModel):
         description="Source of the entity data (e.g., document ID)",
     )
 
+    tenant_id: Optional[str] = Field(
+        default=None,
+        description="Tenant identifier for multi-tenant isolation (alphanumeric, hyphens, underscores only)",
+    )
+
     class Config:
         json_encoders = {datetime: lambda v: v.isoformat()}
         # Allow arbitrary types for numpy arrays if needed
@@ -76,6 +83,19 @@ class Entity(BaseModel):
             if not all(isinstance(x, (int, float)) for x in v):
                 raise ValueError("All embedding values must be numeric")
         return v
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_tenant_id_before(cls, data: Any) -> Any:
+        """Validate tenant_id format before model creation"""
+        # Pydantic converts keyword arguments to dict before calling model_validator
+        if isinstance(data, dict):
+            tenant_id = data.get("tenant_id")
+            if tenant_id is not None:
+                # Validate and raise InvalidTenantIdError directly
+                # Note: Pydantic will wrap this in ValidationError, but the error info is preserved
+                validate_tenant_id(tenant_id)
+        return data
 
     def get_embedding_vector(self) -> Optional[np.ndarray]:
         """
