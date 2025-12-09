@@ -11,4 +11,5 @@ global-exclude test*
 global-exclude tests*
 global-exclude htmlcov*
 global-exclude setup.py
-global-exclude *test*.py
+global-exclude test_*.py
+global-exclude *_test.py
