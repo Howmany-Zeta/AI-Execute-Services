@@ -64,8 +64,9 @@ class ModuleImportChecker:
             return modules
 
         for py_file in self.aiecs_root.rglob("*.py"):
-            # Skip __pycache__ and test files
-            if "__pycache__" in str(py_file) or "test" in py_file.name.lower():
+            # Skip __pycache__ and test files (test_*.py or *_test.py patterns)
+            filename = py_file.name.lower()
+            if "__pycache__" in str(py_file) or filename.startswith("test_") or filename.endswith("_test.py"):
                 continue
             
             # Convert file path to module name
