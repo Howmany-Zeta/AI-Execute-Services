@@ -7,6 +7,10 @@ Identifies and merges duplicate entities based on similarity matching.
 from typing import List, Dict, Optional, Tuple, Set, TYPE_CHECKING
 from difflib import SequenceMatcher
 from aiecs.domain.knowledge_graph.models.entity import Entity
+from aiecs.infrastructure.graph_storage.tenant import (
+    TenantContext,
+    CrossTenantFusionError,
+)
 
 if TYPE_CHECKING:
     from aiecs.application.knowledge_graph.fusion.similarity_pipeline import (
@@ -71,18 +75,29 @@ class EntityDeduplicator:
         self.embedding_threshold = embedding_threshold
         self._similarity_pipeline = similarity_pipeline
 
-    async def deduplicate(self, entities: List[Entity]) -> List[Entity]:
+    async def deduplicate(
+        self, entities: List[Entity], context: Optional[TenantContext] = None
+    ) -> List[Entity]:
         """
         Deduplicate a list of entities
 
+        **Tenant Isolation**: When context is provided, deduplication only compares
+        entities within the same tenant. Entities from other tenants are filtered out
+        (defense-in-depth).
+
         Args:
             entities: List of entities to deduplicate
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             List of deduplicated entities (with merged properties and aliases)
         """
         if not entities:
             return []
+
+        # Filter to only entities in the specified tenant (defense-in-depth)
+        if context:
+            entities = [e for e in entities if e.tenant_id == context.tenant_id]
 
         # Group entities by type (only match within same type)
         entities_by_type: Dict[str, List[Entity]] = {}
@@ -108,8 +123,11 @@ class EntityDeduplicator:
         2. Find clusters of similar entities (connected components)
         3. Merge each cluster into a single canonical entity
 
+        Note: Assumes all entities in the group are from the same tenant
+        (validated by caller if in multi-tenant mode)
+
         Args:
-            entities: List of entities (all same type)
+            entities: List of entities (all same type and same tenant)
 
         Returns:
             List of deduplicated entities
@@ -402,13 +420,14 @@ class EntityDeduplicator:
         # Track merge count
         merged_properties["_merged_count"] = len(entities)
 
-        # Create merged entity
+        # Create merged entity (preserve tenant_id from canonical entity)
         merged_entity = Entity(
             id=canonical.id,
             entity_type=canonical.entity_type,
             properties=merged_properties,
             embedding=canonical.embedding,
             source=canonical.source,
+            tenant_id=canonical.tenant_id,
         )
 
         return merged_entity

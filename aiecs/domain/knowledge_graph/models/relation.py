@@ -6,7 +6,9 @@ Represents an edge/relationship between two entities in the knowledge graph.
 
 from typing import Any, Optional
 from datetime import datetime
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from aiecs.infrastructure.graph_storage.tenant import validate_tenant_id, InvalidTenantIdError, CrossTenantRelationError
 
 
 class Relation(BaseModel):
@@ -65,6 +67,11 @@ class Relation(BaseModel):
 
     source: Optional[str] = Field(default=None, description="Source of the relation data")
 
+    tenant_id: Optional[str] = Field(
+        default=None,
+        description="Tenant identifier for multi-tenant isolation (alphanumeric, hyphens, underscores only)",
+    )
+
     class Config:
         json_encoders = {datetime: lambda v: v.isoformat()}
 
@@ -84,6 +91,68 @@ class Relation(BaseModel):
         # if info.data.get('target_id') and v == info.data['target_id']:
         #     raise ValueError("Self-loops are not allowed (source_id == target_id)")
         return v
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_tenant_id_before(cls, data: Any) -> Any:
+        """Validate tenant_id format before model creation"""
+        # Pydantic converts keyword arguments to dict before calling model_validator
+        if isinstance(data, dict):
+            tenant_id = data.get("tenant_id")
+            if tenant_id is not None:
+                # Validate and raise InvalidTenantIdError directly
+                # Note: Pydantic will wrap this in ValidationError, but the error info is preserved
+                validate_tenant_id(tenant_id)
+        return data
+
+    def validate_tenant_consistency(self, source_entity_tenant_id: Optional[str], target_entity_tenant_id: Optional[str]) -> Optional[str]:
+        """
+        Validate that relation tenant_id matches source and target entity tenant_ids.
+
+        This should be called when creating a relation to ensure tenant isolation.
+        Returns the effective tenant_id that should be used for this relation.
+
+        Args:
+            source_entity_tenant_id: Tenant ID of the source entity
+            target_entity_tenant_id: Tenant ID of the target entity
+
+        Returns:
+            The effective tenant_id for this relation (relation's tenant_id if set,
+            otherwise inferred from entities). Callers should use this value to
+            set the relation's tenant_id if needed.
+
+        Raises:
+            CrossTenantRelationError: If tenant IDs don't match
+        """
+        # If relation has tenant_id, it must match both entities
+        if self.tenant_id is not None:
+            if source_entity_tenant_id != self.tenant_id:
+                raise CrossTenantRelationError(source_entity_tenant_id, self.tenant_id)
+            if target_entity_tenant_id != self.tenant_id:
+                raise CrossTenantRelationError(self.tenant_id, target_entity_tenant_id)
+        
+        # Both entities must have the same tenant_id (or both None)
+        if source_entity_tenant_id != target_entity_tenant_id:
+            raise CrossTenantRelationError(source_entity_tenant_id, target_entity_tenant_id)
+        
+        # Return the effective tenant_id (relation's own or inferred from entities)
+        # Callers can use this to set the relation's tenant_id if needed
+        return self.tenant_id if self.tenant_id is not None else source_entity_tenant_id
+    
+    def with_tenant_id(self, tenant_id: Optional[str]) -> "Relation":
+        """
+        Create a copy of this relation with a new tenant_id.
+        
+        This is the Pydantic-idiomatic way to create a modified copy
+        without mutating the original instance.
+        
+        Args:
+            tenant_id: The tenant_id to set on the new relation
+            
+        Returns:
+            A new Relation instance with the updated tenant_id
+        """
+        return self.model_copy(update={"tenant_id": tenant_id})
 
     def get_property(self, key: str, default: Any = None) -> Any:
         """

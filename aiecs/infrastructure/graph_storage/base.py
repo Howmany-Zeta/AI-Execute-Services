@@ -21,6 +21,7 @@ from aiecs.domain.knowledge_graph.models.query import (
     GraphResult,
     QueryType,
 )
+from aiecs.infrastructure.graph_storage.tenant import TenantContext
 
 
 class GraphStore(ABC):
@@ -44,6 +45,13 @@ class GraphStore(ABC):
     - subgraph_query() - Extract subgraph
     - vector_search() - Semantic vector search
     - execute_query() - Execute GraphQuery
+    - clear() - Clear all data (tenant-scoped if context provided)
+
+    **Multi-Tenancy Support**:
+    All methods accept an optional `context: Optional[TenantContext]` parameter
+    for multi-tenant data isolation. When provided, operations are scoped to
+    the specified tenant. When None, operations work on the global namespace
+    (backward compatible with single-tenant deployments).
 
     Implementations only need to provide Tier 1 methods. Tier 2 methods
     have default implementations using Tier 1, but can be overridden for
@@ -53,7 +61,7 @@ class GraphStore(ABC):
         ```python
         # Minimal implementation (Tier 1 only)
         class CustomGraphStore(GraphStore):
-            async def add_entity(self, entity: Entity) -> None:
+            async def add_entity(self, entity: Entity, context: Optional[TenantContext] = None) -> None:
                 # Your implementation
                 pass
 
@@ -62,9 +70,14 @@ class GraphStore(ABC):
 
         # Optimized implementation (override Tier 2)
         class OptimizedGraphStore(CustomGraphStore):
-            async def traverse(self, ...):
+            async def traverse(self, ..., context: Optional[TenantContext] = None):
                 # Use database-specific optimization
                 pass
+
+        # Multi-tenant usage
+        context = TenantContext(tenant_id="acme-corp")
+        await store.add_entity(entity, context=context)
+        entities = await store.vector_search(embedding, context=context)
         ```
     """
 
@@ -95,36 +108,39 @@ class GraphStore(ABC):
         """
 
     @abstractmethod
-    async def add_entity(self, entity: Entity) -> None:
+    async def add_entity(self, entity: Entity, context: Optional[TenantContext] = None) -> None:
         """
         Add an entity to the graph
 
         Args:
             entity: Entity to add
+            context: Optional tenant context for multi-tenant isolation
 
         Raises:
             ValueError: If entity with same ID already exists
         """
 
     @abstractmethod
-    async def get_entity(self, entity_id: str) -> Optional[Entity]:
+    async def get_entity(self, entity_id: str, context: Optional[TenantContext] = None) -> Optional[Entity]:
         """
         Get an entity by ID
 
         Args:
             entity_id: Entity ID to retrieve
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             Entity if found, None otherwise
         """
 
     @abstractmethod
-    async def add_relation(self, relation: Relation) -> None:
+    async def add_relation(self, relation: Relation, context: Optional[TenantContext] = None) -> None:
         """
         Add a relation to the graph
 
         Args:
             relation: Relation to add
+            context: Optional tenant context for multi-tenant isolation
 
         Raises:
             ValueError: If relation with same ID already exists
@@ -132,12 +148,13 @@ class GraphStore(ABC):
         """
 
     @abstractmethod
-    async def get_relation(self, relation_id: str) -> Optional[Relation]:
+    async def get_relation(self, relation_id: str, context: Optional[TenantContext] = None) -> Optional[Relation]:
         """
         Get a relation by ID
 
         Args:
             relation_id: Relation ID to retrieve
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             Relation if found, None otherwise
@@ -149,6 +166,7 @@ class GraphStore(ABC):
         entity_id: str,
         relation_type: Optional[str] = None,
         direction: str = "outgoing",
+        context: Optional[TenantContext] = None,
     ) -> List[Entity]:
         """
         Get neighboring entities connected by relations
@@ -157,6 +175,7 @@ class GraphStore(ABC):
             entity_id: ID of entity to get neighbors for
             relation_type: Optional filter by relation type
             direction: "outgoing", "incoming", or "both"
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             List of neighboring entities
@@ -222,6 +241,7 @@ class GraphStore(ABC):
         relation_type: Optional[str] = None,
         max_depth: int = 3,
         max_results: int = 100,
+        context: Optional[TenantContext] = None,
     ) -> List[Path]:
         """
         Traverse the graph starting from an entity (BFS traversal)
@@ -234,11 +254,12 @@ class GraphStore(ABC):
             relation_type: Optional filter by relation type
             max_depth: Maximum traversal depth
             max_results: Maximum number of paths to return
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             List of paths found during traversal
         """
-        return await self._default_traverse_bfs(start_entity_id, relation_type, max_depth, max_results)
+        return await self._default_traverse_bfs(start_entity_id, relation_type, max_depth, max_results, context)
 
     async def find_paths(
         self,
@@ -246,6 +267,7 @@ class GraphStore(ABC):
         target_entity_id: str,
         max_depth: int = 5,
         max_paths: int = 10,
+        context: Optional[TenantContext] = None,
     ) -> List[Path]:
         """
         Find paths between two entities
@@ -258,13 +280,19 @@ class GraphStore(ABC):
             target_entity_id: Target entity ID
             max_depth: Maximum path length
             max_paths: Maximum number of paths to return
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             List of paths between source and target
         """
-        return await self._default_find_paths(source_entity_id, target_entity_id, max_depth, max_paths)
+        return await self._default_find_paths(source_entity_id, target_entity_id, max_depth, max_paths, context)
 
-    async def subgraph_query(self, entity_ids: List[str], include_relations: bool = True) -> tuple[List[Entity], List[Relation]]:
+    async def subgraph_query(
+        self,
+        entity_ids: List[str],
+        include_relations: bool = True,
+        context: Optional[TenantContext] = None,
+    ) -> tuple[List[Entity], List[Relation]]:
         """
         Extract a subgraph containing specified entities
 
@@ -274,11 +302,12 @@ class GraphStore(ABC):
         Args:
             entity_ids: List of entity IDs to include
             include_relations: Whether to include relations between entities
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             Tuple of (entities, relations)
         """
-        return await self._default_subgraph_query(entity_ids, include_relations)
+        return await self._default_subgraph_query(entity_ids, include_relations, context)
 
     async def vector_search(
         self,
@@ -286,6 +315,7 @@ class GraphStore(ABC):
         entity_type: Optional[str] = None,
         max_results: int = 10,
         score_threshold: float = 0.0,
+        context: Optional[TenantContext] = None,
     ) -> List[tuple[Entity, float]]:
         """
         Semantic vector search over entities
@@ -298,11 +328,12 @@ class GraphStore(ABC):
             entity_type: Optional filter by entity type
             max_results: Maximum number of results
             score_threshold: Minimum similarity score (0.0-1.0)
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             List of (entity, score) tuples, sorted by score descending
         """
-        return await self._default_vector_search(query_embedding, entity_type, max_results, score_threshold)
+        return await self._default_vector_search(query_embedding, entity_type, max_results, score_threshold, context)
 
     async def text_search(
         self,
@@ -311,6 +342,7 @@ class GraphStore(ABC):
         max_results: int = 10,
         score_threshold: float = 0.0,
         method: str = "bm25",
+        context: Optional[TenantContext] = None,
     ) -> List[tuple[Entity, float]]:
         """
         Text-based search over entities using text similarity
@@ -324,13 +356,14 @@ class GraphStore(ABC):
             max_results: Maximum number of results
             score_threshold: Minimum similarity score (0.0-1.0)
             method: Similarity method ("bm25", "jaccard", "cosine", "levenshtein")
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             List of (entity, score) tuples, sorted by score descending
         """
-        return await self._default_text_search(query_text, entity_type, max_results, score_threshold, method)
+        return await self._default_text_search(query_text, entity_type, max_results, score_threshold, method, context)
 
-    async def execute_query(self, query: GraphQuery) -> GraphResult:
+    async def execute_query(self, query: GraphQuery, context: Optional[TenantContext] = None) -> GraphResult:
         """
         Execute a graph query
 
@@ -339,11 +372,26 @@ class GraphStore(ABC):
 
         Args:
             query: Graph query to execute
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             Query results
         """
-        return await self._default_execute_query(query)
+        return await self._default_execute_query(query, context)
+
+    async def clear(self, context: Optional[TenantContext] = None) -> None:
+        """
+        Clear all data from the graph store
+
+        **DEFAULT IMPLEMENTATION**: Not implemented in base class.
+        Implementations should override this method to provide tenant-scoped clearing.
+
+        Args:
+            context: Optional tenant context for multi-tenant isolation.
+                    If provided, clears only data for the specified tenant.
+                    If None, clears all data (use with caution).
+        """
+        raise NotImplementedError("clear() must be implemented by subclasses")
 
     # =========================================================================
     # DEFAULT IMPLEMENTATIONS (Template Methods)
@@ -355,6 +403,7 @@ class GraphStore(ABC):
         relation_type: Optional[str],
         max_depth: int,
         max_results: int,
+        context: Optional[TenantContext],
     ) -> List[Path]:
         """
         Default BFS traversal implementation using get_neighbors()
@@ -362,7 +411,7 @@ class GraphStore(ABC):
         This provides a working traversal that any Tier 1 implementation gets for free.
         Backends can override traverse() with optimized versions.
         """
-        start_entity = await self.get_entity(start_entity_id)
+        start_entity = await self.get_entity(start_entity_id, context=context)
         if start_entity is None:
             return []
 
@@ -382,7 +431,7 @@ class GraphStore(ABC):
             if current_depth > 0:  # Don't add single-node paths
                 nodes_path = [start_entity]
                 for edge in edges_path:
-                    target_entity = await self.get_entity(edge.target_id)
+                    target_entity = await self.get_entity(edge.target_id, context=context)
                     if target_entity:
                         nodes_path.append(target_entity)
 
@@ -395,6 +444,7 @@ class GraphStore(ABC):
                     current_entity.id,
                     relation_type=relation_type,
                     direction="outgoing",
+                    context=context,
                 )
 
                 for neighbor in neighbors:
@@ -418,6 +468,7 @@ class GraphStore(ABC):
         target_entity_id: str,
         max_depth: int,
         max_paths: int,
+        context: Optional[TenantContext],
     ) -> List[Path]:
         """
         Default path finding using BFS with target check
@@ -426,6 +477,7 @@ class GraphStore(ABC):
             source_entity_id,
             max_depth=max_depth,
             max_results=max_paths * 10,  # Get more, filter later
+            context=context,
         )
 
         # Filter paths that end at target
@@ -433,7 +485,12 @@ class GraphStore(ABC):
 
         return target_paths[:max_paths]
 
-    async def _default_subgraph_query(self, entity_ids: List[str], include_relations: bool) -> tuple[List[Entity], List[Relation]]:
+    async def _default_subgraph_query(
+        self,
+        entity_ids: List[str],
+        include_relations: bool,
+        context: Optional[TenantContext],
+    ) -> tuple[List[Entity], List[Relation]]:
         """
         Default subgraph extraction
         """
@@ -442,7 +499,7 @@ class GraphStore(ABC):
 
         # Fetch all entities
         for entity_id in entity_ids:
-            entity = await self.get_entity(entity_id)
+            entity = await self.get_entity(entity_id, context=context)
             if entity:
                 entities.append(entity)
 
@@ -450,7 +507,7 @@ class GraphStore(ABC):
         if include_relations:
             entity_id_set = set(entity_ids)
             for entity_id in entity_ids:
-                neighbors = await self.get_neighbors(entity_id, direction="outgoing")
+                neighbors = await self.get_neighbors(entity_id, direction="outgoing", context=context)
                 for neighbor in neighbors:
                     if neighbor.id in entity_id_set:
                         # Fetch the relation (simplified - needs proper
@@ -471,6 +528,7 @@ class GraphStore(ABC):
         entity_type: Optional[str],
         max_results: int,
         score_threshold: float,
+        context: Optional[TenantContext],
     ) -> List[tuple[Entity, float]]:
         """
         Default brute-force vector search using cosine similarity
@@ -490,6 +548,7 @@ class GraphStore(ABC):
         max_results: int,
         score_threshold: float,
         method: str,
+        context: Optional[TenantContext],
     ) -> List[tuple[Entity, float]]:
         """
         Default text search using text similarity utilities
@@ -499,7 +558,7 @@ class GraphStore(ABC):
         """
         # Try to get all entities - check if store has get_all_entities method
         if hasattr(self, "get_all_entities"):
-            entities = await self.get_all_entities(entity_type=entity_type)
+            entities = await self.get_all_entities(entity_type=entity_type, context=context)
         else:
             # Fallback: return empty if no way to enumerate entities
             return []
@@ -564,16 +623,31 @@ class GraphStore(ABC):
         scored_entities.sort(key=lambda x: x[1], reverse=True)
         return scored_entities[:max_results]
 
-    async def _default_execute_query(self, query: GraphQuery) -> GraphResult:
+    async def _default_execute_query(self, query: GraphQuery, context: Optional[TenantContext]) -> GraphResult:
         """
-        Default query execution router
+        Default query execution router with tenant filtering support.
+        
+        If query.tenant_id is provided, it takes precedence over the context parameter
+        for tenant filtering. This ensures GraphQuery objects carry their own tenant scope.
         """
         import time
 
         start_time = time.time()
 
+        # Apply tenant filtering: query.tenant_id takes precedence over context parameter
+        # This allows GraphQuery to be self-contained with tenant scope
+        effective_context = context
+        if query.tenant_id is not None:
+            # Create TenantContext from query.tenant_id if not already provided
+            # If context was provided but has different tenant_id, query.tenant_id wins
+            from aiecs.infrastructure.graph_storage.tenant import TenantIsolationMode
+            effective_context = TenantContext(
+                tenant_id=query.tenant_id,
+                isolation_mode=context.isolation_mode if context else TenantIsolationMode.SHARED_SCHEMA,
+            )
+
         if query.query_type == QueryType.ENTITY_LOOKUP:
-            entity = await self.get_entity(query.entity_id) if query.entity_id else None
+            entity = await self.get_entity(query.entity_id, context=effective_context) if query.entity_id else None
             entities = [entity] if entity else []
 
         elif query.query_type == QueryType.VECTOR_SEARCH:
@@ -583,6 +657,7 @@ class GraphStore(ABC):
                     query.entity_type,
                     query.max_results,
                     query.score_threshold,
+                    context=effective_context,
                 )
                 entities = [entity for entity, score in results]
             else:
@@ -595,6 +670,7 @@ class GraphStore(ABC):
                     query.relation_type,
                     query.max_depth,
                     query.max_results,
+                    context=effective_context,
                 )
                 # Extract unique entities from paths
                 entity_ids_seen = set()
@@ -615,6 +691,7 @@ class GraphStore(ABC):
                     query.target_entity_id,
                     query.max_depth,
                     query.max_results,
+                    context=effective_context,
                 )
                 entities = []
             else:
