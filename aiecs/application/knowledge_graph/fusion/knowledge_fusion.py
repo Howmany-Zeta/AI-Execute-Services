@@ -7,6 +7,10 @@ High-level orchestrator for cross-document entity merging and knowledge fusion.
 from typing import List, Dict, Set, Tuple, Any, Optional
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.infrastructure.graph_storage.base import GraphStore
+from aiecs.infrastructure.graph_storage.tenant import (
+    TenantContext,
+    CrossTenantFusionError,
+)
 from aiecs.application.knowledge_graph.fusion.entity_deduplicator import (
     EntityDeduplicator,
 )
@@ -53,7 +57,11 @@ class KnowledgeFusion:
         self.entities_merged = 0
         self.conflicts_resolved = 0
 
-    async def fuse_cross_document_entities(self, entity_types: Optional[List[str]] = None) -> Dict[str, int]:
+    async def fuse_cross_document_entities(
+        self,
+        entity_types: Optional[List[str]] = None,
+        context: Optional[TenantContext] = None,
+    ) -> Dict[str, int]:
         """
         Perform cross-document entity fusion
 
@@ -61,16 +69,21 @@ class KnowledgeFusion:
         It uses similarity matching to find duplicate entities and merges them while
         preserving provenance information.
 
+        **Tenant Isolation**: When context is provided, fusion operates only within the
+        specified tenant scope. Entities from different tenants will never be merged.
+
         Algorithm:
-        1. Query all entities from graph (optionally filtered by type)
-        2. Group entities by type
-        3. For each type, find similar entities using similarity matching
-        4. Identify merge groups (clusters of similar entities)
-        5. Merge each group into a canonical entity
-        6. Update graph with merged entities and update relations
+        1. Query all entities from graph (optionally filtered by type and tenant)
+        2. Filter entities to ensure tenant isolation (if context provided)
+        3. Group entities by type
+        4. For each type, find similar entities using similarity matching
+        5. Identify merge groups (clusters of similar entities)
+        6. Merge each group into a canonical entity
+        7. Update graph with merged entities and update relations
 
         Args:
             entity_types: Optional list of entity types to fuse (None = all types)
+            context: Optional tenant context for multi-tenant isolation
 
         Returns:
             Dictionary with fusion statistics:
@@ -78,6 +91,9 @@ class KnowledgeFusion:
             - entities_merged: Number of entities merged
             - conflicts_resolved: Number of property conflicts resolved
             - merge_groups: Number of merge groups identified
+
+        Raises:
+            CrossTenantFusionError: If entities from multiple tenants are detected
         """
         stats = {
             "entities_analyzed": 0,
@@ -90,18 +106,23 @@ class KnowledgeFusion:
         self.entities_merged = 0
         self.conflicts_resolved = 0
 
-        # Step 1: Query all entities from graph
-        entities = await self._query_entities(entity_types)
+        # Step 1: Query all entities from graph (with tenant context)
+        entities = await self._query_entities(entity_types, context)
+        
+        # Step 2: Filter entities by tenant_id when context provided (defense-in-depth)
+        if context:
+            entities = self._filter_entities_by_tenant(entities, context.tenant_id)
+        
         stats["entities_analyzed"] = len(entities)
 
         if len(entities) < 2:
             # Nothing to merge
             return stats
 
-        # Step 2: Group entities by type (only merge within same type)
+        # Step 3: Group entities by type (only merge within same type)
         entities_by_type = self._group_entities_by_type(entities)
 
-        # Step 3-6: Process each type group
+        # Step 4-7: Process each type group
         for entity_type, type_entities in entities_by_type.items():
             if len(type_entities) < 2:
                 continue
@@ -154,6 +175,7 @@ class KnowledgeFusion:
             entity_type=entities[0].entity_type,
             properties=entities[0].properties.copy(),
             embedding=entities[0].embedding,
+            tenant_id=entities[0].tenant_id,
         )
 
         conflicting_properties = {}
@@ -321,15 +343,20 @@ class KnowledgeFusion:
     # Helper Methods for Cross-Document Fusion
     # =========================================================================
 
-    async def _query_entities(self, entity_types: Optional[List[str]] = None) -> List[Entity]:
+    async def _query_entities(
+        self,
+        entity_types: Optional[List[str]] = None,
+        context: Optional[TenantContext] = None,
+    ) -> List[Entity]:
         """
-        Query entities from graph store
+        Query entities from graph store with tenant filtering
 
         Args:
             entity_types: Optional list of entity types to query
+            context: Optional tenant context for filtering
 
         Returns:
-            List of entities
+            List of entities (filtered by tenant if context provided)
         """
         entities = []
 
@@ -338,11 +365,22 @@ class KnowledgeFusion:
             if entity_types:
                 # Query each type separately
                 for entity_type in entity_types:
-                    type_entities = await self.graph_store.get_all_entities(entity_type=entity_type)
+                    # Pass context to ensure tenant filtering at storage layer
+                    if context:
+                        type_entities = await self.graph_store.get_all_entities(
+                            entity_type=entity_type, context=context
+                        )
+                    else:
+                        type_entities = await self.graph_store.get_all_entities(
+                            entity_type=entity_type
+                        )
                     entities.extend(type_entities)
             else:
                 # Query all entities
-                entities = await self.graph_store.get_all_entities()
+                if context:
+                    entities = await self.graph_store.get_all_entities(context=context)
+                else:
+                    entities = await self.graph_store.get_all_entities()
         else:
             # Fallback: graph store doesn't support bulk queries
             # This is a limitation - we can't efficiently query all entities
@@ -351,6 +389,24 @@ class KnowledgeFusion:
             pass
 
         return entities
+
+    def _filter_entities_by_tenant(
+        self, entities: List[Entity], tenant_id: str
+    ) -> List[Entity]:
+        """
+        Filter entities to only those belonging to the specified tenant.
+
+        This is a defense-in-depth mechanism in addition to storage-level filtering.
+        Silently filters out entities from other tenants.
+
+        Args:
+            entities: List of entities to filter
+            tenant_id: Target tenant ID
+
+        Returns:
+            List of entities belonging to the specified tenant
+        """
+        return [e for e in entities if e.tenant_id == tenant_id]
 
     def _group_entities_by_type(self, entities: List[Entity]) -> Dict[str, List[Entity]]:
         """

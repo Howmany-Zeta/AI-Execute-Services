@@ -1,3 +1,31 @@
+"""
+Configuration Module for AIECS
+
+This module provides centralized configuration management using Pydantic settings.
+Configuration can be loaded from environment variables or .env files.
+
+Knowledge Graph Multi-Tenancy Configuration:
+    KG_MULTI_TENANCY_ENABLED: Enable multi-tenancy support (default: False)
+    KG_TENANT_ISOLATION_MODE: Tenant isolation mode (default: shared_schema)
+        - disabled: No tenant isolation (single-tenant mode)
+        - shared_schema: Shared database schema with tenant_id column filtering
+        - separate_schema: Separate database schemas per tenant
+    KG_ENABLE_RLS: Enable PostgreSQL Row-Level Security for SHARED_SCHEMA mode (default: False)
+    KG_INMEMORY_MAX_TENANTS: Maximum tenant graphs in memory for InMemoryGraphStore (default: 100)
+
+Example:
+    # Enable multi-tenancy with shared schema and RLS
+    export KG_MULTI_TENANCY_ENABLED=true
+    export KG_TENANT_ISOLATION_MODE=shared_schema
+    export KG_ENABLE_RLS=true
+    export KG_STORAGE_BACKEND=postgresql
+
+    # Use separate schemas for stronger isolation
+    export KG_MULTI_TENANCY_ENABLED=true
+    export KG_TENANT_ISOLATION_MODE=separate_schema
+    export KG_STORAGE_BACKEND=postgresql
+"""
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
@@ -115,6 +143,12 @@ class Settings(BaseSettings):
         default=100000,
         alias="KG_INMEMORY_MAX_NODES",
         description="Maximum number of nodes for in-memory storage",
+    )
+    
+    kg_inmemory_max_tenants: int = Field(
+        default=100,
+        alias="KG_INMEMORY_MAX_TENANTS",
+        description="Maximum number of tenant graphs in memory (LRU eviction)",
     )
 
     # Vector search configuration
@@ -362,6 +396,31 @@ class Settings(BaseSettings):
         description="Query optimization strategy: cost, latency, balanced",
     )
 
+    # Multi-tenancy configuration
+    kg_multi_tenancy_enabled: bool = Field(
+        default=False,
+        alias="KG_MULTI_TENANCY_ENABLED",
+        description="Enable multi-tenancy support for knowledge graph",
+    )
+
+    kg_tenant_isolation_mode: str = Field(
+        default="shared_schema",
+        alias="KG_TENANT_ISOLATION_MODE",
+        description="Tenant isolation mode: disabled, shared_schema, separate_schema",
+    )
+
+    kg_enable_rls: bool = Field(
+        default=False,
+        alias="KG_ENABLE_RLS",
+        description="Enable Row-Level Security for PostgreSQL (SHARED_SCHEMA mode only)",
+    )
+
+    kg_inmemory_max_tenants: int = Field(
+        default=100,
+        alias="KG_INMEMORY_MAX_TENANTS",
+        description="Maximum number of tenant graphs in memory (for InMemoryGraphStore LRU)",
+    )
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="allow")
 
     @property
@@ -412,6 +471,39 @@ class Settings(BaseSettings):
             "enable_local_fallback": True,
             "local_storage_path": "./storage",
         }
+
+    def validate_multi_tenancy_config(self) -> bool:
+        """
+        Validate multi-tenancy configuration consistency.
+
+        Returns:
+            True if configuration is valid
+
+        Raises:
+            ValueError: If configuration is inconsistent
+        """
+        if self.kg_enable_rls:
+            # RLS only makes sense with PostgreSQL and SHARED_SCHEMA mode
+            if self.kg_storage_backend != "postgresql":
+                logger.warning(
+                    "KG_ENABLE_RLS is enabled but storage backend is not PostgreSQL. "
+                    "RLS will have no effect."
+                )
+            if self.kg_tenant_isolation_mode != "shared_schema":
+                logger.warning(
+                    "KG_ENABLE_RLS is enabled but isolation mode is not 'shared_schema'. "
+                    "RLS is only applicable to shared_schema mode."
+                )
+
+        if self.kg_multi_tenancy_enabled:
+            # Validate that tenant isolation mode is not disabled
+            if self.kg_tenant_isolation_mode == "disabled":
+                raise ValueError(
+                    "KG_MULTI_TENANCY_ENABLED is True but KG_TENANT_ISOLATION_MODE is 'disabled'. "
+                    "Please set KG_TENANT_ISOLATION_MODE to 'shared_schema' or 'separate_schema'."
+                )
+
+        return True
 
     @property
     def kg_database_config(self) -> dict:
@@ -471,6 +563,25 @@ class Settings(BaseSettings):
         return {
             "enable_query_cache": self.kg_enable_query_cache,
             "cache_ttl_seconds": self.kg_cache_ttl_seconds,
+        }
+
+    @property
+    def kg_multi_tenancy_config(self) -> dict:
+        """
+        Get knowledge graph multi-tenancy configuration.
+
+        Returns:
+            Dictionary with multi-tenancy settings including:
+            - enabled: Whether multi-tenancy is enabled
+            - isolation_mode: Tenant isolation mode (disabled/shared_schema/separate_schema)
+            - enable_rls: Whether PostgreSQL RLS is enabled
+            - max_tenants: Maximum tenant graphs for in-memory storage
+        """
+        return {
+            "enabled": self.kg_multi_tenancy_enabled,
+            "isolation_mode": self.kg_tenant_isolation_mode,
+            "enable_rls": self.kg_enable_rls,
+            "max_tenants": self.kg_inmemory_max_tenants,
         }
 
     @field_validator("kg_storage_backend")
@@ -547,6 +658,26 @@ class Settings(BaseSettings):
         invalid = set(stages) - valid_stages
         if invalid:
             raise ValueError(f"Invalid matching stages: {invalid}. Valid stages are: {valid_stages}")
+        return v
+
+    @field_validator("kg_tenant_isolation_mode")
+    @classmethod
+    def validate_tenant_isolation_mode(cls, v: str) -> str:
+        """Validate tenant isolation mode"""
+        valid_modes = ["disabled", "shared_schema", "separate_schema"]
+        if v not in valid_modes:
+            raise ValueError(
+                f"Invalid KG_TENANT_ISOLATION_MODE: {v}. "
+                f"Must be one of: {', '.join(valid_modes)}"
+            )
+        return v
+
+    @field_validator("kg_enable_rls")
+    @classmethod
+    def validate_enable_rls(cls, v: bool, info) -> bool:
+        """Validate RLS configuration - warn if enabled with wrong backend or mode"""
+        # Note: This validator runs before all fields are set, so we can't access
+        # other fields reliably here. We'll do cross-field validation in a separate method.
         return v
 
     def validate_llm_models_config(self) -> bool:
