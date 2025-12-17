@@ -177,23 +177,275 @@ class DataFusionEngine:
         """
         Use consensus-based fusion (data agreed upon by multiple sources).
 
+        Implements sophisticated consensus logic:
+        - Detects data point agreement across providers
+        - Uses majority voting for conflicting values
+        - Applies quality-weighted consensus calculation
+        - Handles partial agreement scenarios
+        - Calculates confidence scores
+
         Args:
             results: List of valid results
 
         Returns:
-            Consensus result
+            Consensus result with confidence scores
         """
-        # For now, implement a simple version
-        # TODO: Implement more sophisticated consensus logic
+        if not results:
+            return {}
 
-        # Use best quality as baseline
-        consensus = self._fuse_best_quality(results)
+        # Extract all data points with provider and quality information
+        all_data_points: List[Dict[str, Any]] = []
+        for result in results:
+            provider = result.get("provider", "unknown")
+            data = result.get("data", [])
+            metadata = result.get("metadata", {})
+            quality_score = metadata.get("quality", {}).get("score", 0.5)
 
-        # Update strategy in metadata
-        consensus["metadata"]["fusion_info"]["strategy"] = self.STRATEGY_CONSENSUS
-        consensus["metadata"]["fusion_info"]["note"] = "Consensus strategy currently uses best quality baseline"
+            # Normalize data to list format
+            if isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict):
+                        enriched_item = item.copy()
+                        enriched_item["_provider"] = provider
+                        enriched_item["_quality"] = quality_score
+                        all_data_points.append(enriched_item)
+                    else:
+                        all_data_points.append({
+                            "value": item,
+                            "_provider": provider,
+                            "_quality": quality_score
+                        })
+            elif isinstance(data, dict):
+                enriched_data = data.copy()
+                enriched_data["_provider"] = provider
+                enriched_data["_quality"] = quality_score
+                all_data_points.append(enriched_data)
 
-        return consensus
+        if not all_data_points:
+            # Fallback to best quality if no data points
+            return self._fuse_best_quality(results)
+
+        # Group matching data points (agreement detection)
+        data_groups = self._group_matching_data_points(all_data_points)
+
+        # Build consensus result
+        consensus_data = []
+        total_confidence = 0.0
+        agreement_stats = {
+            "full_agreement": 0,
+            "partial_agreement": 0,
+            "conflicts": 0,
+            "single_source": 0
+        }
+
+        for group in data_groups:
+            if len(group) == 0:
+                continue
+
+            # Build consensus item from group
+            consensus_item, confidence, agreement_type = self._build_consensus_item(group)
+            consensus_data.append(consensus_item)
+            total_confidence += confidence
+            agreement_stats[agreement_type] += 1
+
+        # Calculate average confidence
+        avg_confidence = total_confidence / len(consensus_data) if consensus_data else 0.0
+
+        # Build consensus result
+        consensus_result: Dict[str, Any] = {
+            "operation": "multi_provider_search",
+            "data": consensus_data,
+            "metadata": {
+                "fusion_info": {
+                    "strategy": self.STRATEGY_CONSENSUS,
+                    "total_providers": len(results),
+                    "providers": [r.get("provider", "unknown") for r in results],
+                    "consensus_confidence": avg_confidence,
+                    "agreement_stats": agreement_stats,
+                    "data_points_analyzed": len(all_data_points),
+                    "consensus_groups": len(data_groups),
+                }
+            }
+        }
+
+        return consensus_result
+
+    def _group_matching_data_points(self, data_points: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
+        """
+        Group data points that represent the same entity/data point.
+
+        Uses duplicate detection to identify matching data points across providers.
+
+        Args:
+            data_points: List of data points with provider info
+
+        Returns:
+            List of groups, where each group contains matching data points
+        """
+        groups: List[List[Dict[str, Any]]] = []
+        processed = set()
+
+        for i, data_point in enumerate(data_points):
+            if i in processed:
+                continue
+
+            # Start a new group with this data point
+            group = [data_point]
+            processed.add(i)
+
+            # Find matching data points
+            for j, other_point in enumerate(data_points[i + 1:], start=i + 1):
+                if j in processed:
+                    continue
+
+                is_duplicate, similarity = self.detect_duplicate_data(data_point, other_point)
+                if is_duplicate:
+                    group.append(other_point)
+                    processed.add(j)
+
+            groups.append(group)
+
+        return groups
+
+    def _build_consensus_item(
+        self, group: List[Dict[str, Any]]
+    ) -> Tuple[Dict[str, Any], float, str]:
+        """
+        Build a consensus item from a group of matching data points.
+
+        Args:
+            group: List of matching data points from different providers
+
+        Returns:
+            Tuple of (consensus_item, confidence_score, agreement_type)
+        """
+        if len(group) == 1:
+            # Single source - use as-is with lower confidence
+            item = group[0].copy()
+            item.pop("_provider", None)
+            item.pop("_quality", None)
+            return item, 0.5, "single_source"
+
+        # Multiple sources - build consensus
+        consensus_item: Dict[str, Any] = {}
+        field_agreements: Dict[str, List[Tuple[Any, float]]] = {}  # field -> [(value, quality), ...]
+
+        # Collect all field values with their quality scores
+        for data_point in group:
+            quality = data_point.get("_quality", 0.5)
+            for key, value in data_point.items():
+                if key.startswith("_"):  # Skip metadata fields
+                    continue
+                if key not in field_agreements:
+                    field_agreements[key] = []
+                field_agreements[key].append((value, quality))
+
+        # Build consensus for each field
+        field_confidences: Dict[str, float] = {}
+        full_agreement_count = 0
+        partial_agreement_count = 0
+        conflict_count = 0
+
+        for field, value_quality_pairs in field_agreements.items():
+            # Detect agreement
+            unique_values = {}
+            for value, quality in value_quality_pairs:
+                value_key = str(value)  # Use string for comparison
+                if value_key not in unique_values:
+                    unique_values[value_key] = []
+                unique_values[value_key].append((value, quality))
+
+            if len(unique_values) == 1:
+                # Full agreement - all providers have same value
+                consensus_item[field] = value_quality_pairs[0][0]
+                # Confidence based on number of agreeing sources and quality
+                avg_quality = sum(q for _, q in value_quality_pairs) / len(value_quality_pairs)
+                agreement_ratio = len(value_quality_pairs) / len(group)
+                field_confidences[field] = avg_quality * agreement_ratio
+                full_agreement_count += 1
+            else:
+                # Conflict - resolve using majority voting or quality weighting
+                consensus_value, field_confidence = self._resolve_field_conflict(
+                    unique_values, len(group)
+                )
+                consensus_item[field] = consensus_value
+                field_confidences[field] = field_confidence
+                
+                # Check if majority agrees (>= 50%)
+                max_agreement = max(len(vals) for vals in unique_values.values())
+                if max_agreement >= len(group) * 0.5:
+                    partial_agreement_count += 1
+                else:
+                    conflict_count += 1
+
+        # Calculate overall confidence
+        if field_confidences:
+            overall_confidence = sum(field_confidences.values()) / len(field_confidences)
+        else:
+            overall_confidence = 0.5
+
+        # Determine agreement type
+        if conflict_count == 0 and partial_agreement_count == 0:
+            agreement_type = "full_agreement"
+        elif conflict_count == 0:
+            agreement_type = "partial_agreement"
+        else:
+            agreement_type = "conflicts"
+
+        # Add consensus metadata
+        consensus_item["_consensus_metadata"] = {
+            "sources_count": len(group),
+            "providers": [dp.get("_provider", "unknown") for dp in group],
+            "field_confidences": field_confidences,
+            "overall_confidence": overall_confidence,
+            "agreement_type": agreement_type,
+        }
+
+        return consensus_item, overall_confidence, agreement_type
+
+    def _resolve_field_conflict(
+        self, unique_values: Dict[str, List[Tuple[Any, float]]], total_sources: int
+    ) -> Tuple[Any, float]:
+        """
+        Resolve conflict for a single field using majority voting and quality weighting.
+
+        Args:
+            unique_values: Dict mapping value strings to list of (value, quality) tuples
+            total_sources: Total number of sources
+
+        Returns:
+            Tuple of (resolved_value, confidence_score)
+        """
+        # Calculate support (count) and quality-weighted scores for each value
+        value_scores: List[Tuple[Any, float, int]] = []  # (value, quality_weighted_score, count)
+
+        for value_str, value_quality_pairs in unique_values.items():
+            count = len(value_quality_pairs)
+            # Quality-weighted score: average quality * support ratio
+            avg_quality = sum(q for _, q in value_quality_pairs) / count
+            support_ratio = count / total_sources
+            quality_weighted_score = avg_quality * support_ratio
+            
+            # Get original value (not string)
+            original_value = value_quality_pairs[0][0]
+            value_scores.append((original_value, quality_weighted_score, count))
+
+        # Sort by quality-weighted score (descending), then by count (descending)
+        value_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
+
+        # Use majority voting: if majority agrees (>50%), use that value
+        best_value, best_score, best_count = value_scores[0]
+        
+        # Check if majority agrees
+        if best_count > total_sources / 2:
+            # Majority vote wins
+            confidence = best_score * (best_count / total_sources)
+        else:
+            # No clear majority - use quality-weighted consensus
+            # Confidence is lower when no majority
+            confidence = best_score * 0.7  # Penalty for no majority
+
+        return best_value, confidence
 
     def detect_duplicate_data(
         self,
