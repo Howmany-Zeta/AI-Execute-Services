@@ -220,11 +220,12 @@ class EntityLinker:
         """
         Link entity using name-based matching
 
-        This is slower than embedding search but works without embeddings.
+        Uses text search when available for efficient name-based queries,
+        otherwise falls back to candidate enumeration and fuzzy matching.
 
         Strategy:
-        1. Get all entities of same type (if feasible)
-        2. Compare names using fuzzy matching
+        1. Try text_search if available (most efficient for name queries)
+        2. Otherwise get candidate entities and compare names
         3. Return best match if above threshold
 
         Args:
@@ -240,9 +241,46 @@ class EntityLinker:
             return LinkResult(linked=False, new_entity=new_entity)
 
         try:
-            # Get candidate entities of same type (with tenant context)
-            # Note: This is a simplified implementation
-            # In production, you'd want an indexed search or LIKE query
+            # Try text_search first if available (optimized for name-based queries)
+            if hasattr(self.graph_store, "text_search"):
+                try:
+                    # Use text_search to find entities with similar names
+                    # This is more efficient than enumerating all candidates
+                    text_results = await self.graph_store.text_search(
+                        query_text=new_name,
+                        entity_type=new_entity.entity_type,
+                        max_results=candidate_limit,
+                        score_threshold=self.similarity_threshold,
+                        method="levenshtein",  # Good for name matching
+                        context=context,
+                    )
+
+                    if text_results:
+                        # Get best match from text search results
+                        best_entity, best_score = text_results[0]
+                        
+                        # Verify name similarity meets threshold (text_search may use different scoring)
+                        candidate_name = self._get_entity_name(best_entity)
+                        if candidate_name:
+                            # Recompute similarity using our method for consistency
+                            name_similarity = self._name_similarity(
+                                new_name, candidate_name, entity_type=new_entity.entity_type
+                            )
+                            
+                            if name_similarity >= self.similarity_threshold:
+                                return LinkResult(
+                                    linked=True,
+                                    existing_entity=best_entity,
+                                    new_entity=new_entity,
+                                    similarity=name_similarity,
+                                    link_type="name",
+                                )
+                except (ValueError, TypeError, NotImplementedError):
+                    # text_search may not be available or may not support this pattern
+                    # Fall through to candidate enumeration approach
+                    pass
+
+            # Fallback: Get candidate entities and compare names manually
             candidates = await self._get_candidate_entities(
                 new_entity.entity_type, candidate_limit, context
             )
@@ -257,7 +295,9 @@ class EntityLinker:
             for candidate in candidates:
                 candidate_name = self._get_entity_name(candidate)
                 if candidate_name:
-                    score = self._name_similarity(new_name, candidate_name)
+                    score = self._name_similarity(
+                        new_name, candidate_name, entity_type=new_entity.entity_type
+                    )
                     if score > best_score:
                         best_score = score
                         best_match = candidate
@@ -283,25 +323,57 @@ class EntityLinker:
         """
         Get candidate entities for linking
 
-        This is a placeholder - in production, you'd want:
-        - Indexed search by entity type
-        - LIKE queries for name matching
-        - Pagination for large result sets
+        Retrieves candidate entities of the specified type for entity linking operations.
+        Uses efficient methods when available (indexed search, text search) and falls
+        back to enumeration when needed.
 
         Args:
             entity_type: Entity type to filter by
-            limit: Maximum candidates
+            limit: Maximum candidates to return
             context: Optional tenant context for scoping search
 
         Returns:
             List of candidate entities (filtered by tenant if context provided)
         """
-        # TODO: Implement efficient candidate retrieval
-        # For now, return empty list (will rely on embedding search primarily)
-        # In Phase 3 (SQLite) and Phase 6 (PostgreSQL), we'll implement
-        # efficient queries for this
-        # When implemented, pass context to ensure tenant filtering
-        return []
+        try:
+            # Try to use get_all_entities() if available (most efficient for type filtering)
+            if hasattr(self.graph_store, "get_all_entities"):
+                candidates = await self.graph_store.get_all_entities(
+                    entity_type=entity_type,
+                    limit=limit,
+                    context=context,
+                )
+                return candidates
+
+            # Fallback: Try to use text_search with empty query to get entities by type
+            # This works if text_search supports entity_type filtering
+            if hasattr(self.graph_store, "text_search"):
+                try:
+                    # Use text_search with empty query to get entities by type
+                    # Some implementations may support this pattern
+                    results = await self.graph_store.text_search(
+                        query_text="",  # Empty query to get all
+                        entity_type=entity_type,
+                        max_results=limit,
+                        score_threshold=0.0,
+                        method="bm25",
+                        context=context,
+                    )
+                    # Extract entities from (entity, score) tuples
+                    return [entity for entity, _ in results]
+                except (ValueError, TypeError):
+                    # text_search may not support empty queries, continue to next fallback
+                    pass
+
+            # Last resort: If store has a way to enumerate entities, we could iterate
+            # but this is inefficient, so we return empty and rely on embedding search
+            # In production backends (SQLite, PostgreSQL), get_all_entities should be implemented
+            return []
+
+        except Exception as e:
+            # Log error but don't fail - entity linking can fall back to embedding search
+            print(f"Warning: Candidate entity retrieval failed: {e}")
+            return []
 
     def _check_name_similarity(self, entity1: Entity, entity2: Entity) -> bool:
         """
