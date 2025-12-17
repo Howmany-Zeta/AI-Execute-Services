@@ -861,6 +861,116 @@ class SQLiteGraphStore(GraphStore):
     # Tier 2: Advanced Interface (SQL-optimized overrides)
     # =========================================================================
 
+    async def get_all_entities(
+        self,
+        entity_type: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: int = 0,
+        context: Optional[TenantContext] = None,
+    ) -> List[Entity]:
+        """
+        Get all entities in the graph store
+
+        SQL-optimized implementation that uses efficient queries with filtering
+        and pagination.
+
+        Args:
+            entity_type: Optional filter by entity type
+            limit: Optional maximum number of entities to return
+            offset: Number of entities to skip (for pagination)
+            context: Optional tenant context for multi-tenant isolation
+
+        Returns:
+            List of entities matching the criteria
+        """
+        if not self._is_initialized:
+            raise RuntimeError("GraphStore not initialized")
+        if self.conn is None:
+            raise RuntimeError("Database connection not initialized")
+
+        tenant_id = self._get_tenant_id(context)
+        table_name = self._get_table_name("entities", tenant_id)
+
+        # Build query with filters
+        conditions = []
+        params = []
+
+        if self.isolation_mode == TenantIsolationMode.SEPARATE_SCHEMA and tenant_id:
+            # SEPARATE_SCHEMA: No tenant_id column, tenant filtering via table_name
+            if entity_type:
+                conditions.append("entity_type = ?")
+                params.append(entity_type)
+            
+            where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+            
+            # Build LIMIT and OFFSET clauses
+            limit_clause = ""
+            if limit is not None and offset > 0:
+                limit_clause = f"LIMIT {limit} OFFSET {offset}"
+            elif limit is not None:
+                limit_clause = f"LIMIT {limit}"
+            elif offset > 0:
+                limit_clause = f"OFFSET {offset}"
+            
+            # Execute query
+            query = f"""
+                SELECT id, entity_type, properties, embedding
+                FROM {table_name}
+                {where_clause}
+                {limit_clause}
+            """
+            
+            cursor = await self.conn.execute(query, params)
+            rows = await cursor.fetchall()
+            
+            # Convert rows to entities
+            entities = []
+            for row in rows:
+                entity = self._row_to_entity(tuple(row), tenant_id=tenant_id)
+                entities.append(entity)
+        else:
+            # SHARED_SCHEMA: Filter by tenant_id column
+            tenant_filter, tenant_params = self._build_tenant_filter(tenant_id)
+            if tenant_filter:
+                conditions.append(tenant_filter)
+                params.extend(tenant_params)
+            
+            # Entity type filtering
+            if entity_type:
+                conditions.append("entity_type = ?")
+                params.append(entity_type)
+            
+            # Build WHERE clause
+            where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+            
+            # Build LIMIT and OFFSET clauses
+            limit_clause = ""
+            if limit is not None and offset > 0:
+                limit_clause = f"LIMIT {limit} OFFSET {offset}"
+            elif limit is not None:
+                limit_clause = f"LIMIT {limit}"
+            elif offset > 0:
+                limit_clause = f"OFFSET {offset}"
+            
+            # Execute query
+            query = f"""
+                SELECT id, tenant_id, entity_type, properties, embedding
+                FROM {table_name}
+                {where_clause}
+                {limit_clause}
+            """
+            
+            cursor = await self.conn.execute(query, params)
+            rows = await cursor.fetchall()
+            
+            # Convert rows to entities
+            entities = []
+            for row in rows:
+                entity = self._row_to_entity_with_tenant(tuple(row))
+                entities.append(entity)
+
+        return entities
+
     async def vector_search(
         self,
         query_embedding: List[float],
