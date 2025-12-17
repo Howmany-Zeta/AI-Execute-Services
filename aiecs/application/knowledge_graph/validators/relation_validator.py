@@ -168,10 +168,72 @@ class RelationValidator:
             if target_entity.entity_type not in rel_type_schema.target_entity_types:
                 errors.append(f"Target entity type '{target_entity.entity_type}' not allowed for " f"relation '{relation.relation_type}'. " f"Allowed types: {rel_type_schema.target_entity_types}")
 
-        # TODO: Validate relation properties against schema (if PropertySchema defined)
-        # This would check:
-        # - Required properties are present
-        # - Property types match schema
-        # - Values are within allowed ranges/values
+        # Validate relation properties against schema
+        property_errors = self._validate_relation_properties(relation, rel_type_schema)
+        errors.extend(property_errors)
+
+        return errors
+
+    def _validate_relation_properties(self, relation: Relation, rel_type_schema) -> List[str]:
+        """
+        Validate relation properties against schema
+
+        Checks:
+        - Required properties are present
+        - Property types match schema definitions
+        - Property values are within allowed ranges/values
+        - Unknown properties are not present (in strict mode)
+
+        Args:
+            relation: Relation to validate
+            rel_type_schema: RelationType schema to validate against
+
+        Returns:
+            List of error messages (empty if valid)
+        """
+        errors = []
+        relation_properties = relation.properties or {}
+
+        # Check required properties are present
+        for prop_name, prop_schema in rel_type_schema.properties.items():
+            if prop_schema.required and prop_name not in relation_properties:
+                available_props = list(rel_type_schema.properties.keys())
+                errors.append(
+                    f"Required property '{prop_name}' missing for relation type '{relation.relation_type}'. "
+                    f"Available properties: {', '.join(available_props)}"
+                )
+
+        # Validate each provided property
+        for prop_name, prop_value in relation_properties.items():
+            # Check if property exists in schema
+            if prop_name not in rel_type_schema.properties:
+                if self.strict:
+                    available_props = list(rel_type_schema.properties.keys())
+                    errors.append(
+                        f"Unknown property '{prop_name}' for relation type '{relation.relation_type}'. "
+                        f"Available properties: {', '.join(available_props) if available_props else 'none'}"
+                    )
+                # In non-strict mode, allow unknown properties
+                continue
+
+            # Get property schema
+            prop_schema = rel_type_schema.properties[prop_name]
+
+            # Validate property value against schema
+            try:
+                prop_schema.validate_value(prop_value)
+            except ValueError as e:
+                # Convert ValueError to helpful error message
+                error_msg = str(e)
+                # Enhance error message with relation context
+                if "Property" in error_msg and "'" in error_msg:
+                    # Error already includes property name, just add relation context
+                    errors.append(
+                        f"Property validation failed for relation '{relation.relation_type}': {error_msg}"
+                    )
+                else:
+                    errors.append(
+                        f"Property '{prop_name}' validation failed for relation '{relation.relation_type}': {error_msg}"
+                    )
 
         return errors
