@@ -1148,6 +1148,44 @@ class InMemoryGraphStore(GraphStore):
                     entity_id, property_name, entity.properties[property_name]
                 )
 
+    async def get_all_entities(
+        self,
+        entity_type: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: int = 0,
+        context: Optional[TenantContext] = None,
+    ) -> List[Entity]:
+        """
+        Get all entities in the graph store
+
+        Efficient implementation for InMemoryGraphStore that iterates through
+        the entities dictionary.
+
+        Args:
+            entity_type: Optional filter by entity type
+            limit: Optional maximum number of entities to return
+            offset: Number of entities to skip (for pagination)
+            context: Optional tenant context for multi-tenant isolation
+
+        Returns:
+            List of entities matching the criteria
+        """
+        tenant_id = self._get_tenant_id(context)
+        entities_dict = self._get_entities_dict(tenant_id, update_lru=False)
+
+        # Filter by entity type if specified
+        entities = list(entities_dict.values())
+        if entity_type:
+            entities = [e for e in entities if e.entity_type == entity_type]
+
+        # Apply pagination
+        if offset > 0:
+            entities = entities[offset:]
+        if limit is not None:
+            entities = entities[:limit]
+
+        return entities
+
     def __str__(self) -> str:
         stats = self.get_stats()
         return (
