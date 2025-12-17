@@ -423,6 +423,9 @@ class ASTValidator:
         """
         Validate that a property exists in an entity type
 
+        Supports nested property paths (e.g., "address.city") by recursively
+        validating each part of the path.
+
         Args:
             entity_type: Entity type name
             property_path: Property path (may be nested like "address.city")
@@ -442,24 +445,70 @@ class ASTValidator:
         if entity_schema is None:
             return errors  # Entity type error already reported
 
-        # Handle nested properties (e.g., "address.city")
+        # Validate nested property path recursively
+        errors.extend(
+            self._validate_nested_property_path(
+                entity_schema=entity_schema,
+                property_path=property_path,
+                entity_type=entity_type,
+                line=line,
+                column=column,
+            )
+        )
+
+        return errors
+
+    def _validate_nested_property_path(
+        self,
+        entity_schema: Any,
+        property_path: str,
+        entity_type: str,
+        line: int,
+        column: int,
+        current_path: str = "",
+    ) -> List[ValidationError]:
+        """
+        Recursively validate a nested property path
+
+        Args:
+            entity_schema: Current entity schema (may be nested)
+            property_path: Remaining property path to validate
+            entity_type: Root entity type name
+            line: Line number for error reporting
+            column: Column number for error reporting
+            current_path: Accumulated path so far (for error messages)
+
+        Returns:
+            List of validation errors
+        """
+        errors: List[ValidationError] = []
+
+        # Split property path into parts
         property_parts = property_path.split(".")
         current_property = property_parts[0]
+        remaining_path = ".".join(property_parts[1:]) if len(property_parts) > 1 else None
 
-        # Check if property exists
+        # Build full path for error messages
+        full_path = f"{current_path}.{current_property}" if current_path else current_property
+
+        # Check if entity schema has get_property method
         if not hasattr(entity_schema, "get_property"):
             return errors
 
+        # Get property schema
         property_schema = entity_schema.get_property(current_property)
         if property_schema is None:
-            # Get available properties for suggestion
+            # Property doesn't exist - get available properties for suggestion
             available_props = []
             if hasattr(entity_schema, "properties"):
                 available_props = list(entity_schema.properties.keys())
+            elif hasattr(entity_schema, "get_property_names"):
+                available_props = entity_schema.get_property_names()
 
             suggestion = None
             if available_props:
-                suggestion = f"Available properties for {entity_type}: {', '.join(available_props[:5])}"
+                context = f"{entity_type}.{current_path}" if current_path else entity_type
+                suggestion = f"Available properties for {context}: {', '.join(available_props[:5])}"
                 if len(available_props) > 5:
                     suggestion += f" (and {len(available_props) - 5} more)"
 
@@ -467,14 +516,134 @@ class ASTValidator:
                 ValidationError(
                     line=line,
                     column=column,
-                    message=f"Property '{current_property}' not found in entity type '{entity_type}'",
+                    message=f"Property '{full_path}' not found in {entity_type if not current_path else current_path}",
                     suggestion=suggestion,
                 )
             )
+            return errors  # Can't continue validation if property doesn't exist
 
-        # TODO: Validate nested properties (requires nested schema support)
+        # Check if there's more nesting to validate
+        if remaining_path:
+            # Check if current property is DICT type (supports nesting)
+            if not hasattr(property_schema, "property_type"):
+                # Can't determine if nesting is supported
+                errors.append(
+                    ValidationError(
+                        line=line,
+                        column=column,
+                        message=f"Cannot validate nested path '{full_path}.{remaining_path}': "
+                        f"property '{current_property}' type unknown",
+                        suggestion="Ensure property schema defines property_type",
+                    )
+                )
+                return errors
+
+            property_type = property_schema.property_type
+
+            # Check if property type supports nesting
+            # DICT type supports nesting, but we need nested schema
+            if hasattr(property_type, "value"):
+                type_value = property_type.value
+            elif hasattr(property_type, "name"):
+                type_value = property_type.name
+            else:
+                type_value = str(property_type)
+
+            # Import PropertyType to check if it's DICT
+            from aiecs.domain.knowledge_graph.schema.property_schema import PropertyType
+
+            if type_value == PropertyType.DICT.value or type_value == "dict":
+                # Property is DICT type - check for nested schema
+                nested_schema = self._get_nested_schema(property_schema)
+                if nested_schema is None:
+                    # No nested schema defined - can't validate deeper nesting
+                    errors.append(
+                        ValidationError(
+                            line=line,
+                            column=column,
+                            message=f"Cannot validate nested path '{full_path}.{remaining_path}': "
+                            f"property '{current_property}' is DICT type but nested schema not defined",
+                            suggestion=f"Define nested schema for '{current_property}' or use flat property path",
+                        )
+                    )
+                    return errors
+
+                # Recursively validate remaining path
+                errors.extend(
+                    self._validate_nested_property_path(
+                        entity_schema=nested_schema,
+                        property_path=remaining_path,
+                        entity_type=entity_type,
+                        line=line,
+                        column=column,
+                        current_path=full_path,
+                    )
+                )
+            else:
+                # Property is not DICT type - can't nest further
+                errors.append(
+                    ValidationError(
+                        line=line,
+                        column=column,
+                        message=f"Cannot access nested path '{full_path}.{remaining_path}': "
+                        f"property '{current_property}' is {type_value} type, not DICT",
+                        suggestion=f"Use '{full_path}' directly or change property type to DICT",
+                    )
+                )
 
         return errors
+
+    def _get_nested_schema(self, property_schema: Any) -> Optional[Any]:
+        """
+        Get nested schema for a DICT property
+
+        Checks for nested schema in multiple ways:
+        1. property_schema.nested_schema attribute
+        2. property_schema.schema attribute (if not a callable method)
+        3. property_schema.properties attribute (treat as EntityType-like)
+
+        Args:
+            property_schema: Property schema to get nested schema from
+
+        Returns:
+            Nested schema object or None if not found
+        """
+        # Check for explicit nested_schema attribute
+        if hasattr(property_schema, "nested_schema"):
+            nested_schema = getattr(property_schema, "nested_schema", None)
+            if nested_schema is not None:
+                return nested_schema
+
+        # Check for schema attribute (but not if it's a callable method)
+        if hasattr(property_schema, "schema"):
+            schema_attr = getattr(property_schema, "schema", None)
+            # Only use if it's not callable (Pydantic models have schema() method)
+            if schema_attr is not None and not callable(schema_attr):
+                return schema_attr
+
+        # Check if property_schema has properties attribute (treat as EntityType-like)
+        if hasattr(property_schema, "properties"):
+            properties = getattr(property_schema, "properties", None)
+            # Only use if it's a dict-like structure (not a Pydantic method)
+            if properties and isinstance(properties, dict) and len(properties) > 0:
+                # Create a mock entity schema-like object
+                class NestedSchema:
+                    def __init__(self, properties):
+                        self.properties = properties
+
+                    def get_property(self, property_name: str):
+                        if isinstance(self.properties, dict):
+                            return self.properties.get(property_name)
+                        return None
+
+                    def get_property_names(self):
+                        if isinstance(self.properties, dict):
+                            return list(self.properties.keys())
+                        return []
+
+                return NestedSchema(properties)
+
+        return None
 
     def validate_property_value_type(
         self,
@@ -488,9 +657,11 @@ class ASTValidator:
         """
         Validate that a property value matches the expected type
 
+        Supports nested property paths by recursively finding the final property schema.
+
         Args:
             entity_type: Entity type name
-            property_path: Property path
+            property_path: Property path (may be nested like "address.city")
             value: Value to validate
             operator: Operator being used
             line: Line number for error reporting
@@ -509,14 +680,8 @@ class ASTValidator:
         if entity_schema is None:
             return errors
 
-        # Get property schema
-        property_parts = property_path.split(".")
-        current_property = property_parts[0]
-
-        if not hasattr(entity_schema, "get_property"):
-            return errors
-
-        property_schema = entity_schema.get_property(current_property)
+        # Get property schema for nested path
+        property_schema = self._get_property_schema_for_path(entity_schema, property_path)
         if property_schema is None:
             return errors  # Property error already reported
 
@@ -544,6 +709,9 @@ class ASTValidator:
         elif hasattr(property_type, "name"):
             # String type name
             expected_type = type_map.get(property_type.name)
+        elif isinstance(property_type, str):
+            # Direct string type
+            expected_type = type_map.get(property_type)
 
         if expected_type is None:
             return errors  # Unknown type, skip validation
@@ -557,7 +725,8 @@ class ASTValidator:
                             ValidationError(
                                 line=line,
                                 column=column,
-                                message=f"Property '{property_path}' expects {expected_type.__name__} values, " f"but list contains {type(item).__name__}",
+                                message=f"Property '{property_path}' expects {expected_type.__name__} values, "
+                                f"but list contains {type(item).__name__}",
                                 suggestion=f"Ensure all list values are {expected_type.__name__}",
                             )
                         )
@@ -570,12 +739,67 @@ class ASTValidator:
                 ValidationError(
                     line=line,
                     column=column,
-                    message=f"Property '{property_path}' expects {expected_type.__name__} value, " f"got {type(value).__name__}",
+                    message=f"Property '{property_path}' expects {expected_type.__name__} value, "
+                    f"got {type(value).__name__}",
                     suggestion=f"Use a {expected_type.__name__} value",
                 )
             )
 
         return errors
+
+    def _get_property_schema_for_path(self, entity_schema: Any, property_path: str) -> Optional[Any]:
+        """
+        Get property schema for a nested property path
+
+        Args:
+            entity_schema: Entity schema to start from
+            property_path: Property path (may be nested like "address.city")
+
+        Returns:
+            Property schema for the final property in the path, or None if not found
+        """
+        property_parts = property_path.split(".")
+        current_schema = entity_schema
+
+        for i, part in enumerate(property_parts):
+            if not hasattr(current_schema, "get_property"):
+                return None
+
+            property_schema = current_schema.get_property(part)
+            if property_schema is None:
+                return None
+
+            # If this is the last part, return the property schema
+            if i == len(property_parts) - 1:
+                return property_schema
+
+            # Otherwise, check if this property supports nesting
+            if not hasattr(property_schema, "property_type"):
+                return None
+
+            property_type = property_schema.property_type
+            type_value = None
+            if hasattr(property_type, "value"):
+                type_value = property_type.value
+            elif hasattr(property_type, "name"):
+                type_value = property_type.name
+            else:
+                type_value = str(property_type)
+
+            # Import PropertyType to check if it's DICT
+            from aiecs.domain.knowledge_graph.schema.property_schema import PropertyType
+
+            if type_value == PropertyType.DICT.value or type_value == "dict":
+                # Get nested schema for next iteration
+                nested_schema = self._get_nested_schema(property_schema)
+                if nested_schema is None:
+                    return None
+                current_schema = nested_schema
+            else:
+                # Can't nest further
+                return None
+
+        return None
 
     def validate_relation_endpoints(
         self,
