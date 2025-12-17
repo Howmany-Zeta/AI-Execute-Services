@@ -14,10 +14,13 @@ Phase: 2.4 - Logic Query Parser
 Version: 1.0
 """
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import uuid
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .query_context import QueryContext
@@ -82,12 +85,13 @@ class ASTNode(ABC):
     column: int
 
     @abstractmethod
-    def validate(self, schema: Any) -> List[ValidationError]:
+    def validate(self, schema: Any, entity_type: Optional[str] = None) -> List[ValidationError]:
         """
         Validate this node against the schema
 
         Args:
             schema: SchemaManager instance for validation
+            entity_type: Optional entity type context for property validation
 
         Returns:
             List of validation errors (empty if valid)
@@ -243,25 +247,34 @@ class FindNode(ASTNode):
     entity_name: Optional[str] = None
     filters: List["FilterNode"] = field(default_factory=list)
 
-    def validate(self, schema: Any) -> List[ValidationError]:
-        """Validate entity type and all filters"""
+    def validate(self, schema: Any, entity_type: Optional[str] = None) -> List[ValidationError]:
+        """
+        Validate entity type and all filters
+        
+        Args:
+            schema: Schema object for validation
+            entity_type: Optional entity type (uses self.entity_type if not provided)
+        """
         errors = []
+
+        # Use self.entity_type if entity_type parameter not provided
+        effective_entity_type = entity_type if entity_type is not None else self.entity_type
 
         # Validate entity type exists (if schema has this method)
         if hasattr(schema, "has_entity_type"):
-            if not schema.has_entity_type(self.entity_type):
+            if not schema.has_entity_type(effective_entity_type):
                 errors.append(
                     ValidationError(
                         self.line,
                         self.column,
-                        f"Entity type '{self.entity_type}' not found",
+                        f"Entity type '{effective_entity_type}' not found",
                         suggestion=f"Available types: {', '.join(schema.get_entity_types())}",
                     )
                 )
 
-        # Validate all filters
+        # Validate all filters (pass entity_type for property validation)
         for filter_node in self.filters:
-            errors.extend(filter_node.validate(schema))
+            errors.extend(filter_node.validate(schema, entity_type=effective_entity_type))
 
         return errors
 
@@ -365,8 +378,14 @@ class TraversalNode(ASTNode):
     relation_type: str
     direction: Optional[str] = "outgoing"  # "incoming" | "outgoing" | None
 
-    def validate(self, schema: Any) -> List[ValidationError]:
-        """Validate relation type exists"""
+    def validate(self, schema: Any, entity_type: Optional[str] = None) -> List[ValidationError]:
+        """
+        Validate relation type exists
+        
+        Args:
+            schema: Schema object for validation
+            entity_type: Optional entity type (not used for traversal validation)
+        """
         errors = []
 
         # Validate relation type exists (if schema has this method)
@@ -513,8 +532,14 @@ class PropertyFilterNode(FilterNode):
 
         return {self.property_path: {mongo_op: self.value}}
 
-    def validate(self, schema: Any) -> List[ValidationError]:
-        """Validate property exists and type matches"""
+    def validate(self, schema: Any, entity_type: Optional[str] = None) -> List[ValidationError]:
+        """
+        Validate property exists and type matches
+        
+        Args:
+            schema: Schema object for validation
+            entity_type: Optional entity type context for property validation
+        """
         errors = []
 
         # Validate operator is valid
@@ -548,9 +573,253 @@ class PropertyFilterNode(FilterNode):
                 )
             )
 
-        # TODO: Validate property exists in schema (requires entity context)
+        # Validate property exists in schema (if entity_type provided)
+        if entity_type:
+            errors.extend(self._validate_property_in_schema(schema, entity_type))
+        else:
+            logger.debug(
+                f"PropertyFilterNode.validate: "
+                f"FALLBACK - No entity_type provided, skipping property validation for '{self.property_path}'"
+            )
 
         return errors
+
+    def _validate_property_in_schema(self, schema: Any, entity_type: str) -> List[ValidationError]:
+        """
+        Validate that property exists in entity type schema
+        
+        Args:
+            schema: Schema object for validation
+            entity_type: Entity type to validate against
+            
+        Returns:
+            List of validation errors
+        """
+        errors = []
+
+        # Check if schema has required methods
+        if not hasattr(schema, "get_entity_type"):
+            logger.debug(
+                f"PropertyFilterNode._validate_property_in_schema: "
+                f"FALLBACK - schema missing 'get_entity_type' method, skipping property validation"
+            )
+            return errors
+
+        # Get entity type schema
+        entity_schema = schema.get_entity_type(entity_type)
+        if entity_schema is None:
+            # Entity type doesn't exist - error already reported by FindNode
+            logger.debug(
+                f"PropertyFilterNode._validate_property_in_schema: "
+                f"FALLBACK - entity type '{entity_type}' not found in schema, skipping property validation"
+            )
+            return errors
+
+        # Validate nested property path recursively
+        errors.extend(
+            self._validate_nested_property_path(
+                entity_schema=entity_schema,
+                property_path=self.property_path,
+                entity_type=entity_type,
+                current_path="",
+            )
+        )
+
+        return errors
+
+    def _validate_nested_property_path(
+        self,
+        entity_schema: Any,
+        property_path: str,
+        entity_type: str,
+        current_path: str = "",
+    ) -> List[ValidationError]:
+        """
+        Recursively validate a nested property path
+
+        Args:
+            entity_schema: Current entity schema (may be nested)
+            property_path: Remaining property path to validate
+            entity_type: Root entity type name
+            current_path: Accumulated path so far (for error messages)
+
+        Returns:
+            List of validation errors
+        """
+        errors = []
+
+        # Split property path into parts
+        property_parts = property_path.split(".")
+        current_property = property_parts[0]
+        remaining_path = ".".join(property_parts[1:]) if len(property_parts) > 1 else None
+
+        # Build full path for error messages
+        full_path = f"{current_path}.{current_property}" if current_path else current_property
+
+        # Check if entity schema has get_property method
+        if not hasattr(entity_schema, "get_property"):
+            logger.debug(
+                f"PropertyFilterNode._validate_nested_property_path: "
+                f"FALLBACK - entity_schema missing 'get_property' method for '{entity_type}', "
+                f"skipping nested property validation at '{full_path}'"
+            )
+            return errors
+
+        # Get property schema
+        property_schema = entity_schema.get_property(current_property)
+        if property_schema is None:
+            # Property doesn't exist - get available properties for suggestion
+            available_props = []
+            if hasattr(entity_schema, "properties"):
+                available_props = list(entity_schema.properties.keys())
+                logger.debug(
+                    f"PropertyFilterNode._validate_nested_property_path: "
+                    f"Using 'properties' attribute to get available properties for '{entity_type}'"
+                )
+            elif hasattr(entity_schema, "get_property_names"):
+                available_props = entity_schema.get_property_names()
+                logger.debug(
+                    f"PropertyFilterNode._validate_nested_property_path: "
+                    f"FALLBACK - Using 'get_property_names()' method instead of 'properties' attribute "
+                    f"for '{entity_type}'"
+                )
+
+            suggestion = None
+            if available_props:
+                context = f"{entity_type}.{current_path}" if current_path else entity_type
+                suggestion = f"Available properties for {context}: {', '.join(available_props[:5])}"
+                if len(available_props) > 5:
+                    suggestion += f" (and {len(available_props) - 5} more)"
+
+            errors.append(
+                ValidationError(
+                    self.line,
+                    self.column,
+                    f"Property '{full_path}' not found in {entity_type if not current_path else current_path}",
+                    suggestion=suggestion,
+                )
+            )
+            return errors  # Can't continue validation if property doesn't exist
+
+        # Check if there's more nesting to validate
+        if remaining_path:
+            # Check if current property is DICT type (supports nesting)
+            if not hasattr(property_schema, "property_type"):
+                # Can't determine if nesting is supported
+                errors.append(
+                    ValidationError(
+                        self.line,
+                        self.column,
+                        f"Cannot validate nested path '{full_path}.{remaining_path}': "
+                        f"property '{current_property}' type unknown",
+                        suggestion="Ensure property schema defines property_type",
+                    )
+                )
+                return errors
+
+            property_type = property_schema.property_type
+
+            # Check if property type supports nesting
+            if hasattr(property_type, "value"):
+                type_value = property_type.value
+            elif hasattr(property_type, "name"):
+                type_value = property_type.name
+            else:
+                type_value = str(property_type)
+
+            # Import PropertyType to check if it's DICT
+            from aiecs.domain.knowledge_graph.schema.property_schema import PropertyType
+
+            if type_value == PropertyType.DICT.value or type_value == "dict":
+                # Property is DICT type - check for nested schema
+                nested_schema = self._get_nested_schema(property_schema)
+                if nested_schema is None:
+                    # No nested schema defined - can't validate deeper nesting
+                    errors.append(
+                        ValidationError(
+                            self.line,
+                            self.column,
+                            f"Cannot validate nested path '{full_path}.{remaining_path}': "
+                            f"property '{current_property}' is DICT type but nested schema not defined",
+                            suggestion=f"Define nested schema for '{current_property}' or use flat property path",
+                        )
+                    )
+                    return errors
+
+                # Recursively validate remaining path
+                errors.extend(
+                    self._validate_nested_property_path(
+                        entity_schema=nested_schema,
+                        property_path=remaining_path,
+                        entity_type=entity_type,
+                        current_path=full_path,
+                    )
+                )
+            else:
+                # Property is not DICT type - can't nest further
+                errors.append(
+                    ValidationError(
+                        self.line,
+                        self.column,
+                        f"Cannot access nested path '{full_path}.{remaining_path}': "
+                        f"property '{current_property}' is {type_value} type, not DICT",
+                        suggestion=f"Use '{full_path}' directly or change property type to DICT",
+                    )
+                )
+
+        return errors
+
+    def _get_nested_schema(self, property_schema: Any) -> Optional[Any]:
+        """
+        Get nested schema for a DICT property
+
+        Checks for nested schema in multiple ways:
+        1. property_schema.nested_schema attribute
+        2. property_schema.schema attribute (if not a callable method)
+        3. property_schema.properties attribute (treat as EntityType-like)
+
+        Args:
+            property_schema: Property schema to get nested schema from
+
+        Returns:
+            Nested schema object or None if not found
+        """
+        # Check for explicit nested_schema attribute
+        if hasattr(property_schema, "nested_schema"):
+            nested_schema = getattr(property_schema, "nested_schema", None)
+            if nested_schema is not None:
+                return nested_schema
+
+        # Check for schema attribute (but not if it's a callable method)
+        if hasattr(property_schema, "schema"):
+            schema_attr = getattr(property_schema, "schema", None)
+            # Only use if it's not callable (Pydantic models have schema() method)
+            if schema_attr is not None and not callable(schema_attr):
+                return schema_attr
+
+        # Check if property_schema has properties attribute (treat as EntityType-like)
+        if hasattr(property_schema, "properties"):
+            properties = getattr(property_schema, "properties", None)
+            # Only use if it's a dict-like structure (not a Pydantic method)
+            if properties and isinstance(properties, dict) and len(properties) > 0:
+                # Create a mock entity schema-like object
+                class NestedSchema:
+                    def __init__(self, properties):
+                        self.properties = properties
+
+                    def get_property(self, property_name: str):
+                        if isinstance(self.properties, dict):
+                            return self.properties.get(property_name)
+                        return None
+
+                    def get_property_names(self):
+                        if isinstance(self.properties, dict):
+                            return list(self.properties.keys())
+                        return []
+
+                return NestedSchema(properties)
+
+        return None
 
     def __repr__(self) -> str:
         """String representation for debugging"""
@@ -602,8 +871,14 @@ class BooleanFilterNode(FilterNode):
 
         return {mongo_op: operand_dicts}
 
-    def validate(self, schema: Any) -> List[ValidationError]:
-        """Validate all operands"""
+    def validate(self, schema: Any, entity_type: Optional[str] = None) -> List[ValidationError]:
+        """
+        Validate all operands
+        
+        Args:
+            schema: Schema object for validation
+            entity_type: Optional entity type context for property validation
+        """
         errors = []
 
         # Validate operator is valid
@@ -627,9 +902,9 @@ class BooleanFilterNode(FilterNode):
                 )
             )
 
-        # Validate all operands
+        # Validate all operands (pass entity_type for property validation)
         for operand in self.operands:
-            errors.extend(operand.validate(schema))
+            errors.extend(operand.validate(schema, entity_type=entity_type))
 
         return errors
 
