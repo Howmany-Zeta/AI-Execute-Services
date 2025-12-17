@@ -309,6 +309,40 @@ class GraphStore(ABC):
         """
         return await self._default_subgraph_query(entity_ids, include_relations, context)
 
+    async def get_all_entities(
+        self,
+        entity_type: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: int = 0,
+        context: Optional[TenantContext] = None,
+    ) -> List[Entity]:
+        """
+        Get all entities in the graph store
+
+        **DEFAULT IMPLEMENTATION**: Uses entity enumeration.
+        Override for better performance (e.g., database cursors, streaming).
+
+        Args:
+            entity_type: Optional filter by entity type
+            limit: Optional maximum number of entities to return
+            offset: Number of entities to skip (for pagination)
+            context: Optional tenant context for multi-tenant isolation
+
+        Returns:
+            List of entities matching the criteria
+
+        Example:
+            # Get all entities
+            all_entities = await store.get_all_entities()
+
+            # Get first 100 Person entities
+            people = await store.get_all_entities(entity_type="Person", limit=100)
+
+            # Get next page (pagination)
+            next_page = await store.get_all_entities(entity_type="Person", limit=100, offset=100)
+        """
+        return await self._default_get_all_entities(entity_type, limit, offset, context)
+
     async def vector_search(
         self,
         query_embedding: List[float],
@@ -522,6 +556,36 @@ class GraphStore(ABC):
 
         return entities, relations
 
+    async def _default_get_all_entities(
+        self,
+        entity_type: Optional[str],
+        limit: Optional[int],
+        offset: int,
+        context: Optional[TenantContext],
+    ) -> List[Entity]:
+        """
+        Default entity enumeration implementation
+
+        This default raises NotImplementedError. Backends should override
+        this method to provide efficient entity enumeration.
+
+        Args:
+            entity_type: Optional filter by entity type
+            limit: Optional maximum number of entities to return
+            offset: Number of entities to skip (for pagination)
+            context: Optional tenant context for multi-tenant isolation
+
+        Returns:
+            List of entities matching the criteria
+
+        Raises:
+            NotImplementedError: If backend doesn't implement this method
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} must implement get_all_entities() "
+            "or override _default_get_all_entities()"
+        )
+
     async def _default_vector_search(
         self,
         query_embedding: List[float],
@@ -529,17 +593,43 @@ class GraphStore(ABC):
         max_results: int,
         score_threshold: float,
         context: Optional[TenantContext],
-    ) -> List[tuple[Entity, float]]:
+        ) -> List[tuple[Entity, float]]:
         """
         Default brute-force vector search using cosine similarity
 
-        This is slow but works. Backends should override with ANN indexes.
+        This implementation uses get_all_entities() to enumerate entities
+        and computes cosine similarity. Backends should override with ANN indexes.
         """
-        # Note: This requires iterating all entities - needs proper implementation
-        # In a real store, you'd have a method to get all entities or use an index
-        # For now, return empty results
-        # TODO: Implement when we have entity enumeration capability
-        return []
+        if not query_embedding:
+            return []
+
+        # Get all entities (or filtered by entity_type)
+        entities = await self.get_all_entities(entity_type=entity_type, context=context)
+
+        if not entities:
+            return []
+
+        # Compute cosine similarity for each entity with embedding
+        scored_entities = []
+        for entity in entities:
+            if not entity.embedding:
+                continue  # Skip entities without embeddings
+
+            # Compute cosine similarity between vectors
+            try:
+                similarity = self._cosine_similarity_vectors(query_embedding, entity.embedding)
+                if similarity >= score_threshold:
+                    scored_entities.append((entity, float(similarity)))
+            except Exception as e:
+                # Skip entities with incompatible embedding dimensions
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Skipping entity {entity.id} due to embedding error: {e}")
+                continue
+
+        # Sort by score descending and return top results
+        scored_entities.sort(key=lambda x: x[1], reverse=True)
+        return scored_entities[:max_results]
 
     async def _default_text_search(
         self,
@@ -622,6 +712,39 @@ class GraphStore(ABC):
         # Sort by score descending and return top results
         scored_entities.sort(key=lambda x: x[1], reverse=True)
         return scored_entities[:max_results]
+
+    def _cosine_similarity_vectors(self, vec1: List[float], vec2: List[float]) -> float:
+        """
+        Compute cosine similarity between two vectors
+
+        Args:
+            vec1: First vector
+            vec2: Second vector
+
+        Returns:
+            Cosine similarity score (0.0-1.0)
+
+        Raises:
+            ValueError: If vectors have different dimensions or are empty
+        """
+        if len(vec1) != len(vec2):
+            raise ValueError(f"Vectors must have same dimension: {len(vec1)} != {len(vec2)}")
+        if len(vec1) == 0:
+            raise ValueError("Vectors cannot be empty")
+
+        # Compute dot product
+        dot_product = sum(a * b for a, b in zip(vec1, vec2))
+
+        # Compute magnitudes
+        magnitude1 = sum(a * a for a in vec1) ** 0.5
+        magnitude2 = sum(b * b for b in vec2) ** 0.5
+
+        if magnitude1 == 0 or magnitude2 == 0:
+            return 0.0
+
+        # Cosine similarity
+        similarity = dot_product / (magnitude1 * magnitude2)
+        return max(0.0, min(1.0, similarity))  # Clamp to [0, 1]
 
     async def _default_execute_query(self, query: GraphQuery, context: Optional[TenantContext]) -> GraphResult:
         """
