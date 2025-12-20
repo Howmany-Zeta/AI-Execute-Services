@@ -1,0 +1,209 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # AIECS 主服务 (生产环境)
+  # ============================================================================
+  aiecs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: aiecs-prod
+    image: aiecs:latest
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # 数据持久化
+      - aiecs-data:/app/data
+      - aiecs-logs:/app/logs
+      - aiecs-temp:/app/temp
+      # 配置文件 (可选)
+      - ./config:/app/config:ro
+      - ./.env:/app/.env:ro
+    environment:
+      - AIECS_ENV=production
+      - PYTHONUNBUFFERED=1
+      # 根据需要添加其他环境变量
+      # - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # - GOOGLE_SEARCH_API_KEY=${GOOGLE_SEARCH_API_KEY}
+    networks:
+      - aiecs-network
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ============================================================================
+  # AIECS 开发服务
+  # ============================================================================
+  aiecs-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: aiecs-dev
+    image: aiecs:dev
+    volumes:
+      # 挂载整个项目目录 (热重载)
+      - .:/app
+      - aiecs-dev-data:/app/data
+      - aiecs-dev-logs:/app/logs
+      - aiecs-dev-temp:/app/temp
+    ports:
+      - "8001:8000"
+      - "5678:5678"  # Python debugger port
+    environment:
+      - AIECS_ENV=development
+      - PYTHONUNBUFFERED=1
+      - DEBUG=true
+    networks:
+      - aiecs-network
+    depends_on:
+      - redis
+    command: bash -c "poetry run python -m aiecs"
+    stdin_open: true
+    tty: true
+
+  # ============================================================================
+  # Redis (缓存服务)
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: aiecs-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - aiecs-network
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # ============================================================================
+  # Neo4j (知识图谱数据库 - 可选)
+  # ============================================================================
+  neo4j:
+    image: neo4j:5-community
+    container_name: aiecs-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+      - neo4j-import:/var/lib/neo4j/import
+      - neo4j-plugins:/plugins
+    environment:
+      - NEO4J_AUTH=neo4j/password123  # 请在生产环境中修改
+      - NEO4J_PLUGINS=["apoc", "graph-data-science"]
+      - NEO4J_dbms_memory_heap_initial__size=512m
+      - NEO4J_dbms_memory_heap_max__size=2G
+    networks:
+      - aiecs-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================================
+  # Jupyter Notebook (数据分析 - 可选)
+  # ============================================================================
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: aiecs-jupyter
+    volumes:
+      - .:/app
+      - jupyter-data:/root/.jupyter
+    ports:
+      - "8888:8888"
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    networks:
+      - aiecs-network
+    command: >
+      bash -c "pip install jupyterlab ipywidgets &&
+      jupyter lab --ip=0.0.0.0 --port=8888 --no-browser
+      --allow-root --NotebookApp.token='' --NotebookApp.password=''"
+
+  # ============================================================================
+  # 依赖检查服务 (一次性运行)
+  # ============================================================================
+  dependency-check:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: aiecs-dep-check
+    volumes:
+      - ./dependency_report.txt:/app/dependency_report.txt
+    networks:
+      - aiecs-network
+    command: >
+      bash -c "python aiecs/scripts/dependance_check/dependency_checker.py > /app/dependency_report.txt 2>&1 &&
+      echo 'Dependency check completed. See dependency_report.txt' &&
+      exit 0"
+    profiles:
+      - tools
+
+# ============================================================================
+# 网络配置
+# ============================================================================
+networks:
+  aiecs-network:
+    driver: bridge
+    name: aiecs-network
+
+# ============================================================================
+# 数据卷配置
+# ============================================================================
+volumes:
+  # AIECS 生产环境数据
+  aiecs-data:
+    driver: local
+  aiecs-logs:
+    driver: local
+  aiecs-temp:
+    driver: local
+  
+  # AIECS 开发环境数据
+  aiecs-dev-data:
+    driver: local
+  aiecs-dev-logs:
+    driver: local
+  aiecs-dev-temp:
+    driver: local
+  
+  # Redis 数据
+  redis-data:
+    driver: local
+  
+  # Neo4j 数据
+  neo4j-data:
+    driver: local
+  neo4j-logs:
+    driver: local
+  neo4j-import:
+    driver: local
+  neo4j-plugins:
+    driver: local
+  
+  # Jupyter 数据
+  jupyter-data:
+    driver: local
+
