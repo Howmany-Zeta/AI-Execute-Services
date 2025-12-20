@@ -160,14 +160,21 @@ class AIECS:
                     "mode": "simple",
                 }
 
-            # TODO: Implement direct task execution without Celery
-            # For now, return a placeholder
-            return {
-                "status": "completed",
-                "result": "Simple mode execution (placeholder)",
-                "mode": "simple",
-                "context_id": context.user_id,
-            }
+            # Direct task execution using process_task_async (no Celery required)
+            try:
+                result = await self.process_task_async(context)
+                return {
+                    **result,
+                    "mode": "simple",
+                }
+            except Exception as e:
+                logger.error(f"Simple mode execution failed: {e}", exc_info=True)
+                return {
+                    "status": "failed",
+                    "error": str(e),
+                    "mode": "simple",
+                    "context_id": context.user_id if hasattr(context, "user_id") else "unknown",
+                }
 
         elif self.mode == "full":
             if not self.task_manager:
