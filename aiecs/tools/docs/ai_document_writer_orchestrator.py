@@ -940,11 +940,19 @@ Please provide a detailed editing plan with:
                 "successful_operations": sum(1 for r in edit_results if r.get("success")),
                 "failed_operations": sum(1 for r in edit_results if not r.get("success")),
                 "content_changed": original_content != edited_content,
-                "structure_preserved": True,  # TODO: Implement structure validation
             }
 
             if preserve_structure:
-                validation["structure_check"] = self._check_structure_preservation(original_content, edited_content)
+                structure_check = self._check_structure_preservation(original_content, edited_content)
+                validation["structure_check"] = structure_check
+                # Extract structure preservation status from check results
+                # Structure is considered preserved if headers are preserved and similarity is above threshold
+                validation["structure_preserved"] = (
+                    structure_check.get("headers_preserved", False) and
+                    structure_check.get("structure_similarity", 0.0) > 0.8
+                )
+            else:
+                validation["structure_preserved"] = None  # Not checked when preserve_structure is False
 
             return validation
 
