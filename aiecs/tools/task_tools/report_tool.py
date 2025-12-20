@@ -13,8 +13,7 @@ import bleach
 from typing import Dict, Any, List, Optional, Union, Tuple, Set
 from jinja2 import FileSystemLoader, sandbox
 
-# from weasyprint import HTML  # TODO: Re-enable when deployment issues
-# are resolved
+# from weasyprint import HTML  # TODO: Re-enable when deployment issues are resolved
 import pandas as pd  # type: ignore[import-untyped]
 from pptx import Presentation
 from pptx.util import Pt
