@@ -39,7 +39,7 @@ types-bleach = "^6.3.0.20251115"
 
 [project]
 name = "aiecs"
-version = "1.6.2"
+version = "1.6.3"
 description = "AI Execute Services - A middleware framework for AI-powered task execution and tool orchestration"
 authors = [
     {name = "AIECS Team", email = "iretbl@gmail.com"}
@@ -192,6 +192,8 @@ aiecs-check-deps = "aiecs.scripts.dependance_check.dependency_checker:main"
 aiecs-fix-deps = "aiecs.scripts.dependance_check.dependency_fixer:main"
 aiecs-tools-check-annotations = "aiecs.scripts.tools_develop.check_type_annotations:main"
 aiecs-tools-validate-schemas = "aiecs.scripts.tools_develop.validate_tool_schemas:main"
+aiecs-tools-check-config = "aiecs.scripts.tools_develop.check_all_tools_config:main"
+aiecs-tools-test-config = "aiecs.scripts.tools_develop.test_all_tools_config_runtime:main"
 aiecs-check-modules = "aiecs.scripts.aid.module_checker:main"
 
 [tool.setuptools.packages.find]
