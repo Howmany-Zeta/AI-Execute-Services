@@ -34,7 +34,7 @@ MANIFEST
 pip-log.txt
 pip-delete-this-directory.txt
 
-# Unit test / coverage reports
+# Unit test / coverage reports (generated files only)
 htmlcov/
 .tox/
 .nox/
@@ -49,17 +49,16 @@ coverage.xml
 .pytest_cache/
 cover/
 
-# Test files and directories
-test/
-tests/
-test_*.py
-*_test.py
-**/test_*.py
-**/*_test.py
+# Test-related generated files (but NOT test source code)
+test/**/__pycache__/
+test/**/.pytest_cache/
+test/**/htmlcov/
+test/**/.coverage
+test/**/*.pyc
+test/archived/old_structure/
 
-# Allow GitHub workflows with 'test' in name
-!.github/workflows/*test*.yml
-!.github/workflows/*test*.yaml
+# Note: We DO want to track test/ directory and test_*.py files in git!
+# Only generated artifacts should be ignored
 
 # Translations
 *.mo
@@ -222,10 +221,8 @@ openspec/project.md
 openspec/AGENTS.md
 
 # augment
-augment/
 .augment/
 .augment/commands/
 
-# test scripts
-test/scripts/run_apisource_tests.sh
-test/scripts/run_search_tool_tests.sh
+# Old test scripts (moved to archived)
+# test/scripts/ has been archived - no longer in active use

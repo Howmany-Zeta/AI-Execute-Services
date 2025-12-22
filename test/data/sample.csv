@@ -1,0 +1,11 @@
+Name,Age,Department,Role,Experience,Skills
+John Smith,32,Engineering,Senior Developer,8,Python,JavaScript,React
+Sarah Johnson,28,Design,UX Designer,5,UI/UX,Sketch,Figma
+Michael Brown,35,Engineering,Tech Lead,10,Python,Java,Architecture
+Emily Davis,26,Marketing,Marketing Specialist,3,Digital Marketing,SEO,Analytics
+David Wilson,30,Engineering,DevOps Engineer,6,Docker,Kubernetes,AWS
+Lisa Anderson,29,Design,Graphic Designer,4,Photoshop,Illustrator,Branding
+Robert Taylor,33,Engineering,Backend Developer,7,Python,Django,PostgreSQL
+Jennifer Martinez,27,Marketing,Content Manager,4,Content Strategy,SEO,Social Media
+Christopher Lee,31,Engineering,Frontend Developer,6,React,Vue.js,TypeScript
+Amanda White,25,Design,Product Designer,3,Product Design,User Research,Prototyping

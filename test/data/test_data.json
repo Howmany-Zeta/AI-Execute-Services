@@ -1,0 +1,12 @@
+[
+    {"name": "Alice", "age": 25, "score": 85.5, "category": "A", "date": "2023-01-01"},
+    {"name": "Bob", "age": 30, "score": 92.0, "category": "B", "date": "2023-01-02"},
+    {"name": "Charlie", "age": 22, "score": 78.3, "category": "A", "date": "2023-01-03"},
+    {"name": "Diana", "age": 28, "score": 91.7, "category": "B", "date": "2023-01-04"},
+    {"name": "Eve", "age": 26, "score": 83.2, "category": "C", "date": "2023-01-05"},
+    {"name": "Frank", "age": 32, "score": 89.5, "category": "A", "date": "2023-01-06"},
+    {"name": "Grace", "age": 24, "score": 76.8, "category": "C", "date": "2023-01-07"},
+    {"name": "Henry", "age": 29, "score": 94.1, "category": "B", "date": "2023-01-08"},
+    {"name": "Ivy", "age": 27, "score": 81.9, "category": "A", "date": "2023-01-09"},
+    {"name": "Jack", "age": 31, "score": 88.0, "category": "C", "date": "2023-01-10"}
+]
