@@ -1,0 +1,252 @@
+"""
+Pytest configuration and fixtures for APISource Tool tests
+
+This module provides shared fixtures and configuration for all APISource tests.
+Loads API keys from .env.apisource and provides common test utilities.
+"""
+
+import os
+import sys
+import logging
+from pathlib import Path
+from typing import Dict, Any
+
+import pytest
+from dotenv import load_dotenv
+
+
+# Configure logging for tests
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('test/logs/apisource_tests.log')
+    ]
+)
+
+logger = logging.getLogger(__name__)
+
+
+def pytest_configure(config):
+    """Configure pytest with custom markers"""
+    config.addinivalue_line(
+        "markers", "network: marks tests that require network access (deselect with '-m \"not network\"')"
+    )
+    config.addinivalue_line(
+        "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
+    )
+    config.addinivalue_line(
+        "markers", "integration: marks tests as integration tests"
+    )
+    config.addinivalue_line(
+        "markers", "provider: marks tests for specific providers"
+    )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def load_env_config():
+    """Load environment variables from .env.apisource"""
+    env_file = Path(__file__).parent.parent.parent.parent.parent / '.env.apisource'
+    
+    if env_file.exists():
+        load_dotenv(env_file)
+        logger.info(f"✓ Loaded environment from {env_file}")
+    else:
+        logger.warning(f"⚠ Environment file not found: {env_file}")
+        logger.warning("  Some tests may fail without API keys")
+    
+    # Log configuration (without exposing keys)
+    logger.info("Environment Configuration:")
+    logger.info(f"  - FRED_API_KEY: {'✓ Set' if os.getenv('FRED_API_KEY') else '✗ Not set'}")
+    logger.info(f"  - NEWSAPI_API_KEY: {'✓ Set' if os.getenv('NEWSAPI_API_KEY') else '✗ Not set'}")
+    logger.info(f"  - CENSUS_API_KEY: {'✓ Set' if os.getenv('CENSUS_API_KEY') else '✗ Not set'}")
+    logger.info(f"  - DEBUG_MODE: {os.getenv('DEBUG_MODE', 'false')}")
+    logger.info(f"  - VERBOSE_API_CALLS: {os.getenv('VERBOSE_API_CALLS', 'false')}")
+
+
+@pytest.fixture(scope="session")
+def api_keys() -> Dict[str, str]:
+    """Provide API keys for tests"""
+    return {
+        'fred_api_key': os.getenv('FRED_API_KEY'),
+        'newsapi_api_key': os.getenv('NEWSAPI_API_KEY'),
+        'census_api_key': os.getenv('CENSUS_API_KEY'),
+    }
+
+
+@pytest.fixture(scope="session")
+def test_config() -> Dict[str, Any]:
+    """Provide test configuration"""
+    return {
+        'enable_fallback': True,
+        'enable_query_enhancement': True,
+        'enable_data_fusion': True,
+        'default_timeout': int(os.getenv('API_REQUEST_TIMEOUT', '30')),
+        'max_retries': 3,
+        'cache_ttl': int(os.getenv('CACHE_TTL', '300')),
+    }
+
+
+@pytest.fixture
+def fred_config(api_keys) -> Dict[str, Any]:
+    """Configuration for FRED provider"""
+    return {
+        'api_key': api_keys['fred_api_key'],
+        'timeout': int(os.getenv('FRED_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('FRED_RATE_LIMIT', '10')),
+        'max_burst': int(os.getenv('FRED_MAX_BURST', '20')),
+    }
+
+
+@pytest.fixture
+def newsapi_config(api_keys) -> Dict[str, Any]:
+    """Configuration for News API provider"""
+    return {
+        'api_key': api_keys['newsapi_api_key'],
+        'timeout': int(os.getenv('NEWSAPI_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('NEWSAPI_RATE_LIMIT', '5')),
+        'max_burst': int(os.getenv('NEWSAPI_MAX_BURST', '10')),
+    }
+
+
+@pytest.fixture
+def census_config(api_keys) -> Dict[str, Any]:
+    """Configuration for Census provider"""
+    return {
+        'api_key': api_keys['census_api_key'],
+        'timeout': int(os.getenv('CENSUS_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('CENSUS_RATE_LIMIT', '10')),
+        'max_burst': int(os.getenv('CENSUS_MAX_BURST', '20')),
+    }
+
+
+@pytest.fixture
+def worldbank_config() -> Dict[str, Any]:
+    """Configuration for World Bank provider (no API key needed)"""
+    return {
+        'timeout': int(os.getenv('WORLDBANK_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('WORLDBANK_RATE_LIMIT', '10')),
+        'max_burst': int(os.getenv('WORLDBANK_MAX_BURST', '20')),
+    }
+
+
+@pytest.fixture
+def skip_if_no_api_key():
+    """Skip test if required API keys are not available"""
+    def _skip_if_no_key(provider: str):
+        key_map = {
+            'fred': 'FRED_API_KEY',
+            'newsapi': 'NEWSAPI_API_KEY',
+            'census': 'CENSUS_API_KEY',
+        }
+        
+        env_var = key_map.get(provider.lower())
+        if env_var and not os.getenv(env_var):
+            pytest.skip(f"Skipping test: {env_var} not set")
+    
+    return _skip_if_no_key
+
+
+@pytest.fixture
+def debug_output():
+    """Helper for debug output in tests"""
+    def _print_debug(title: str, data: Any, indent: int = 0):
+        """Print formatted debug output"""
+        prefix = "  " * indent
+        print(f"\n{prefix}{'=' * 60}")
+        print(f"{prefix}{title}")
+        print(f"{prefix}{'=' * 60}")
+        
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if isinstance(value, (dict, list)) and len(str(value)) > 100:
+                    print(f"{prefix}  {key}: {type(value).__name__} (length: {len(value)})")
+                else:
+                    print(f"{prefix}  {key}: {value}")
+        elif isinstance(data, list):
+            print(f"{prefix}  Items: {len(data)}")
+            for i, item in enumerate(data[:3]):  # Show first 3 items
+                print(f"{prefix}  [{i}]: {item}")
+            if len(data) > 3:
+                print(f"{prefix}  ... and {len(data) - 3} more items")
+        else:
+            print(f"{prefix}  {data}")
+        
+        print(f"{prefix}{'=' * 60}\n")
+    
+    return _print_debug
+
+
+@pytest.fixture
+def assert_valid_response():
+    """Helper to validate API response structure"""
+    def _validate(response: Dict[str, Any], operation: str = None):
+        """Validate response has required fields"""
+        assert isinstance(response, dict), "Response must be a dictionary"
+
+        # APISourceTool returns format: {'provider': ..., 'operation': ..., 'data': ...}
+        # OR for search: {'results': ..., 'metadata': ..., 'providers_queried': ...}
+
+        if 'results' in response:
+            # Search response format
+            assert 'metadata' in response, "Search response must have 'metadata' field"
+            assert 'providers_queried' in response, "Search response must have 'providers_queried' field"
+        else:
+            # Query response format
+            assert 'provider' in response, "Response must have 'provider' field"
+            assert 'operation' in response, "Response must have 'operation' field"
+            assert 'data' in response, "Response must have 'data' field"
+
+            if operation:
+                assert response['operation'] == operation, f"Expected operation '{operation}', got '{response['operation']}'"
+
+        return True
+
+    return _validate
+
+
+@pytest.fixture
+def measure_performance():
+    """Helper to measure test performance"""
+    import time
+    
+    class PerformanceMeasure:
+        def __init__(self):
+            self.start_time = None
+            self.end_time = None
+        
+        def start(self):
+            self.start_time = time.time()
+        
+        def stop(self):
+            self.end_time = time.time()
+            return self.duration
+        
+        @property
+        def duration(self):
+            if self.start_time and self.end_time:
+                return self.end_time - self.start_time
+            return None
+        
+        def print_result(self, operation: str):
+            if self.duration:
+                print(f"\n⏱  {operation} took {self.duration:.3f} seconds")
+    
+    return PerformanceMeasure()
+
+
+@pytest.fixture(autouse=True)
+def test_logger(request):
+    """Log test execution"""
+    test_name = request.node.name
+    logger.info(f"\n{'=' * 80}")
+    logger.info(f"Starting test: {test_name}")
+    logger.info(f"{'=' * 80}")
+    
+    yield
+    
+    logger.info(f"\n{'=' * 80}")
+    logger.info(f"Completed test: {test_name}")
+    logger.info(f"{'=' * 80}\n")
+

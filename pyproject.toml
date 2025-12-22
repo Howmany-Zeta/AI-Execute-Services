@@ -215,7 +215,13 @@ build-backend = "setuptools.build_meta"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-testpaths = ["test"]
+# Test discovery paths (new structure)
+testpaths = [
+    "test/unit",
+    "test/integration", 
+    "test/e2e",
+    "test/performance"
+]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -223,14 +229,37 @@ addopts = [
     "-v",
     "--tb=short",
     "--strict-markers",
-    "--disable-warnings"
+    "--disable-warnings",
+    "--timeout=300",              # Default timeout: 5 minutes
+    "--timeout-method=thread"     # Use thread-based timeout
 ]
+# Timeout settings by test type
+timeout_func_only = true
 markers = [
-    "asyncio: marks tests as async",
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
-    "security: marks tests as security tests",
-    "performance: marks tests as performance tests"
+    # Primary test level markers (testing pyramid)
+    "unit: Unit tests - fast, isolated, no external dependencies",
+    "integration: Integration tests - test component interactions",
+    "e2e: End-to-end tests - full workflow with real APIs",
+    
+    # Special test categories
+    "performance: Performance tests - measure speed and resource usage",
+    "slow: Slow tests - may take several seconds or minutes (deselect with '-m \"not slow\"')",
+    
+    # Dependency markers
+    "requires_api: Tests requiring real API keys (OpenAI, Google, etc.)",
+    "requires_redis: Tests requiring Redis connection",
+    "requires_postgres: Tests requiring PostgreSQL connection",
+    
+    # Provider-specific markers (for E2E tests)
+    "openai: Tests requiring OpenAI API",
+    "google: Tests requiring Google AI API",
+    "vertex: Tests requiring Vertex AI",
+    "xai: Tests requiring xAI API",
+    "expensive: Tests that may cost significant API credits",
+    
+    # Legacy markers (backward compatibility)
+    "asyncio: Async tests (automatically applied by pytest-asyncio)",
+    "security: Security-related tests"
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

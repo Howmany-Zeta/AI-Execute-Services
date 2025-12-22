@@ -1,0 +1,17 @@
+name,age,score,group,category,weight,height,income,date,treatment
+Alice,25,85.5,A,Student,55.2,165.5,35000,2023-01-15,Yes
+Bob,30,92.0,B,Worker,70.8,175.2,50000,2023-01-20,No
+Charlie,22,78.3,A,Student,68.1,170.0,28000,2023-01-25,Yes
+Diana,28,91.7,B,Worker,58.9,162.8,48000,2023-02-01,No
+Eve,26,83.2,C,Teacher,62.3,168.7,42000,2023-02-05,Yes
+Frank,32,89.5,A,Worker,75.4,178.3,55000,2023-02-10,No
+Grace,24,76.8,C,Student,51.7,158.2,32000,2023-02-15,Yes
+Henry,29,94.1,B,Teacher,72.6,182.1,46000,2023-02-20,No
+Ivy,27,81.9,A,Teacher,59.8,166.4,39000,2023-02-25,Yes
+Jack,31,88.0,C,Worker,79.2,175.8,52000,2023-03-01,No
+Linda,23,87.3,A,Student,54.1,163.0,31000,2023-03-05,Yes
+Mike,33,93.2,B,Worker,81.5,180.5,58000,2023-03-10,No
+Nina,25,79.6,C,Teacher,56.8,161.3,41000,2023-03-15,Yes
+Oscar,29,85.8,A,Teacher,73.2,174.6,44000,2023-03-20,No
+Paula,26,90.4,B,Student,60.5,167.9,36000,2023-03-25,Yes
+
