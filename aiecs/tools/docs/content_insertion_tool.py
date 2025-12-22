@@ -242,7 +242,7 @@ class ContentInsertionTool(BaseTool):
             self.logger.warning("ImageTool not available")
 
     # Schema definitions
-    class InsertChartSchema(BaseModel):
+    class Insert_chartSchema(BaseModel):
         """Schema for insert_chart operation"""
 
         document_path: str = Field(description="Path to target document")
@@ -253,7 +253,7 @@ class ContentInsertionTool(BaseTool):
         caption: Optional[str] = Field(default=None, description="Chart caption")
         reference_id: Optional[str] = Field(default=None, description="Reference ID for cross-referencing")
 
-    class InsertTableSchema(BaseModel):
+    class Insert_tableSchema(BaseModel):
         """Schema for insert_table operation"""
 
         document_path: str = Field(description="Path to target document")
@@ -264,7 +264,7 @@ class ContentInsertionTool(BaseTool):
         caption: Optional[str] = Field(default=None, description="Table caption")
         reference_id: Optional[str] = Field(default=None, description="Reference ID for cross-referencing")
 
-    class InsertImageSchema(BaseModel):
+    class Insert_imageSchema(BaseModel):
         """Schema for insert_image operation"""
 
         document_path: str = Field(description="Path to target document")
@@ -276,7 +276,7 @@ class ContentInsertionTool(BaseTool):
         alt_text: Optional[str] = Field(default=None, description="Alternative text")
         reference_id: Optional[str] = Field(default=None, description="Reference ID for cross-referencing")
 
-    class InsertMediaSchema(BaseModel):
+    class Insert_mediaSchema(BaseModel):
         """Schema for insert_media operation"""
 
         document_path: str = Field(description="Path to target document")
@@ -286,13 +286,27 @@ class ContentInsertionTool(BaseTool):
         media_config: Optional[Dict[str, Any]] = Field(default=None, description="Media configuration")
         caption: Optional[str] = Field(default=None, description="Media caption")
 
-    class InsertInteractiveSchema(BaseModel):
+    class Insert_interactive_elementSchema(BaseModel):
         """Schema for insert_interactive_element operation"""
 
         document_path: str = Field(description="Path to target document")
         element_type: ContentType = Field(description="Type of interactive element")
         element_config: Dict[str, Any] = Field(description="Element configuration")
         position: Dict[str, Any] = Field(description="Position to insert element")
+
+    class Insert_citationSchema(BaseModel):
+        """Schema for insert_citation operation"""
+
+        document_path: str = Field(description="Path to target document")
+        citation_data: Dict[str, Any] = Field(description="Citation information")
+        position: Dict[str, Any] = Field(description="Position to insert citation")
+        citation_style: str = Field(default="apa", description="Citation style (apa, mla, chicago, etc.)")
+
+    class Batch_insert_contentSchema(BaseModel):
+        """Schema for batch_insert_content operation"""
+
+        document_path: str = Field(description="Path to target document")
+        content_items: List[Dict[str, Any]] = Field(description="List of content items to insert")
 
     def insert_chart(
         self,

@@ -60,6 +60,56 @@ class ResearchTool(BaseTool):
             description="Allowed spaCy models",
         )
 
+    # Schema definitions
+    class Mill_agreementSchema(BaseModel):
+        """Schema for mill_agreement operation"""
+
+        cases: List[Dict[str, Any]] = Field(description="List of cases with attributes and outcomes. Each case should have 'attrs' (dict of attributes) and 'outcome' (boolean)")
+
+    class Mill_differenceSchema(BaseModel):
+        """Schema for mill_difference operation"""
+
+        positive_case: Dict[str, Any] = Field(description="Positive case with attributes and outcome. Should have 'attrs' (dict of attributes) and 'outcome' (boolean)")
+        negative_case: Dict[str, Any] = Field(description="Negative case with attributes and outcome. Should have 'attrs' (dict of attributes) and 'outcome' (boolean)")
+
+    class Mill_jointSchema(BaseModel):
+        """Schema for mill_joint operation"""
+
+        positive_cases: List[Dict[str, Any]] = Field(description="List of positive cases. Each case should have 'attrs' (dict of attributes) and 'outcome' (boolean)")
+        negative_cases: List[Dict[str, Any]] = Field(description="List of negative cases. Each case should have 'attrs' (dict of attributes) and 'outcome' (boolean)")
+
+    class Mill_residuesSchema(BaseModel):
+        """Schema for mill_residues operation"""
+
+        cases: List[Dict[str, Any]] = Field(description="List of cases with attributes and effects. Each case should have 'attrs' (dict of attributes) and 'effects' (list of effect names)")
+        known_causes: Dict[str, List[str]] = Field(description="Dictionary mapping effect names to lists of known cause attribute names")
+
+    class Mill_concomitantSchema(BaseModel):
+        """Schema for mill_concomitant operation"""
+
+        cases: List[Dict[str, Any]] = Field(description="List of cases with attributes. Each case should have 'attrs' (dict of attributes with numeric values)")
+        factor: str = Field(description="Name of the factor attribute to analyze")
+        effect: str = Field(description="Name of the effect attribute to analyze")
+
+    class InductionSchema(BaseModel):
+        """Schema for induction operation"""
+
+        examples: List[str] = Field(description="List of example text strings to generalize patterns from")
+        max_keywords: int = Field(default=10, description="Maximum number of keywords/patterns to extract from the examples")
+
+    class DeductionSchema(BaseModel):
+        """Schema for deduction operation"""
+
+        premises: List[str] = Field(description="List of premise statement strings to validate against")
+        conclusion: Optional[str] = Field(default=None, description="Optional conclusion statement string to validate. If None, validation will fail")
+
+    class SummarizeSchema(BaseModel):
+        """Schema for summarize operation"""
+
+        text: str = Field(description="Text string to summarize")
+        max_length: int = Field(default=150, description="Maximum length of the summary in words")
+        language: Optional[str] = Field(default=None, description="Optional language code for the text. If None, uses the default spaCy model language")
+
     def __init__(self, config: Optional[Dict[str, Any]] = None, **kwargs):
         """
         Initialize ResearchTool with settings and resources.

@@ -20,7 +20,7 @@ from pptx.util import Pt
 from docx import Document
 from docx.shared import Pt as DocxPt
 import matplotlib.pyplot as plt
-from pydantic import Field
+from pydantic import Field, BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import tempfile
 import logging
@@ -167,6 +167,87 @@ class ReportTool(BaseTool):
             default=3600,
             description="Maximum age of temporary files in seconds",
         )
+
+    # Schema definitions
+    class Generate_htmlSchema(BaseModel):
+        """Schema for generate_html operation"""
+
+        template_path: Optional[str] = Field(default=None, description="Optional path to the Jinja2 template file. Either template_path or template_str must be provided")
+        template_str: Optional[str] = Field(default=None, description="Optional template string content. Either template_path or template_str must be provided")
+        context: Dict[str, Any] = Field(description="Dictionary of template context data to render the template with")
+        output_path: str = Field(description="Path where the generated HTML file will be saved")
+        template_variables: Optional[Dict[str, str]] = Field(default=None, description="Optional dictionary of variables for dynamic output path generation")
+
+    class Generate_pdfSchema(BaseModel):
+        """Schema for generate_pdf operation (currently disabled)"""
+
+        html: Optional[str] = Field(default=None, description="Optional HTML content string. Either html or html_schema must be provided")
+        html_schema: Optional[Dict[str, Any]] = Field(default=None, description="Optional dictionary for HTML generation. Either html or html_schema must be provided")
+        output_path: str = Field(description="Path where the generated PDF file will be saved")
+        page_size: Optional[str] = Field(default=None, description="Optional PDF page size (e.g., 'A4', 'Letter'). Uses default if not specified")
+        template_variables: Optional[Dict[str, str]] = Field(default=None, description="Optional dictionary of variables for dynamic output path generation")
+
+    class Generate_excelSchema(BaseModel):
+        """Schema for generate_excel operation"""
+
+        sheets: Dict[str, Union[pd.DataFrame, List[Dict[str, Any]]]] = Field(description="Dictionary mapping sheet names to sheet data. Data can be a pandas DataFrame or list of dictionaries")
+        output_path: str = Field(description="Path where the generated Excel file will be saved")
+        styles: Optional[Dict[str, Dict[str, Any]]] = Field(default=None, description="Optional dictionary mapping sheet names to cell styling dictionaries. Each style dict maps cell addresses (e.g., 'A1') to style properties")
+        template_variables: Optional[Dict[str, str]] = Field(default=None, description="Optional dictionary of variables for dynamic output path generation")
+
+    class Generate_pptxSchema(BaseModel):
+        """Schema for generate_pptx operation"""
+
+        slides: List[Dict[str, Any]] = Field(description="List of slide dictionaries. Each slide should have 'title' (str) and 'bullets' (list of strings). Optional: 'font', 'font_size', 'font_color'")
+        output_path: str = Field(description="Path where the generated PowerPoint file will be saved")
+        default_font: Optional[str] = Field(default=None, description="Optional default font name for all slides. Uses tool default if not specified")
+        default_font_size: Optional[int] = Field(default=None, description="Optional default font size in points for all slides. Uses tool default if not specified")
+        default_font_color: Optional[Tuple[int, int, int]] = Field(default=None, description="Optional default font color as RGB tuple (r, g, b) for all slides")
+        template_variables: Optional[Dict[str, str]] = Field(default=None, description="Optional dictionary of variables for dynamic output path generation")
+
+    class Generate_markdownSchema(BaseModel):
+        """Schema for generate_markdown operation"""
+
+        template_path: Optional[str] = Field(default=None, description="Optional path to the Jinja2 template file. Either template_path or template_str must be provided")
+        template_str: Optional[str] = Field(default=None, description="Optional template string content. Either template_path or template_str must be provided")
+        context: Dict[str, Any] = Field(description="Dictionary of template context data to render the template with")
+        output_path: str = Field(description="Path where the generated Markdown file will be saved")
+        template_variables: Optional[Dict[str, str]] = Field(default=None, description="Optional dictionary of variables for dynamic output path generation")
+
+    class Generate_wordSchema(BaseModel):
+        """Schema for generate_word operation"""
+
+        template_path: Optional[str] = Field(default=None, description="Optional path to the Jinja2 template file. Either template_path or template_str must be provided")
+        template_str: Optional[str] = Field(default=None, description="Optional template string content. Either template_path or template_str must be provided")
+        context: Dict[str, Any] = Field(description="Dictionary of template context data to render the template with")
+        output_path: str = Field(description="Path where the generated Word document will be saved")
+        font: Optional[str] = Field(default=None, description="Optional font name for the document. Uses tool default if not specified")
+        font_size: Optional[int] = Field(default=None, description="Optional font size in points. Uses tool default if not specified")
+        font_color: Optional[Tuple[int, int, int]] = Field(default=None, description="Optional font color as RGB tuple (r, g, b)")
+        template_variables: Optional[Dict[str, str]] = Field(default=None, description="Optional dictionary of variables for dynamic output path generation")
+
+    class Generate_imageSchema(BaseModel):
+        """Schema for generate_image operation"""
+
+        chart_type: str = Field(description="Type of chart to generate: 'bar', 'line', or 'pie'")
+        data: Union[pd.DataFrame, List[Dict[str, Any]]] = Field(description="Chart data as pandas DataFrame or list of dictionaries")
+        output_path: str = Field(description="Path where the generated image file will be saved")
+        x_col: Optional[str] = Field(default=None, description="Optional X-axis column name for bar and line charts. For pie charts, used as labels if labels not provided")
+        y_col: Optional[str] = Field(default=None, description="Optional Y-axis column name for bar, line, and pie charts")
+        labels: Optional[List[str]] = Field(default=None, description="Optional list of labels for pie chart. If not provided and x_col is specified, uses x_col values")
+        title: Optional[str] = Field(default=None, description="Optional chart title")
+        width: int = Field(default=8, description="Chart width in inches")
+        height: int = Field(default=6, description="Chart height in inches")
+        template_variables: Optional[Dict[str, str]] = Field(default=None, description="Optional dictionary of variables for dynamic output path generation")
+
+    class Batch_generateSchema(BaseModel):
+        """Schema for batch_generate operation"""
+
+        operation: str = Field(description="Operation to perform: 'generate_html', 'generate_excel', 'generate_pptx', 'generate_markdown', 'generate_word', 'generate_image', or 'generate_pdf'")
+        contexts: List[Dict[str, Any]] = Field(default=[], description="List of context dictionaries for HTML, Markdown, Word, or PDF operations. Each dict should match the corresponding operation's parameters")
+        output_paths: List[str] = Field(description="List of output file paths, one for each report to generate")
+        datasets: Optional[List[DatasetType]] = Field(default=None, description="Optional list of dataset dictionaries for Excel or Image operations. Each dict should match the corresponding operation's parameters")
+        slides: Optional[List[List[Dict[str, Any]]]] = Field(default=None, description="Optional list of slide lists for PPTX operations. Each inner list contains slide dictionaries")
 
     def __init__(self, config: Optional[Dict[str, Any]] = None, **kwargs):
         """

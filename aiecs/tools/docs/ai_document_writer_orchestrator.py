@@ -264,7 +264,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
         }
 
     # Schema definitions
-    class AIWriteDocumentSchema(BaseModel):
+    class Ai_write_documentSchema(BaseModel):
         """Schema for ai_write_document operation"""
 
         target_path: str = Field(description="Target file path")
@@ -276,7 +276,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
         generation_params: Optional[Dict[str, Any]] = Field(default=None, description="AI generation parameters")
         write_params: Optional[Dict[str, Any]] = Field(default=None, description="Document write parameters")
 
-    class EnhanceDocumentSchema(BaseModel):
+    class Enhance_documentSchema(BaseModel):
         """Schema for enhance_document operation"""
 
         source_path: str = Field(description="Source document path")
@@ -285,14 +285,14 @@ class AIDocumentWriterOrchestrator(BaseTool):
         ai_provider: Optional[AIProvider] = Field(default=None, description="AI provider to use")
         preserve_format: bool = Field(default=True, description="Preserve original format")
 
-    class BatchWriteSchema(BaseModel):
+    class Batch_ai_writeSchema(BaseModel):
         """Schema for batch_ai_write operation"""
 
         write_requests: List[Dict[str, Any]] = Field(description="List of write requests")
         coordination_strategy: str = Field(default="parallel", description="Coordination strategy")
         max_concurrent: Optional[int] = Field(default=None, description="Maximum concurrent operations")
 
-    class AIEditDocumentSchema(BaseModel):
+    class Ai_edit_documentSchema(BaseModel):
         """Schema for ai_edit_document operation"""
 
         target_path: str = Field(description="Target document path")
@@ -302,7 +302,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
         preserve_structure: bool = Field(default=True, description="Preserve document structure")
         format_options: Optional[Dict[str, Any]] = Field(default=None, description="Format-specific options")
 
-    class SmartFormatSchema(BaseModel):
+    class Smart_format_documentSchema(BaseModel):
         """Schema for smart_format_document operation"""
 
         target_path: str = Field(description="Target document path")
@@ -310,14 +310,14 @@ class AIDocumentWriterOrchestrator(BaseTool):
         target_format: str = Field(description="Target document format")
         style_preferences: Optional[Dict[str, Any]] = Field(default=None, description="Style preferences")
 
-    class ContentAnalysisSchema(BaseModel):
+    class Analyze_document_contentSchema(BaseModel):
         """Schema for analyze_document_content operation"""
 
         source_path: str = Field(description="Source document path")
         analysis_type: str = Field(description="Type of analysis to perform")
         analysis_params: Optional[Dict[str, Any]] = Field(default=None, description="Analysis parameters")
 
-    class CreateRichDocumentSchema(BaseModel):
+    class Create_rich_documentSchema(BaseModel):
         """Schema for create_rich_document operation"""
 
         document_template: str = Field(description="Document template type")
@@ -329,7 +329,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
             description="Use AI assistance for content generation",
         )
 
-    class GenerateDocumentWithChartsSchema(BaseModel):
+    class Generate_document_with_chartsSchema(BaseModel):
         """Schema for generate_document_with_charts operation"""
 
         requirements: str = Field(description="Document requirements and specifications")
@@ -338,7 +338,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
         include_analysis: bool = Field(default=True, description="Include data analysis sections")
         chart_preferences: Optional[Dict[str, Any]] = Field(default=None, description="Chart style preferences")
 
-    class OptimizeDocumentLayoutSchema(BaseModel):
+    class Optimize_document_layoutSchema(BaseModel):
         """Schema for optimize_document_layout operation"""
 
         document_path: str = Field(description="Path to document to optimize")
@@ -346,13 +346,29 @@ class AIDocumentWriterOrchestrator(BaseTool):
         preserve_content: bool = Field(default=True, description="Preserve existing content")
         layout_style: Optional[str] = Field(default=None, description="Target layout style")
 
-    class BatchContentInsertionSchema(BaseModel):
+    class Batch_content_insertionSchema(BaseModel):
         """Schema for batch_content_insertion operation"""
 
         document_path: str = Field(description="Target document path")
         content_plan: List[Dict[str, Any]] = Field(description="Content insertion plan")
         insertion_strategy: str = Field(default="sequential", description="Insertion strategy")
         ai_optimization: bool = Field(default=True, description="Use AI for content optimization")
+
+    class Create_content_templateSchema(BaseModel):
+        """Schema for create_content_template operation"""
+
+        template_name: str = Field(description="Name of the template")
+        template_content: str = Field(description="Template content with variables")
+        template_variables: List[str] = Field(description="List of template variables")
+        metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional template metadata")
+
+    class Use_content_templateSchema(BaseModel):
+        """Schema for use_content_template operation"""
+
+        template_name: str = Field(description="Name of the template to use")
+        template_data: Dict[str, Any] = Field(description="Data to fill template variables")
+        target_path: str = Field(description="Target document path")
+        ai_enhancement: bool = Field(default=True, description="Whether to enhance with AI")
 
     def ai_write_document(
         self,

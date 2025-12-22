@@ -263,7 +263,7 @@ class DocumentWriterTool(BaseTool):
         }
 
     # Schema definitions
-    class WriteDocumentSchema(BaseModel):
+    class Write_documentSchema(BaseModel):
         """Schema for write_document operation"""
 
         target_path: str = Field(description="Target file path (local or cloud)")
@@ -275,14 +275,14 @@ class DocumentWriterTool(BaseTool):
         metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata")
         backup_comment: Optional[str] = Field(default=None, description="Backup comment")
 
-    class BatchWriteSchema(BaseModel):
+    class Batch_write_documentsSchema(BaseModel):
         """Schema for batch_write_documents operation"""
 
         write_operations: List[Dict[str, Any]] = Field(description="List of write operations")
         transaction_mode: bool = Field(default=True, description="Use transaction mode")
         rollback_on_error: bool = Field(default=True, description="Rollback on any error")
 
-    class EditDocumentSchema(BaseModel):
+    class Edit_documentSchema(BaseModel):
         """Schema for edit_document operation"""
 
         target_path: str = Field(description="Target file path")
@@ -292,7 +292,7 @@ class DocumentWriterTool(BaseTool):
         selection: Optional[Dict[str, Any]] = Field(default=None, description="Text selection range")
         format_options: Optional[Dict[str, Any]] = Field(default=None, description="Formatting options")
 
-    class FormatTextSchema(BaseModel):
+    class Format_textSchema(BaseModel):
         """Schema for format_text operation"""
 
         target_path: str = Field(description="Target file path")
@@ -300,7 +300,7 @@ class DocumentWriterTool(BaseTool):
         format_type: EditOperation = Field(description="Type of formatting")
         format_options: Optional[Dict[str, Any]] = Field(default=None, description="Additional format options")
 
-    class FindReplaceSchema(BaseModel):
+    class Find_replaceSchema(BaseModel):
         """Schema for find_replace operation"""
 
         target_path: str = Field(description="Target file path")

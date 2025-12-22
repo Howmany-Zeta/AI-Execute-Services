@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 import pandas as pd  # type: ignore[import-untyped]
 import numpy as np
-from pydantic import Field
+from pydantic import Field, BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aiecs.tools.base_tool import BaseTool
@@ -88,6 +88,93 @@ class StatsTool(BaseTool):
             ],
             description="Allowed file extensions",
         )
+
+    # Schema definitions
+    class Read_dataSchema(BaseModel):
+        """Schema for read_data operation"""
+
+        file_path: str = Field(description="Path to the data file to read")
+        nrows: Optional[int] = Field(default=None, description="Optional number of rows to read from the file. If None, reads all rows")
+        sheet_name: Optional[Union[str, int]] = Field(default=0, description="Sheet name or index for Excel files. Can be a string name or integer index (0-based)")
+
+    class DescribeSchema(BaseModel):
+        """Schema for describe operation"""
+
+        file_path: str = Field(description="Path to the data file")
+        variables: Optional[List[str]] = Field(default=None, description="Optional list of variable names to describe. If None, describes all variables")
+        include_percentiles: bool = Field(default=False, description="Whether to include custom percentiles in the descriptive statistics")
+        percentiles: Optional[List[float]] = Field(default=None, description="Optional list of percentile values (0.0 to 1.0) to include. Only used if include_percentiles is True")
+
+    class TtestSchema(BaseModel):
+        """Schema for ttest operation"""
+
+        file_path: str = Field(description="Path to the data file")
+        var1: str = Field(description="Name of the first variable for the t-test")
+        var2: str = Field(description="Name of the second variable for the t-test")
+        equal_var: bool = Field(default=True, description="Whether to assume equal variances. If True, uses standard t-test; if False, uses Welch's t-test")
+        paired: bool = Field(default=False, description="Whether to perform a paired t-test. If True, performs paired t-test; if False, performs independent t-test")
+
+    class CorrelationSchema(BaseModel):
+        """Schema for correlation operation"""
+
+        file_path: str = Field(description="Path to the data file")
+        variables: Optional[List[str]] = Field(default=None, description="Optional list of variable names for correlation matrix. If provided, computes correlation matrix for all pairs")
+        var1: Optional[str] = Field(default=None, description="First variable name for pairwise correlation. Must be used together with var2")
+        var2: Optional[str] = Field(default=None, description="Second variable name for pairwise correlation. Must be used together with var1")
+        method: str = Field(default="pearson", description="Correlation method: 'pearson' (linear), 'spearman' (rank-based), or 'kendall' (tau)")
+
+    class AnovaSchema(BaseModel):
+        """Schema for anova operation"""
+
+        file_path: str = Field(description="Path to the data file")
+        dependent: str = Field(description="Name of the dependent variable (continuous)")
+        factor: str = Field(description="Name of the factor/grouping variable (categorical)")
+        post_hoc: bool = Field(default=False, description="Whether to perform post-hoc tests (Tukey HSD) to identify which groups differ significantly")
+
+    class Chi_squareSchema(BaseModel):
+        """Schema for chi_square operation"""
+
+        file_path: str = Field(description="Path to the data file")
+        var1: str = Field(description="Name of the first categorical variable")
+        var2: str = Field(description="Name of the second categorical variable")
+        correction: bool = Field(default=True, description="Whether to apply Yates' correction for continuity. Recommended for 2x2 contingency tables")
+
+    class Non_parametricSchema(BaseModel):
+        """Schema for non_parametric operation"""
+
+        file_path: str = Field(description="Path to the data file")
+        test_type: str = Field(description="Type of non-parametric test: 'mann_whitney' (2 groups), 'wilcoxon' (paired), 'kruskal' (multiple groups), or 'friedman' (repeated measures)")
+        variables: List[str] = Field(description="List of variable names to test. Number of variables depends on test_type")
+        grouping: Optional[str] = Field(default=None, description="Optional grouping variable name. Required for 'kruskal' test, not used for other tests")
+
+    class RegressionSchema(BaseModel):
+        """Schema for regression operation"""
+
+        file_path: str = Field(description="Path to the data file")
+        formula: str = Field(description="Regression formula string (e.g., 'y ~ x1 + x2'). Uses R-style formula syntax")
+        regression_type: str = Field(default="ols", description="Type of regression model: 'ols' (ordinary least squares), 'logit' (logistic), 'probit', or 'poisson'")
+        robust: bool = Field(default=False, description="Whether to use robust standard errors (HC3 heteroscedasticity-consistent)")
+        structured_output: bool = Field(default=True, description="Whether to return structured output with coefficients, p-values, and confidence intervals. If False, returns summary text only")
+
+    class Time_seriesSchema(BaseModel):
+        """Schema for time_series operation"""
+
+        file_path: str = Field(description="Path to the data file")
+        variable: str = Field(description="Name of the time series variable to analyze")
+        date_variable: Optional[str] = Field(default=None, description="Optional name of the date/time variable. If provided, uses it as the time index")
+        model_type: str = Field(default="arima", description="Type of time series model: 'arima' or 'sarima' (seasonal ARIMA)")
+        order: Optional[Tuple[int, int, int]] = Field(default=(1, 1, 1), description="ARIMA order tuple (p, d, q) where p=autoregressive, d=differencing, q=moving average")
+        seasonal_order: Optional[Tuple[int, int, int, int]] = Field(default=None, description="Optional SARIMA seasonal order tuple (P, D, Q, s). Required for 'sarima' model type")
+        forecast_periods: int = Field(default=10, description="Number of periods to forecast into the future")
+
+    class PreprocessSchema(BaseModel):
+        """Schema for preprocess operation"""
+
+        file_path: str = Field(description="Path to the data file")
+        variables: List[str] = Field(description="List of variable names to preprocess")
+        operation: str = Field(description="Preprocessing operation: 'scale' (normalize) or 'impute' (fill missing values)")
+        scaler_type: ScalerType = Field(default=ScalerType.STANDARD, description="Type of scaler to use for scaling operation: 'standard' (z-score), 'minmax' (0-1), 'robust' (median/IQR), or 'none'")
+        output_path: Optional[str] = Field(default=None, description="Optional path to save the preprocessed data. If None, data is not saved to file")
 
     def __init__(self, config: Optional[Dict[str, Any]] = None, **kwargs):
         """

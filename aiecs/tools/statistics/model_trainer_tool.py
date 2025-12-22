@@ -134,7 +134,7 @@ class ModelTrainerTool(BaseTool):
         self.external_tools = {}
 
     # Schema definitions
-    class TrainModelSchema(BaseModel):
+    class Train_modelSchema(BaseModel):
         """Schema for train_model operation"""
 
         data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(description="Training data")
@@ -143,19 +143,26 @@ class ModelTrainerTool(BaseTool):
         auto_tune: bool = Field(default=False, description="Enable hyperparameter tuning")
         cross_validation: int = Field(default=5, description="Number of CV folds")
 
-    class AutoSelectModelSchema(BaseModel):
+    class Auto_select_modelSchema(BaseModel):
         """Schema for auto_select_model operation"""
 
         data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(description="Data for model selection")
         target: str = Field(description="Target column name")
         task_type: Optional[TaskType] = Field(default=None, description="Task type")
 
-    class EvaluateModelSchema(BaseModel):
+    class Evaluate_modelSchema(BaseModel):
         """Schema for evaluate_model operation"""
 
         model_id: str = Field(description="ID of trained model")
         test_data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(description="Test data")
         target: str = Field(description="Target column name")
+
+    class Tune_hyperparametersSchema(BaseModel):
+        """Schema for tune_hyperparameters operation"""
+
+        data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(description="Training data")
+        target: str = Field(description="Target column name")
+        model_type: ModelType = Field(description="Model type to tune")
 
     def train_model(
         self,

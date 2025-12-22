@@ -147,7 +147,7 @@ class DataLoaderTool(BaseTool):
             self.external_tools["pandas"] = None
 
     # Schema definitions
-    class LoadDataSchema(BaseModel):
+    class Load_dataSchema(BaseModel):
         """Schema for load_data operation"""
 
         source: str = Field(description="Path to data source file")
@@ -159,18 +159,18 @@ class DataLoaderTool(BaseTool):
         chunk_size: Optional[int] = Field(default=None, description="Chunk size for chunked loading")
         encoding: Optional[str] = Field(default=None, description="File encoding")
 
-    class DetectFormatSchema(BaseModel):
+    class Detect_formatSchema(BaseModel):
         """Schema for detect_format operation"""
 
         source: str = Field(description="Path to data source file")
 
-    class ValidateSchemaSchema(BaseModel):
+    class Validate_schemaSchema(BaseModel):
         """Schema for validate_schema operation"""
 
         data: Union[Dict[str, Any], List[Dict[str, Any]]] = Field(description="Data to validate")
         data_schema: Dict[str, Any] = Field(description="Expected schema")
 
-    class StreamDataSchema(BaseModel):
+    class Stream_dataSchema(BaseModel):
         """Schema for stream_data operation"""
 
         source: str = Field(description="Path to data source file")

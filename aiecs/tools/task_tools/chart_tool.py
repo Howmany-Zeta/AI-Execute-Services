@@ -77,8 +77,8 @@ class ChartTool(BaseTool):
         )
 
     # Input schemas for operations
-    class ReadDataSchema(BaseModel):
-        """Schema for reading data files"""
+    class Read_dataSchema(BaseModel):
+        """Schema for read_data operation"""
 
         file_path: str = Field(description="Path to the data file")
         nrows: Optional[int] = Field(default=None, description="Number of rows to read")
@@ -100,8 +100,8 @@ class ChartTool(BaseTool):
                 raise ValueError("export_format must be specified when export_path is provided")
             return v
 
-    class VisualizationSchema(BaseModel):
-        """Schema for data visualization"""
+    class VisualizeSchema(BaseModel):
+        """Schema for visualize operation"""
 
         file_path: str = Field(description="Path to the data file")
         plot_type: VisualizationType = Field(description="Type of visualization to create")
@@ -133,8 +133,8 @@ class ChartTool(BaseTool):
                 raise ValueError("export_format must be specified when export_path is provided")
             return v
 
-    class ExportDataSchema(BaseModel):
-        """Schema for exporting data"""
+    class Export_dataSchema(BaseModel):
+        """Schema for export_data operation"""
 
         file_path: str = Field(description="Path to the data file")
         variables: Optional[List[str]] = Field(

@@ -1,8 +1,8 @@
 from io import StringIO
 import pandas as pd  # type: ignore[import-untyped]
 import numpy as np
-from typing import List, Dict, Union, Optional, cast
-from pydantic import Field
+from typing import List, Dict, Union, Optional, cast, Any
+from pydantic import Field, BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import logging
 
@@ -73,6 +73,251 @@ class PandasTool(BaseTool):
             default=[".csv", ".xlsx", ".json"],
             description="Allowed file extensions",
         )
+
+    # Schema definitions
+    class Read_csvSchema(BaseModel):
+        """Schema for read_csv operation"""
+
+        csv_str: str = Field(description="CSV string content to read into a DataFrame")
+
+    class Read_jsonSchema(BaseModel):
+        """Schema for read_json operation"""
+
+        json_str: str = Field(description="JSON string content to read into a DataFrame")
+
+    class Read_fileSchema(BaseModel):
+        """Schema for read_file operation"""
+
+        file_path: str = Field(description="Path to the file to read")
+        file_type: str = Field(default="csv", description="Type of file: 'csv', 'excel', or 'json'")
+
+    class Write_fileSchema(BaseModel):
+        """Schema for write_file operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) to write as DataFrame")
+        file_path: str = Field(description="Path where the file will be written")
+        file_type: str = Field(default="csv", description="Type of file to write: 'csv', 'excel', or 'json'")
+
+    class SummarySchema(BaseModel):
+        """Schema for summary operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+
+    class DescribeSchema(BaseModel):
+        """Schema for describe operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        columns: Optional[List[str]] = Field(default=None, description="Optional list of column names to describe. If None, describes all columns")
+
+    class Value_countsSchema(BaseModel):
+        """Schema for value_counts operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        columns: List[str] = Field(description="List of column names for which to compute value counts")
+
+    class FilterSchema(BaseModel):
+        """Schema for filter operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        condition: str = Field(description="Query condition string to filter rows (e.g., 'age > 30')")
+
+    class Select_columnsSchema(BaseModel):
+        """Schema for select_columns operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        columns: List[str] = Field(description="List of column names to select from the DataFrame")
+
+    class Drop_columnsSchema(BaseModel):
+        """Schema for drop_columns operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        columns: List[str] = Field(description="List of column names to drop from the DataFrame")
+
+    class Drop_duplicatesSchema(BaseModel):
+        """Schema for drop_duplicates operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        columns: Optional[List[str]] = Field(default=None, description="Optional list of column names to consider when identifying duplicates. If None, considers all columns")
+
+    class DropnaSchema(BaseModel):
+        """Schema for dropna operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        axis: int = Field(default=0, description="Axis along which to drop missing values: 0 for rows, 1 for columns")
+        how: str = Field(default="any", description="How to determine if a row/column is dropped: 'any' drops if any value is missing, 'all' drops if all values are missing")
+
+    class GroupbySchema(BaseModel):
+        """Schema for groupby operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        by: List[str] = Field(description="List of column names to group by")
+        agg: Dict[str, str] = Field(description="Dictionary mapping column names to aggregation functions (e.g., {'age': 'mean', 'salary': 'sum'})")
+
+    class Pivot_tableSchema(BaseModel):
+        """Schema for pivot_table operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        values: List[str] = Field(description="List of column names to aggregate")
+        index: List[str] = Field(description="List of column names to use as row index")
+        columns: List[str] = Field(description="List of column names to use as column index")
+        aggfunc: str = Field(default="mean", description="Aggregation function to apply (e.g., 'mean', 'sum', 'count')")
+
+    class MergeSchema(BaseModel):
+        """Schema for merge operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the left DataFrame")
+        records_right: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the right DataFrame")
+        on: Union[str, List[str]] = Field(description="Column name(s) to join on. Can be a single string or list of strings")
+        join_type: str = Field(default="inner", description="Type of join: 'inner', 'left', 'right', or 'outer'")
+
+    class ConcatSchema(BaseModel):
+        """Schema for concat operation"""
+
+        records_list: List[List[Dict[str, Any]]] = Field(description="List of DataFrames (each as a list of dictionaries) to concatenate")
+        axis: int = Field(default=0, description="Axis along which to concatenate: 0 for rows (vertical), 1 for columns (horizontal)")
+
+    class Sort_valuesSchema(BaseModel):
+        """Schema for sort_values operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        sort_by: List[str] = Field(description="List of column names to sort by")
+        ascending: Union[bool, List[bool]] = Field(default=True, description="Whether to sort in ascending order. Can be a single boolean or list of booleans (one per column)")
+
+    class Rename_columnsSchema(BaseModel):
+        """Schema for rename_columns operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        mapping: Dict[str, str] = Field(description="Dictionary mapping old column names to new column names")
+
+    class Replace_valuesSchema(BaseModel):
+        """Schema for replace_values operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        to_replace: Dict[str, Any] = Field(description="Dictionary mapping values to replace to their replacement values")
+        columns: Optional[List[str]] = Field(default=None, description="Optional list of column names to apply replacement to. If None, applies to all columns")
+
+    class Fill_naSchema(BaseModel):
+        """Schema for fill_na operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        value: Union[str, int, float] = Field(description="Value to use for filling missing values")
+        columns: Optional[List[str]] = Field(default=None, description="Optional list of column names to fill. If None, fills all columns")
+
+    class AstypeSchema(BaseModel):
+        """Schema for astype operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        dtypes: Dict[str, str] = Field(description="Dictionary mapping column names to target data types (e.g., {'age': 'int64', 'name': 'string'})")
+
+    class ApplySchema(BaseModel):
+        """Schema for apply operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        func: str = Field(description="Name of the function to apply (e.g., 'upper', 'lower', 'strip', 'abs', 'round')")
+        columns: List[str] = Field(description="List of column names to apply the function to")
+        axis: int = Field(default=0, description="Axis along which to apply: 0 for columns, 1 for rows")
+
+    class MeltSchema(BaseModel):
+        """Schema for melt operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        id_vars: List[str] = Field(description="List of column names to use as identifier variables (kept as columns)")
+        value_vars: List[str] = Field(description="List of column names to unpivot (melted into rows)")
+
+    class PivotSchema(BaseModel):
+        """Schema for pivot operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        index: str = Field(description="Column name to use as row index")
+        columns: str = Field(description="Column name to use as column index")
+        values: str = Field(description="Column name containing values to pivot")
+
+    class StackSchema(BaseModel):
+        """Schema for stack operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+
+    class UnstackSchema(BaseModel):
+        """Schema for unstack operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        level: Union[int, str] = Field(default=-1, description="Level to unstack: integer index or column name. Default is -1 (last level)")
+
+    class Strip_stringsSchema(BaseModel):
+        """Schema for strip_strings operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        columns: List[str] = Field(description="List of string column names to strip whitespace from")
+
+    class To_numericSchema(BaseModel):
+        """Schema for to_numeric operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        columns: List[str] = Field(description="List of column names to convert to numeric type")
+
+    class To_datetimeSchema(BaseModel):
+        """Schema for to_datetime operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        columns: List[str] = Field(description="List of column names to convert to datetime type")
+        format: Optional[str] = Field(default=None, description="Optional datetime format string (e.g., '%Y-%m-%d'). If None, pandas will infer the format")
+
+    class MeanSchema(BaseModel):
+        """Schema for mean operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        columns: Optional[List[str]] = Field(default=None, description="Optional list of numeric column names to compute mean for. If None, computes mean for all numeric columns")
+
+    class SumSchema(BaseModel):
+        """Schema for sum operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        columns: Optional[List[str]] = Field(default=None, description="Optional list of numeric column names to compute sum for. If None, computes sum for all numeric columns")
+
+    class CountSchema(BaseModel):
+        """Schema for count operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        columns: Optional[List[str]] = Field(default=None, description="Optional list of column names to count non-null values for. If None, counts for all columns")
+
+    class MinSchema(BaseModel):
+        """Schema for min operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        columns: Optional[List[str]] = Field(default=None, description="Optional list of column names to compute minimum values for. If None, computes minimum for all columns")
+
+    class MaxSchema(BaseModel):
+        """Schema for max operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        columns: Optional[List[str]] = Field(default=None, description="Optional list of column names to compute maximum values for. If None, computes maximum for all columns")
+
+    class RollingSchema(BaseModel):
+        """Schema for rolling operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        columns: List[str] = Field(description="List of numeric column names to apply rolling window function to")
+        window: int = Field(description="Size of the rolling window (number of rows)")
+        function: str = Field(default="mean", description="Rolling function to apply: 'mean', 'sum', 'min', 'max', 'std', 'count', or 'median'")
+
+    class HeadSchema(BaseModel):
+        """Schema for head operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        n: int = Field(default=5, description="Number of rows to return from the beginning of the DataFrame")
+
+    class TailSchema(BaseModel):
+        """Schema for tail operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        n: int = Field(default=5, description="Number of rows to return from the end of the DataFrame")
+
+    class SampleSchema(BaseModel):
+        """Schema for sample operation"""
+
+        records: List[Dict[str, Any]] = Field(description="List of records (dictionaries) representing the DataFrame")
+        n: int = Field(default=5, description="Number of random rows to sample")
+        random_state: Optional[int] = Field(default=None, description="Optional random seed for reproducible sampling")
 
     def __init__(self, config: Optional[Dict] = None, **kwargs):
         """

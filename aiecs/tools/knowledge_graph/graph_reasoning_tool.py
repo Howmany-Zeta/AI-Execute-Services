@@ -108,59 +108,7 @@ class GraphReasoningInput(BaseModel):
     )
 
 
-# Schemas for individual operations (used with run_async)
-class QueryPlanSchema(BaseModel):
-    """Schema for query_plan operation"""
-
-    query: str = Field(..., description="Natural language query to plan")
-    optimization_strategy: Optional[str] = Field(
-        default="balanced",
-        description="Query optimization strategy: 'cost', 'latency', or 'balanced'",
-    )
-
-
-class MultiHopSchema(BaseModel):
-    """Schema for multi_hop operation"""
-
-    query: str = Field(..., description="Natural language query to reason about")
-    start_entity_id: str = Field(..., description="Starting entity ID")
-    target_entity_id: Optional[str] = Field(None, description="Target entity ID")
-    max_hops: int = Field(default=3, ge=1, le=5, description="Maximum hops (1-5)")
-    relation_types: Optional[List[str]] = Field(None, description="Filter by relation types")
-    synthesize_evidence: bool = Field(default=True, description="Synthesize evidence")
-    synthesis_method: str = Field(default="weighted_average", description="Synthesis method")
-    confidence_threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="Min confidence")
-
-
-class InferenceSchema(BaseModel):
-    """Schema for inference operation"""
-
-    relation_type: str = Field(..., description="Relation type to apply inference on")
-    max_steps: int = Field(default=3, ge=1, le=10, description="Maximum inference steps")
-
-
-class EvidenceSynthesisSchema(BaseModel):
-    """Schema for evidence_synthesis operation"""
-
-    synthesis_method: str = Field(default="weighted_average", description="Synthesis method")
-    confidence_threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="Min confidence")
-
-
-class FullReasoningSchema(BaseModel):
-    """Schema for full_reasoning operation"""
-
-    query: str = Field(..., description="Natural language query")
-    start_entity_id: str = Field(..., description="Starting entity ID")
-    target_entity_id: Optional[str] = Field(None, description="Target entity ID")
-    max_hops: int = Field(default=3, ge=1, le=5, description="Maximum hops")
-    relation_types: Optional[List[str]] = Field(None, description="Filter by relation types")
-    optimization_strategy: Optional[str] = Field(default="balanced", description="Optimization strategy")
-    apply_inference: bool = Field(default=False, description="Apply logical inference rules")
-    inference_relation_type: Optional[str] = Field(None, description="Relation type for inference")
-    inference_max_steps: int = Field(default=3, ge=1, le=10, description="Max inference steps")
-    synthesize_evidence: bool = Field(default=True, description="Synthesize evidence")
-    synthesis_method: str = Field(default="weighted_average", description="Synthesis method")
-    confidence_threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="Min confidence")
+# Schemas for individual operations - moved to GraphReasoningTool class as inner classes
 
 
 @register_tool("graph_reasoning")
@@ -215,6 +163,56 @@ class GraphReasoningTool(BaseTool):
             default=False,
             description="Enable default inference rules by default",
         )
+
+    # Schema definitions
+    class Query_planSchema(BaseModel):
+        """Schema for query_plan operation"""
+
+        query: str = Field(description="Natural language query to plan")
+        optimization_strategy: Optional[str] = Field(
+            default="balanced",
+            description="Query optimization strategy: 'cost', 'latency', or 'balanced'",
+        )
+
+    class Multi_hopSchema(BaseModel):
+        """Schema for multi_hop operation"""
+
+        query: str = Field(description="Natural language query to reason about")
+        start_entity_id: str = Field(description="Starting entity ID")
+        target_entity_id: Optional[str] = Field(default=None, description="Optional target entity ID")
+        max_hops: int = Field(default=3, ge=1, le=5, description="Maximum hops (1-5)")
+        relation_types: Optional[List[str]] = Field(default=None, description="Optional filter by relation types")
+        synthesize_evidence: bool = Field(default=True, description="Whether to synthesize evidence from multiple paths")
+        synthesis_method: str = Field(default="weighted_average", description="Evidence synthesis method: 'weighted_average', 'max', or 'voting'")
+        confidence_threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="Minimum confidence threshold for evidence (0.0-1.0)")
+
+    class InferenceSchema(BaseModel):
+        """Schema for inference operation"""
+
+        relation_type: str = Field(description="Relation type to apply inference on")
+        max_steps: int = Field(default=3, ge=1, le=10, description="Maximum inference steps (1-10)")
+
+    class Evidence_synthesisSchema(BaseModel):
+        """Schema for evidence_synthesis operation"""
+
+        synthesis_method: str = Field(default="weighted_average", description="Evidence synthesis method: 'weighted_average', 'max', or 'voting'")
+        confidence_threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="Minimum confidence threshold for evidence (0.0-1.0)")
+
+    class Full_reasoningSchema(BaseModel):
+        """Schema for full_reasoning operation"""
+
+        query: str = Field(description="Natural language query")
+        start_entity_id: str = Field(description="Starting entity ID")
+        target_entity_id: Optional[str] = Field(default=None, description="Optional target entity ID")
+        max_hops: int = Field(default=3, ge=1, le=5, description="Maximum hops (1-5)")
+        relation_types: Optional[List[str]] = Field(default=None, description="Optional filter by relation types")
+        optimization_strategy: Optional[str] = Field(default="balanced", description="Query optimization strategy: 'cost', 'latency', or 'balanced'")
+        apply_inference: bool = Field(default=False, description="Whether to apply logical inference rules")
+        inference_relation_type: Optional[str] = Field(default=None, description="Optional relation type for inference")
+        inference_max_steps: int = Field(default=3, ge=1, le=10, description="Maximum inference steps (1-10)")
+        synthesize_evidence: bool = Field(default=True, description="Whether to synthesize evidence from multiple sources")
+        synthesis_method: str = Field(default="weighted_average", description="Evidence synthesis method: 'weighted_average', 'max', or 'voting'")
+        confidence_threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="Minimum confidence threshold for evidence (0.0-1.0)")
 
     def __init__(self, graph_store: Optional[GraphStore] = None, config: Optional[Dict[str, Any]] = None, **kwargs):
         """

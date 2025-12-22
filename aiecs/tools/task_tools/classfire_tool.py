@@ -131,7 +131,7 @@ class ClassifierTool(BaseTool):
 
     # Input schemas for operations
     class ClassifySchema(BaseTextSchema):
-        """Schema for text classification"""
+        """Schema for classify operation"""
 
         model: Optional[str] = Field(default=None, description="Model to use for classification")
         language: Optional[Language] = Field(default=None, description="Language of the text")
@@ -145,32 +145,32 @@ class ClassifierTool(BaseTool):
             return v
 
     class TokenizeSchema(BaseTextSchema):
-        """Schema for text tokenization"""
+        """Schema for tokenize operation"""
 
         language: Optional[Language] = Field(default=None, description="Language of the text")
 
-    class PosTagSchema(BaseTextSchema):
-        """Schema for part-of-speech tagging"""
+    class Pos_tagSchema(BaseTextSchema):
+        """Schema for pos_tag operation"""
 
         language: Optional[Language] = Field(default=None, description="Language of the text")
 
     class NERSchema(BaseTextSchema):
-        """Schema for named entity recognition"""
+        """Schema for ner operation"""
 
         language: Optional[Language] = Field(default=None, description="Language of the text")
 
     class LemmatizeSchema(BaseTextSchema):
-        """Schema for lemmatization"""
+        """Schema for lemmatize operation"""
 
         language: Optional[Language] = Field(default=None, description="Language of the text")
 
-    class DependencyParseSchema(BaseTextSchema):
-        """Schema for dependency parsing"""
+    class Dependency_parseSchema(BaseTextSchema):
+        """Schema for dependency_parse operation"""
 
         language: Optional[Language] = Field(default=None, description="Language of the text")
 
-    class KeywordExtractSchema(BaseTextSchema):
-        """Schema for keyword extraction"""
+    class Keyword_extractSchema(BaseTextSchema):
+        """Schema for keyword_extract operation"""
 
         top_k: int = Field(default=10, description="Number of keywords to extract")
         language: Optional[Language] = Field(default=None, description="Language of the text")
@@ -180,12 +180,12 @@ class ClassifierTool(BaseTool):
         )
 
     class SummarizeSchema(BaseTextSchema):
-        """Schema for text summarization"""
+        """Schema for summarize operation"""
 
         max_length: int = Field(default=150, description="Maximum length of the summary")
         language: Optional[Language] = Field(default=None, description="Language of the text")
 
-    class BatchProcessSchema(BaseModel):
+    class Batch_processSchema(BaseModel):
         """Schema for batch processing"""
 
         texts: List[str] = Field(description="List of texts to process")
@@ -595,7 +595,6 @@ class ClassifierTool(BaseTool):
 
         return [(token.text, token.pos_) for token in doc]
 
-    @validate_input(NERSchema)
     async def ner(self, text: str, language: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Perform named entity recognition.
@@ -626,7 +625,6 @@ class ClassifierTool(BaseTool):
             for ent in doc.ents
         ]
 
-    @validate_input(LemmatizeSchema)
     async def lemmatize(self, text: str, language: Optional[str] = None) -> List[str]:
         """
         Lemmatize tokens in text using spaCy.
@@ -651,7 +649,6 @@ class ClassifierTool(BaseTool):
         # consistently
         return [token.lemma_ for token in doc]
 
-    @validate_input(DependencyParseSchema)
     async def dependency_parse(self, text: str, language: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Perform dependency parsing using spaCy (supports both English and Chinese).
@@ -682,7 +679,6 @@ class ClassifierTool(BaseTool):
             for token in doc
         ]
 
-    @validate_input(KeywordExtractSchema)
     async def keyword_extract(
         self,
         text: str,
@@ -729,7 +725,6 @@ class ClassifierTool(BaseTool):
                 keywords = [token.text for token in doc if token.pos_ in ("NOUN", "PROPN")][:top_k]
                 return keywords
 
-    @validate_input(SummarizeSchema)
     async def summarize(self, text: str, max_length: int = 150, language: Optional[str] = None) -> str:
         """
         Summarize text.
@@ -810,7 +805,6 @@ class ClassifierTool(BaseTool):
 
         return result
 
-    @validate_input(BatchProcessSchema)
     async def batch_process(
         self,
         texts: List[str],
