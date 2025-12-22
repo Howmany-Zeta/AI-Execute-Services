@@ -156,76 +156,7 @@ class GraphSearchInput(BaseModel):
     )
 
 
-# Schemas for individual operations (used with run_async)
-class VectorSearchSchema(BaseModel):
-    """Schema for vector_search operation"""
-
-    query: Optional[str] = Field(None, description="Natural language query")
-    query_embedding: Optional[List[float]] = Field(None, description="Query vector embedding")
-    entity_type: Optional[str] = Field(None, description="Filter by entity type")
-    max_results: int = Field(default=10, ge=1, le=100, description="Maximum results")
-    vector_threshold: float = Field(default=0.0, ge=0.0, le=1.0, description="Minimum similarity")
-    enable_reranking: bool = Field(default=False, description="Enable result reranking")
-    rerank_strategy: Optional[str] = Field(default="text", description="Reranking strategy")
-    rerank_top_k: Optional[int] = Field(default=None, description="Top-K for reranking")
-
-
-class GraphSearchSchema(BaseModel):
-    """Schema for graph_search operation"""
-
-    seed_entity_ids: List[str] = Field(..., description="Starting entity IDs")
-    max_depth: int = Field(default=2, ge=1, le=5, description="Maximum traversal depth")
-    max_results: int = Field(default=10, ge=1, le=100, description="Maximum results")
-
-
-class HybridSearchSchema(BaseModel):
-    """Schema for hybrid_search operation"""
-
-    query: Optional[str] = Field(None, description="Natural language query")
-    query_embedding: Optional[List[float]] = Field(None, description="Query vector embedding")
-    seed_entity_ids: Optional[List[str]] = Field(None, description="Starting entity IDs")
-    entity_type: Optional[str] = Field(None, description="Filter by entity type")
-    max_results: int = Field(default=10, ge=1, le=100, description="Maximum results")
-    max_depth: int = Field(default=2, ge=1, le=5, description="Maximum graph depth")
-    vector_weight: float = Field(default=0.6, ge=0.0, le=1.0, description="Vector weight")
-    graph_weight: float = Field(default=0.4, ge=0.0, le=1.0, description="Graph weight")
-    expand_results: bool = Field(default=True, description="Expand with neighbors")
-    vector_threshold: float = Field(default=0.0, ge=0.0, le=1.0, description="Minimum similarity")
-    enable_reranking: bool = Field(default=False, description="Enable result reranking")
-    rerank_strategy: Optional[str] = Field(default="hybrid", description="Reranking strategy")
-    rerank_top_k: Optional[int] = Field(default=None, description="Top-K for reranking")
-
-
-class PagerankSearchSchema(BaseModel):
-    """Schema for pagerank_search operation"""
-
-    seed_entity_ids: List[str] = Field(..., description="Starting entity IDs")
-    max_results: int = Field(default=10, ge=1, le=100, description="Maximum results")
-
-
-class MultihopSearchSchema(BaseModel):
-    """Schema for multihop_search operation"""
-
-    seed_entity_ids: List[str] = Field(..., description="Starting entity IDs")
-    max_depth: int = Field(default=2, ge=1, le=5, description="Maximum hops")
-    max_results: int = Field(default=10, ge=1, le=100, description="Maximum results")
-
-
-class FilteredSearchSchema(BaseModel):
-    """Schema for filtered_search operation"""
-
-    entity_type: Optional[str] = Field(None, description="Filter by entity type")
-    property_filters: Optional[Dict[str, Any]] = Field(None, description="Filter by properties")
-    max_results: int = Field(default=10, ge=1, le=100, description="Maximum results")
-
-
-class TraverseSearchSchema(BaseModel):
-    """Schema for traverse_search operation"""
-
-    seed_entity_ids: List[str] = Field(..., description="Starting entity IDs")
-    relation_types: Optional[List[str]] = Field(None, description="Filter by relation types")
-    max_depth: int = Field(default=2, ge=1, le=5, description="Maximum depth")
-    max_results: int = Field(default=10, ge=1, le=100, description="Maximum results")
+# Schemas for individual operations - moved to GraphSearchTool class as inner classes
 
 
 @register_tool("graph_search")
@@ -323,6 +254,71 @@ class GraphSearchTool(BaseTool):
             default=2,
             description="Default maximum traversal depth",
         )
+
+    # Schema definitions
+    class Vector_searchSchema(BaseModel):
+        """Schema for vector_search operation"""
+
+        query: Optional[str] = Field(default=None, description="Optional natural language query. Either query or query_embedding must be provided")
+        query_embedding: Optional[List[float]] = Field(default=None, description="Optional pre-computed query vector embedding. Either query or query_embedding must be provided")
+        entity_type: Optional[str] = Field(default=None, description="Optional filter by entity type (e.g., 'Person', 'Company', 'Location')")
+        max_results: int = Field(default=10, ge=1, le=100, description="Maximum number of results to return (1-100)")
+        vector_threshold: float = Field(default=0.0, ge=0.0, le=1.0, description="Minimum similarity threshold for results (0.0-1.0)")
+        enable_reranking: bool = Field(default=False, description="Whether to enable result reranking for improved relevance")
+        rerank_strategy: Optional[str] = Field(default="text", description="Reranking strategy: 'text' (text similarity), 'semantic' (embeddings), 'structural' (graph importance), or 'hybrid' (all signals)")
+        rerank_top_k: Optional[int] = Field(default=None, ge=1, le=500, description="Top-K results to fetch before reranking. If None, uses max_results")
+
+    class Graph_searchSchema(BaseModel):
+        """Schema for graph_search operation"""
+
+        seed_entity_ids: List[str] = Field(description="List of starting entity IDs to begin graph traversal from")
+        max_depth: int = Field(default=2, ge=1, le=5, description="Maximum traversal depth from seed entities (1-5)")
+        max_results: int = Field(default=10, ge=1, le=100, description="Maximum number of results to return (1-100)")
+
+    class Hybrid_searchSchema(BaseModel):
+        """Schema for hybrid_search operation"""
+
+        query: Optional[str] = Field(default=None, description="Optional natural language query. Either query or query_embedding must be provided")
+        query_embedding: Optional[List[float]] = Field(default=None, description="Optional pre-computed query vector embedding. Either query or query_embedding must be provided")
+        seed_entity_ids: Optional[List[str]] = Field(default=None, description="Optional list of starting entity IDs for graph-based search")
+        entity_type: Optional[str] = Field(default=None, description="Optional filter by entity type")
+        max_results: int = Field(default=10, ge=1, le=100, description="Maximum number of results to return (1-100)")
+        max_depth: int = Field(default=2, ge=1, le=5, description="Maximum graph traversal depth (1-5)")
+        vector_weight: float = Field(default=0.6, ge=0.0, le=1.0, description="Weight for vector similarity component (0.0-1.0)")
+        graph_weight: float = Field(default=0.4, ge=0.0, le=1.0, description="Weight for graph structure component (0.0-1.0)")
+        expand_results: bool = Field(default=True, description="Whether to expand results with graph neighbors")
+        vector_threshold: float = Field(default=0.0, ge=0.0, le=1.0, description="Minimum similarity threshold for vector search (0.0-1.0)")
+        enable_reranking: bool = Field(default=False, description="Whether to enable result reranking")
+        rerank_strategy: Optional[str] = Field(default="hybrid", description="Reranking strategy: 'text', 'semantic', 'structural', or 'hybrid'")
+        rerank_top_k: Optional[int] = Field(default=None, ge=1, le=500, description="Top-K results for reranking")
+
+    class Pagerank_searchSchema(BaseModel):
+        """Schema for pagerank_search operation"""
+
+        seed_entity_ids: List[str] = Field(description="List of starting entity IDs for Personalized PageRank calculation")
+        max_results: int = Field(default=10, ge=1, le=100, description="Maximum number of results to return (1-100)")
+
+    class Multihop_searchSchema(BaseModel):
+        """Schema for multihop_search operation"""
+
+        seed_entity_ids: List[str] = Field(description="List of starting entity IDs")
+        max_depth: int = Field(default=2, ge=1, le=5, description="Maximum number of hops from seed entities (1-5)")
+        max_results: int = Field(default=10, ge=1, le=100, description="Maximum number of results to return (1-100)")
+
+    class Filtered_searchSchema(BaseModel):
+        """Schema for filtered_search operation"""
+
+        entity_type: Optional[str] = Field(default=None, description="Optional filter by entity type (e.g., 'Person', 'Company')")
+        property_filters: Optional[Dict[str, Any]] = Field(default=None, description="Optional dictionary of property filters (e.g., {'role': 'Engineer', 'level': 'Senior'})")
+        max_results: int = Field(default=10, ge=1, le=100, description="Maximum number of results to return (1-100)")
+
+    class Traverse_searchSchema(BaseModel):
+        """Schema for traverse_search operation"""
+
+        seed_entity_ids: List[str] = Field(description="List of starting entity IDs for pattern-based traversal")
+        relation_types: Optional[List[str]] = Field(default=None, description="Optional filter by relation types (e.g., ['WORKS_FOR', 'LOCATED_IN'])")
+        max_depth: int = Field(default=2, ge=1, le=5, description="Maximum traversal depth (1-5)")
+        max_results: int = Field(default=10, ge=1, le=100, description="Maximum number of results to return (1-100)")
 
     input_schema: type[BaseModel] = GraphSearchInput
 
