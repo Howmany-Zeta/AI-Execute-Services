@@ -68,71 +68,7 @@ class BaseFileSchema(BaseModel):
         return abs_path
 
 
-# Schemas for operations
-
-
-class LoadSchema(BaseFileSchema):
-    """Schema for load operation."""
-
-
-class OCRSchema(BaseFileSchema):
-    """Schema for OCR operation."""
-
-    lang: Optional[str] = None
-
-
-class MetadataSchema(BaseFileSchema):
-    """Schema for metadata extraction operation."""
-
-    include_exif: bool = False
-
-
-class ResizeSchema(BaseFileSchema):
-    """Schema for resize operation."""
-
-    output_path: str
-    width: int
-    height: int
-
-    @field_validator("output_path")
-    @classmethod
-    def validate_output_path(cls, v: str) -> str:
-        """Validate output path for existence and extension."""
-        abs_path = os.path.abspath(os.path.normpath(v))
-        ext = os.path.splitext(abs_path)[1].lower()
-        if ext not in _DEFAULT_ALLOWED_EXTENSIONS:
-            raise SecurityError(f"Output extension '{ext}' not allowed, expected {_DEFAULT_ALLOWED_EXTENSIONS}")
-        if os.path.exists(abs_path):
-            raise FileOperationError(f"Output file already exists: {abs_path}")
-        return abs_path
-
-
-class FilterSchema(BaseFileSchema):
-    """Schema for filter operation."""
-
-    output_path: str
-    filter_type: str = "blur"
-
-    @field_validator("filter_type")
-    @classmethod
-    def validate_filter_type(cls, v: str) -> str:
-        """Validate filter type."""
-        valid_filters = ["blur", "sharpen", "edge_enhance"]
-        if v not in valid_filters:
-            raise ValueError(f"Invalid filter_type '{v}', expected {valid_filters}")
-        return v
-
-    @field_validator("output_path")
-    @classmethod
-    def validate_output_path(cls, v: str) -> str:
-        """Validate output path for existence and extension."""
-        abs_path = os.path.abspath(os.path.normpath(v))
-        ext = os.path.splitext(abs_path)[1].lower()
-        if ext not in _DEFAULT_ALLOWED_EXTENSIONS:
-            raise SecurityError(f"Output extension '{ext}' not allowed, expected {_DEFAULT_ALLOWED_EXTENSIONS}")
-        if os.path.exists(abs_path):
-            raise FileOperationError(f"Output file already exists: {abs_path}")
-        return abs_path
+# Schemas for operations - moved to ImageTool class as inner classes
 
 
 # Tesseract process manager
@@ -213,6 +149,72 @@ class ImageTool(BaseTool):
         )
         tesseract_pool_size: int = Field(default=2, description="Number of Tesseract processes for OCR")
 
+    # Schema definitions
+    class LoadSchema(BaseFileSchema):
+        """Schema for load operation"""
+
+        file_path: str = Field(description="Path to the image file to load")
+
+    class OcrSchema(BaseFileSchema):
+        """Schema for ocr operation"""
+
+        file_path: str = Field(description="Path to the image file for OCR text extraction")
+        lang: Optional[str] = Field(default=None, description="Optional language code for OCR (e.g., 'eng', 'chi_sim'). Uses default 'eng' if not specified")
+
+    class MetadataSchema(BaseFileSchema):
+        """Schema for metadata operation"""
+
+        file_path: str = Field(description="Path to the image file to extract metadata from")
+        include_exif: bool = Field(default=False, description="Whether to include EXIF data in the metadata. If False, only basic info (size, mode) is returned")
+
+    class ResizeSchema(BaseFileSchema):
+        """Schema for resize operation"""
+
+        file_path: str = Field(description="Path to the source image file")
+        output_path: str = Field(description="Path where the resized image will be saved")
+        width: int = Field(description="Target width in pixels for the resized image")
+        height: int = Field(description="Target height in pixels for the resized image")
+
+        @field_validator("output_path")
+        @classmethod
+        def validate_output_path(cls, v: str) -> str:
+            """Validate output path for existence and extension."""
+            abs_path = os.path.abspath(os.path.normpath(v))
+            ext = os.path.splitext(abs_path)[1].lower()
+            if ext not in _DEFAULT_ALLOWED_EXTENSIONS:
+                raise SecurityError(f"Output extension '{ext}' not allowed, expected {_DEFAULT_ALLOWED_EXTENSIONS}")
+            if os.path.exists(abs_path):
+                raise FileOperationError(f"Output file already exists: {abs_path}")
+            return abs_path
+
+    class FilterSchema(BaseFileSchema):
+        """Schema for filter operation"""
+
+        file_path: str = Field(description="Path to the source image file")
+        output_path: str = Field(description="Path where the filtered image will be saved")
+        filter_type: str = Field(default="blur", description="Type of filter to apply: 'blur', 'sharpen', or 'edge_enhance'")
+
+        @field_validator("filter_type")
+        @classmethod
+        def validate_filter_type(cls, v: str) -> str:
+            """Validate filter type."""
+            valid_filters = ["blur", "sharpen", "edge_enhance"]
+            if v not in valid_filters:
+                raise ValueError(f"Invalid filter_type '{v}', expected {valid_filters}")
+            return v
+
+        @field_validator("output_path")
+        @classmethod
+        def validate_output_path(cls, v: str) -> str:
+            """Validate output path for existence and extension."""
+            abs_path = os.path.abspath(os.path.normpath(v))
+            ext = os.path.splitext(abs_path)[1].lower()
+            if ext not in _DEFAULT_ALLOWED_EXTENSIONS:
+                raise SecurityError(f"Output extension '{ext}' not allowed, expected {_DEFAULT_ALLOWED_EXTENSIONS}")
+            if os.path.exists(abs_path):
+                raise FileOperationError(f"Output file already exists: {abs_path}")
+            return abs_path
+
     def __init__(self, config: Optional[Dict[str, Any]] = None, **kwargs):
         """
         Initialize ImageTool with configuration and resources.
@@ -285,7 +287,7 @@ class ImageTool(BaseTool):
             FileOperationError: If file is invalid or inaccessible.
         """
         # Validate input using schema
-        validated_input = LoadSchema(file_path=file_path)
+        validated_input = self.LoadSchema(file_path=file_path)
 
         try:
             with Image.open(validated_input.file_path) as img:
@@ -309,7 +311,7 @@ class ImageTool(BaseTool):
             FileOperationError: If OCR fails or Tesseract is unavailable.
         """
         # Validate input using schema
-        validated_input = OCRSchema(file_path=file_path, lang=lang)
+        validated_input = self.OcrSchema(file_path=file_path, lang=lang)
 
         proc = self._tesseract_manager.get_process()
         if not proc:
@@ -348,7 +350,7 @@ class ImageTool(BaseTool):
             FileOperationError: If metadata extraction fails.
         """
         # Validate input using schema
-        validated_input = MetadataSchema(file_path=file_path, include_exif=include_exif)
+        validated_input = self.MetadataSchema(file_path=file_path, include_exif=include_exif)
 
         try:
             with Image.open(validated_input.file_path) as img:
@@ -382,7 +384,7 @@ class ImageTool(BaseTool):
             FileOperationError: If resizing fails.
         """
         # Validate input using schema
-        validated_input = ResizeSchema(
+        validated_input = self.ResizeSchema(
             file_path=file_path,
             output_path=output_path,
             width=width,
@@ -416,7 +418,7 @@ class ImageTool(BaseTool):
             FileOperationError: If filtering fails.
         """
         # Validate input using schema
-        validated_input = FilterSchema(
+        validated_input = self.FilterSchema(
             file_path=file_path,
             output_path=output_path,
             filter_type=filter_type,

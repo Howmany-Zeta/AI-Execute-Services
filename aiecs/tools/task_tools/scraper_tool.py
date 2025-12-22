@@ -127,6 +127,34 @@ class ScraperTool(BaseTool):
             description="Whether Playwright is available (auto-detected)",
         )
 
+    # Schema definitions
+    class Get_httpxSchema(BaseModel):
+        """Schema for get_httpx operation"""
+
+        url: str = Field(description="URL to scrape")
+        method: HttpMethod = Field(default=HttpMethod.GET, description="HTTP method to use: GET, POST, PUT, DELETE, HEAD, OPTIONS, or PATCH")
+        params: Optional[Dict[str, str]] = Field(default=None, description="Optional query parameters as dictionary")
+        data: Optional[Dict[str, Any]] = Field(default=None, description="Optional form data as dictionary. Mutually exclusive with json_data")
+        json_data: Optional[Dict[str, Any]] = Field(default=None, description="Optional JSON data as dictionary. Mutually exclusive with data")
+        cookies: Optional[Dict[str, str]] = Field(default=None, description="Optional cookies as dictionary")
+        auth: Optional[Tuple[str, str]] = Field(default=None, description="Optional authentication credentials as (username, password) tuple")
+        verify_ssl: Optional[bool] = Field(default=None, description="Optional SSL certificate verification. If None, defaults to True")
+        allow_redirects: bool = Field(default=True, description="Whether to allow HTTP redirects")
+        content_type: ContentType = Field(default=ContentType.TEXT, description="Expected content type: TEXT, JSON, HTML, or BINARY")
+        headers: Optional[Dict[str, str]] = Field(default=None, description="Optional custom HTTP headers as dictionary")
+        output_format: Optional[OutputFormat] = Field(default=None, description="Optional output format for saving: TEXT, JSON, HTML, MARKDOWN, or CSV")
+        output_path: Optional[str] = Field(default=None, description="Optional path to save output file. Requires output_format to be specified")
+        async_mode: bool = Field(default=True, description="Whether to use async HTTP client. If False, uses synchronous client")
+
+    class Parse_htmlSchema(BaseModel):
+        """Schema for parse_html operation"""
+
+        html: str = Field(description="HTML content string to parse")
+        selector: str = Field(description="CSS selector or XPath expression to find elements")
+        selector_type: str = Field(default="css", description="Selector type: 'css' for CSS selectors or 'xpath' for XPath expressions")
+        extract_attr: Optional[str] = Field(default=None, description="Optional attribute name to extract from matched elements (e.g., 'href', 'src')")
+        extract_text: bool = Field(default=True, description="Whether to extract text content from matched elements. Ignored if extract_attr is specified")
+
     def __init__(self, config: Optional[Dict] = None, **kwargs):
         """
         Initialize ScraperTool with settings and resources.

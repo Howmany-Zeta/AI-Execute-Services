@@ -180,7 +180,7 @@ class AIDocumentOrchestrator(BaseTool):
         }
 
     # Schema definitions
-    class ProcessDocumentSchema(BaseModel):
+    class Process_documentSchema(BaseModel):
         """Schema for process_document operation"""
 
         source: str = Field(description="URL or file path to the document")
@@ -190,7 +190,7 @@ class AIDocumentOrchestrator(BaseTool):
         parse_params: Optional[Dict[str, Any]] = Field(default=None, description="Document parsing parameters")
         ai_params: Optional[Dict[str, Any]] = Field(default=None, description="AI provider parameters")
 
-    class BatchProcessSchema(BaseModel):
+    class Batch_process_documentsSchema(BaseModel):
         """Schema for batch_process_documents operation"""
 
         sources: List[str] = Field(description="List of URLs or file paths")
@@ -199,7 +199,7 @@ class AIDocumentOrchestrator(BaseTool):
         processing_params: Optional[Dict[str, Any]] = Field(default=None, description="Additional processing parameters")
         max_concurrent: Optional[int] = Field(default=None, description="Maximum concurrent processing")
 
-    class AnalyzeDocumentSchema(BaseModel):
+    class Analyze_documentSchema(BaseModel):
         """Schema for analyze_document operation (AI-first approach)"""
 
         source: str = Field(description="URL or file path to the document")

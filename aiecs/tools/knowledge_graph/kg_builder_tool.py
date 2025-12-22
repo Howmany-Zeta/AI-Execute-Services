@@ -70,37 +70,7 @@ class KGBuilderInput(BaseModel):
     )
 
 
-# Schemas for individual operations (used with run_async)
-class BuildFromTextSchema(BaseModel):
-    """Schema for build_from_text operation"""
-
-    text: str = Field(..., description="Text to extract knowledge from")
-    source: Optional[str] = Field(
-        default="unknown",
-        description="Optional source identifier (document name, URL, etc.)",
-    )
-    entity_types: Optional[List[str]] = Field(
-        default=None,
-        description="Optional list of entity types to extract (e.g., ['Person', 'Company', 'Location'])",
-    )
-    relation_types: Optional[List[str]] = Field(
-        default=None,
-        description="Optional list of relation types to extract (e.g., ['WORKS_FOR', 'LOCATED_IN'])",
-    )
-
-
-class BuildFromDocumentSchema(BaseModel):
-    """Schema for build_from_document operation"""
-
-    document_path: str = Field(..., description="Path to document file (PDF, DOCX, TXT, etc.)")
-    entity_types: Optional[List[str]] = Field(default=None, description="Optional list of entity types to extract")
-    relation_types: Optional[List[str]] = Field(default=None, description="Optional list of relation types to extract")
-
-
-class GetStatsSchema(BaseModel):
-    """Schema for get_stats operation"""
-
-    pass  # No parameters needed
+# Schemas for individual operations - moved to KnowledgeGraphBuilderTool class as inner classes
 
 
 @register_tool("kg_builder")
@@ -172,6 +142,36 @@ class KnowledgeGraphBuilderTool(BaseTool):
             default=True,
             description="Skip errors during structured data import",
         )
+
+    # Schema definitions
+    class Build_from_textSchema(BaseModel):
+        """Schema for build_from_text operation"""
+
+        text: str = Field(description="Text content to extract knowledge from")
+        source: Optional[str] = Field(
+            default="unknown",
+            description="Optional source identifier (document name, URL, etc.)",
+        )
+        entity_types: Optional[List[str]] = Field(
+            default=None,
+            description="Optional list of entity types to extract (e.g., ['Person', 'Company', 'Location'])",
+        )
+        relation_types: Optional[List[str]] = Field(
+            default=None,
+            description="Optional list of relation types to extract (e.g., ['WORKS_FOR', 'LOCATED_IN'])",
+        )
+
+    class Build_from_documentSchema(BaseModel):
+        """Schema for build_from_document operation"""
+
+        document_path: str = Field(description="Path to document file (PDF, DOCX, TXT, etc.)")
+        entity_types: Optional[List[str]] = Field(default=None, description="Optional list of entity types to extract (e.g., ['Person', 'Company', 'Location'])")
+        relation_types: Optional[List[str]] = Field(default=None, description="Optional list of relation types to extract (e.g., ['WORKS_FOR', 'LOCATED_IN'])")
+
+    class Get_statsSchema(BaseModel):
+        """Schema for get_stats operation"""
+
+        pass  # No parameters needed
 
     name: str = "kg_builder"
     description: str = """Build knowledge graphs from text and documents.

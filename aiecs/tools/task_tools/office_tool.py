@@ -100,57 +100,7 @@ class BaseFileSchema(BaseModel):
         return abs_path
 
 
-# Schemas for operations
-
-
-class ReadDocxSchema(BaseFileSchema):
-    """Schema for reading DOCX files."""
-
-    file_path: str
-    include_tables: bool = False
-
-
-class WriteDocxSchema(BaseFileSchema):
-    """Schema for writing DOCX files."""
-
-    text: str
-    output_path: str
-    table_data: Optional[List[List[str]]] = None
-
-
-class ReadPptxSchema(BaseFileSchema):
-    """Schema for reading PPTX files."""
-
-    file_path: str
-
-
-class WritePptxSchema(BaseFileSchema):
-    """Schema for writing PPTX files."""
-
-    slides: List[str]
-    output_path: str
-    image_path: Optional[str] = None
-
-
-class ReadXlsxSchema(BaseFileSchema):
-    """Schema for reading XLSX files."""
-
-    file_path: str
-    sheet_name: Optional[str] = None
-
-
-class WriteXlsxSchema(BaseFileSchema):
-    """Schema for writing XLSX files."""
-
-    data: List[Dict]
-    output_path: str
-    sheet_name: str = "Sheet1"
-
-
-class ExtractTextSchema(BaseFileSchema):
-    """Schema for extracting text from files."""
-
-    file_path: str
+# Schemas for operations - moved to OfficeTool class as inner classes
 
 
 @register_tool("office")
@@ -200,6 +150,50 @@ class OfficeTool(BaseTool):
             ],
             description="Allowed document file extensions",
         )
+
+    # Schema definitions
+    class Read_docxSchema(BaseFileSchema):
+        """Schema for read_docx operation"""
+
+        file_path: str = Field(description="Path to the DOCX file to read")
+        include_tables: bool = Field(default=False, description="Whether to include table data in the output. If True, tables are included as nested lists")
+
+    class Write_docxSchema(BaseFileSchema):
+        """Schema for write_docx operation"""
+
+        text: str = Field(description="Text content to write to the DOCX file")
+        output_path: str = Field(description="Path where the DOCX file will be saved")
+        table_data: Optional[List[List[str]]] = Field(default=None, description="Optional table data to include in the document. Each inner list represents a row, each string represents a cell")
+
+    class Read_pptxSchema(BaseFileSchema):
+        """Schema for read_pptx operation"""
+
+        file_path: str = Field(description="Path to the PPTX file to read")
+
+    class Write_pptxSchema(BaseFileSchema):
+        """Schema for write_pptx operation"""
+
+        slides: List[str] = Field(description="List of slide content strings. Each string becomes a slide")
+        output_path: str = Field(description="Path where the PPTX file will be saved")
+        image_path: Optional[str] = Field(default=None, description="Optional path to an image file to include on the first slide")
+
+    class Read_xlsxSchema(BaseFileSchema):
+        """Schema for read_xlsx operation"""
+
+        file_path: str = Field(description="Path to the XLSX file to read")
+        sheet_name: Optional[str] = Field(default=None, description="Optional name of the sheet to read. If None, reads the first sheet")
+
+    class Write_xlsxSchema(BaseFileSchema):
+        """Schema for write_xlsx operation"""
+
+        data: List[Dict[str, Any]] = Field(description="List of dictionaries representing Excel rows. Each dictionary key becomes a column header, values become cell data")
+        output_path: str = Field(description="Path where the XLSX file will be saved")
+        sheet_name: str = Field(default="Sheet1", description="Name of the Excel sheet to create")
+
+    class Extract_textSchema(BaseFileSchema):
+        """Schema for extract_text operation"""
+
+        file_path: str = Field(description="Path to the file to extract text from. Supports DOCX, PPTX, XLSX, PDF, and image formats")
 
     def __init__(self, config: Optional[Dict[str, Any]] = None, **kwargs):
         """

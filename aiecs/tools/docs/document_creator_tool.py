@@ -198,7 +198,7 @@ class DocumentCreatorTool(BaseTool):
         }
 
     # Schema definitions
-    class CreateDocumentSchema(BaseModel):
+    class Create_documentSchema(BaseModel):
         """Schema for create_document operation"""
 
         document_type: DocumentType = Field(description="Type of document to create")
@@ -208,7 +208,7 @@ class DocumentCreatorTool(BaseTool):
         style_preset: Optional[StylePreset] = Field(default=None, description="Style preset")
         output_path: Optional[str] = Field(default=None, description="Custom output path")
 
-    class CreateFromTemplateSchema(BaseModel):
+    class Create_from_templateSchema(BaseModel):
         """Schema for create_from_template operation"""
 
         template_name: str = Field(description="Name of template to use")
@@ -216,7 +216,7 @@ class DocumentCreatorTool(BaseTool):
         output_format: DocumentFormat = Field(description="Output format")
         output_path: Optional[str] = Field(default=None, description="Custom output path")
 
-    class SetupStructureSchema(BaseModel):
+    class Setup_document_structureSchema(BaseModel):
         """Schema for setup_document_structure operation"""
 
         document_path: str = Field(description="Path to document")
@@ -224,12 +224,17 @@ class DocumentCreatorTool(BaseTool):
         generate_toc: bool = Field(default=True, description="Generate table of contents")
         numbering_style: Optional[str] = Field(default=None, description="Section numbering style")
 
-    class ConfigureMetadataSchema(BaseModel):
+    class Configure_metadataSchema(BaseModel):
         """Schema for configure_metadata operation"""
 
         document_path: str = Field(description="Path to document")
         metadata: Dict[str, Any] = Field(description="Metadata to configure")
         format_specific: bool = Field(default=True, description="Use format-specific metadata")
+
+    class Get_template_infoSchema(BaseModel):
+        """Schema for get_template_info operation"""
+
+        template_type: TemplateType = Field(description="Type of template")
 
     def create_document(
         self,

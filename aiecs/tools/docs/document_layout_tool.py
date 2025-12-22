@@ -200,7 +200,7 @@ class DocumentLayoutTool(BaseTool):
         }
 
     # Schema definitions
-    class SetPageLayoutSchema(BaseModel):
+    class Set_page_layoutSchema(BaseModel):
         """Schema for set_page_layout operation"""
 
         document_path: str = Field(description="Path to document")
@@ -209,7 +209,7 @@ class DocumentLayoutTool(BaseTool):
         margins: Dict[str, float] = Field(description="Page margins (top, bottom, left, right)")
         layout_preset: Optional[str] = Field(default=None, description="Layout preset name")
 
-    class CreateMultiColumnSchema(BaseModel):
+    class Create_multi_column_layoutSchema(BaseModel):
         """Schema for create_multi_column_layout operation"""
 
         document_path: str = Field(description="Path to document")
@@ -218,7 +218,7 @@ class DocumentLayoutTool(BaseTool):
         column_widths: Optional[List[float]] = Field(default=None, description="Custom column widths")
         balance_columns: bool = Field(default=True, description="Balance column heights")
 
-    class SetupHeadersFootersSchema(BaseModel):
+    class Setup_headers_footersSchema(BaseModel):
         """Schema for setup_headers_footers operation"""
 
         document_path: str = Field(description="Path to document")
@@ -227,7 +227,7 @@ class DocumentLayoutTool(BaseTool):
         page_numbering: bool = Field(default=True, description="Include page numbering")
         numbering_style: str = Field(default="numeric", description="Page numbering style")
 
-    class InsertBreakSchema(BaseModel):
+    class Insert_breakSchema(BaseModel):
         """Schema for insert_break operation"""
 
         document_path: str = Field(description="Path to document")
@@ -235,13 +235,20 @@ class DocumentLayoutTool(BaseTool):
         position: Optional[Dict[str, Any]] = Field(default=None, description="Position to insert break")
         break_options: Optional[Dict[str, Any]] = Field(default=None, description="Break-specific options")
 
-    class ConfigureTypographySchema(BaseModel):
+    class Configure_typographySchema(BaseModel):
         """Schema for configure_typography operation"""
 
         document_path: str = Field(description="Path to document")
         font_config: Dict[str, Any] = Field(description="Font configuration")
         spacing_config: Optional[Dict[str, Any]] = Field(default=None, description="Spacing configuration")
         alignment: Optional[AlignmentType] = Field(default=None, description="Text alignment")
+
+    class Optimize_layout_for_contentSchema(BaseModel):
+        """Schema for optimize_layout_for_content operation"""
+
+        document_path: str = Field(description="Path to document")
+        content_analysis: Dict[str, Any] = Field(description="Analysis of document content")
+        optimization_goals: List[str] = Field(description="List of optimization goals")
 
     def set_page_layout(
         self,

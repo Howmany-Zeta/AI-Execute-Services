@@ -234,7 +234,7 @@ class DocumentParserTool(BaseTool):
             self.file_storage = None
 
     # Schema definitions
-    class ParseDocumentSchema(BaseModel):
+    class Parse_documentSchema(BaseModel):
         """Schema for parse_document operation"""
 
         source: str = Field(description="URL or file path to the document")
@@ -247,7 +247,7 @@ class DocumentParserTool(BaseTool):
         extract_metadata: bool = Field(default=True, description="Whether to extract metadata")
         chunk_size: Optional[int] = Field(default=None, description="Chunk size for large documents")
 
-    class DetectTypeSchema(BaseModel):
+    class Detect_document_typeSchema(BaseModel):
         """Schema for detect_document_type operation"""
 
         source: str = Field(description="URL or file path to analyze")

@@ -485,10 +485,12 @@ class APISourceTool(BaseTool):
         operation: str = Field(description="Provider-specific operation to perform (e.g., 'get_series', 'search_indicators')")
         params: Dict[str, Any] = Field(description="Operation-specific parameters as key-value pairs")
 
-    class ListProvidersSchema(BaseModel):
+    class List_providersSchema(BaseModel):
         """Schema for list_providers operation (no parameters required)"""
 
-    class GetProviderInfoSchema(BaseModel):
+        pass
+
+    class Get_provider_infoSchema(BaseModel):
         """Schema for get_provider_info operation"""
 
         provider: str = Field(description="API provider name to get information about")
@@ -505,6 +507,11 @@ class APISourceTool(BaseTool):
             default=10,
             description="Maximum number of results to return per provider",
         )
+
+    class Get_metrics_reportSchema(BaseModel):
+        """Schema for get_metrics_report operation (no parameters required)"""
+
+        pass
 
     @cache_result_with_strategy(ttl_strategy=lambda self, result, args, kwargs: self._create_query_ttl_strategy()(result, args, kwargs))
     @measure_execution_time

@@ -49,20 +49,7 @@ from .context import SearchContext
 from .cache import IntelligentCache
 from .metrics import EnhancedMetrics
 from .error_handler import AgentFriendlyErrorHandler
-from .schemas import (
-    SearchWebSchema,
-    SearchImagesSchema,
-    SearchNewsSchema,
-    SearchVideosSchema,
-    SearchPaginatedSchema,
-    SearchBatchSchema,
-    ValidateCredentialsSchema,
-    GetQuotaStatusSchema,
-    GetMetricsSchema,
-    GetMetricsReportSchema,
-    GetHealthScoreSchema,
-    GetSearchContextSchema,
-)
+from pydantic import BaseModel, Field, field_validator
 
 
 class SearchTool(BaseTool):
@@ -120,19 +107,111 @@ class SearchTool(BaseTool):
         similarity_threshold: float = Field(default=0.85, description="Similarity threshold for deduplication")
         max_search_history: int = Field(default=10, description="Maximum search history to maintain")
 
-    # Operation schemas for input validation and documentation
-    SearchWebSchema = SearchWebSchema
-    SearchImagesSchema = SearchImagesSchema
-    SearchNewsSchema = SearchNewsSchema
-    SearchVideosSchema = SearchVideosSchema
-    SearchPaginatedSchema = SearchPaginatedSchema
-    SearchBatchSchema = SearchBatchSchema
-    ValidateCredentialsSchema = ValidateCredentialsSchema
-    GetQuotaStatusSchema = GetQuotaStatusSchema
-    GetMetricsSchema = GetMetricsSchema
-    GetMetricsReportSchema = GetMetricsReportSchema
-    GetHealthScoreSchema = GetHealthScoreSchema
-    GetSearchContextSchema = GetSearchContextSchema
+    # Schema definitions
+    class Search_webSchema(BaseModel):
+        """Schema for search_web operation"""
+
+        query: str = Field(description="Search query string")
+        num_results: int = Field(default=10, ge=1, le=100, description="Number of results to return (1-100)")
+        start_index: int = Field(default=1, ge=1, le=91, description="Starting index for pagination (1-91)")
+        language: str = Field(default="en", description="Language code for results (e.g., 'en', 'zh-CN', 'es')")
+        country: str = Field(default="us", description="Country code for geolocation (e.g., 'us', 'cn', 'uk')")
+        safe_search: str = Field(default="medium", description="Safe search level: 'off', 'medium', or 'high'")
+        date_restrict: Optional[str] = Field(default=None, description="Date restriction (e.g., 'd7' for last 7 days, 'm3' for last 3 months)")
+        file_type: Optional[str] = Field(default=None, description="File type filter (e.g., 'pdf', 'doc', 'xls')")
+        exclude_terms: Optional[List[str]] = Field(default=None, description="Terms to exclude from search results")
+        auto_enhance: bool = Field(default=True, description="Whether to automatically enhance query based on detected intent")
+        return_summary: bool = Field(default=False, description="Whether to return a structured summary of results")
+
+        @field_validator("safe_search")
+        @classmethod
+        def validate_safe_search(cls, v: str) -> str:
+            """Validate safe search level"""
+            allowed = ["off", "medium", "high"]
+            if v not in allowed:
+                raise ValueError(f"safe_search must be one of {allowed}")
+            return v
+
+    class Search_imagesSchema(BaseModel):
+        """Schema for search_images operation"""
+
+        query: str = Field(description="Image search query string")
+        num_results: int = Field(default=10, ge=1, le=100, description="Number of image results to return (1-100)")
+        image_size: Optional[str] = Field(default=None, description="Image size filter: 'icon', 'small', 'medium', 'large', 'xlarge', 'xxlarge', 'huge'")
+        image_type: Optional[str] = Field(default=None, description="Image type filter: 'clipart', 'face', 'lineart', 'stock', 'photo', 'animated'")
+        image_color_type: Optional[str] = Field(default=None, description="Color type filter: 'color', 'gray', 'mono', 'trans'")
+        safe_search: str = Field(default="medium", description="Safe search level: 'off', 'medium', or 'high'")
+
+        @field_validator("safe_search")
+        @classmethod
+        def validate_safe_search(cls, v: str) -> str:
+            """Validate safe search level"""
+            allowed = ["off", "medium", "high"]
+            if v not in allowed:
+                raise ValueError(f"safe_search must be one of {allowed}")
+            return v
+
+    class Search_newsSchema(BaseModel):
+        """Schema for search_news operation"""
+
+        query: str = Field(description="News search query string")
+        num_results: int = Field(default=10, ge=1, le=100, description="Number of news results to return (1-100)")
+        start_index: int = Field(default=1, ge=1, le=91, description="Starting index for pagination (1-91)")
+        language: str = Field(default="en", description="Language code for news articles (e.g., 'en', 'zh-CN', 'es')")
+        date_restrict: Optional[str] = Field(default=None, description="Date restriction (e.g., 'd7' for last 7 days, 'm1' for last month)")
+        sort_by: str = Field(default="date", description="Sort order: 'date' for newest first, 'relevance' for most relevant")
+
+        @field_validator("sort_by")
+        @classmethod
+        def validate_sort_by(cls, v: str) -> str:
+            """Validate sort order"""
+            allowed = ["date", "relevance"]
+            if v not in allowed:
+                raise ValueError(f"sort_by must be one of {allowed}")
+            return v
+
+    class Search_videosSchema(BaseModel):
+        """Schema for search_videos operation"""
+
+        query: str = Field(description="Video search query string")
+        num_results: int = Field(default=10, ge=1, le=100, description="Number of video results to return (1-100)")
+        start_index: int = Field(default=1, ge=1, le=91, description="Starting index for pagination (1-91)")
+        language: str = Field(default="en", description="Language code for videos (e.g., 'en', 'zh-CN', 'es')")
+        safe_search: str = Field(default="medium", description="Safe search level: 'off', 'medium', or 'high'")
+
+        @field_validator("safe_search")
+        @classmethod
+        def validate_safe_search(cls, v: str) -> str:
+            """Validate safe search level"""
+            allowed = ["off", "medium", "high"]
+            if v not in allowed:
+                raise ValueError(f"safe_search must be one of {allowed}")
+            return v
+
+    class Get_metricsSchema(BaseModel):
+        """Schema for get_metrics operation (no parameters required)"""
+
+        pass
+
+    class Get_metrics_reportSchema(BaseModel):
+        """Schema for get_metrics_report operation (no parameters required)"""
+
+        pass
+
+    class Get_health_scoreSchema(BaseModel):
+        """Schema for get_health_score operation (no parameters required)"""
+
+        pass
+
+    class Get_quota_statusSchema(BaseModel):
+        """Schema for get_quota_status operation (no parameters required)"""
+
+        pass
+
+    class Get_search_contextSchema(BaseModel):
+        """Schema for get_search_context operation (no parameters required)"""
+
+        pass
 
     # Tool metadata
     description = "Comprehensive web search tool using Google Custom Search API."
