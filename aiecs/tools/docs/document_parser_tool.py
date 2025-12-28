@@ -284,7 +284,12 @@ class DocumentParserTool(BaseTool):
             if extension_type != DocumentType.UNKNOWN:
                 result["detected_type"] = extension_type
                 result["confidence"] = ext_confidence
-                result["file_extension"] = Path(source).suffix.lower()
+                # Extract extension correctly for URLs and local paths
+                if self._is_url(source):
+                    parsed = urlparse(source)
+                    result["file_extension"] = Path(parsed.path).suffix.lower()
+                else:
+                    result["file_extension"] = Path(source).suffix.lower()
                 result["detection_methods"].append("file_extension")
 
             # Method 2: MIME type detection (for URLs)
@@ -446,8 +451,16 @@ class DocumentParserTool(BaseTool):
     def _detect_by_extension(self, source: str) -> Tuple[DocumentType, float]:
         """Detect document type by file extension"""
         try:
-            path = Path(source)
-            ext = path.suffix.lower()
+            # For URLs, parse the URL first to extract the path without query parameters
+            if self._is_url(source):
+                parsed = urlparse(source)
+                # Extract extension from the URL path, not from the full URL
+                path = Path(parsed.path)
+                ext = path.suffix.lower()
+            else:
+                # For local file paths, use Path directly
+                path = Path(source)
+                ext = path.suffix.lower()
 
             extension_map = {
                 ".pdf": DocumentType.PDF,
