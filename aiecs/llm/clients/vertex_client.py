@@ -276,6 +276,7 @@ class VertexAIClient(BaseLLMClient):
                     content = "[Response error: Cannot get the response text. Multiple content parts are not supported.]"
 
             # Vertex AI doesn't provide detailed token usage in the response
+            # Use estimation method as fallback
             input_tokens = self._count_tokens_estimate(prompt)
             output_tokens = self._count_tokens_estimate(content)
             tokens_used = input_tokens + output_tokens
@@ -288,6 +289,8 @@ class VertexAIClient(BaseLLMClient):
                 provider=self.provider_name,
                 model=model_name,
                 tokens_used=tokens_used,
+                prompt_tokens=input_tokens,  # Estimated value since Vertex AI doesn't provide detailed usage
+                completion_tokens=output_tokens,  # Estimated value since Vertex AI doesn't provide detailed usage
                 cost_estimate=cost,
             )
 
@@ -306,11 +309,14 @@ class VertexAIClient(BaseLLMClient):
             ):
                 self.logger.warning(f"Vertex AI response issue: {str(e)}")
                 # Return a response indicating the issue
+                estimated_prompt_tokens = self._count_tokens_estimate(prompt)
                 return LLMResponse(
                     content="[Response unavailable due to content processing issues or safety filters]",
                     provider=self.provider_name,
                     model=model_name,
-                    tokens_used=self._count_tokens_estimate(prompt),
+                    tokens_used=estimated_prompt_tokens,
+                    prompt_tokens=estimated_prompt_tokens,
+                    completion_tokens=0,
                     cost_estimate=0.0,
                 )
             raise

@@ -17,25 +17,14 @@ exclude = '''
 '''
 
 
-# 移除 Poetry 配置，统一使用 project.optional-dependencies
-
-[tool.poetry.group.dev.dependencies]
-pyarrow = "^21.0.0"
-pytest = "^8.4.2"
-pytest-asyncio = "^1.2.0"
-pytest-cov = "^7.0.0"
-pytest-timeout = "^2.4.0"
-mypy = "^1.18.2"
-flake8 = "^7.3.0"
-black = "^25.1.0"
-types-aiofiles = "^25.1.0.20251011"
-types-cachetools = "^6.2.0.20251022"
-types-colorama = "^0.4.15.20250801"
-types-tqdm = "^4.67.0.20250809"
-types-pyyaml = "^6.0.12.20250915"
-types-opentracing = "^2.4.10.20250622"
-types-lxml = "^2025.8.25"
-types-bleach = "^6.3.0.20251115"
+# Poetry 2.x 配置 - 需要基本的 metadata (使用 PEP 621 格式时保持最小配置)
+[tool.poetry]
+name = "aiecs"
+version = "1.6.3"
+description = "AI Execute Services - A middleware framework for AI-powered task execution and tool orchestration"
+authors = ["AIECS Team <iretbl@gmail.com>"]
+readme = "README.md"
+packages = [{include = "aiecs"}]
 
 [project]
 name = "aiecs"
@@ -115,6 +104,7 @@ dependencies = [
     "scikit-learn (>=1.5.0,<2.0.0)",                # Machine learning library
     "statsmodels (>=0.14.4,<0.15.0)",               # Statistical models and tests
     "pyreadstat (>=1.2.9,<2.0.0)",                  # Read/write SAS, SPSS, and Stata files
+    "pyarrow (>=21.0.0,<22.0.0)",                    # Apache Arrow for Parquet file support
     "tabulate (>=0.9.0,<0.10.0)",                   # Pretty-print tabular data
 
     # =============================================================================
@@ -125,7 +115,7 @@ dependencies = [
     "openpyxl (>=3.1.5,<4.0.0)",                    # Excel file reading and writing
     "pdfplumber (>=0.11.7,<0.12.0)",                # PDF text extraction and analysis
     "pdfminer-six (==20250506)",                    # PDF parsing and text extraction
-    "tika (>=2.6.0,<3.0.0)",                        # Content analysis toolkit for document parsing
+    "tika (>=3.1.0,<4.0.0)",                        # Content analysis toolkit for document parsing (upgraded from 2.x for security fixes)
 
     # =============================================================================
     # Data Visualization and Reporting
@@ -175,6 +165,23 @@ dependencies = [
 "Documentation" = "https://aiecs.readthedocs.io"
 
 [project.optional-dependencies]
+dev = [
+    "pytest>=8.4.2,<9.0.0",
+    "pytest-asyncio>=1.2.0,<2.0.0",
+    "pytest-cov>=7.0.0,<8.0.0",
+    "pytest-timeout>=2.4.0,<3.0.0",
+    "mypy>=1.18.2,<2.0.0",
+    "flake8>=7.3.0,<8.0.0",
+    "black>=25.1.0,<26.0.0",
+    "types-aiofiles>=25.1.0.20251011",
+    "types-cachetools>=6.2.0.20251022",
+    "types-colorama>=0.4.15.20250801",
+    "types-tqdm>=4.67.0.20250809",
+    "types-pyyaml>=6.0.12.20250915",
+    "types-opentracing>=2.4.10.20250622",
+    "types-lxml>=2025.8.25",
+    "types-bleach>=6.3.0.20251115",
+]
 docs = [
     "sphinx>=7.0.0,<8.0.0",
     "sphinx-rtd-theme>=2.0.0,<3.0.0",
@@ -192,6 +199,7 @@ aiecs-check-deps = "aiecs.scripts.dependance_check.dependency_checker:main"
 aiecs-fix-deps = "aiecs.scripts.dependance_check.dependency_fixer:main"
 aiecs-tools-check-annotations = "aiecs.scripts.tools_develop.check_type_annotations:main"
 aiecs-tools-validate-schemas = "aiecs.scripts.tools_develop.validate_tool_schemas:main"
+aiecs-tools-schema-coverage = "aiecs.scripts.tools_develop.schema_coverage:main"
 aiecs-tools-check-config = "aiecs.scripts.tools_develop.check_all_tools_config:main"
 aiecs-tools-test-config = "aiecs.scripts.tools_develop.test_all_tools_config_runtime:main"
 aiecs-check-modules = "aiecs.scripts.aid.module_checker:main"
