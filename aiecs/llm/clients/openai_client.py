@@ -83,6 +83,8 @@ class OpenAIClient(BaseLLMClient):
                 provider=self.provider_name,
                 model=model,
                 tokens_used=tokens_used,
+                prompt_tokens=input_tokens if response.usage else None,
+                completion_tokens=output_tokens if response.usage else None,
                 cost_estimate=cost,
             )
 

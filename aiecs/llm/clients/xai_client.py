@@ -116,12 +116,16 @@ class XAIClient(BaseLLMClient):
             if content is None:
                 content = ""
             tokens_used = completion.usage.total_tokens if completion.usage else None
+            prompt_tokens = completion.usage.prompt_tokens if completion.usage else None
+            completion_tokens = completion.usage.completion_tokens if completion.usage else None
 
             return LLMResponse(
                 content=content,
                 provider=self.provider_name,
                 model=selected_model,
                 tokens_used=tokens_used,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
                 cost_estimate=0.0,  # xAI pricing not available yet
             )
 

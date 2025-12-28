@@ -114,6 +114,32 @@ class MyTool(BaseTool):
         return {"result": f"处理 {param1} 和 {param2}"}
 ```
 
+## Schema 开发要求
+
+**重要：** 所有工具方法必须具有 Schema 定义，以确保 Tool Calling Agent 的正常工作。
+
+### Schema 开发选项
+
+1. **自动生成（推荐）**：如果方法有完整的类型注解和文档字符串，Schema 会自动生成
+   - 要求：完整的类型注解 + Google/NumPy 风格的文档字符串
+   - 优点：零维护成本，自动同步
+
+2. **手动定义**：对于需要复杂验证的情况，需要手动定义 Schema
+   - 使用场景：复杂验证规则、字段约束、自定义验证器
+   - 命名规范：`{MethodName}Schema`（例如：`OperationSchema`）
+
+### Schema 开发检查清单
+
+创建新工具时，请确保：
+
+- [ ] 所有方法都有完整的类型注解
+- [ ] 所有方法都有文档字符串（Google 或 NumPy 风格）
+- [ ] Schema 覆盖率 ≥ 90%
+- [ ] 运行 `aiecs tools validate-schemas tool_name` 验证质量
+- [ ] 运行 `aiecs tools schema-coverage tool_name` 检查覆盖率
+
+**详细指南：** 请参阅 [Schema 开发指南](../../TOOLS/TOOL_SCHEMA_GUIDELINES.md) 和 [工具创建工作流](../../TOOLS/TOOL_CREATION_WORKFLOW.md)
+
 ## 使用装饰器进行性能优化
 
 工具执行器提供了几个装饰器，您可以用它们为方法添加性能优化：
@@ -826,7 +852,7 @@ tesseract --list-langs
 - **pdfplumber** (>=0.11.7) - PDF 文本提取
 
 **内容解析库**:
-- **tika** (>=2.6.0) - 通用文档解析（需要 Java）
+- **tika** (>=3.2.2) - 通用文档解析（需要 Java 11+）
 - **pytesseract** (>=0.3.13) - OCR 文字识别
 - **Pillow** (>=11.2.1) - 图像处理
 

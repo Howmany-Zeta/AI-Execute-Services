@@ -826,7 +826,7 @@ tesseract --list-langs
 - **pdfplumber** (>=0.11.7) - PDF text extraction
 
 **Content Parsing Libraries**:
-- **tika** (>=2.6.0) - Universal document parsing (requires Java)
+- **tika** (>=3.2.2) - Universal document parsing (requires Java 11+)
 - **pytesseract** (>=0.3.13) - OCR text recognition
 - **Pillow** (>=11.2.1) - Image processing
 
@@ -892,7 +892,7 @@ print(f"Recognized text: {image_text}")
 
 #### Notes
 
-- **Java Version**: Requires Java 8 or higher
+- **Java Version**: Requires Java 11 or higher (Tika 3.x requirement)
 - **Memory Requirements**: Tika requires sufficient memory when processing large files
 - **File Size**: Default maximum file size is 100MB
 - **Encoding Issues**: Some documents may have encoding issues

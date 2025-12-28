@@ -114,6 +114,24 @@ jobs:
           POSTGRES_PASSWORD: test_password
           POSTGRES_DB: test_db
       
+      - name: Run schema generation integration tests
+        run: |
+          poetry run pytest test/integration/tools/test_schema_generation_integration.py \
+            -m integration \
+            --cov=aiecs.tools.schema_generator \
+            --cov=aiecs.scripts.tools_develop.validate_tool_schemas \
+            --cov-report=term-missing \
+            --tb=short \
+            -v
+        env:
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db
+      
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:

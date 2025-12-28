@@ -20,7 +20,7 @@ from pptx.util import Pt
 from docx import Document
 from docx.shared import Pt as DocxPt
 import matplotlib.pyplot as plt
-from pydantic import Field, BaseModel
+from pydantic import Field, BaseModel, ConfigDict
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import tempfile
 import logging
@@ -67,7 +67,9 @@ def sanitize_html(
 
 
 # Type alias for dataset entries
-DatasetType = Dict[str, Union[pd.DataFrame, List[Dict[str, Any]]]]
+# Note: Using Any instead of pd.DataFrame to avoid Pydantic schema generation errors
+# The actual runtime type can be pd.DataFrame or List[Dict[str, Any]]
+DatasetType = Dict[str, Union[Any, List[Dict[str, Any]]]]
 
 
 @register_tool("report")
@@ -189,8 +191,10 @@ class ReportTool(BaseTool):
 
     class Generate_excelSchema(BaseModel):
         """Schema for generate_excel operation"""
+        
+        model_config = ConfigDict(arbitrary_types_allowed=True)
 
-        sheets: Dict[str, Union[pd.DataFrame, List[Dict[str, Any]]]] = Field(description="Dictionary mapping sheet names to sheet data. Data can be a pandas DataFrame or list of dictionaries")
+        sheets: Dict[str, Union[Any, List[Dict[str, Any]]]] = Field(description="Dictionary mapping sheet names to sheet data. Data can be a pandas DataFrame or list of dictionaries")
         output_path: str = Field(description="Path where the generated Excel file will be saved")
         styles: Optional[Dict[str, Dict[str, Any]]] = Field(default=None, description="Optional dictionary mapping sheet names to cell styling dictionaries. Each style dict maps cell addresses (e.g., 'A1') to style properties")
         template_variables: Optional[Dict[str, str]] = Field(default=None, description="Optional dictionary of variables for dynamic output path generation")
@@ -228,9 +232,11 @@ class ReportTool(BaseTool):
 
     class Generate_imageSchema(BaseModel):
         """Schema for generate_image operation"""
+        
+        model_config = ConfigDict(arbitrary_types_allowed=True)
 
         chart_type: str = Field(description="Type of chart to generate: 'bar', 'line', or 'pie'")
-        data: Union[pd.DataFrame, List[Dict[str, Any]]] = Field(description="Chart data as pandas DataFrame or list of dictionaries")
+        data: Union[Any, List[Dict[str, Any]]] = Field(description="Chart data as pandas DataFrame or list of dictionaries")
         output_path: str = Field(description="Path where the generated image file will be saved")
         x_col: Optional[str] = Field(default=None, description="Optional X-axis column name for bar and line charts. For pie charts, used as labels if labels not provided")
         y_col: Optional[str] = Field(default=None, description="Optional Y-axis column name for bar, line, and pie charts")
@@ -242,6 +248,8 @@ class ReportTool(BaseTool):
 
     class Batch_generateSchema(BaseModel):
         """Schema for batch_generate operation"""
+        
+        model_config = ConfigDict(arbitrary_types_allowed=True)
 
         operation: str = Field(description="Operation to perform: 'generate_html', 'generate_excel', 'generate_pptx', 'generate_markdown', 'generate_word', 'generate_image', or 'generate_pdf'")
         contexts: List[Dict[str, Any]] = Field(default=[], description="List of context dictionaries for HTML, Markdown, Word, or PDF operations. Each dict should match the corresponding operation's parameters")

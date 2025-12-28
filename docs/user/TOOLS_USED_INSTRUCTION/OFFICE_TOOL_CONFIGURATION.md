@@ -389,6 +389,9 @@ pip install pandas pdfplumber pytesseract python-docx python-pptx pillow tika
 
 Tika is used as a fallback for text extraction from various formats:
 
+**Requirements:**
+- Java 11 or higher (Java 8 is no longer supported in Tika 3.x)
+
 **Automatic (recommended):**
 ```python
 # Tika will download automatically on first use
@@ -397,9 +400,9 @@ Tika is used as a fallback for text extraction from various formats:
 
 **Manual:**
 ```bash
-# Download Tika server JAR manually
-wget https://repo1.maven.org/maven2/org/apache/tika/tika-server/2.9.0/tika-server-2.9.0.jar
-export TIKA_SERVER_JAR=/path/to/tika-server-2.9.0.jar
+# Download Tika server JAR manually (version 3.2.2+ recommended for security fixes)
+wget https://repo1.maven.org/maven2/org/apache/tika/tika-server/3.2.2/tika-server-3.2.2.jar
+export TIKA_SERVER_JAR=/path/to/tika-server-3.2.2.jar
 ```
 
 ### Tesseract OCR Setup
