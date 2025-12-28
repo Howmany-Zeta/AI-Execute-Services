@@ -58,7 +58,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 4. Office Tool 依赖: Java Runtime (Apache Tika)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    openjdk-17-jre-headless \
+    openjdk-21-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
 # 5. Stats Tool & Data Loader 依赖: pyreadstat 系统库
@@ -67,22 +67,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libreadline-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 6. Report Tool 依赖 (可选): WeasyPrint 系统库
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libcairo2-dev \
-    libpango1.0-dev \
-    libgdk-pixbuf2.0-dev \
-    libffi-dev \
-    shared-mime-info \
-    && rm -rf /var/lib/apt/lists/*
-
-# 7. Data Visualizer & Chart Tool 依赖: Matplotlib 系统库
+# 6. Data Visualizer & Chart Tool 依赖: Matplotlib 系统库
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libfreetype6-dev \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# 8. 中文字体支持 (用于图表和报告)
+# 7. 中文字体支持 (用于图表和报告)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-wqy-zenhei \
     fonts-wqy-microhei \
@@ -90,7 +81,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && fc-cache -fv \
     && rm -rf /var/lib/apt/lists/*
 
-# 9. Scraper Tool 依赖: Playwright 系统库
+# 8. Scraper Tool 依赖: Playwright 系统库
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3 \
     libnspr4 \
@@ -111,13 +102,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libatspi2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# 10. XML/XSLT 处理库 (lxml)
+# 9. XML/XSLT 处理库 (lxml)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libxml2-dev \
     libxslt1-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 11. 数据库客户端 (可选 - 用于知识图谱)
+# 10. 数据库客户端 (可选 - 用于知识图谱)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     default-libmysqlclient-dev \
@@ -128,8 +119,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ============================================================================
 FROM base as python-deps
 
-# 安装 Poetry
-RUN pip install --no-cache-dir poetry==1.7.1
+# 安装 Poetry 2.x
+RUN pip install --no-cache-dir "poetry>=2.0.0,<3.0.0"
+
+# 配置 Poetry (不创建虚拟环境，因为已经在容器中)
+RUN poetry config virtualenvs.create false
 
 # 设置工作目录
 WORKDIR /app
@@ -137,11 +131,8 @@ WORKDIR /app
 # 复制依赖文件
 COPY pyproject.toml poetry.lock ./
 
-# 配置 Poetry (不创建虚拟环境，因为已经在容器中)
-RUN poetry config virtualenvs.create false
-
-# 安装 Python 依赖 (仅生产环境依赖)
-RUN poetry install --no-dev --no-interaction --no-ansi
+# 安装 Python 依赖 (仅生产环境依赖，不安装当前项目)
+RUN poetry install --only=main --no-interaction --no-ansi --no-root
 
 # 安装 Playwright 浏览器
 RUN playwright install chromium --with-deps
@@ -179,6 +170,18 @@ WORKDIR /app
 # 复制项目代码
 COPY --chown=aiecs:aiecs . .
 
+# 安装当前项目 (在复制代码后)
+RUN poetry install --only=main --no-interaction --no-ansi
+
+# 为 aiecs 用户安装 Playwright 浏览器 (在切换用户之前)
+RUN mkdir -p /home/aiecs/.cache && \
+    if [ -d /root/.cache/ms-playwright ]; then \
+        cp -r /root/.cache/ms-playwright /home/aiecs/.cache/ && \
+        chown -R aiecs:aiecs /home/aiecs/.cache/ms-playwright; \
+    else \
+        su - aiecs -c "playwright install chromium --with-deps" || true; \
+    fi
+
 # 切换到非 root 用户
 USER aiecs
 
@@ -209,7 +212,7 @@ FROM python-deps as development
 # 安装开发依赖
 WORKDIR /app
 COPY pyproject.toml poetry.lock ./
-RUN poetry install --no-interaction --no-ansi
+RUN poetry install --no-interaction --no-ansi --extras dev --no-root
 
 # 安装开发工具
 RUN pip install --no-cache-dir \
@@ -228,6 +231,9 @@ RUN useradd -m -u 1000 aiecs && \
 
 WORKDIR /app
 COPY --chown=aiecs:aiecs . .
+
+# 安装当前项目 (在复制代码后)
+RUN poetry install --no-interaction --no-ansi --extras dev
 
 USER aiecs
 

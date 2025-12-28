@@ -289,7 +289,9 @@ def validate_schemas(
     tool_names: Optional[List[str]] = None,
     verbose: bool = False,
     show_examples: bool = False,
-):
+    export_coverage: Optional[str] = None,
+    min_coverage: float = 0.0,
+) -> Dict[str, Any]:
     """
     验证工具的 Schema 质量
 
@@ -297,6 +299,11 @@ def validate_schemas(
         tool_names: 要验证的工具名称列表，None 表示验证所有工具
         verbose: 是否显示详细信息
         show_examples: 是否显示示例 Schema
+        export_coverage: 导出覆盖率报告的文件路径（支持 .json, .html, .txt）
+        min_coverage: 最小覆盖率阈值（0-100），低于此值的工具会被标记
+
+    Returns:
+        包含所有工具分析结果的字典
     """
     print("=" * 100)
     print("工具 Schema 质量验证器")
@@ -315,7 +322,7 @@ def validate_schemas(
 
         if not tools_to_check:
             print("\n没有找到要验证的工具")
-            return
+            return {}
     else:
         tools_to_check = TOOL_CLASSES
 
@@ -334,16 +341,53 @@ def validate_schemas(
         total_generated = sum(r["metrics"].schemas_generated for r in all_results.values())
         total_fields = sum(r["metrics"].total_fields for r in all_results.values())
         total_meaningful = sum(r["metrics"].fields_with_meaningful_descriptions for r in all_results.values())
+        total_with_types = sum(r["metrics"].fields_with_types for r in all_results.values())
 
         overall_generation = (total_generated / total_methods * 100) if total_methods > 0 else 0
         overall_description = (total_meaningful / total_fields * 100) if total_fields > 0 else 0
+        overall_type_coverage = (total_with_types / total_fields * 100) if total_fields > 0 else 0
+        overall_score = (overall_generation + overall_description + overall_type_coverage) / 3
 
         print("\n" + "=" * 100)
         print("总体统计:")
+        print(f"  工具数: {len(all_results)}")
         print(f"  方法数: {total_methods}")
         print(f"  Schema 生成率: {total_generated}/{total_methods} ({overall_generation:.1f}%)")
         print(f"  描述质量: {overall_description:.1f}%")
+        print(f"  类型覆盖率: {overall_type_coverage:.1f}%")
+        print(f"  综合评分: {overall_score:.1f}%")
         print("=" * 100)
+        
+        # Coverage summary by tool
+        print("\n覆盖率摘要:")
+        tools_by_coverage = []
+        for tool_name, result in all_results.items():
+            metrics = result["metrics"]
+            scores = metrics.get_scores()
+            coverage = scores["generation_rate"]
+            tools_by_coverage.append((tool_name, coverage, scores))
+        
+        # Sort by coverage (lowest first)
+        tools_by_coverage.sort(key=lambda x: x[1])
+        
+        # Show tools below 90%
+        low_coverage_tools = [t for t in tools_by_coverage if t[1] < 90]
+        if low_coverage_tools:
+            print(f"\n  需要改进的工具 ({len(low_coverage_tools)} 个，覆盖率 < 90%):")
+            for tool_name, coverage, scores in low_coverage_tools[:10]:
+                print(f"    - {tool_name}: {coverage:.1f}% (生成率: {scores['generation_rate']:.1f}%, "
+                      f"描述: {scores['description_quality']:.1f}%, 类型: {scores['type_coverage']:.1f}%)")
+            if len(low_coverage_tools) > 10:
+                print(f"    ... 还有 {len(low_coverage_tools) - 10} 个工具需要改进")
+        
+        # Show tools at 90%+
+        high_coverage_tools = [t for t in tools_by_coverage if t[1] >= 90]
+        if high_coverage_tools:
+            print(f"\n  ✅ 达标工具 ({len(high_coverage_tools)} 个，覆盖率 ≥ 90%):")
+            for tool_name, coverage, scores in high_coverage_tools[:5]:
+                print(f"    - {tool_name}: {coverage:.1f}%")
+            if len(high_coverage_tools) > 5:
+                print(f"    ... 还有 {len(high_coverage_tools) - 5} 个工具已达标")
 
     print("\n💡 改进建议:")
     print("  1. 在方法的文档字符串第一行添加简短描述")
@@ -358,6 +402,19 @@ def validate_schemas(
     print("          records: List of records to filter")
     print("          condition: Filter condition (pandas query syntax)")
     print('      """')
+    
+    # Export coverage report if requested
+    if export_coverage:
+        from aiecs.scripts.tools_develop.schema_coverage import generate_coverage_report
+        report_format = "json" if export_coverage.endswith(".json") else "html" if export_coverage.endswith(".html") else "text"
+        generate_coverage_report(
+            tool_names=tool_names,
+            format=report_format,
+            output=export_coverage,
+            min_coverage=min_coverage,
+        )
+    
+    return all_results
 
 
 def main():
@@ -388,11 +445,30 @@ def main():
     parser.add_argument("-v", "--verbose", action="store_true", help="显示详细的改进建议")
 
     parser.add_argument("-e", "--show-examples", action="store_true", help="显示示例 Schema")
+    
+    parser.add_argument(
+        "--export-coverage",
+        type=str,
+        help="导出覆盖率报告到文件（支持 .json, .html, .txt 格式）"
+    )
+    
+    parser.add_argument(
+        "--min-coverage",
+        type=float,
+        default=0.0,
+        help="最小覆盖率阈值（0-100），用于导出报告时过滤工具"
+    )
 
     args = parser.parse_args()
 
     tool_names = args.tools if args.tools else None
-    validate_schemas(tool_names, args.verbose, args.show_examples)
+    validate_schemas(
+        tool_names,
+        args.verbose,
+        args.show_examples,
+        args.export_coverage,
+        args.min_coverage,
+    )
 
 
 if __name__ == "__main__":
