@@ -536,16 +536,143 @@ class VertexAIClient(BaseLLMClient):
         max_tokens: Optional[int] = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]:
-        """Stream text using Vertex AI (simulated streaming)"""
-        # Vertex AI streaming is more complex, for now fall back to
-        # non-streaming
-        response = await self.generate_text(messages, model, temperature, max_tokens, **kwargs)
+        """Stream text using Vertex AI real streaming API"""
+        self._init_vertex_ai()
 
-        # Simulate streaming by yielding words
-        words = response.content.split()
-        for word in words:
-            yield word + " "
-            await asyncio.sleep(0.05)  # Small delay to simulate streaming
+        # Get model name from config if not provided
+        model_name = model or self._get_default_model() or "gemini-2.5-pro"
+
+        # Get model config for default parameters
+        model_config = self._get_model_config(model_name)
+        if model_config and max_tokens is None:
+            max_tokens = model_config.default_params.max_tokens
+
+        try:
+            # Use the stable Vertex AI API
+            model_instance = GenerativeModel(model_name)
+            self.logger.debug(f"Initialized Vertex AI model for streaming: {model_name}")
+
+            # Convert messages to Vertex AI format
+            if len(messages) == 1 and messages[0].role == "user":
+                prompt = messages[0].content
+            else:
+                # For multi-turn conversations, combine messages
+                prompt = "\n".join([f"{msg.role}: {msg.content}" for msg in messages])
+
+            # Use modern GenerationConfig object
+            generation_config = GenerationConfig(
+                temperature=temperature,
+                max_output_tokens=max_tokens or 8192,
+                top_p=0.95,
+                top_k=40,
+            )
+
+            # Get safety settings from kwargs or use defaults
+            if "safety_settings" in kwargs:
+                safety_settings = kwargs["safety_settings"]
+                if not isinstance(safety_settings, list):
+                    raise ValueError("safety_settings must be a list of SafetySetting objects")
+            else:
+                # Default safety settings
+                safety_settings = [
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                ]
+
+            # Use Vertex AI's real streaming API
+            # Vertex AI SDK's generate_content with stream=True returns a synchronous iterator
+            # We need to iterate it in an executor to avoid blocking the event loop
+            def get_stream():
+                """Get the streaming response iterator"""
+                return model_instance.generate_content(
+                    prompt,
+                    generation_config=generation_config,
+                    safety_settings=safety_settings,
+                    stream=True,  # Enable real streaming
+                )
+            
+            # Get the stream iterator synchronously (this is fast, just creates the iterator)
+            stream_response = get_stream()
+
+            # Check for prompt-level safety blocks first
+            # Note: prompt_feedback might be in the first chunk or response object
+            first_chunk_checked = False
+
+            # Stream chunks from Vertex AI
+            # We iterate the synchronous iterator, but yield each chunk asynchronously
+            # This preserves the streaming behavior while keeping the async interface
+            for chunk in stream_response:
+                # Process each chunk in executor to avoid blocking
+                # But yield immediately to maintain streaming behavior
+                await asyncio.sleep(0)  # Yield control to event loop
+                # Check prompt_feedback in the first chunk if available
+                if not first_chunk_checked and hasattr(chunk, "prompt_feedback"):
+                    pf = chunk.prompt_feedback
+                    if hasattr(pf, "block_reason") and pf.block_reason:
+                        block_reason = str(pf.block_reason)
+                        if block_reason not in ["BLOCKED_REASON_UNSPECIFIED", "OTHER"]:
+                            raise _build_safety_block_error(
+                                chunk,
+                                block_type="prompt",
+                                default_message="Prompt blocked by safety filters",
+                            )
+                    elif hasattr(pf, "get") and pf.get("block_reason"):
+                        block_reason = pf.get("block_reason")
+                        if block_reason not in ["BLOCKED_REASON_UNSPECIFIED", "OTHER"]:
+                            raise _build_safety_block_error(
+                                chunk,
+                                block_type="prompt",
+                                default_message="Prompt blocked by safety filters",
+                            )
+                    first_chunk_checked = True
+
+                # Extract text content from chunk
+                if hasattr(chunk, "candidates") and chunk.candidates:
+                    candidate = chunk.candidates[0]
+                    
+                    # Check for safety blocks in response
+                    if hasattr(candidate, "finish_reason"):
+                        finish_reason = candidate.finish_reason
+                        if finish_reason in ["SAFETY", "RECITATION"]:
+                            raise _build_safety_block_error(
+                                chunk,
+                                block_type="response",
+                                default_message="Response blocked by safety filters",
+                            )
+                    
+                    # Extract text from chunk parts
+                    if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
+                        for part in candidate.content.parts:
+                            if hasattr(part, "text") and part.text:
+                                # Yield text chunk as-is, preserving all characters including newlines
+                                yield part.text
+                    
+                    # Also check if text is directly available
+                    elif hasattr(candidate, "text"):
+                        yield candidate.text
+
+        except SafetyBlockError:
+            # Re-raise safety block errors as-is
+            raise
+        except Exception as e:
+            if "quota" in str(e).lower() or "limit" in str(e).lower():
+                raise RateLimitError(f"Vertex AI quota exceeded: {str(e)}")
+            self.logger.error(f"Error in Vertex AI streaming: {str(e)}")
+            raise
 
     def get_part_count_stats(self) -> Dict[str, Any]:
         """
