@@ -18,6 +18,7 @@ from aiecs.llm.clients.base_client import (
     LLMResponse,
     ProviderNotAvailableError,
     RateLimitError,
+    SafetyBlockError,
 )
 from aiecs.config.config import get_settings
 
@@ -30,6 +31,150 @@ warnings.filterwarnings(
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_safety_ratings(safety_ratings: Any) -> List[Dict[str, Any]]:
+    """
+    Extract safety ratings information from Vertex AI response.
+    
+    Args:
+        safety_ratings: Safety ratings object from Vertex AI response
+        
+    Returns:
+        List of dictionaries containing safety rating details
+    """
+    ratings_list = []
+    if not safety_ratings:
+        return ratings_list
+    
+    # Handle both list and single object
+    ratings_iter = safety_ratings if isinstance(safety_ratings, list) else [safety_ratings]
+    
+    for rating in ratings_iter:
+        rating_dict = {}
+        
+        # Extract category
+        if hasattr(rating, "category"):
+            rating_dict["category"] = str(rating.category)
+        elif hasattr(rating, "get"):
+            rating_dict["category"] = rating.get("category", "UNKNOWN")
+        
+        # Extract blocked status
+        if hasattr(rating, "blocked"):
+            rating_dict["blocked"] = bool(rating.blocked)
+        elif hasattr(rating, "get"):
+            rating_dict["blocked"] = rating.get("blocked", False)
+        
+        # Extract severity (for HarmBlockMethod.SEVERITY)
+        if hasattr(rating, "severity"):
+            rating_dict["severity"] = str(rating.severity)
+        elif hasattr(rating, "get"):
+            rating_dict["severity"] = rating.get("severity")
+        
+        if hasattr(rating, "severity_score"):
+            rating_dict["severity_score"] = float(rating.severity_score)
+        elif hasattr(rating, "get"):
+            rating_dict["severity_score"] = rating.get("severity_score")
+        
+        # Extract probability (for HarmBlockMethod.PROBABILITY)
+        if hasattr(rating, "probability"):
+            rating_dict["probability"] = str(rating.probability)
+        elif hasattr(rating, "get"):
+            rating_dict["probability"] = rating.get("probability")
+        
+        if hasattr(rating, "probability_score"):
+            rating_dict["probability_score"] = float(rating.probability_score)
+        elif hasattr(rating, "get"):
+            rating_dict["probability_score"] = rating.get("probability_score")
+        
+        ratings_list.append(rating_dict)
+    
+    return ratings_list
+
+
+def _build_safety_block_error(
+    response: Any,
+    block_type: str,
+    default_message: str,
+) -> SafetyBlockError:
+    """
+    Build a detailed SafetyBlockError from Vertex AI response.
+    
+    Args:
+        response: Vertex AI response object
+        block_type: "prompt" or "response"
+        default_message: Default error message
+        
+    Returns:
+        SafetyBlockError with detailed information
+    """
+    block_reason = None
+    safety_ratings = []
+    
+    if block_type == "prompt":
+        # Check prompt_feedback for prompt blocks
+        if hasattr(response, "prompt_feedback"):
+            pf = response.prompt_feedback
+            if hasattr(pf, "block_reason"):
+                block_reason = str(pf.block_reason)
+            elif hasattr(pf, "get"):
+                block_reason = pf.get("block_reason")
+            
+            if hasattr(pf, "safety_ratings"):
+                safety_ratings = _extract_safety_ratings(pf.safety_ratings)
+            elif hasattr(pf, "get"):
+                safety_ratings = _extract_safety_ratings(pf.get("safety_ratings", []))
+    
+    elif block_type == "response":
+        # Check candidates for response blocks
+        if hasattr(response, "candidates") and response.candidates:
+            candidate = response.candidates[0]
+            if hasattr(candidate, "safety_ratings"):
+                safety_ratings = _extract_safety_ratings(candidate.safety_ratings)
+            elif hasattr(candidate, "get"):
+                safety_ratings = _extract_safety_ratings(candidate.get("safety_ratings", []))
+            
+            # Check finish_reason
+            if hasattr(candidate, "finish_reason"):
+                finish_reason = str(candidate.finish_reason)
+                if finish_reason in ["SAFETY", "RECITATION"]:
+                    block_reason = finish_reason
+    
+    # Build detailed error message
+    error_parts = [default_message]
+    if block_reason:
+        error_parts.append(f"Block reason: {block_reason}")
+    
+    blocked_categories = [
+        r.get("category", "UNKNOWN")
+        for r in safety_ratings
+        if r.get("blocked", False)
+    ]
+    if blocked_categories:
+        error_parts.append(f"Blocked categories: {', '.join(blocked_categories)}")
+    
+    # Add severity/probability information
+    for rating in safety_ratings:
+        if rating.get("blocked"):
+            if "severity" in rating:
+                error_parts.append(
+                    f"{rating.get('category', 'UNKNOWN')}: severity={rating.get('severity')}, "
+                    f"score={rating.get('severity_score', 'N/A')}"
+                )
+            elif "probability" in rating:
+                error_parts.append(
+                    f"{rating.get('category', 'UNKNOWN')}: probability={rating.get('probability')}, "
+                    f"score={rating.get('probability_score', 'N/A')}"
+                )
+    
+    error_message = " | ".join(error_parts)
+    
+    return SafetyBlockError(
+        message=error_message,
+        block_reason=block_reason,
+        block_type=block_type,
+        safety_ratings=safety_ratings,
+    )
 
 
 class VertexAIClient(BaseLLMClient):
@@ -123,24 +268,32 @@ class VertexAIClient(BaseLLMClient):
             )
 
             # Modern safety settings configuration using SafetySetting objects
-            safety_settings = [
-                SafetySetting(
-                    category=HarmCategory.HARM_CATEGORY_HARASSMENT,
-                    threshold=HarmBlockThreshold.BLOCK_NONE,
-                ),
-                SafetySetting(
-                    category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                    threshold=HarmBlockThreshold.BLOCK_NONE,
-                ),
-                SafetySetting(
-                    category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                    threshold=HarmBlockThreshold.BLOCK_NONE,
-                ),
-                SafetySetting(
-                    category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                    threshold=HarmBlockThreshold.BLOCK_NONE,
-                ),
-            ]
+            # Allow override via kwargs, otherwise use defaults (BLOCK_NONE for all categories)
+            if "safety_settings" in kwargs:
+                safety_settings = kwargs["safety_settings"]
+                if not isinstance(safety_settings, list):
+                    raise ValueError("safety_settings must be a list of SafetySetting objects")
+            else:
+                # Default safety settings - can be configured via environment or config
+                # Default to BLOCK_NONE to allow all content (can be overridden)
+                safety_settings = [
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                ]
 
             response = await asyncio.get_event_loop().run_in_executor(
                 None,
@@ -150,6 +303,28 @@ class VertexAIClient(BaseLLMClient):
                     safety_settings=safety_settings,
                 ),
             )
+
+            # Check for prompt-level safety blocks first
+            if hasattr(response, "prompt_feedback"):
+                pf = response.prompt_feedback
+                # Check if prompt was blocked
+                if hasattr(pf, "block_reason") and pf.block_reason:
+                    block_reason = str(pf.block_reason)
+                    if block_reason not in ["BLOCKED_REASON_UNSPECIFIED", "OTHER"]:
+                        # Prompt was blocked by safety filters
+                        raise _build_safety_block_error(
+                            response,
+                            block_type="prompt",
+                            default_message="Prompt blocked by safety filters",
+                        )
+                elif hasattr(pf, "get") and pf.get("block_reason"):
+                    block_reason = pf.get("block_reason")
+                    if block_reason not in ["BLOCKED_REASON_UNSPECIFIED", "OTHER"]:
+                        raise _build_safety_block_error(
+                            response,
+                            block_type="prompt",
+                            default_message="Prompt blocked by safety filters",
+                        )
 
             # Handle response content safely - improved multi-part response
             # handling
@@ -262,14 +437,43 @@ class VertexAIClient(BaseLLMClient):
                                 "SAFETY",
                                 "RECITATION",
                             ]:
-                                content = "[Response blocked by safety filters or content policy]"
-                                self.logger.warning(f"Response blocked by safety filters: {candidate.finish_reason}")
+                                # Response was blocked by safety filters
+                                raise _build_safety_block_error(
+                                    response,
+                                    block_type="response",
+                                    default_message="Response blocked by safety filters",
+                                )
                             else:
                                 content = f"[Response error: Cannot get response text - {candidate.finish_reason}]"
                         else:
                             content = "[Response error: Cannot get the response text]"
                 else:
-                    content = f"[Response error: No candidates found - {str(ve)}]"
+                    # No candidates found - check if this is due to safety filters
+                    # Check prompt_feedback for block reason
+                    if hasattr(response, "prompt_feedback"):
+                        pf = response.prompt_feedback
+                        if hasattr(pf, "block_reason") and pf.block_reason:
+                            block_reason = str(pf.block_reason)
+                            if block_reason not in ["BLOCKED_REASON_UNSPECIFIED", "OTHER"]:
+                                raise _build_safety_block_error(
+                                    response,
+                                    block_type="prompt",
+                                    default_message="No candidates found - prompt blocked by safety filters",
+                                )
+                        elif hasattr(pf, "get") and pf.get("block_reason"):
+                            block_reason = pf.get("block_reason")
+                            if block_reason not in ["BLOCKED_REASON_UNSPECIFIED", "OTHER"]:
+                                raise _build_safety_block_error(
+                                    response,
+                                    block_type="prompt",
+                                    default_message="No candidates found - prompt blocked by safety filters",
+                                )
+                    
+                    # If not a safety block, raise generic error with details
+                    error_msg = f"Response error: No candidates found - Response has no candidates (and thus no text)."
+                    if hasattr(response, "prompt_feedback"):
+                        error_msg += " Check prompt_feedback for details."
+                    raise ValueError(error_msg)
 
                 # Final fallback
                 if not content:
@@ -294,6 +498,9 @@ class VertexAIClient(BaseLLMClient):
                 cost_estimate=cost,
             )
 
+        except SafetyBlockError:
+            # Re-raise safety block errors as-is (they already contain detailed information)
+            raise
         except Exception as e:
             if "quota" in str(e).lower() or "limit" in str(e).lower():
                 raise RateLimitError(f"Vertex AI quota exceeded: {str(e)}")

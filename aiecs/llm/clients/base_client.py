@@ -60,6 +60,44 @@ class RateLimitError(LLMClientError):
     """Raised when rate limit is exceeded"""
 
 
+class SafetyBlockError(LLMClientError):
+    """Raised when content is blocked by safety filters"""
+    
+    def __init__(
+        self,
+        message: str,
+        block_reason: Optional[str] = None,
+        block_type: Optional[str] = None,  # "prompt" or "response"
+        safety_ratings: Optional[List[Dict[str, Any]]] = None,
+    ):
+        """
+        Initialize SafetyBlockError with detailed information.
+        
+        Args:
+            message: Error message
+            block_reason: Reason for blocking (e.g., SAFETY, RECITATION, JAILBREAK)
+            block_type: Type of block - "prompt" if input was blocked, "response" if output was blocked
+            safety_ratings: List of safety ratings with category, severity, etc.
+        """
+        super().__init__(message)
+        self.block_reason = block_reason
+        self.block_type = block_type
+        self.safety_ratings = safety_ratings or []
+    
+    def __str__(self) -> str:
+        """Return detailed error message"""
+        msg = super().__str__()
+        if self.block_reason:
+            msg += f" (Block reason: {self.block_reason})"
+        if self.block_type:
+            msg += f" (Block type: {self.block_type})"
+        if self.safety_ratings:
+            categories = [r.get("category", "UNKNOWN") for r in self.safety_ratings if r.get("blocked")]
+            if categories:
+                msg += f" (Categories: {', '.join(categories)})"
+        return msg
+
+
 class BaseLLMClient(ABC):
     """Abstract base class for all LLM provider clients"""
 
