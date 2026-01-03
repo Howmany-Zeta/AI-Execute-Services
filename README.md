@@ -58,6 +58,22 @@ aiecs-fix-deps
 aiecs-patch-weasel
 ```
 
+### Container Deployment
+
+When installing aiecs in a container (e.g., Docker), you may encounter a warning about scripts not being on PATH:
+
+```
+WARNING: The scripts aiecs, aiecs-check-deps, ... are installed in '/tmp/.local/bin' which is not on PATH.
+```
+
+**Quick Fix:** Add the user bin directory to PATH in your Dockerfile:
+
+```dockerfile
+ENV PATH="${PATH}:/root/.local/bin"
+```
+
+For detailed troubleshooting and best practices, see [Deployment Troubleshooting Guide](docs/user/DEPLOYMENT_TROUBLESHOOTING.md).
+
 ## Quick Start
 
 ### Basic Usage

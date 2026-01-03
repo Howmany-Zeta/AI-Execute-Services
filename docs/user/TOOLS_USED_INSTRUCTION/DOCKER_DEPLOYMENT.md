@@ -544,6 +544,53 @@ docker network prune
 docker-compose up -d
 ```
 
+## 🔧 在用户容器中安装 AIECS
+
+如果您在自己的容器项目中安装 AIECS 作为依赖包，可能会遇到脚本路径警告：
+
+### 问题
+
+```bash
+WARNING: The scripts aiecs, aiecs-check-deps, ... are installed in '/tmp/.local/bin' which is not on PATH.
+```
+
+### 解决方案
+
+**方案 1：添加到 PATH（推荐）**
+
+在您的 Dockerfile 中添加：
+
+```dockerfile
+# 如果使用 root 用户
+ENV PATH="${PATH}:/root/.local/bin"
+
+# 如果使用非 root 用户（例如 myuser）
+ENV PATH="${PATH}:/home/myuser/.local/bin"
+```
+
+**方案 2：系统级安装**
+
+在容器中，通常不需要使用 `--user` 安装：
+
+```dockerfile
+# 不使用 --user，直接系统级安装
+RUN pip install aiecs
+```
+
+**方案 3：使用 Python 模块调用**
+
+如果不需要命令行工具，可以直接使用 Python 模块：
+
+```python
+# 不使用命令行
+# aiecs-version  # ❌
+
+# 使用 Python 模块
+python -m aiecs.scripts.aid.version_manager  # ✅
+```
+
+更多故障排除信息，请参阅 [部署故障排除指南](../DEPLOYMENT_TROUBLESHOOTING.md)。
+
 ## 📚 参考资料
 
 ### Docker 最佳实践
@@ -554,6 +601,9 @@ docker-compose up -d
 ### 安全指南
 - [Docker安全](https://docs.docker.com/engine/security/)
 - [容器安全最佳实践](https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html)
+
+### AIECS 文档
+- [部署故障排除指南](../DEPLOYMENT_TROUBLESHOOTING.md)
 
 ## 🎉 总结
 
