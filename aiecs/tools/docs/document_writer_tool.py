@@ -235,7 +235,15 @@ class DocumentWriterTool(BaseTool):
                 }
 
                 self.file_storage = FileStorage(storage_config)
-                asyncio.create_task(self._init_storage_async())
+                # Initialize storage asynchronously if in async context, otherwise defer
+                try:
+                    loop = asyncio.get_running_loop()
+                    # We're in an async context, create task
+                    asyncio.create_task(self._init_storage_async())
+                except RuntimeError:
+                    # Not in async context, initialization will happen on first async operation
+                    # or can be called explicitly via write_document_async
+                    pass
 
             except ImportError:
                 self.logger.warning("FileStorage not available, cloud storage disabled")
@@ -261,6 +269,51 @@ class DocumentWriterTool(BaseTool):
             DocumentFormat.YAML: self._validate_yaml_content,
             DocumentFormat.HTML: self._validate_html_content,
         }
+
+    def _run_async_safely(self, coro):
+        """Safely run async coroutine from sync context
+        
+        This method handles both cases:
+        1. If already in an async context (event loop running), creates a new event loop in a thread
+        2. If not in async context, uses asyncio.run() to create new event loop
+        
+        Args:
+            coro: Coroutine to run
+            
+        Returns:
+            Result of the coroutine
+        """
+        try:
+            # Try to get the running event loop
+            asyncio.get_running_loop()
+            # If we get here, we're in an async context
+            # We need to run the coroutine in a separate thread with its own event loop
+            import concurrent.futures
+            import threading
+            
+            result = None
+            exception = None
+            
+            def run_in_thread():
+                nonlocal result, exception
+                try:
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    result = new_loop.run_until_complete(coro)
+                    new_loop.close()
+                except Exception as e:
+                    exception = e
+            
+            thread = threading.Thread(target=run_in_thread)
+            thread.start()
+            thread.join()
+            
+            if exception:
+                raise exception
+            return result
+        except RuntimeError:
+            # No running event loop, safe to use asyncio.run()
+            return asyncio.run(coro)
 
     # Schema definitions
     class Write_documentSchema(BaseModel):
@@ -361,8 +414,7 @@ class DocumentWriterTool(BaseTool):
                 backup_info = self._create_backup(target_path, backup_comment)
 
             # Step 5: Execute atomic write
-            import asyncio
-            write_result = asyncio.run(self._execute_atomic_write(target_path, processed_content, format, encoding, write_plan))
+            write_result = self._run_async_safely(self._execute_atomic_write(target_path, processed_content, format, encoding, write_plan))
 
             # Step 6: Update metadata and versioning
             version_info = self._handle_versioning(target_path, content_metadata, metadata)
