@@ -20,6 +20,7 @@ from aiecs.llm.clients.base_client import (
     RateLimitError,
     SafetyBlockError,
 )
+from aiecs.llm.clients.google_function_calling_mixin import GoogleFunctionCallingMixin
 from aiecs.config.config import get_settings
 
 # Suppress Vertex AI SDK deprecation warnings (deprecated June 2025, removal June 2026)
@@ -177,7 +178,7 @@ def _build_safety_block_error(
     )
 
 
-class VertexAIClient(BaseLLMClient):
+class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
     """Vertex AI provider client"""
 
     def __init__(self):
@@ -233,6 +234,9 @@ class VertexAIClient(BaseLLMClient):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        functions: Optional[List[Dict[str, Any]]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Any] = None,
         **kwargs,
     ) -> LLMResponse:
         """Generate text using Vertex AI"""
@@ -295,13 +299,38 @@ class VertexAIClient(BaseLLMClient):
                     ),
                 ]
 
+            # Prepare tools for Function Calling if provided
+            tools_for_api = None
+            if tools or functions:
+                # Convert OpenAI format to Google format
+                tools_list = tools or []
+                if functions:
+                    # Convert legacy functions format to tools format
+                    tools_list = [{"type": "function", "function": func} for func in functions]
+                
+                google_tools = self._convert_openai_to_google_format(tools_list)
+                if google_tools:
+                    tools_for_api = google_tools
+            
+            # Build API call parameters
+            api_params = {
+                "prompt": prompt,
+                "generation_config": generation_config,
+                "safety_settings": safety_settings,
+            }
+            
+            # Add tools if available
+            if tools_for_api:
+                api_params["tools"] = tools_for_api
+            
+            # Add any additional kwargs (but exclude tools/safety_settings to avoid conflicts)
+            for key, value in kwargs.items():
+                if key not in ["tools", "safety_settings"]:
+                    api_params[key] = value
+            
             response = await asyncio.get_event_loop().run_in_executor(
                 None,
-                lambda: model_instance.generate_content(
-                    prompt,
-                    generation_config=generation_config,
-                    safety_settings=safety_settings,
-                ),
+                lambda: model_instance.generate_content(**api_params),
             )
 
             # Check for prompt-level safety blocks first
@@ -488,7 +517,10 @@ class VertexAIClient(BaseLLMClient):
             # Use config-based cost estimation
             cost = self._estimate_cost_from_config(model_name, input_tokens, output_tokens)
 
-            return LLMResponse(
+            # Extract function calls from response if present
+            function_calls = self._extract_function_calls_from_google_response(response)
+
+            llm_response = LLMResponse(
                 content=content,
                 provider=self.provider_name,
                 model=model_name,
@@ -497,6 +529,12 @@ class VertexAIClient(BaseLLMClient):
                 completion_tokens=output_tokens,  # Estimated value since Vertex AI doesn't provide detailed usage
                 cost_estimate=cost,
             )
+
+            # Attach function call info if present
+            if function_calls:
+                self._attach_function_calls_to_response(llm_response, function_calls)
+
+            return llm_response
 
         except SafetyBlockError:
             # Re-raise safety block errors as-is (they already contain detailed information)
@@ -534,9 +572,29 @@ class VertexAIClient(BaseLLMClient):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        functions: Optional[List[Dict[str, Any]]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Any] = None,
+        return_chunks: bool = False,
         **kwargs,
-    ) -> AsyncGenerator[str, None]:
-        """Stream text using Vertex AI real streaming API"""
+    ) -> AsyncGenerator[Any, None]:
+        """
+        Stream text using Vertex AI real streaming API with Function Calling support.
+        
+        Args:
+            messages: List of LLM messages
+            model: Model name (optional)
+            temperature: Temperature for generation
+            max_tokens: Maximum tokens to generate
+            functions: List of function schemas (legacy format)
+            tools: List of tool schemas (new format)
+            tool_choice: Tool choice strategy (not used for Google Vertex AI)
+            return_chunks: If True, returns GoogleStreamChunk objects; if False, returns str tokens only
+            **kwargs: Additional arguments
+            
+        Yields:
+            str or GoogleStreamChunk: Text tokens or StreamChunk objects
+        """
         self._init_vertex_ai()
 
         # Get model name from config if not provided
@@ -593,77 +651,33 @@ class VertexAIClient(BaseLLMClient):
                     ),
                 ]
 
-            # Use Vertex AI's real streaming API
-            # Vertex AI SDK's generate_content with stream=True returns a synchronous iterator
-            # We need to iterate it in an executor to avoid blocking the event loop
-            def get_stream():
-                """Get the streaming response iterator"""
-                return model_instance.generate_content(
-                    prompt,
-                    generation_config=generation_config,
-                    safety_settings=safety_settings,
-                    stream=True,  # Enable real streaming
-                )
+            # Prepare tools for Function Calling if provided
+            tools_for_api = None
+            if tools or functions:
+                # Convert OpenAI format to Google format
+                tools_list = tools or []
+                if functions:
+                    # Convert legacy functions format to tools format
+                    tools_list = [{"type": "function", "function": func} for func in functions]
+                
+                google_tools = self._convert_openai_to_google_format(tools_list)
+                if google_tools:
+                    tools_for_api = google_tools
             
-            # Get the stream iterator synchronously (this is fast, just creates the iterator)
-            stream_response = get_stream()
-
-            # Check for prompt-level safety blocks first
-            # Note: prompt_feedback might be in the first chunk or response object
-            first_chunk_checked = False
-
-            # Stream chunks from Vertex AI
-            # We iterate the synchronous iterator, but yield each chunk asynchronously
-            # This preserves the streaming behavior while keeping the async interface
-            for chunk in stream_response:
-                # Process each chunk in executor to avoid blocking
-                # But yield immediately to maintain streaming behavior
-                await asyncio.sleep(0)  # Yield control to event loop
-                # Check prompt_feedback in the first chunk if available
-                if not first_chunk_checked and hasattr(chunk, "prompt_feedback"):
-                    pf = chunk.prompt_feedback
-                    if hasattr(pf, "block_reason") and pf.block_reason:
-                        block_reason = str(pf.block_reason)
-                        if block_reason not in ["BLOCKED_REASON_UNSPECIFIED", "OTHER"]:
-                            raise _build_safety_block_error(
-                                chunk,
-                                block_type="prompt",
-                                default_message="Prompt blocked by safety filters",
-                            )
-                    elif hasattr(pf, "get") and pf.get("block_reason"):
-                        block_reason = pf.get("block_reason")
-                        if block_reason not in ["BLOCKED_REASON_UNSPECIFIED", "OTHER"]:
-                            raise _build_safety_block_error(
-                                chunk,
-                                block_type="prompt",
-                                default_message="Prompt blocked by safety filters",
-                            )
-                    first_chunk_checked = True
-
-                # Extract text content from chunk
-                if hasattr(chunk, "candidates") and chunk.candidates:
-                    candidate = chunk.candidates[0]
-                    
-                    # Check for safety blocks in response
-                    if hasattr(candidate, "finish_reason"):
-                        finish_reason = candidate.finish_reason
-                        if finish_reason in ["SAFETY", "RECITATION"]:
-                            raise _build_safety_block_error(
-                                chunk,
-                                block_type="response",
-                                default_message="Response blocked by safety filters",
-                            )
-                    
-                    # Extract text from chunk parts
-                    if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
-                        for part in candidate.content.parts:
-                            if hasattr(part, "text") and part.text:
-                                # Yield text chunk as-is, preserving all characters including newlines
-                                yield part.text
-                    
-                    # Also check if text is directly available
-                    elif hasattr(candidate, "text"):
-                        yield candidate.text
+            # Use mixin method for Function Calling support
+            from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
+            
+            async for chunk in self._stream_text_with_function_calling(
+                model_instance=model_instance,
+                prompt=prompt,
+                generation_config=generation_config,
+                safety_settings=safety_settings,
+                tools=tools_for_api,
+                return_chunks=return_chunks,
+                **kwargs,
+            ):
+                # Yield chunk (can be str or StreamChunk)
+                yield chunk
 
         except SafetyBlockError:
             # Re-raise safety block errors as-is

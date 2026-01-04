@@ -17,8 +17,10 @@ def _get_config_loader():
 
 @dataclass
 class LLMMessage:
-    role: str  # "system", "user", "assistant"
-    content: str
+    role: str  # "system", "user", "assistant", "tool"
+    content: Optional[str] = None  # None when using tool calls
+    tool_calls: Optional[List[Dict[str, Any]]] = None  # For assistant messages with tool calls
+    tool_call_id: Optional[str] = None  # For tool messages
 
 
 @dataclass

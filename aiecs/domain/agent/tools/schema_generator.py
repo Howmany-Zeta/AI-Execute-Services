@@ -6,8 +6,9 @@ Generate OpenAI-style function schemas from AIECS tools.
 
 import inspect
 import logging
-from typing import Dict, Any, List, Optional
-from aiecs.tools import get_tool
+from typing import Dict, Any, List, Optional, Type, Tuple
+from pydantic import BaseModel
+from aiecs.tools import get_tool, BaseTool
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,9 @@ class ToolSchemaGenerator:
     ) -> Dict[str, Any]:
         """
         Generate OpenAI function schema for a tool operation.
+
+        This method prioritizes Pydantic schemas from BaseTool for accurate
+        parameter descriptions and types.
 
         Args:
             tool_name: Tool name
@@ -61,17 +65,32 @@ class ToolSchemaGenerator:
             if method is None:
                 raise ValueError(f"Tool {tool_name} has no 'run' method")
 
-        # Extract parameters
-        parameters = ToolSchemaGenerator._extract_parameters(method)
+        # Try to get Pydantic schema from BaseTool first
+        schema_class = None
+        if isinstance(tool, BaseTool) and hasattr(tool, "_schemas"):
+            schema_class = tool._schemas.get(operation)
+
+        # Extract parameters - prefer Pydantic schema if available
+        if schema_class:
+            parameters, required = ToolSchemaGenerator._extract_from_pydantic_schema(schema_class)
+            # Get description from schema class docstring or method docstring
+            if not description:
+                description = ToolSchemaGenerator._get_description(schema_class, method)
+        else:
+            # Fallback to method signature inspection
+            parameters = ToolSchemaGenerator._extract_parameters(method)
+            required = ToolSchemaGenerator._get_required_params(method)
+            if not description:
+                description = ToolSchemaGenerator._get_description(None, method) or f"{tool_name} tool"
 
         # Build schema
         schema = {
             "name": function_name,
-            "description": description or f"{tool_name} tool",
+            "description": description,
             "parameters": {
                 "type": "object",
                 "properties": parameters,
-                "required": ToolSchemaGenerator._get_required_params(method),
+                "required": required,
             },
         }
 
@@ -172,6 +191,57 @@ class ToolSchemaGenerator:
         return required
 
     @staticmethod
+    def _extract_from_pydantic_schema(schema_class: Type[BaseModel]) -> Tuple[Dict[str, Dict[str, Any]], List[str]]:
+        """
+        Extract parameters from Pydantic schema class.
+
+        Args:
+            schema_class: Pydantic BaseModel class
+
+        Returns:
+            Tuple of (properties dict, required fields list)
+        """
+        properties = {}
+        required = []
+
+        if not hasattr(schema_class, "model_fields"):
+            return properties, required
+
+        for field_name, field_info in schema_class.model_fields.items():
+            # Build property schema
+            prop_schema: Dict[str, Any] = {}
+
+            # Get type
+            field_type = field_info.annotation
+            prop_schema.update(ToolSchemaGenerator._type_to_schema(field_type))
+
+            # Get description from Field
+            if hasattr(field_info, "description") and field_info.description:
+                prop_schema["description"] = field_info.description
+
+            # Get default value
+            if field_info.default is not None and field_info.default != inspect.Parameter.empty:
+                prop_schema["default"] = field_info.default
+            else:
+                required.append(field_name)
+
+            properties[field_name] = prop_schema
+
+        return properties, required
+
+    @staticmethod
+    def _get_description(schema_class: Optional[Type[BaseModel]], method) -> Optional[str]:
+        """Get description from schema class docstring or method docstring."""
+        if schema_class and schema_class.__doc__:
+            return schema_class.__doc__.strip().split("\n")[0]
+        if method and method.__doc__:
+            # Extract first line of docstring
+            doc_lines = method.__doc__.strip().split("\n")
+            if doc_lines:
+                return doc_lines[0]
+        return None
+
+    @staticmethod
     def generate_schemas_for_tools(
         tool_names: List[str],
         operations: Optional[Dict[str, List[str]]] = None,
@@ -195,6 +265,79 @@ class ToolSchemaGenerator:
             for op in tool_ops:
                 try:
                     schema = ToolSchemaGenerator.generate_schema(tool_name, op)
+                    schemas.append(schema)
+                except Exception as e:
+                    logger.warning(f"Failed to generate schema for {tool_name}.{op}: {e}")
+
+        return schemas
+
+    @staticmethod
+    def generate_schemas_for_tool_instances(
+        tool_instances: Dict[str, BaseTool],
+        operations: Optional[Dict[str, List[str]]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Generate schemas for tool instances.
+
+        This method works directly with tool instances, which is useful
+        when tools are pre-configured with state.
+
+        Args:
+            tool_instances: Dict mapping tool names to BaseTool instances
+            operations: Optional dict mapping tool names to operations
+
+        Returns:
+            List of function schemas
+        """
+        schemas = []
+        operations = operations or {}
+
+        for tool_name, tool in tool_instances.items():
+            tool_ops = operations.get(tool_name, [None])
+
+            for op in tool_ops:
+                try:
+                    # Generate function name
+                    if op:
+                        function_name = f"{tool_name}_{op}"
+                    else:
+                        function_name = tool_name
+
+                    # Get operation method
+                    if op:
+                        if not hasattr(tool, op):
+                            logger.warning(f"Tool {tool_name} has no operation '{op}'")
+                            continue
+                        method = getattr(tool, op)
+                    else:
+                        method = getattr(tool, "run", None)
+                        if method is None:
+                            logger.warning(f"Tool {tool_name} has no 'run' method")
+                            continue
+
+                    # Try to get Pydantic schema from BaseTool
+                    schema_class = None
+                    if hasattr(tool, "_schemas"):
+                        schema_class = tool._schemas.get(op)
+
+                    # Extract parameters
+                    if schema_class:
+                        parameters, required = ToolSchemaGenerator._extract_from_pydantic_schema(schema_class)
+                        description = ToolSchemaGenerator._get_description(schema_class, method)
+                    else:
+                        parameters = ToolSchemaGenerator._extract_parameters(method)
+                        required = ToolSchemaGenerator._get_required_params(method)
+                        description = ToolSchemaGenerator._get_description(None, method) or f"{tool_name} tool"
+
+                    schema = {
+                        "name": function_name,
+                        "description": description,
+                        "parameters": {
+                            "type": "object",
+                            "properties": parameters,
+                            "required": required,
+                        },
+                    }
                     schemas.append(schema)
                 except Exception as e:
                     logger.warning(f"Failed to generate schema for {tool_name}.{op}: {e}")
