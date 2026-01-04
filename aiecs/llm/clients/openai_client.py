@@ -16,12 +16,16 @@ from aiecs.llm.clients.base_client import (
     ProviderNotAvailableError,
     RateLimitError,
 )
+from aiecs.llm.clients.openai_compatible_mixin import (
+    OpenAICompatibleFunctionCallingMixin,
+    StreamChunk,
+)
 from aiecs.config.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 
-class OpenAIClient(BaseLLMClient):
+class OpenAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
     """OpenAI provider client"""
 
     def __init__(self) -> None:
@@ -48,44 +52,44 @@ class OpenAIClient(BaseLLMClient):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        functions: Optional[List[Dict[str, Any]]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Any] = None,
         **kwargs,
     ) -> LLMResponse:
-        """Generate text using OpenAI API"""
+        """
+        Generate text using OpenAI API with optional function calling support.
+
+        Args:
+            messages: List of LLM messages
+            model: Model name (optional)
+            temperature: Temperature for generation
+            max_tokens: Maximum tokens to generate
+            functions: List of function schemas (legacy format)
+            tools: List of tool schemas (new format, recommended)
+            tool_choice: Tool choice strategy ("auto", "none", or specific tool)
+            **kwargs: Additional arguments passed to OpenAI API
+
+        Returns:
+            LLMResponse with content and optional function_call information
+        """
         client = self._get_client()
 
         # Get model name from config if not provided
         model = model or self._get_default_model() or "gpt-4-turbo"
 
-        # Convert to OpenAI message format
-        openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
-
         try:
-            response = await client.chat.completions.create(
+            # Use mixin method for Function Calling support
+            return await self._generate_text_with_function_calling(
+                client=client,
+                messages=messages,
                 model=model,
-                messages=cast(Any, openai_messages),  # type: ignore[arg-type]
                 temperature=temperature,
                 max_tokens=max_tokens,
+                functions=functions,
+                tools=tools,
+                tool_choice=tool_choice,
                 **kwargs,
-            )
-
-            content = response.choices[0].message.content
-            if content is None:
-                content = ""
-            tokens_used = response.usage.total_tokens if response.usage else None
-
-            # Estimate cost using config
-            input_tokens = response.usage.prompt_tokens if response.usage else 0
-            output_tokens = response.usage.completion_tokens if response.usage else 0
-            cost = self._estimate_cost_from_config(model, input_tokens, output_tokens)
-
-            return LLMResponse(
-                content=content,
-                provider=self.provider_name,
-                model=model,
-                tokens_used=tokens_used,
-                prompt_tokens=input_tokens if response.usage else None,
-                completion_tokens=output_tokens if response.usage else None,
-                cost_estimate=cost,
             )
 
         except Exception as e:
@@ -99,32 +103,49 @@ class OpenAIClient(BaseLLMClient):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        functions: Optional[List[Dict[str, Any]]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Any] = None,
+        return_chunks: bool = False,
         **kwargs,
-    ) -> AsyncGenerator[str, None]:
-        """Stream text using OpenAI API"""
+    ) -> AsyncGenerator[Any, None]:
+        """
+        Stream text using OpenAI API with optional function calling support.
+
+        Args:
+            messages: List of LLM messages
+            model: Model name (optional)
+            temperature: Temperature for generation
+            max_tokens: Maximum tokens to generate
+            functions: List of function schemas (legacy format)
+            tools: List of tool schemas (new format, recommended)
+            tool_choice: Tool choice strategy ("auto", "none", or specific tool)
+            return_chunks: If True, returns StreamChunk objects with tool_calls info; if False, returns str tokens only
+            **kwargs: Additional arguments passed to OpenAI API
+
+        Yields:
+            str or StreamChunk: Text tokens as they are generated, or StreamChunk objects if return_chunks=True
+        """
         client = self._get_client()
 
         # Get model name from config if not provided
         model = model or self._get_default_model() or "gpt-4-turbo"
 
-        openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
-
         try:
-            stream = await client.chat.completions.create(
+            # Use mixin method for Function Calling support
+            async for chunk in self._stream_text_with_function_calling(
+                client=client,
+                messages=messages,
                 model=model,
-                messages=cast(Any, openai_messages),  # type: ignore[arg-type]
                 temperature=temperature,
                 max_tokens=max_tokens,
-                stream=True,
+                functions=functions,
+                tools=tools,
+                tool_choice=tool_choice,
+                return_chunks=return_chunks,
                 **kwargs,
-            )
-
-            # Type narrowing: check if stream is async iterable
-            if hasattr(stream, "__aiter__"):
-                async for chunk in stream:
-                    if chunk.choices[0].delta.content:
-                        yield chunk.choices[0].delta.content
-
+            ):
+                yield chunk
         except Exception as e:
             if "rate_limit" in str(e).lower():
                 raise RateLimitError(f"OpenAI rate limit exceeded: {str(e)}")

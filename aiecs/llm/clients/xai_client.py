@@ -7,6 +7,10 @@ from aiecs.llm.clients.base_client import (
     ProviderNotAvailableError,
     RateLimitError,
 )
+from aiecs.llm.clients.openai_compatible_mixin import (
+    OpenAICompatibleFunctionCallingMixin,
+    StreamChunk,
+)
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -29,7 +33,7 @@ def _get_config_loader():
 logger = logging.getLogger(__name__)
 
 
-class XAIClient(BaseLLMClient):
+class XAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
     """xAI (Grok) provider client"""
 
     def __init__(self) -> None:
@@ -83,9 +87,16 @@ class XAIClient(BaseLLMClient):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        functions: Optional[List[Dict[str, Any]]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Any] = None,
         **kwargs,
     ) -> LLMResponse:
-        """Generate text using xAI API via OpenAI library (supports all Grok models)"""
+        """
+        Generate text using xAI API via OpenAI library (supports all Grok models).
+        
+        xAI API is OpenAI-compatible, so it supports Function Calling.
+        """
         # Check API key availability
         api_key = self._get_api_key()
         if not api_key:
@@ -100,34 +111,26 @@ class XAIClient(BaseLLMClient):
         model_map = self._get_model_map()
         api_model = model_map.get(selected_model, selected_model)
 
-        # Convert to OpenAI format
-        openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
-
         try:
-            completion = await client.chat.completions.create(
+            # Use mixin method for Function Calling support
+            response = await self._generate_text_with_function_calling(
+                client=client,
+                messages=messages,
                 model=api_model,
-                messages=cast(Any, openai_messages),  # type: ignore[arg-type]
                 temperature=temperature,
                 max_tokens=max_tokens,
+                functions=functions,
+                tools=tools,
+                tool_choice=tool_choice,
                 **kwargs,
             )
-
-            content = completion.choices[0].message.content
-            if content is None:
-                content = ""
-            tokens_used = completion.usage.total_tokens if completion.usage else None
-            prompt_tokens = completion.usage.prompt_tokens if completion.usage else None
-            completion_tokens = completion.usage.completion_tokens if completion.usage else None
-
-            return LLMResponse(
-                content=content,
-                provider=self.provider_name,
-                model=selected_model,
-                tokens_used=tokens_used,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                cost_estimate=0.0,  # xAI pricing not available yet
-            )
+            
+            # Override provider and model name for xAI
+            response.provider = self.provider_name
+            response.model = selected_model
+            response.cost_estimate = 0.0  # xAI pricing not available yet
+            
+            return response
 
         except Exception as e:
             if "rate limit" in str(e).lower() or "429" in str(e):
@@ -141,9 +144,20 @@ class XAIClient(BaseLLMClient):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        functions: Optional[List[Dict[str, Any]]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Any] = None,
+        return_chunks: bool = False,
         **kwargs,
-    ) -> AsyncGenerator[str, None]:
-        """Stream text using xAI API via OpenAI library (supports all Grok models)"""
+    ) -> AsyncGenerator[Any, None]:
+        """
+        Stream text using xAI API via OpenAI library (supports all Grok models).
+        
+        xAI API is OpenAI-compatible, so it supports Function Calling.
+        
+        Args:
+            return_chunks: If True, returns StreamChunk objects with tool_calls info; if False, returns str tokens only
+        """
         # Check API key availability
         api_key = self._get_api_key()
         if not api_key:
@@ -158,24 +172,21 @@ class XAIClient(BaseLLMClient):
         model_map = self._get_model_map()
         api_model = model_map.get(selected_model, selected_model)
 
-        # Convert to OpenAI format
-        openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
-
         try:
-            stream = await client.chat.completions.create(
+            # Use mixin method for Function Calling support
+            async for chunk in self._stream_text_with_function_calling(
+                client=client,
+                messages=messages,
                 model=api_model,
-                messages=cast(Any, openai_messages),  # type: ignore[arg-type]
                 temperature=temperature,
                 max_tokens=max_tokens,
-                stream=True,
+                functions=functions,
+                tools=tools,
+                tool_choice=tool_choice,
+                return_chunks=return_chunks,
                 **kwargs,
-            )
-
-            # Type narrowing: check if stream is async iterable
-            if hasattr(stream, "__aiter__"):
-                async for chunk in stream:
-                    if chunk.choices[0].delta.content is not None:
-                        yield chunk.choices[0].delta.content
+            ):
+                yield chunk
 
         except Exception as e:
             if "rate limit" in str(e).lower() or "429" in str(e):

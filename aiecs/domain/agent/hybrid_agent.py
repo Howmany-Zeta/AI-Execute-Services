@@ -11,6 +11,7 @@ from datetime import datetime
 
 from aiecs.llm import BaseLLMClient, LLMMessage
 from aiecs.tools import get_tool, BaseTool
+from aiecs.domain.agent.tools.schema_generator import ToolSchemaGenerator
 
 from .base_agent import BaseAIAgent
 from .models import AgentType, AgentConfiguration, ToolObservation
@@ -257,6 +258,8 @@ class HybridAgent(BaseAIAgent):
         self._max_iterations = max_iterations
         self._system_prompt: Optional[str] = None
         self._conversation_history: List[LLMMessage] = []
+        self._tool_schemas: List[Dict[str, Any]] = []
+        self._use_function_calling: bool = False  # Will be determined during initialization
 
         logger.info(f"HybridAgent initialized: {agent_id} with LLM ({self.llm_client.provider_name}) " f"and {len(tools) if isinstance(tools, (list, dict)) else 0} tools")
 
@@ -286,6 +289,12 @@ class HybridAgent(BaseAIAgent):
                     logger.warning(f"Failed to load tool {tool_name}: {e}")
 
             logger.info(f"HybridAgent {self.agent_id} initialized with {len(self._tool_instances)} tools")
+
+        # Generate tool schemas for Function Calling
+        self._generate_tool_schemas()
+
+        # Check if LLM client supports Function Calling
+        self._use_function_calling = self._check_function_calling_support()
 
         # Build system prompt
         self._system_prompt = self._build_system_prompt()
@@ -593,20 +602,176 @@ class HybridAgent(BaseAIAgent):
 
             # THINK: Stream LLM reasoning
             thought_tokens = []
-            async for token in self.llm_client.stream_text(  # type: ignore[attr-defined]
-                messages=messages,
-                model=self._config.llm_model,
-                temperature=self._config.temperature,
-                max_tokens=self._config.max_tokens,
-            ):
-                thought_tokens.append(token)
-                yield {
-                    "type": "token",
-                    "content": token,
-                    "timestamp": datetime.utcnow().isoformat(),
-                }
+            tool_calls_from_stream = None
+            
+            # Use Function Calling if supported, otherwise use ReAct mode
+            if self._use_function_calling and self._tool_schemas:
+                # Convert schemas to tools format
+                tools = [{"type": "function", "function": schema} for schema in self._tool_schemas]
+                # Use return_chunks=True to get tool_calls information
+                stream_gen = self.llm_client.stream_text(  # type: ignore[attr-defined]
+                    messages=messages,
+                    model=self._config.llm_model,
+                    temperature=self._config.temperature,
+                    max_tokens=self._config.max_tokens,
+                    tools=tools,
+                    tool_choice="auto",
+                    return_chunks=True,  # Enable tool_calls accumulation
+                )
+            else:
+                # Fallback to ReAct mode
+                stream_gen = self.llm_client.stream_text(  # type: ignore[attr-defined]
+                    messages=messages,
+                    model=self._config.llm_model,
+                    temperature=self._config.temperature,
+                    max_tokens=self._config.max_tokens,
+                )
+
+            # Stream tokens and collect tool calls
+            from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
+            
+            async for chunk in stream_gen:
+                # Handle StreamChunk objects (Function Calling mode)
+                if isinstance(chunk, StreamChunk):
+                    if chunk.type == "token" and chunk.content:
+                        thought_tokens.append(chunk.content)
+                        yield {
+                            "type": "token",
+                            "content": chunk.content,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    elif chunk.type == "tool_call" and chunk.tool_call:
+                        # Yield tool call update event
+                        yield {
+                            "type": "tool_call_update",
+                            "tool_call": chunk.tool_call,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    elif chunk.type == "tool_calls" and chunk.tool_calls:
+                        # Complete tool_calls received
+                        tool_calls_from_stream = chunk.tool_calls
+                        yield {
+                            "type": "tool_calls",
+                            "tool_calls": chunk.tool_calls,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                else:
+                    # Handle plain string tokens (ReAct mode or non-Function Calling)
+                    thought_tokens.append(chunk)
+                    yield {
+                        "type": "token",
+                        "content": chunk,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
 
             thought = "".join(thought_tokens)
+            
+            # Process tool_calls if received from stream
+            if tool_calls_from_stream:
+                # Process each tool call
+                for tool_call in tool_calls_from_stream:
+                    try:
+                        func_name = tool_call["function"]["name"]
+                        func_args = tool_call["function"]["arguments"]
+
+                        # Parse function name to extract tool and operation
+                        parts = func_name.split("_", 1)
+                        if len(parts) == 2:
+                            tool_name, operation = parts
+                        else:
+                            tool_name = parts[0]
+                            operation = None
+
+                        # Parse arguments JSON
+                        import json
+                        if isinstance(func_args, str):
+                            parameters = json.loads(func_args)
+                        else:
+                            parameters = func_args
+
+                        # Yield tool call event
+                        yield {
+                            "type": "tool_call",
+                            "tool_name": tool_name,
+                            "operation": operation,
+                            "parameters": parameters,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+
+                        # Execute tool
+                        tool_result = await self._execute_tool(tool_name, operation, parameters)
+                        tool_calls_count += 1
+
+                        steps.append(
+                            {
+                                "type": "action",
+                                "tool": tool_name,
+                                "operation": operation,
+                                "parameters": parameters,
+                                "iteration": iteration + 1,
+                            }
+                        )
+
+                        # Yield tool result event
+                        yield {
+                            "type": "tool_result",
+                            "tool_name": tool_name,
+                            "result": tool_result,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+
+                        # Add tool result to messages
+                        observation = f"Tool '{tool_name}' returned: {tool_result}"
+                        steps.append(
+                            {
+                                "type": "observation",
+                                "content": observation,
+                                "iteration": iteration + 1,
+                            }
+                        )
+
+                        # Add assistant message with tool call and tool result
+                        messages.append(
+                            LLMMessage(
+                                role="assistant",
+                                content=None,
+                                tool_calls=tool_calls_from_stream,
+                            )
+                        )
+                        messages.append(
+                            LLMMessage(
+                                role="tool",
+                                content=str(tool_result),
+                                tool_call_id=tool_call.get("id", "call_0"),
+                            )
+                        )
+
+                    except Exception as e:
+                        error_msg = f"Tool execution failed: {str(e)}"
+                        steps.append(
+                            {
+                                "type": "observation",
+                                "content": error_msg,
+                                "iteration": iteration + 1,
+                                "error": True,
+                            }
+                        )
+                        yield {
+                            "type": "tool_error",
+                            "tool_name": tool_name if "tool_name" in locals() else "unknown",
+                            "error": str(e),
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                        messages.append(
+                            LLMMessage(
+                                role="tool",
+                                content=error_msg,
+                                tool_call_id=tool_call.get("id", "call_0"),
+                            )
+                        )
+
+                # Continue to next iteration
+                continue
 
             steps.append(
                 {
@@ -760,15 +925,152 @@ class HybridAgent(BaseAIAgent):
             logger.debug(f"HybridAgent {self.agent_id} - ReAct iteration {iteration + 1}")
 
             # THINK: LLM reasons about next action
-            response = await self.llm_client.generate_text(
-                messages=messages,
-                model=self._config.llm_model,
-                temperature=self._config.temperature,
-                max_tokens=self._config.max_tokens,
-            )
+            # Use Function Calling if supported, otherwise use ReAct mode
+            if self._use_function_calling and self._tool_schemas:
+                # Convert schemas to tools format
+                tools = [{"type": "function", "function": schema} for schema in self._tool_schemas]
+                response = await self.llm_client.generate_text(
+                    messages=messages,
+                    model=self._config.llm_model,
+                    temperature=self._config.temperature,
+                    max_tokens=self._config.max_tokens,
+                    tools=tools,
+                    tool_choice="auto",
+                )
+            else:
+                # Fallback to ReAct mode
+                response = await self.llm_client.generate_text(
+                    messages=messages,
+                    model=self._config.llm_model,
+                    temperature=self._config.temperature,
+                    max_tokens=self._config.max_tokens,
+                )
 
-            thought = response.content
+            thought = response.content or ""
             total_tokens += getattr(response, "total_tokens", 0)
+
+            # Check for Function Calling response
+            tool_calls = getattr(response, "tool_calls", None)
+            function_call = getattr(response, "function_call", None)
+
+            if tool_calls or function_call:
+                # Handle Function Calling response
+                tool_calls_to_process = tool_calls or []
+                if function_call:
+                    # Convert legacy function_call to tool_calls format
+                    tool_calls_to_process = [
+                        {
+                            "id": "call_0",
+                            "type": "function",
+                            "function": {
+                                "name": function_call["name"],
+                                "arguments": function_call["arguments"],
+                            },
+                        }
+                    ]
+
+                # Process each tool call
+                for tool_call in tool_calls_to_process:
+                    try:
+                        func_name = tool_call["function"]["name"]
+                        func_args = tool_call["function"]["arguments"]
+
+                        # Parse function name to extract tool and operation
+                        # Format: tool_name_operation or tool_name
+                        parts = func_name.split("_", 1)
+                        if len(parts) == 2:
+                            tool_name, operation = parts
+                        else:
+                            tool_name = parts[0]
+                            operation = None
+
+                        # Parse arguments JSON
+                        import json
+                        if isinstance(func_args, str):
+                            parameters = json.loads(func_args)
+                        else:
+                            parameters = func_args
+
+                        steps.append(
+                            {
+                                "type": "thought",
+                                "content": f"Calling tool {func_name}",
+                                "iteration": iteration + 1,
+                            }
+                        )
+
+                        # Execute tool
+                        tool_result = await self._execute_tool(tool_name, operation, parameters)
+                        tool_calls_count += 1
+
+                        steps.append(
+                            {
+                                "type": "action",
+                                "tool": tool_name,
+                                "operation": operation,
+                                "parameters": parameters,
+                                "iteration": iteration + 1,
+                            }
+                        )
+
+                        # Add tool result to messages
+                        observation = f"Tool '{tool_name}' returned: {tool_result}"
+                        steps.append(
+                            {
+                                "type": "observation",
+                                "content": observation,
+                                "iteration": iteration + 1,
+                            }
+                        )
+
+                        # Add assistant message with tool call and tool result
+                        messages.append(
+                            LLMMessage(
+                                role="assistant",
+                                content=None,  # Content is None when using tool calls
+                                tool_calls=tool_calls_to_process if tool_calls else None,
+                            )
+                        )
+                        messages.append(
+                            LLMMessage(
+                                role="tool",
+                                content=str(tool_result),
+                                tool_call_id=tool_call.get("id", "call_0"),
+                            )
+                        )
+
+                    except Exception as e:
+                        error_msg = f"Tool execution failed: {str(e)}"
+                        steps.append(
+                            {
+                                "type": "observation",
+                                "content": error_msg,
+                                "iteration": iteration + 1,
+                                "error": True,
+                            }
+                        )
+                        # Add error to messages
+                        messages.append(
+                            LLMMessage(
+                                role="tool",
+                                content=error_msg,
+                                tool_call_id=tool_call.get("id", "call_0"),
+                            )
+                        )
+
+                # Continue to next iteration
+                continue
+
+            # If using Function Calling and no tool calls, check if we have a final answer
+            if self._use_function_calling and thought:
+                # LLM provided a text response without tool calls - treat as final answer
+                return {
+                    "final_answer": thought,
+                    "steps": steps,
+                    "iterations": iteration + 1,
+                    "tool_calls_count": tool_calls_count,
+                    "total_tokens": total_tokens,
+                }
 
             steps.append(
                 {
@@ -778,7 +1080,7 @@ class HybridAgent(BaseAIAgent):
                 }
             )
 
-            # Check if final answer
+            # Check if final answer (ReAct mode)
             if "FINAL ANSWER:" in thought:
                 final_answer = self._extract_final_answer(thought)
                 return {
@@ -789,7 +1091,7 @@ class HybridAgent(BaseAIAgent):
                     "total_tokens": total_tokens,
                 }
 
-            # Check if tool call
+            # Check if tool call (ReAct mode)
             if "TOOL:" in thought:
                 # ACT: Execute tool
                 try:
@@ -1046,6 +1348,52 @@ class HybridAgent(BaseAIAgent):
     def get_available_tools(self) -> List[str]:
         """Get list of available tools."""
         return self._available_tools.copy() if self._available_tools else []
+
+    def _generate_tool_schemas(self) -> None:
+        """Generate OpenAI Function Calling schemas for available tools."""
+        if not self._tool_instances:
+            return
+
+        try:
+            # Use ToolSchemaGenerator to generate schemas from tool instances
+            self._tool_schemas = ToolSchemaGenerator.generate_schemas_for_tool_instances(
+                self._tool_instances
+            )
+            logger.info(f"HybridAgent {self.agent_id} generated {len(self._tool_schemas)} tool schemas")
+        except Exception as e:
+            logger.warning(f"Failed to generate tool schemas: {e}. Falling back to ReAct mode.")
+            self._tool_schemas = []
+
+    def _check_function_calling_support(self) -> bool:
+        """
+        Check if LLM client supports Function Calling.
+
+        Returns:
+            True if Function Calling is supported, False otherwise
+        """
+        # Check if we have tools and schemas
+        if not self._tool_instances or not self._tool_schemas:
+            return False
+
+        # Check if LLM client supports Function Calling
+        # OpenAI, xAI (OpenAI-compatible), Google Vertex AI, and some other providers support it
+        provider_name = getattr(self.llm_client, "provider_name", "").lower()
+        supported_providers = ["openai", "xai", "anthropic", "vertex"]
+        
+        # Note: Google Vertex AI uses FunctionDeclaration format, but it's handled via GoogleFunctionCallingMixin
+        # The mixin converts OpenAI format to Google format internally
+
+        # Also check if generate_text method accepts 'tools' or 'functions' parameter
+        import inspect
+        try:
+            sig = inspect.signature(self.llm_client.generate_text)
+            params = sig.parameters
+            has_tools_param = "tools" in params or "functions" in params
+        except (ValueError, TypeError):
+            # If signature inspection fails, assume not supported
+            has_tools_param = False
+
+        return provider_name in supported_providers or has_tools_param
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "HybridAgent":

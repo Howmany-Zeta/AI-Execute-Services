@@ -12,6 +12,7 @@ from .base_client import (
     ProviderNotAvailableError,
     RateLimitError,
 )
+from .openai_compatible_mixin import StreamChunk
 from .openai_client import OpenAIClient
 from .vertex_client import VertexAIClient
 from .googleai_client import GoogleAIClient
@@ -25,6 +26,8 @@ __all__ = [
     "LLMClientError",
     "ProviderNotAvailableError",
     "RateLimitError",
+    # Streaming support
+    "StreamChunk",
     # Client implementations
     "OpenAIClient",
     "VertexAIClient",
