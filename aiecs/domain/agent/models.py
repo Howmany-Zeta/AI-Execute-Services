@@ -226,6 +226,20 @@ class AgentConfiguration(BaseModel):
     domain_knowledge: Optional[str] = Field(None, description="Domain-specific knowledge")
     reasoning_guidance: Optional[str] = Field(None, description="Guidance for reasoning approach")
 
+    # System prompt configuration
+    system_prompt: Optional[str] = Field(
+        None,
+        description="Custom system prompt that takes precedence over assembled prompt from goal/backstory/etc. "
+        "If provided, goal, backstory, domain_knowledge, and reasoning_guidance are ignored for system prompt construction.",
+    )
+
+    # Prompt caching configuration
+    enable_prompt_caching: bool = Field(
+        default=True,
+        description="Enable provider-level prompt caching for system prompts and tool schemas. "
+        "Reduces cost and latency for repeated context.",
+    )
+
     # Context compression
     context_window_limit: int = Field(default=20000, ge=0, description="Token limit for context window")
     enable_context_compression: bool = Field(default=True, description="Enable automatic context compression")

@@ -99,6 +99,13 @@ class GoogleAIClient(BaseLLMClient):
             completion_tokens = response.usage_metadata.candidates_token_count
             total_tokens = response.usage_metadata.total_token_count
 
+            # Extract cache metadata from Google AI response
+            cache_read_tokens = None
+            cache_hit = None
+            if hasattr(response.usage_metadata, "cached_content_token_count"):
+                cache_read_tokens = response.usage_metadata.cached_content_token_count
+                cache_hit = cache_read_tokens is not None and cache_read_tokens > 0
+
             # Use config-based cost estimation
             cost = self._estimate_cost_from_config(model_name, prompt_tokens, completion_tokens)
 
@@ -110,6 +117,8 @@ class GoogleAIClient(BaseLLMClient):
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 cost_estimate=cost,
+                cache_read_tokens=cache_read_tokens,
+                cache_hit=cache_hit,
             )
 
         except Exception as e:

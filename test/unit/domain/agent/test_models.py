@@ -19,6 +19,7 @@ from aiecs.domain.agent.models import (
     AgentInteraction,
     AgentMemory,
 )
+from aiecs.llm.clients.base_client import CacheControl, LLMMessage, LLMResponse
 
 
 @pytest.mark.unit
@@ -117,6 +118,41 @@ class TestAgentConfiguration:
         assert config.temperature == 0.5
         assert config.max_tokens == 1000
         assert config.retry_policy.max_retries == 5
+
+    def test_system_prompt_field(self):
+        """Test system_prompt field in configuration."""
+        config = AgentConfiguration(
+            system_prompt="You are a custom AI assistant."
+        )
+        assert config.system_prompt == "You are a custom AI assistant."
+
+    def test_system_prompt_default_none(self):
+        """Test system_prompt defaults to None."""
+        config = AgentConfiguration()
+        assert config.system_prompt is None
+
+    def test_enable_prompt_caching_default_true(self):
+        """Test enable_prompt_caching defaults to True."""
+        config = AgentConfiguration()
+        assert config.enable_prompt_caching is True
+
+    def test_enable_prompt_caching_can_be_disabled(self):
+        """Test enable_prompt_caching can be set to False."""
+        config = AgentConfiguration(enable_prompt_caching=False)
+        assert config.enable_prompt_caching is False
+
+    def test_system_prompt_with_other_fields(self):
+        """Test system_prompt can coexist with goal/backstory fields."""
+        config = AgentConfiguration(
+            system_prompt="Custom prompt",
+            goal="Goal text",
+            backstory="Backstory text",
+            domain_knowledge="Domain knowledge",
+        )
+        assert config.system_prompt == "Custom prompt"
+        assert config.goal == "Goal text"
+        assert config.backstory == "Backstory text"
+        assert config.domain_knowledge == "Domain knowledge"
 
 
 @pytest.mark.unit
@@ -229,4 +265,92 @@ class TestAgentMemory:
         assert memory.key == "test_key"
         assert memory.value == "Test content"
         assert memory.memory_type == MemoryType.SHORT_TERM
+
+
+@pytest.mark.unit
+class TestCacheControl:
+    """Test CacheControl dataclass for prompt caching."""
+
+    def test_cache_control_default_type(self):
+        """Test CacheControl defaults to ephemeral type."""
+        cache_control = CacheControl()
+        assert cache_control.type == "ephemeral"
+
+    def test_cache_control_custom_type(self):
+        """Test CacheControl with custom type."""
+        cache_control = CacheControl(type="persistent")
+        assert cache_control.type == "persistent"
+
+
+@pytest.mark.unit
+class TestLLMMessageCacheControl:
+    """Test LLMMessage with cache_control field."""
+
+    def test_llm_message_default_no_cache_control(self):
+        """Test LLMMessage defaults to no cache_control."""
+        msg = LLMMessage(role="user", content="Hello")
+        assert msg.cache_control is None
+
+    def test_llm_message_with_cache_control(self):
+        """Test LLMMessage with cache_control set."""
+        cache_control = CacheControl(type="ephemeral")
+        msg = LLMMessage(role="system", content="You are an assistant.", cache_control=cache_control)
+        assert msg.cache_control is not None
+        assert msg.cache_control.type == "ephemeral"
+
+
+@pytest.mark.unit
+class TestLLMResponseCacheMetadata:
+    """Test LLMResponse cache metadata fields."""
+
+    def test_llm_response_default_cache_fields(self):
+        """Test LLMResponse defaults cache fields to None."""
+        response = LLMResponse(
+            content="Hello",
+            provider="openai",
+            model="gpt-4o",
+        )
+        assert response.cache_creation_tokens is None
+        assert response.cache_read_tokens is None
+        assert response.cache_hit is None
+
+    def test_llm_response_with_cache_hit(self):
+        """Test LLMResponse with cache hit metadata."""
+        response = LLMResponse(
+            content="Hello",
+            provider="openai",
+            model="gpt-4o",
+            cache_read_tokens=1000,
+            cache_hit=True,
+        )
+        assert response.cache_read_tokens == 1000
+        assert response.cache_hit is True
+        assert response.cache_creation_tokens is None
+
+    def test_llm_response_with_cache_creation(self):
+        """Test LLMResponse with cache creation metadata."""
+        response = LLMResponse(
+            content="Hello",
+            provider="anthropic",
+            model="claude-3-opus",
+            cache_creation_tokens=500,
+            cache_hit=False,
+        )
+        assert response.cache_creation_tokens == 500
+        assert response.cache_hit is False
+        assert response.cache_read_tokens is None
+
+    def test_llm_response_with_all_cache_fields(self):
+        """Test LLMResponse with all cache metadata fields."""
+        response = LLMResponse(
+            content="Hello",
+            provider="google",
+            model="gemini-pro",
+            cache_creation_tokens=100,
+            cache_read_tokens=900,
+            cache_hit=True,
+        )
+        assert response.cache_creation_tokens == 100
+        assert response.cache_read_tokens == 900
+        assert response.cache_hit is True
 

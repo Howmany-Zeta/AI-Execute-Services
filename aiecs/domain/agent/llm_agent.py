@@ -8,7 +8,7 @@ import logging
 from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING, AsyncIterator
 from datetime import datetime
 
-from aiecs.llm import BaseLLMClient, LLMMessage
+from aiecs.llm import BaseLLMClient, CacheControl, LLMMessage
 
 from .base_agent import BaseAIAgent
 from .models import AgentType, AgentConfiguration
@@ -306,7 +306,18 @@ class LLMAgent(BaseAIAgent):
         logger.info(f"LLMAgent {self.agent_id} shut down")
 
     def _build_system_prompt(self) -> str:
-        """Build system prompt from configuration."""
+        """Build system prompt from configuration.
+
+        Precedence order:
+        1. config.system_prompt - Direct custom prompt (highest priority)
+        2. Assembled from goal/backstory/domain_knowledge/reasoning_guidance
+        3. Default fallback: "You are a helpful AI assistant."
+        """
+        # 1. Custom system_prompt takes precedence
+        if self._config.system_prompt:
+            return self._config.system_prompt
+
+        # 2. Assemble from individual fields
         parts = []
 
         if self._config.goal:
@@ -321,10 +332,11 @@ class LLMAgent(BaseAIAgent):
         if self._config.reasoning_guidance:
             parts.append(f"Reasoning Approach: {self._config.reasoning_guidance}")
 
-        if not parts:
-            return "You are a helpful AI assistant."
+        if parts:
+            return "\n\n".join(parts)
 
-        return "\n\n".join(parts)
+        # 3. Default fallback
+        return "You are a helpful AI assistant."
 
     async def execute_task(self, task: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -605,9 +617,20 @@ class LLMAgent(BaseAIAgent):
         """
         messages = []
 
-        # Add system prompt
+        # Add system prompt with cache control if caching is enabled
         if self._system_prompt:
-            messages.append(LLMMessage(role="system", content=self._system_prompt))
+            cache_control = (
+                CacheControl(type="ephemeral")
+                if self._config.enable_prompt_caching
+                else None
+            )
+            messages.append(
+                LLMMessage(
+                    role="system",
+                    content=self._system_prompt,
+                    cache_control=cache_control,
+                )
+            )
 
         # Add conversation history if available and memory enabled
         if self._config.memory_enabled and self._conversation_history:
