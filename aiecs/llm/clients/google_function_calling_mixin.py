@@ -12,8 +12,6 @@ from vertexai.generative_models import (
     FunctionDeclaration,
     Tool,
 )
-from google.genai.types import Schema, Type
-
 from .base_client import LLMMessage, LLMResponse
 
 logger = logging.getLogger(__name__)
@@ -71,15 +69,13 @@ class GoogleFunctionCallingMixin:
                 if not func_name:
                     logger.warning(f"Skipping tool without name: {tool}")
                     continue
-                
-                # Convert parameters schema
-                google_schema = self._convert_json_schema_to_google_schema(func_parameters)
-                
-                # Create FunctionDeclaration
+
+                # Create FunctionDeclaration with raw dict parameters
+                # Let Vertex SDK handle the schema conversion internally
                 function_declaration = FunctionDeclaration(
                     name=func_name,
                     description=func_description,
-                    parameters=google_schema,
+                    parameters=func_parameters,
                 )
                 
                 function_declarations.append(function_declaration)
@@ -90,78 +86,6 @@ class GoogleFunctionCallingMixin:
         if function_declarations:
             return [Tool(function_declarations=function_declarations)]
         return []
-
-    def _convert_json_schema_to_google_schema(
-        self, json_schema: Dict[str, Any]
-    ) -> Schema:
-        """
-        Convert JSON Schema to Google Schema format.
-        
-        Args:
-            json_schema: JSON Schema dictionary
-            
-        Returns:
-            Google Schema object
-        """
-        schema_type = json_schema.get("type", "object")
-        properties = json_schema.get("properties", {})
-        required = json_schema.get("required", [])
-        
-        # Convert type
-        google_type = self._convert_json_type_to_google_type(schema_type)
-        
-        # Convert properties (only for object types)
-        google_properties = None
-        if schema_type == "object" and properties:
-            google_properties = {}
-            for prop_name, prop_schema in properties.items():
-                google_properties[prop_name] = self._convert_json_schema_to_google_schema(
-                    prop_schema
-                )
-        
-        # Handle array items
-        items = None
-        if schema_type == "array" and "items" in json_schema:
-            items = self._convert_json_schema_to_google_schema(json_schema["items"])
-        
-        # Create Schema
-        schema_kwargs = {
-            "type": google_type,
-        }
-        
-        if google_properties is not None:
-            schema_kwargs["properties"] = google_properties
-        
-        if required:
-            schema_kwargs["required"] = required
-        
-        if items is not None:
-            schema_kwargs["items"] = items
-        
-        schema = Schema(**schema_kwargs)
-        
-        return schema
-
-    def _convert_json_type_to_google_type(self, json_type: str) -> Type:
-        """
-        Convert JSON Schema type to Google Type enum.
-        
-        Args:
-            json_type: JSON Schema type string
-            
-        Returns:
-            Google Type enum value
-        """
-        type_mapping = {
-            "string": Type.STRING,
-            "number": Type.NUMBER,
-            "integer": Type.NUMBER,  # Google uses NUMBER for both
-            "boolean": Type.BOOLEAN,
-            "array": Type.ARRAY,
-            "object": Type.OBJECT,
-        }
-        
-        return type_mapping.get(json_type.lower(), Type.OBJECT)
 
     def _extract_function_calls_from_google_response(
         self, response: Any
