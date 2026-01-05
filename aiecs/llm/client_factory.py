@@ -7,6 +7,7 @@ from .clients.openai_client import OpenAIClient
 from .clients.vertex_client import VertexAIClient
 from .clients.googleai_client import GoogleAIClient
 from .clients.xai_client import XAIClient
+from .clients.openai_compatible_mixin import StreamChunk
 from .callbacks.custom_callbacks import CustomAsyncCallbackHandler
 
 if TYPE_CHECKING:
@@ -407,7 +408,11 @@ class LLMClientManager:
                 max_tokens=max_tokens,
                 **kwargs,
             ):
-                collected_content += chunk
+                # Handle StreamChunk objects (when return_chunks=True or function calling)
+                if hasattr(chunk, 'content') and chunk.content:
+                    collected_content += chunk.content
+                elif isinstance(chunk, str):
+                    collected_content += chunk
                 yield chunk
 
             # Create a response object for callbacks (streaming doesn't return LLMResponse directly)
