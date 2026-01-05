@@ -207,6 +207,12 @@ class ToolSchemaGenerator:
         if not hasattr(schema_class, "model_fields"):
             return properties, required
 
+        # Import PydanticUndefined for v2 compatibility
+        try:
+            from pydantic_core import PydanticUndefined
+        except ImportError:
+            PydanticUndefined = type(None)  # Fallback for Pydantic v1
+
         for field_name, field_info in schema_class.model_fields.items():
             # Build property schema
             prop_schema: Dict[str, Any] = {}
@@ -219,11 +225,18 @@ class ToolSchemaGenerator:
             if hasattr(field_info, "description") and field_info.description:
                 prop_schema["description"] = field_info.description
 
-            # Get default value
-            if field_info.default is not None and field_info.default != inspect.Parameter.empty:
-                prop_schema["default"] = field_info.default
+            # Check if required using Pydantic v2 API (preferred)
+            if hasattr(field_info, "is_required") and callable(field_info.is_required):
+                if field_info.is_required():
+                    required.append(field_name)
+                elif field_info.default is not None and field_info.default is not PydanticUndefined:
+                    prop_schema["default"] = field_info.default
             else:
-                required.append(field_name)
+                # Fallback for Pydantic v1
+                if field_info.default is None or field_info.default == inspect.Parameter.empty:
+                    required.append(field_name)
+                else:
+                    prop_schema["default"] = field_info.default
 
             properties[field_name] = prop_schema
 
