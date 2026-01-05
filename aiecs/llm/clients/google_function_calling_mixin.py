@@ -5,6 +5,7 @@ Provides shared implementation for Google providers (Vertex AI, Google AI)
 that use FunctionDeclaration format for Function Calling.
 """
 
+import json
 import logging
 from typing import Dict, Any, Optional, List, Union, AsyncGenerator
 from dataclasses import dataclass
@@ -30,13 +31,46 @@ except ImportError:
         tool_calls: Optional[List[Dict[str, Any]]] = None
 
 
+def _serialize_function_args(args) -> str:
+    """
+    Safely serialize function call arguments to JSON string.
+
+    Handles MapComposite/protobuf objects from Vertex AI by converting
+    them to regular dicts before JSON serialization.
+
+    Args:
+        args: Function call arguments (may be MapComposite, dict, or other)
+
+    Returns:
+        JSON string representation of the arguments
+    """
+    if args is None:
+        return "{}"
+
+    # Handle MapComposite/protobuf objects (they have items() method)
+    if hasattr(args, 'items'):
+        # Convert to regular dict
+        args_dict = dict(args)
+    elif isinstance(args, dict):
+        args_dict = args
+    else:
+        # Try to convert to dict if possible
+        try:
+            args_dict = dict(args)
+        except (TypeError, ValueError):
+            # Last resort: use str() but this should rarely happen
+            return str(args)
+
+    return json.dumps(args_dict, ensure_ascii=False)
+
+
 class GoogleFunctionCallingMixin:
     """
     Mixin class providing Google Function Calling implementation.
-    
+
     This mixin can be used by Google providers (Vertex AI, Google AI)
     that use FunctionDeclaration format for Function Calling.
-    
+
     Usage:
         class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             async def generate_text(self, messages, tools=None, ...):
@@ -115,10 +149,10 @@ class GoogleFunctionCallingMixin:
                     "type": "function",
                     "function": {
                         "name": func_call.name,
-                        "arguments": str(func_call.args) if hasattr(func_call, "args") else "{}",
+                        "arguments": _serialize_function_args(func_call.args) if hasattr(func_call, "args") else "{}",
                     },
                 })
-            
+
             # Check for content.parts with function_call (newer API)
             elif hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
                 for part in candidate.content.parts:
@@ -129,7 +163,7 @@ class GoogleFunctionCallingMixin:
                             "type": "function",
                             "function": {
                                 "name": func_call.name,
-                                "arguments": str(func_call.args) if hasattr(func_call, "args") else "{}",
+                                "arguments": _serialize_function_args(func_call.args) if hasattr(func_call, "args") else "{}",
                             },
                         })
         
@@ -224,10 +258,10 @@ class GoogleFunctionCallingMixin:
                             "type": "function",
                             "function": {
                                 "name": func_call.name,
-                                "arguments": str(func_call.args) if hasattr(func_call, "args") else "{}",
+                                "arguments": _serialize_function_args(func_call.args) if hasattr(func_call, "args") else "{}",
                             },
                         })
-            
+
             # Check for function_call attribute directly on candidate
             elif hasattr(candidate, "function_call") and candidate.function_call:
                 func_call = candidate.function_call
@@ -236,7 +270,7 @@ class GoogleFunctionCallingMixin:
                     "type": "function",
                     "function": {
                         "name": func_call.name,
-                        "arguments": str(func_call.args) if hasattr(func_call, "args") else "{}",
+                        "arguments": _serialize_function_args(func_call.args) if hasattr(func_call, "args") else "{}",
                     },
                 })
         

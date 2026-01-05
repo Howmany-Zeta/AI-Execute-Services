@@ -139,7 +139,11 @@ class SafetyBlockError(LLMClientError):
         if self.block_type:
             msg += f" (Block type: {self.block_type})"
         if self.safety_ratings:
-            categories = [r.get("category", "UNKNOWN") for r in self.safety_ratings if r.get("blocked")]
+            # Safely extract categories, handling potential non-dict elements
+            categories = []
+            for r in self.safety_ratings:
+                if isinstance(r, dict) and r.get("blocked"):
+                    categories.append(r.get("category", "UNKNOWN"))
             if categories:
                 msg += f" (Categories: {', '.join(categories)})"
         return msg
