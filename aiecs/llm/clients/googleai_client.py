@@ -103,11 +103,14 @@ class GoogleAIClient(BaseLLMClient):
                     except json.JSONDecodeError:
                         args_dict = {}
 
-                    # Create FunctionCall part
-                    parts.append(types.Part.from_function_call(
+                    # Create FunctionCall part using types.FunctionCall
+                    # Note: types.Part.from_function_call() may not exist in google.genai
+                    # Use FunctionCall type directly
+                    function_call = types.FunctionCall(
                         name=func_name,
                         args=args_dict
-                    ))
+                    )
+                    parts.append(types.Part(function_call=function_call))
 
                 contents.append(types.Content(
                     role="model",
