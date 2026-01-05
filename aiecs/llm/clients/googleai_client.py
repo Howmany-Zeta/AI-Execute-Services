@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from typing import Optional, List, AsyncGenerator
@@ -45,14 +46,83 @@ class GoogleAIClient(BaseLLMClient):
     def _convert_messages_to_contents(
         self, messages: List[LLMMessage]
     ) -> List[types.Content]:
-        """Convert LLMMessage list to Google GenAI Content objects."""
+        """
+        Convert LLMMessage list to Google GenAI Content objects.
+
+        This properly handles multi-turn conversations including
+        function/tool responses for Google AI Function Calling.
+
+        Args:
+            messages: List of LLMMessage objects (system messages should be filtered out)
+
+        Returns:
+            List of Content objects for Google AI API
+        """
         contents = []
+
         for msg in messages:
-            # Map 'assistant' role to 'model' for Google AI
-            role = "model" if msg.role == "assistant" else msg.role
-            contents.append(
-                types.Content(role=role, parts=[types.Part(text=msg.content)])
-            )
+            # Handle tool/function responses (role="tool")
+            if msg.role == "tool":
+                # Google AI expects function responses as user messages with FunctionResponse parts
+                func_name = msg.tool_call_id or "unknown_function"
+
+                # Parse content as the function response
+                try:
+                    if msg.content and msg.content.strip().startswith('{'):
+                        response_data = json.loads(msg.content)
+                    else:
+                        response_data = {"result": msg.content}
+                except json.JSONDecodeError:
+                    response_data = {"result": msg.content}
+
+                # Create FunctionResponse part
+                func_response_part = types.Part.from_function_response(
+                    name=func_name,
+                    response=response_data
+                )
+
+                contents.append(types.Content(
+                    role="user",  # Function responses are sent as "user" role
+                    parts=[func_response_part]
+                ))
+
+            # Handle assistant messages with tool calls
+            elif msg.role == "assistant" and msg.tool_calls:
+                parts = []
+                if msg.content:
+                    parts.append(types.Part(text=msg.content))
+
+                for tool_call in msg.tool_calls:
+                    func = tool_call.get("function", {})
+                    func_name = func.get("name", "")
+                    func_args = func.get("arguments", "{}")
+
+                    # Parse arguments
+                    try:
+                        args_dict = json.loads(func_args) if isinstance(func_args, str) else func_args
+                    except json.JSONDecodeError:
+                        args_dict = {}
+
+                    # Create FunctionCall part
+                    parts.append(types.Part.from_function_call(
+                        name=func_name,
+                        args=args_dict
+                    ))
+
+                contents.append(types.Content(
+                    role="model",
+                    parts=parts
+                ))
+
+            # Handle regular messages (user, assistant without tool_calls)
+            else:
+                role = "model" if msg.role == "assistant" else msg.role
+                if msg.content:
+                    contents.append(types.Content(
+                        role=role,
+                        parts=[types.Part(text=msg.content)]
+                    ))
+
         return contents
 
     async def generate_text(
