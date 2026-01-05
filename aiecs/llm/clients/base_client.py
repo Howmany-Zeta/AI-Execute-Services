@@ -16,15 +16,57 @@ def _get_config_loader():
 
 
 @dataclass
+class CacheControl:
+    """
+    Cache control marker for message content.
+
+    Used to indicate that a message or message block should be cached
+    by providers that support prompt caching (e.g., Anthropic, Google).
+    """
+
+    type: str = "ephemeral"  # Cache type - "ephemeral" for session-scoped caching
+
+
+@dataclass
 class LLMMessage:
+    """
+    Represents a message in an LLM conversation.
+
+    Attributes:
+        role: Message role - "system", "user", "assistant", or "tool"
+        content: Text content of the message (None when using tool calls)
+        tool_calls: Tool call information for assistant messages
+        tool_call_id: Tool call ID for tool response messages
+        cache_control: Cache control marker for prompt caching support
+    """
+
     role: str  # "system", "user", "assistant", "tool"
     content: Optional[str] = None  # None when using tool calls
     tool_calls: Optional[List[Dict[str, Any]]] = None  # For assistant messages with tool calls
     tool_call_id: Optional[str] = None  # For tool messages
+    cache_control: Optional[CacheControl] = None  # Cache control for prompt caching
 
 
 @dataclass
 class LLMResponse:
+    """
+    Response from an LLM provider.
+
+    Attributes:
+        content: Generated text content
+        provider: Name of the LLM provider (e.g., "openai", "google", "vertex")
+        model: Model name used for generation
+        tokens_used: Total tokens used (prompt + completion)
+        prompt_tokens: Number of tokens in the prompt
+        completion_tokens: Number of tokens in the completion
+        cost_estimate: Estimated cost in USD
+        response_time: Response time in seconds
+        metadata: Additional provider-specific metadata
+        cache_creation_tokens: Tokens used to create a new cache entry
+        cache_read_tokens: Tokens read from cache (indicates cache hit)
+        cache_hit: Whether the request hit a cached prompt prefix
+    """
+
     content: str
     provider: str
     model: str
@@ -33,8 +75,11 @@ class LLMResponse:
     completion_tokens: Optional[int] = None
     cost_estimate: Optional[float] = None
     response_time: Optional[float] = None
-    # Added for backward compatibility
     metadata: Optional[Dict[str, Any]] = None
+    # Cache metadata for prompt caching observability
+    cache_creation_tokens: Optional[int] = None
+    cache_read_tokens: Optional[int] = None
+    cache_hit: Optional[bool] = None
 
     def __post_init__(self):
         """Ensure consistency of token data"""
@@ -142,6 +187,65 @@ class BaseLLMClient(ABC):
     def _count_tokens_estimate(self, text: str) -> int:
         """Rough token count estimation (4 chars ≈ 1 token for English)"""
         return len(text) // 4
+
+    def _apply_cache_control(
+        self,
+        messages: List[LLMMessage],
+        enable_caching: bool = True,
+    ) -> List[LLMMessage]:
+        """
+        Apply cache control markers to cacheable messages.
+
+        Marks system messages and the first message in the conversation
+        with cache_control for providers that support prompt caching.
+
+        Args:
+            messages: List of LLM messages
+            enable_caching: Whether to enable caching (default: True)
+
+        Returns:
+            List of messages with cache_control applied where appropriate
+        """
+        if not enable_caching:
+            return messages
+
+        result = []
+        for msg in messages:
+            if msg.role == "system" and msg.cache_control is None:
+                # Mark system messages as cacheable
+                result.append(
+                    LLMMessage(
+                        role=msg.role,
+                        content=msg.content,
+                        tool_calls=msg.tool_calls,
+                        tool_call_id=msg.tool_call_id,
+                        cache_control=CacheControl(type="ephemeral"),
+                    )
+                )
+            else:
+                result.append(msg)
+        return result
+
+    def _extract_cache_metadata(
+        self,
+        usage: Any,
+    ) -> Dict[str, Any]:
+        """
+        Extract cache metadata from provider response usage data.
+
+        Override in subclasses for provider-specific extraction.
+
+        Args:
+            usage: Usage data from provider response
+
+        Returns:
+            Dictionary with cache_creation_tokens, cache_read_tokens, cache_hit
+        """
+        return {
+            "cache_creation_tokens": None,
+            "cache_read_tokens": None,
+            "cache_hit": None,
+        }
 
     def _estimate_cost(
         self,

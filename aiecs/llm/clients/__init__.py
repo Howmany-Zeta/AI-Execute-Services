@@ -6,6 +6,7 @@ This package contains all LLM provider client implementations.
 
 from .base_client import (
     BaseLLMClient,
+    CacheControl,
     LLMMessage,
     LLMResponse,
     LLMClientError,
@@ -21,6 +22,7 @@ from .xai_client import XAIClient
 __all__ = [
     # Base classes
     "BaseLLMClient",
+    "CacheControl",
     "LLMMessage",
     "LLMResponse",
     "LLMClientError",

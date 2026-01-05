@@ -9,7 +9,7 @@ import logging
 from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING, AsyncIterator
 from datetime import datetime
 
-from aiecs.llm import BaseLLMClient, LLMMessage
+from aiecs.llm import BaseLLMClient, CacheControl, LLMMessage
 from aiecs.tools import get_tool, BaseTool
 from aiecs.domain.agent.tools.schema_generator import ToolSchemaGenerator
 
@@ -311,17 +311,33 @@ class HybridAgent(BaseAIAgent):
         logger.info(f"HybridAgent {self.agent_id} shut down")
 
     def _build_system_prompt(self) -> str:
-        """Build system prompt including tool descriptions."""
+        """Build system prompt including tool descriptions.
+
+        Precedence order for base prompt:
+        1. config.system_prompt - Direct custom prompt (highest priority)
+        2. Assembled from goal/backstory/domain_knowledge
+        3. Default: Empty (ReAct instructions will be added)
+
+        Note: ReAct instructions and tool info are always appended regardless
+        of whether system_prompt is used, as they're essential for agent operation.
+        """
         parts = []
 
-        # Add goal and backstory
-        if self._config.goal:
-            parts.append(f"Goal: {self._config.goal}")
+        # 1. Custom system_prompt takes precedence over goal/backstory
+        if self._config.system_prompt:
+            parts.append(self._config.system_prompt)
+        else:
+            # 2. Assemble from individual fields
+            if self._config.goal:
+                parts.append(f"Goal: {self._config.goal}")
 
-        if self._config.backstory:
-            parts.append(f"Background: {self._config.backstory}")
+            if self._config.backstory:
+                parts.append(f"Background: {self._config.backstory}")
 
-        # Add ReAct instructions
+            if self._config.domain_knowledge:
+                parts.append(f"Domain Knowledge: {self._config.domain_knowledge}")
+
+        # Add ReAct instructions (always required for HybridAgent)
         parts.append(
             "You are a reasoning agent that can use tools to complete tasks. "
             "Follow the ReAct pattern:\n"
@@ -336,12 +352,9 @@ class HybridAgent(BaseAIAgent):
             "FINAL ANSWER: <your_answer>"
         )
 
-        # Add available tools
+        # Add available tools (always required for HybridAgent)
         if self._available_tools:
             parts.append(f"\nAvailable tools: {', '.join(self._available_tools)}")
-
-        if self._config.domain_knowledge:
-            parts.append(f"\nDomain Knowledge: {self._config.domain_knowledge}")
 
         return "\n\n".join(parts)
 
@@ -1168,9 +1181,20 @@ class HybridAgent(BaseAIAgent):
         """Build initial messages for ReAct loop."""
         messages = []
 
-        # Add system prompt
+        # Add system prompt with cache control if caching is enabled
         if self._system_prompt:
-            messages.append(LLMMessage(role="system", content=self._system_prompt))
+            cache_control = (
+                CacheControl(type="ephemeral")
+                if self._config.enable_prompt_caching
+                else None
+            )
+            messages.append(
+                LLMMessage(
+                    role="system",
+                    content=self._system_prompt,
+                    cache_control=cache_control,
+                )
+            )
 
         # Add context if provided
         if context:
