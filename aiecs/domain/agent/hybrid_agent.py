@@ -688,19 +688,30 @@ class HybridAgent(BaseAIAgent):
                         func_args = tool_call["function"]["arguments"]
 
                         # Parse function name to extract tool and operation
-                        parts = func_name.split("_", 1)
-                        if len(parts) == 2:
-                            tool_name, operation = parts
-                        else:
-                            tool_name = parts[0]
+                        # CRITICAL: Try exact match first, then fall back to underscore parsing
+                        if self._tool_instances and func_name in self._tool_instances:
+                            # Exact match found - use full function name as tool name
+                            tool_name = func_name
                             operation = None
+                        elif self._available_tools and func_name in self._available_tools:
+                            # Exact match in available tools list
+                            tool_name = func_name
+                            operation = None
+                        else:
+                            # Fallback: try underscore parsing for legacy compatibility
+                            parts = func_name.split("_", 1)
+                            if len(parts) == 2:
+                                tool_name, operation = parts
+                            else:
+                                tool_name = parts[0]
+                                operation = None
 
                         # Parse arguments JSON
                         import json
                         if isinstance(func_args, str):
                             parameters = json.loads(func_args)
                         else:
-                            parameters = func_args
+                            parameters = func_args if func_args else {}
 
                         # Yield tool call event
                         yield {
@@ -989,20 +1000,30 @@ class HybridAgent(BaseAIAgent):
                         func_args = tool_call["function"]["arguments"]
 
                         # Parse function name to extract tool and operation
-                        # Format: tool_name_operation or tool_name
-                        parts = func_name.split("_", 1)
-                        if len(parts) == 2:
-                            tool_name, operation = parts
-                        else:
-                            tool_name = parts[0]
+                        # CRITICAL: Try exact match first, then fall back to underscore parsing
+                        if self._tool_instances and func_name in self._tool_instances:
+                            # Exact match found - use full function name as tool name
+                            tool_name = func_name
                             operation = None
+                        elif self._available_tools and func_name in self._available_tools:
+                            # Exact match in available tools list
+                            tool_name = func_name
+                            operation = None
+                        else:
+                            # Fallback: try underscore parsing for legacy compatibility
+                            parts = func_name.split("_", 1)
+                            if len(parts) == 2:
+                                tool_name, operation = parts
+                            else:
+                                tool_name = parts[0]
+                                operation = None
 
                         # Parse arguments JSON
                         import json
                         if isinstance(func_args, str):
                             parameters = json.loads(func_args)
                         else:
-                            parameters = func_args
+                            parameters = func_args if func_args else {}
 
                         steps.append(
                             {
