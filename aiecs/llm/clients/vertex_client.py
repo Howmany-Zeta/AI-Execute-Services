@@ -147,17 +147,20 @@ def _build_safety_block_error(
     error_parts = [default_message]
     if block_reason:
         error_parts.append(f"Block reason: {block_reason}")
-    
-    blocked_categories = [
-        r.get("category", "UNKNOWN")
-        for r in safety_ratings
-        if r.get("blocked", False)
-    ]
+
+    # Safely extract blocked categories, handling potential non-dict elements
+    blocked_categories = []
+    for r in safety_ratings:
+        if isinstance(r, dict) and r.get("blocked", False):
+            blocked_categories.append(r.get("category", "UNKNOWN"))
     if blocked_categories:
         error_parts.append(f"Blocked categories: {', '.join(blocked_categories)}")
-    
+
     # Add severity/probability information
     for rating in safety_ratings:
+        # Skip non-dict elements
+        if not isinstance(rating, dict):
+            continue
         if rating.get("blocked"):
             if "severity" in rating:
                 error_parts.append(
