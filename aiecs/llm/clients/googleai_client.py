@@ -2,12 +2,8 @@ import logging
 import os
 from typing import Optional, List, AsyncGenerator
 
-import google.generativeai as genai
-from google.generativeai.types import (
-    GenerationConfig,
-    HarmCategory,
-    HarmBlockThreshold,
-)
+from google import genai
+from google.genai import types
 
 from aiecs.llm.clients.base_client import (
     BaseLLMClient,
@@ -22,27 +18,42 @@ logger = logging.getLogger(__name__)
 
 
 class GoogleAIClient(BaseLLMClient):
-    """Google AI (Gemini) provider client"""
+    """Google AI (Gemini) provider client using the new google.genai SDK"""
 
     def __init__(self):
         super().__init__("GoogleAI")
         self.settings = get_settings()
         self._initialized = False
-        self.client = None
+        self._client: Optional[genai.Client] = None
 
-    def _init_google_ai(self):
-        """Lazy initialization of Google AI SDK"""
-        if not self._initialized:
+    def _init_google_ai(self) -> genai.Client:
+        """Lazy initialization of Google AI SDK and return the client"""
+        if not self._initialized or self._client is None:
             api_key = self.settings.googleai_api_key or os.environ.get("GOOGLEAI_API_KEY")
             if not api_key:
                 raise ProviderNotAvailableError("Google AI API key not configured. Set GOOGLEAI_API_KEY.")
 
             try:
-                genai.configure(api_key=api_key)
+                self._client = genai.Client(api_key=api_key)
                 self._initialized = True
-                self.logger.info("Google AI SDK initialized successfully.")
+                self.logger.info("Google AI SDK (google.genai) initialized successfully.")
             except Exception as e:
                 raise ProviderNotAvailableError(f"Failed to initialize Google AI SDK: {str(e)}")
+
+        return self._client
+
+    def _convert_messages_to_contents(
+        self, messages: List[LLMMessage]
+    ) -> List[types.Content]:
+        """Convert LLMMessage list to Google GenAI Content objects."""
+        contents = []
+        for msg in messages:
+            # Map 'assistant' role to 'model' for Google AI
+            role = "model" if msg.role == "assistant" else msg.role
+            contents.append(
+                types.Content(role=role, parts=[types.Part(text=msg.content)])
+            )
+        return contents
 
     async def generate_text(
         self,
@@ -50,10 +61,11 @@ class GoogleAIClient(BaseLLMClient):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        system_instruction: Optional[str] = None,
         **kwargs,
     ) -> LLMResponse:
-        """Generate text using Google AI"""
-        self._init_google_ai()
+        """Generate text using Google AI (google.genai SDK)"""
+        client = self._init_google_ai()
 
         # Get model name from config if not provided
         model_name = model or self._get_default_model() or "gemini-2.5-pro"
@@ -64,34 +76,53 @@ class GoogleAIClient(BaseLLMClient):
             max_tokens = model_config.default_params.max_tokens
 
         try:
-            model_instance = genai.GenerativeModel(model_name)
+            # Extract system message from messages if not provided
+            system_msg = None
+            user_messages = []
+            for msg in messages:
+                if msg.role == "system":
+                    system_msg = msg.content
+                else:
+                    user_messages.append(msg)
 
-            # Convert messages to Google AI format
-            history = [{"role": msg.role, "parts": [msg.content]} for msg in messages]
+            # Use provided system_instruction or extracted system message
+            final_system_instruction = system_instruction or system_msg
 
-            # The last message is the prompt
-            prompt = history.pop()
+            # Convert messages to Content objects
+            contents = self._convert_messages_to_contents(user_messages)
 
-            # Create GenerationConfig
-            generation_config = GenerationConfig(
+            # Create GenerateContentConfig with all settings
+            config = types.GenerateContentConfig(
+                system_instruction=final_system_instruction,
                 temperature=temperature,
                 max_output_tokens=max_tokens or 8192,
                 top_p=kwargs.get("top_p", 0.95),
                 top_k=kwargs.get("top_k", 40),
+                safety_settings=[
+                    types.SafetySetting(
+                        category="HARM_CATEGORY_HARASSMENT",
+                        threshold="OFF",
+                    ),
+                    types.SafetySetting(
+                        category="HARM_CATEGORY_HATE_SPEECH",
+                        threshold="OFF",
+                    ),
+                    types.SafetySetting(
+                        category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                        threshold="OFF",
+                    ),
+                    types.SafetySetting(
+                        category="HARM_CATEGORY_DANGEROUS_CONTENT",
+                        threshold="OFF",
+                    ),
+                ],
             )
 
-            # Safety settings to match vertex_client
-            safety_settings = {
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-            }
-
-            response = await model_instance.generate_content_async(
-                contents=prompt["parts"],
-                generation_config=generation_config,
-                safety_settings=safety_settings,
+            # Use async client for async operations
+            response = await client.aio.models.generate_content(
+                model=model_name,
+                contents=contents,
+                config=config,
             )
 
             content = response.text
@@ -133,10 +164,11 @@ class GoogleAIClient(BaseLLMClient):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        system_instruction: Optional[str] = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]:
-        """Stream text generation using Google AI"""
-        self._init_google_ai()
+        """Stream text generation using Google AI (google.genai SDK)"""
+        client = self._init_google_ai()
 
         # Get model name from config if not provided
         model_name = model or self._get_default_model() or "gemini-2.5-pro"
@@ -147,34 +179,54 @@ class GoogleAIClient(BaseLLMClient):
             max_tokens = model_config.default_params.max_tokens
 
         try:
-            model_instance = genai.GenerativeModel(model_name)
+            # Extract system message from messages if not provided
+            system_msg = None
+            user_messages = []
+            for msg in messages:
+                if msg.role == "system":
+                    system_msg = msg.content
+                else:
+                    user_messages.append(msg)
 
-            # Convert messages to Google AI format
-            history = [{"role": msg.role, "parts": [msg.content]} for msg in messages]
-            prompt = history.pop()
+            # Use provided system_instruction or extracted system message
+            final_system_instruction = system_instruction or system_msg
 
-            generation_config = GenerationConfig(
+            # Convert messages to Content objects
+            contents = self._convert_messages_to_contents(user_messages)
+
+            # Create GenerateContentConfig with all settings
+            config = types.GenerateContentConfig(
+                system_instruction=final_system_instruction,
                 temperature=temperature,
                 max_output_tokens=max_tokens or 8192,
                 top_p=kwargs.get("top_p", 0.95),
                 top_k=kwargs.get("top_k", 40),
+                safety_settings=[
+                    types.SafetySetting(
+                        category="HARM_CATEGORY_HARASSMENT",
+                        threshold="OFF",
+                    ),
+                    types.SafetySetting(
+                        category="HARM_CATEGORY_HATE_SPEECH",
+                        threshold="OFF",
+                    ),
+                    types.SafetySetting(
+                        category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                        threshold="OFF",
+                    ),
+                    types.SafetySetting(
+                        category="HARM_CATEGORY_DANGEROUS_CONTENT",
+                        threshold="OFF",
+                    ),
+                ],
             )
 
-            safety_settings = {
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-            }
-
-            response_stream = await model_instance.generate_content_async(
-                contents=prompt["parts"],
-                generation_config=generation_config,
-                safety_settings=safety_settings,
-                stream=True,
-            )
-
-            async for chunk in response_stream:
+            # Use async streaming with the new SDK
+            async for chunk in client.aio.models.generate_content_stream(
+                model=model_name,
+                contents=contents,
+                config=config,
+            ):
                 if chunk.text:
                     yield chunk.text
 
@@ -184,5 +236,6 @@ class GoogleAIClient(BaseLLMClient):
 
     async def close(self):
         """Clean up resources"""
-        # Google AI SDK does not require explicit closing of a client
+        # Google GenAI SDK does not require explicit closing of a client
         self._initialized = False
+        self._client = None
