@@ -17,7 +17,7 @@ from aiecs.domain.agent import (
     AgentConfiguration,
     AgentType,
 )
-from aiecs.llm import BaseLLMClient, LLMResponse, LLMMessage
+from aiecs.llm import BaseLLMClient, CacheControl, LLMResponse, LLMMessage
 
 
 # ==================== Mock Classes ====================
@@ -362,6 +362,250 @@ async def test_agent_metrics_backward_compatible():
     assert metrics.total_tasks_executed == 0
     assert metrics.successful_tasks == 0
     assert metrics.failed_tasks == 0
+
+
+# ==================== Test System Prompt Precedence ====================
+
+
+@pytest.mark.asyncio
+async def test_llm_agent_system_prompt_takes_precedence():
+    """Test that system_prompt field takes precedence over assembled fields in LLMAgent."""
+    config = AgentConfiguration(
+        system_prompt="Custom system prompt",
+        goal="This goal should be ignored",
+        backstory="This backstory should be ignored",
+        llm_model="mock-model",
+    )
+
+    agent = LLMAgent(
+        agent_id="test_precedence_1",
+        name="Precedence Test Agent",
+        llm_client=MockLLMClient(),
+        config=config,
+    )
+
+    await agent.initialize()
+
+    # Access the built system prompt via the private attribute
+    assert agent._system_prompt == "Custom system prompt"
+    assert "goal" not in agent._system_prompt.lower()
+
+
+@pytest.mark.asyncio
+async def test_llm_agent_assembled_prompt_fallback():
+    """Test that assembled prompt is used when system_prompt is None."""
+    config = AgentConfiguration(
+        goal="Help users with tasks",
+        backstory="You are an experienced assistant",
+        llm_model="mock-model",
+    )
+
+    agent = LLMAgent(
+        agent_id="test_fallback_1",
+        name="Fallback Test Agent",
+        llm_client=MockLLMClient(),
+        config=config,
+    )
+
+    await agent.initialize()
+
+    # Should contain assembled parts
+    assert "Goal: Help users with tasks" in agent._system_prompt
+    assert "Background: You are an experienced assistant" in agent._system_prompt
+
+
+@pytest.mark.asyncio
+async def test_llm_agent_default_fallback():
+    """Test that default prompt is used when no prompts configured."""
+    config = AgentConfiguration(llm_model="mock-model")
+
+    agent = LLMAgent(
+        agent_id="test_default_1",
+        name="Default Test Agent",
+        llm_client=MockLLMClient(),
+        config=config,
+    )
+
+    await agent.initialize()
+
+    assert agent._system_prompt == "You are a helpful AI assistant."
+
+
+@pytest.mark.asyncio
+async def test_hybrid_agent_system_prompt_with_react_instructions():
+    """Test that HybridAgent uses system_prompt but still adds ReAct instructions."""
+    config = AgentConfiguration(
+        system_prompt="You are a specialized data analyst.",
+        goal="This goal should be ignored",
+        llm_model="mock-model",
+    )
+
+    agent = HybridAgent(
+        agent_id="test_hybrid_precedence_1",
+        name="Hybrid Precedence Test",
+        llm_client=MockLLMClient(),
+        tools=["search"],
+        config=config,
+    )
+
+    await agent.initialize()
+
+    # Custom prompt should be included
+    assert "You are a specialized data analyst." in agent._system_prompt
+    # ReAct instructions should still be appended
+    assert "ReAct pattern" in agent._system_prompt
+    # Goal should NOT be in the prompt (overridden by system_prompt)
+    assert "This goal should be ignored" not in agent._system_prompt
+
+
+@pytest.mark.asyncio
+async def test_hybrid_agent_assembled_with_react():
+    """Test that HybridAgent assembles from fields when system_prompt is None."""
+    config = AgentConfiguration(
+        goal="Analyze data",
+        backstory="Expert analyst",
+        llm_model="mock-model",
+    )
+
+    agent = HybridAgent(
+        agent_id="test_hybrid_assembled_1",
+        name="Hybrid Assembled Test",
+        llm_client=MockLLMClient(),
+        tools=["calculator"],
+        config=config,
+    )
+
+    await agent.initialize()
+
+    # Assembled fields should be present
+    assert "Goal: Analyze data" in agent._system_prompt
+    assert "Background: Expert analyst" in agent._system_prompt
+    # ReAct instructions should be present
+    assert "ReAct pattern" in agent._system_prompt
+
+
+@pytest.mark.asyncio
+async def test_enable_prompt_caching_field_accessible():
+    """Test that enable_prompt_caching field is accessible on agent config."""
+    config = AgentConfiguration(
+        goal="Test",
+        enable_prompt_caching=False,
+        llm_model="mock-model",
+    )
+
+    agent = LLMAgent(
+        agent_id="test_caching_1",
+        name="Caching Test Agent",
+        llm_client=MockLLMClient(),
+        config=config,
+    )
+
+    # Config field should be accessible
+    assert agent._config.enable_prompt_caching is False
+
+
+@pytest.mark.asyncio
+async def test_llm_agent_messages_have_cache_control_when_enabled():
+    """Test that LLMAgent adds cache_control to system prompt when enabled."""
+    config = AgentConfiguration(
+        system_prompt="You are a test assistant.",
+        enable_prompt_caching=True,
+        llm_model="mock-model",
+    )
+
+    agent = LLMAgent(
+        agent_id="test_cache_ctrl_1",
+        name="Cache Control Test Agent",
+        llm_client=MockLLMClient(),
+        config=config,
+    )
+    await agent.initialize()
+
+    messages = agent._build_messages("Hello", {})
+
+    # System prompt should have cache_control
+    system_msg = messages[0]
+    assert system_msg.role == "system"
+    assert system_msg.cache_control is not None
+    assert system_msg.cache_control.type == "ephemeral"
+
+
+@pytest.mark.asyncio
+async def test_llm_agent_messages_no_cache_control_when_disabled():
+    """Test that LLMAgent does not add cache_control when disabled."""
+    config = AgentConfiguration(
+        system_prompt="You are a test assistant.",
+        enable_prompt_caching=False,
+        llm_model="mock-model",
+    )
+
+    agent = LLMAgent(
+        agent_id="test_cache_ctrl_2",
+        name="Cache Control Disabled Agent",
+        llm_client=MockLLMClient(),
+        config=config,
+    )
+    await agent.initialize()
+
+    messages = agent._build_messages("Hello", {})
+
+    # System prompt should NOT have cache_control
+    system_msg = messages[0]
+    assert system_msg.role == "system"
+    assert system_msg.cache_control is None
+
+
+@pytest.mark.asyncio
+async def test_hybrid_agent_messages_have_cache_control_when_enabled():
+    """Test that HybridAgent adds cache_control to system prompt when enabled."""
+    config = AgentConfiguration(
+        system_prompt="You are a hybrid test assistant.",
+        enable_prompt_caching=True,
+        llm_model="mock-model",
+    )
+
+    agent = HybridAgent(
+        agent_id="test_hybrid_cache_1",
+        name="Hybrid Cache Control Test Agent",
+        llm_client=MockLLMClient(),
+        tools=[],
+        config=config,
+    )
+    await agent.initialize()
+
+    messages = agent._build_initial_messages("Do something", {})
+
+    # System prompt should have cache_control
+    system_msg = messages[0]
+    assert system_msg.role == "system"
+    assert system_msg.cache_control is not None
+    assert system_msg.cache_control.type == "ephemeral"
+
+
+@pytest.mark.asyncio
+async def test_hybrid_agent_messages_no_cache_control_when_disabled():
+    """Test that HybridAgent does not add cache_control when disabled."""
+    config = AgentConfiguration(
+        system_prompt="You are a hybrid test assistant.",
+        enable_prompt_caching=False,
+        llm_model="mock-model",
+    )
+
+    agent = HybridAgent(
+        agent_id="test_hybrid_cache_2",
+        name="Hybrid Cache Disabled Agent",
+        llm_client=MockLLMClient(),
+        tools=[],
+        config=config,
+    )
+    await agent.initialize()
+
+    messages = agent._build_initial_messages("Do something", {})
+
+    # System prompt should NOT have cache_control
+    system_msg = messages[0]
+    assert system_msg.role == "system"
+    assert system_msg.cache_control is None
 
 
 if __name__ == "__main__":

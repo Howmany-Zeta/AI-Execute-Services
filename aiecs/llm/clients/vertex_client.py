@@ -514,6 +514,15 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             output_tokens = self._count_tokens_estimate(content)
             tokens_used = input_tokens + output_tokens
 
+            # Extract cache metadata from Vertex AI response if available
+            cache_read_tokens = None
+            cache_hit = None
+            if hasattr(response, "usage_metadata"):
+                usage = response.usage_metadata
+                if hasattr(usage, "cached_content_token_count"):
+                    cache_read_tokens = usage.cached_content_token_count
+                    cache_hit = cache_read_tokens is not None and cache_read_tokens > 0
+
             # Use config-based cost estimation
             cost = self._estimate_cost_from_config(model_name, input_tokens, output_tokens)
 
@@ -528,6 +537,8 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 prompt_tokens=input_tokens,  # Estimated value since Vertex AI doesn't provide detailed usage
                 completion_tokens=output_tokens,  # Estimated value since Vertex AI doesn't provide detailed usage
                 cost_estimate=cost,
+                cache_read_tokens=cache_read_tokens,
+                cache_hit=cache_hit,
             )
 
             # Attach function call info if present

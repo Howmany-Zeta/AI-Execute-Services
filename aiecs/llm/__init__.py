@@ -14,6 +14,7 @@ Package Structure:
 # Import from organized subpackages
 from .clients import (
     BaseLLMClient,
+    CacheControl,
     LLMMessage,
     LLMResponse,
     LLMClientError,
@@ -60,6 +61,7 @@ from .client_resolver import (
 __all__ = [
     # Base classes and types
     "BaseLLMClient",
+    "CacheControl",
     "LLMMessage",
     "LLMResponse",
     "LLMClientError",

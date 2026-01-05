@@ -226,7 +226,17 @@ class OpenAICompatibleFunctionCallingMixin:
         tokens_used = response.usage.total_tokens if response.usage else None
         input_tokens = response.usage.prompt_tokens if response.usage else 0
         output_tokens = response.usage.completion_tokens if response.usage else 0
-        
+
+        # Extract cache metadata from OpenAI response
+        # OpenAI returns cached_tokens in prompt_tokens_details for supported models
+        cache_read_tokens = None
+        cache_hit = None
+        if response.usage and hasattr(response.usage, "prompt_tokens_details"):
+            details = response.usage.prompt_tokens_details
+            if details and hasattr(details, "cached_tokens"):
+                cache_read_tokens = details.cached_tokens
+                cache_hit = cache_read_tokens is not None and cache_read_tokens > 0
+
         # Create response
         llm_response = LLMResponse(
             content=content,
@@ -237,8 +247,10 @@ class OpenAICompatibleFunctionCallingMixin:
             completion_tokens=output_tokens if response.usage else None,
             cost_estimate=self._estimate_cost_from_config(model, input_tokens, output_tokens)  # type: ignore[attr-defined]
             if hasattr(self, "_estimate_cost_from_config") else None,
+            cache_read_tokens=cache_read_tokens,
+            cache_hit=cache_hit,
         )
-        
+
         # Attach function call info
         return self._attach_function_calls_to_response(llm_response, function_call, tool_calls)
 
