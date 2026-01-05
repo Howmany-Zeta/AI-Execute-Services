@@ -10,6 +10,8 @@ from vertexai.generative_models import (
     HarmBlockThreshold,
     GenerationConfig,
     SafetySetting,
+    Content,
+    Part,
 )
 
 from aiecs.llm.clients.base_client import (
@@ -228,6 +230,31 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             except Exception as e:
                 raise ProviderNotAvailableError(f"Failed to initialize Vertex AI: {str(e)}")
 
+    def _convert_messages_to_contents(
+        self, messages: List[LLMMessage]
+    ) -> List[Content]:
+        """
+        Convert LLMMessage list to Vertex AI Content objects.
+
+        This properly handles multi-turn conversations instead of
+        string concatenation.
+
+        Args:
+            messages: List of LLMMessage objects (system messages should be filtered out)
+
+        Returns:
+            List of Content objects for Vertex AI API
+        """
+        contents = []
+        for msg in messages:
+            # Map role: Vertex AI uses "model" for assistant responses
+            role = "model" if msg.role == "assistant" else msg.role
+            contents.append(Content(
+                role=role,
+                parts=[Part.from_text(msg.content)]
+            ))
+        return contents
+
     async def generate_text(
         self,
         messages: List[LLMMessage],
@@ -237,6 +264,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
         functions: Optional[List[Dict[str, Any]]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Any] = None,
+        system_instruction: Optional[str] = None,
         **kwargs,
     ) -> LLMResponse:
         """Generate text using Vertex AI"""
@@ -251,16 +279,31 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             max_tokens = model_config.default_params.max_tokens
 
         try:
-            # Use the stable Vertex AI API
-            model_instance = GenerativeModel(model_name)
+            # Extract system message from messages if present
+            system_msg = None
+            user_messages = []
+            for msg in messages:
+                if msg.role == "system":
+                    system_msg = msg.content
+                else:
+                    user_messages.append(msg)
+
+            # Use explicit system_instruction parameter if provided, else use extracted system message
+            final_system_instruction = system_instruction or system_msg
+
+            # Initialize model WITH system instruction for prompt caching support
+            model_instance = GenerativeModel(
+                model_name,
+                system_instruction=final_system_instruction
+            )
             self.logger.debug(f"Initialized Vertex AI model: {model_name}")
 
             # Convert messages to Vertex AI format
-            if len(messages) == 1 and messages[0].role == "user":
-                prompt = messages[0].content
+            if len(user_messages) == 1 and user_messages[0].role == "user":
+                contents = user_messages[0].content
             else:
-                # For multi-turn conversations, combine messages
-                prompt = "\n".join([f"{msg.role}: {msg.content}" for msg in messages])
+                # For multi-turn conversations, use proper Content objects
+                contents = self._convert_messages_to_contents(user_messages)
 
             # Use modern GenerationConfig object
             generation_config = GenerationConfig(
@@ -314,7 +357,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             
             # Build API call parameters
             api_params = {
-                "prompt": prompt,
+                "contents": contents,
                 "generation_config": generation_config,
                 "safety_settings": safety_settings,
             }
@@ -587,11 +630,12 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Any] = None,
         return_chunks: bool = False,
+        system_instruction: Optional[str] = None,
         **kwargs,
     ) -> AsyncGenerator[Any, None]:
         """
         Stream text using Vertex AI real streaming API with Function Calling support.
-        
+
         Args:
             messages: List of LLM messages
             model: Model name (optional)
@@ -601,8 +645,9 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             tools: List of tool schemas (new format)
             tool_choice: Tool choice strategy (not used for Google Vertex AI)
             return_chunks: If True, returns GoogleStreamChunk objects; if False, returns str tokens only
+            system_instruction: System instruction for prompt caching support
             **kwargs: Additional arguments
-            
+
         Yields:
             str or GoogleStreamChunk: Text tokens or StreamChunk objects
         """
@@ -617,16 +662,31 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             max_tokens = model_config.default_params.max_tokens
 
         try:
-            # Use the stable Vertex AI API
-            model_instance = GenerativeModel(model_name)
+            # Extract system message from messages if present
+            system_msg = None
+            user_messages = []
+            for msg in messages:
+                if msg.role == "system":
+                    system_msg = msg.content
+                else:
+                    user_messages.append(msg)
+
+            # Use explicit system_instruction parameter if provided, else use extracted system message
+            final_system_instruction = system_instruction or system_msg
+
+            # Initialize model WITH system instruction for prompt caching support
+            model_instance = GenerativeModel(
+                model_name,
+                system_instruction=final_system_instruction
+            )
             self.logger.debug(f"Initialized Vertex AI model for streaming: {model_name}")
 
             # Convert messages to Vertex AI format
-            if len(messages) == 1 and messages[0].role == "user":
-                prompt = messages[0].content
+            if len(user_messages) == 1 and user_messages[0].role == "user":
+                contents = user_messages[0].content
             else:
-                # For multi-turn conversations, combine messages
-                prompt = "\n".join([f"{msg.role}: {msg.content}" for msg in messages])
+                # For multi-turn conversations, use proper Content objects
+                contents = self._convert_messages_to_contents(user_messages)
 
             # Use modern GenerationConfig object
             generation_config = GenerationConfig(
@@ -680,7 +740,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             
             async for chunk in self._stream_text_with_function_calling(
                 model_instance=model_instance,
-                prompt=prompt,
+                contents=contents,
                 generation_config=generation_config,
                 safety_settings=safety_settings,
                 tools=tools_for_api,
