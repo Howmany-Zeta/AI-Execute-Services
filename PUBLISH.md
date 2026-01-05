@@ -68,9 +68,9 @@ python -c "import aiecs; print('AIECS installed successfully!')"
 
 Before releasing a new version:
 
-1. Update version in `pyproject.toml`
-2. Update version in `setup.py`
-3. Update version in `aiecs/main.py` (if applicable)
+1. Update version use  `poetry run aiecs-version --bump patch` for patch
+2. Update version use  `poetry run aiecs-version --bump minor` for minor
+3. Update version use  `poetry run aiecs-version --bump major` for major
 4. Update CHANGELOG (if you have one)
 5. Commit changes
 6. Tag the release: `git tag v1.2.2`
