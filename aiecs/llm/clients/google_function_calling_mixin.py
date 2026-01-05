@@ -12,7 +12,7 @@ from vertexai.generative_models import (
     FunctionDeclaration,
     Tool,
 )
-from google.ai.generativelanguage import Schema, Type
+from google.genai.types import Schema, Type
 
 from .base_client import LLMMessage, LLMResponse
 
