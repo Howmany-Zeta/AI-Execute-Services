@@ -321,7 +321,7 @@ class GoogleFunctionCallingMixin:
     async def _stream_text_with_function_calling(
         self,
         model_instance: Any,
-        prompt: str,
+        contents: Any,
         generation_config: Any,
         safety_settings: List[Any],
         tools: Optional[List[Tool]] = None,
@@ -330,22 +330,22 @@ class GoogleFunctionCallingMixin:
     ) -> AsyncGenerator[Union[str, StreamChunk], None]:
         """
         Stream text with Function Calling support (Google Vertex AI format).
-        
+
         Args:
-            model_instance: GenerativeModel instance
-            prompt: Input prompt
+            model_instance: GenerativeModel instance (should include system_instruction)
+            contents: Input contents (string or list of Content objects)
             generation_config: GenerationConfig object
             safety_settings: List of SafetySetting objects
             tools: List of Tool objects (Google format)
             return_chunks: If True, returns StreamChunk objects; if False, returns str tokens only
             **kwargs: Additional arguments
-            
+
         Yields:
             str or StreamChunk: Text tokens or StreamChunk objects
         """
         # Build API call parameters
         api_params = {
-            "prompt": prompt,
+            "contents": contents,
             "generation_config": generation_config,
             "safety_settings": safety_settings,
             "stream": True,
