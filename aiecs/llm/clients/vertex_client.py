@@ -296,11 +296,16 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                     except json.JSONDecodeError:
                         args_dict = {}
 
-                    # Create FunctionCall part using Part.from_function_call
-                    parts.append(Part.from_function_call(
-                        name=func_name,
-                        args=args_dict
-                    ))
+                    # Create FunctionCall part using Part.from_dict
+                    # Note: Part.from_function_call() does NOT exist in Vertex AI SDK
+                    # Must use from_dict with function_call structure
+                    function_call_part = Part.from_dict({
+                        "function_call": {
+                            "name": func_name,
+                            "args": args_dict
+                        }
+                    })
+                    parts.append(function_call_part)
 
                 contents.append(Content(
                     role="model",
