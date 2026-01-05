@@ -1,8 +1,9 @@
 import asyncio
+import json
 import logging
 import os
 import warnings
-from typing import Dict, Any, Optional, List, AsyncGenerator
+from typing import Dict, Any, Optional, List, AsyncGenerator, Union
 import vertexai
 from vertexai.generative_models import (
     GenerativeModel,
@@ -239,8 +240,8 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
         """
         Convert LLMMessage list to Vertex AI Content objects.
 
-        This properly handles multi-turn conversations instead of
-        string concatenation.
+        This properly handles multi-turn conversations including
+        function/tool responses for Vertex AI Function Calling.
 
         Args:
             messages: List of LLMMessage objects (system messages should be filtered out)
@@ -249,13 +250,72 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             List of Content objects for Vertex AI API
         """
         contents = []
+
         for msg in messages:
-            # Map role: Vertex AI uses "model" for assistant responses
-            role = "model" if msg.role == "assistant" else msg.role
-            contents.append(Content(
-                role=role,
-                parts=[Part.from_text(msg.content)]
-            ))
+            # Handle tool/function responses (role="tool")
+            if msg.role == "tool":
+                # Vertex AI expects function responses as user messages with FunctionResponse parts
+                # The tool_call_id maps to the function name
+                func_name = msg.tool_call_id or "unknown_function"
+
+                # Parse content as the function response
+                try:
+                    # Try to parse as JSON if it looks like JSON
+                    if msg.content and msg.content.strip().startswith('{'):
+                        response_data = json.loads(msg.content)
+                    else:
+                        response_data = {"result": msg.content}
+                except json.JSONDecodeError:
+                    response_data = {"result": msg.content}
+
+                # Create FunctionResponse part using Part.from_function_response
+                func_response_part = Part.from_function_response(
+                    name=func_name,
+                    response=response_data
+                )
+
+                contents.append(Content(
+                    role="user",  # Function responses are sent as "user" role in Vertex AI
+                    parts=[func_response_part]
+                ))
+
+            # Handle assistant messages with tool calls
+            elif msg.role == "assistant" and msg.tool_calls:
+                parts = []
+                if msg.content:
+                    parts.append(Part.from_text(msg.content))
+
+                for tool_call in msg.tool_calls:
+                    func = tool_call.get("function", {})
+                    func_name = func.get("name", "")
+                    func_args = func.get("arguments", "{}")
+
+                    # Parse arguments
+                    try:
+                        args_dict = json.loads(func_args) if isinstance(func_args, str) else func_args
+                    except json.JSONDecodeError:
+                        args_dict = {}
+
+                    # Create FunctionCall part using Part.from_function_call
+                    parts.append(Part.from_function_call(
+                        name=func_name,
+                        args=args_dict
+                    ))
+
+                contents.append(Content(
+                    role="model",
+                    parts=parts
+                ))
+
+            # Handle regular messages (user, assistant without tool_calls)
+            else:
+                role = "model" if msg.role == "assistant" else msg.role
+                if msg.content:
+                    contents.append(Content(
+                        role=role,
+                        parts=[Part.from_text(msg.content)]
+                    ))
+
         return contents
 
     async def generate_text(
