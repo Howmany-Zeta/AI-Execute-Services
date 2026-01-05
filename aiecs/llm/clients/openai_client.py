@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, List, AsyncGenerator, cast, Any
+from typing import Optional, List, Dict, AsyncGenerator, cast, Any
 from openai import AsyncOpenAI
 from tenacity import (
     retry,
