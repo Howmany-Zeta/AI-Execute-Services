@@ -10,10 +10,9 @@ from typing import Dict, Any, Optional, List, Union, AsyncGenerator
 from dataclasses import dataclass
 from vertexai.generative_models import (
     FunctionDeclaration,
-    Schema,
-    Type,
     Tool,
 )
+from google.ai.generativelanguage import Schema, Type
 
 from .base_client import LLMMessage, LLMResponse
 
