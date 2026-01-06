@@ -973,6 +973,17 @@ class HybridAgent(BaseAIAgent):
             thought = response.content or ""
             total_tokens += getattr(response, "total_tokens", 0)
 
+            # Update prompt cache metrics from LLM response
+            cache_read_tokens = getattr(response, "cache_read_tokens", None)
+            cache_creation_tokens = getattr(response, "cache_creation_tokens", None)
+            cache_hit = getattr(response, "cache_hit", None)
+            if cache_read_tokens is not None or cache_creation_tokens is not None or cache_hit is not None:
+                self.update_cache_metrics(
+                    cache_read_tokens=cache_read_tokens,
+                    cache_creation_tokens=cache_creation_tokens,
+                    cache_hit=cache_hit,
+                )
+
             # Check for Function Calling response
             tool_calls = getattr(response, "tool_calls", None)
             function_call = getattr(response, "function_call", None)

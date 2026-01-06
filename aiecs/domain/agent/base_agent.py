@@ -1296,6 +1296,67 @@ class BaseAIAgent(ABC):
 
         self._metrics.updated_at = datetime.utcnow()
 
+    def update_cache_metrics(
+        self,
+        cache_read_tokens: Optional[int] = None,
+        cache_creation_tokens: Optional[int] = None,
+        cache_hit: Optional[bool] = None,
+    ) -> None:
+        """
+        Update prompt cache metrics from LLM response.
+
+        This method tracks provider-level prompt caching statistics to monitor
+        cache hit rates and token savings.
+
+        Args:
+            cache_read_tokens: Tokens read from cache (indicates cache hit)
+            cache_creation_tokens: Tokens used to create a new cache entry
+            cache_hit: Whether the request hit a cached prompt prefix
+
+        Example:
+            # After receiving LLM response
+            agent.update_cache_metrics(
+                cache_read_tokens=response.cache_read_tokens,
+                cache_creation_tokens=response.cache_creation_tokens,
+                cache_hit=response.cache_hit
+            )
+        """
+        # Track LLM request count
+        self._metrics.total_llm_requests += 1
+
+        # Track cache hit/miss
+        if cache_hit is True:
+            self._metrics.cache_hits += 1
+        elif cache_hit is False:
+            self._metrics.cache_misses += 1
+        elif cache_read_tokens is not None and cache_read_tokens > 0:
+            # Infer cache hit from tokens
+            self._metrics.cache_hits += 1
+        elif cache_creation_tokens is not None and cache_creation_tokens > 0:
+            # Infer cache miss from creation tokens
+            self._metrics.cache_misses += 1
+
+        # Update cache hit rate
+        total_cache_requests = self._metrics.cache_hits + self._metrics.cache_misses
+        if total_cache_requests > 0:
+            self._metrics.cache_hit_rate = self._metrics.cache_hits / total_cache_requests
+
+        # Track cache tokens
+        if cache_read_tokens is not None and cache_read_tokens > 0:
+            self._metrics.total_cache_read_tokens += cache_read_tokens
+            # Provider-level caching saves ~90% of token cost for cached tokens
+            self._metrics.estimated_cache_savings_tokens += int(cache_read_tokens * 0.9)
+
+        if cache_creation_tokens is not None and cache_creation_tokens > 0:
+            self._metrics.total_cache_creation_tokens += cache_creation_tokens
+
+        self._metrics.updated_at = datetime.utcnow()
+        logger.debug(
+            f"Agent {self.agent_id} cache metrics updated: "
+            f"hit_rate={self._metrics.cache_hit_rate:.2%}, "
+            f"read_tokens={cache_read_tokens}, creation_tokens={cache_creation_tokens}"
+        )
+
     def update_session_metrics(
         self,
         session_status: str,
@@ -1518,6 +1579,18 @@ class BaseAIAgent(ABC):
             "p95_operation_time": self._metrics.p95_operation_time,
             "p99_operation_time": self._metrics.p99_operation_time,
             "recent_operations": self._metrics.operation_history[-10:],  # Last 10 operations
+            # Prompt cache metrics
+            "prompt_cache": {
+                "total_llm_requests": self._metrics.total_llm_requests,
+                "cache_hits": self._metrics.cache_hits,
+                "cache_misses": self._metrics.cache_misses,
+                "cache_hit_rate": self._metrics.cache_hit_rate,
+                "cache_hit_rate_pct": f"{self._metrics.cache_hit_rate * 100:.1f}%",
+                "total_cache_read_tokens": self._metrics.total_cache_read_tokens,
+                "total_cache_creation_tokens": self._metrics.total_cache_creation_tokens,
+                "estimated_cache_savings_tokens": self._metrics.estimated_cache_savings_tokens,
+                "estimated_cache_savings_cost": self._metrics.estimated_cache_savings_cost,
+            },
         }
 
     def get_health_status(self) -> Dict[str, Any]:
@@ -1658,6 +1731,12 @@ class BaseAIAgent(ABC):
                 # Error tracking
                 "error_count": self._metrics.error_count,
                 "error_types": self._metrics.error_types,
+                # Prompt cache metrics
+                "cache_hit_rate": self._metrics.cache_hit_rate,
+                "cache_hits": self._metrics.cache_hits,
+                "cache_misses": self._metrics.cache_misses,
+                "total_cache_read_tokens": self._metrics.total_cache_read_tokens,
+                "estimated_cache_savings_tokens": self._metrics.estimated_cache_savings_tokens,
             },
             "capabilities": [cap.capability_type for cap in self.get_capabilities()],
             "active_goals": len([g for g in self._goals.values() if g.status == GoalStatus.IN_PROGRESS]),
