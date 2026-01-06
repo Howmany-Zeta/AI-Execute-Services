@@ -621,7 +621,9 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
 
             # Vertex AI doesn't provide detailed token usage in the response
             # Use estimation method as fallback
-            input_tokens = self._count_tokens_estimate(prompt)
+            # Estimate input tokens from messages content
+            prompt_text = " ".join(msg.content for msg in messages if msg.content)
+            input_tokens = self._count_tokens_estimate(prompt_text)
             output_tokens = self._count_tokens_estimate(content)
             tokens_used = input_tokens + output_tokens
 
@@ -676,7 +678,9 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             ):
                 self.logger.warning(f"Vertex AI response issue: {str(e)}")
                 # Return a response indicating the issue
-                estimated_prompt_tokens = self._count_tokens_estimate(prompt)
+                # Estimate prompt tokens from messages content
+                prompt_text = " ".join(msg.content for msg in messages if msg.content)
+                estimated_prompt_tokens = self._count_tokens_estimate(prompt_text)
                 return LLMResponse(
                     content="[Response unavailable due to content processing issues or safety filters]",
                     provider=self.provider_name,
