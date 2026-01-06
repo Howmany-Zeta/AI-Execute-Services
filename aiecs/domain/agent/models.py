@@ -381,6 +381,16 @@ class AgentMetrics(BaseModel):
     p95_operation_time: Optional[float] = Field(None, ge=0, description="95th percentile operation time in seconds")
     p99_operation_time: Optional[float] = Field(None, ge=0, description="99th percentile operation time in seconds")
 
+    # Prompt cache metrics (for LLM provider-level caching observability)
+    total_llm_requests: int = Field(default=0, ge=0, description="Total number of LLM requests made")
+    cache_hits: int = Field(default=0, ge=0, description="Number of LLM requests with cache hits")
+    cache_misses: int = Field(default=0, ge=0, description="Number of LLM requests without cache hits (cache creation)")
+    cache_hit_rate: float = Field(default=0.0, ge=0.0, le=1.0, description="Prompt cache hit rate (0-1)")
+    total_cache_read_tokens: int = Field(default=0, ge=0, description="Total tokens read from prompt cache")
+    total_cache_creation_tokens: int = Field(default=0, ge=0, description="Total tokens used to create cache entries")
+    estimated_cache_savings_tokens: int = Field(default=0, ge=0, description="Estimated tokens saved from cache (cache_read_tokens * 0.9)")
+    estimated_cache_savings_cost: float = Field(default=0.0, ge=0, description="Estimated cost saved from cache in USD")
+
     # Timestamps
     last_reset_at: Optional[datetime] = Field(None, description="When metrics were last reset")
     updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last metrics update")
