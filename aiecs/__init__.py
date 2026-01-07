@@ -5,7 +5,7 @@ A powerful Python middleware framework for building AI-powered applications
 with tool orchestration, task execution, and multi-provider LLM support.
 """
 
-__version__ = "1.7.13"
+__version__ = "1.7.14"
 __author__ = "AIECS Team"
 __email__ = "iretbl@gmail.com"
 
