@@ -1,0 +1,19 @@
+# Image Tool Configuration
+# Runtime configuration for ImageTool
+# This file is automatically loaded by ToolConfigLoader
+
+# File Size Limits
+max_file_size_mb: 50  # Maximum file size in megabytes
+
+# Allowed File Extensions
+allowed_extensions:
+  - ".jpg"
+  - ".jpeg"
+  - ".png"
+  - ".bmp"
+  - ".tiff"
+  - ".gif"
+
+# Tesseract OCR Configuration
+tesseract_pool_size: 2  # Number of Tesseract processes for OCR
+default_ocr_language: "eng"  # Default OCR language code (e.g., 'eng', 'chi_sim', 'eng+chi_sim' for multi-language)

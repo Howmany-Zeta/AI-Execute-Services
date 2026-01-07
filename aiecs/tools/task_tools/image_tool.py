@@ -235,10 +235,16 @@ class ImageTool(BaseTool):
 
         Configuration is automatically loaded by BaseTool from:
         1. Explicit config dict (highest priority)
-        2. YAML config files (config/tools/image.yaml)
-        3. Environment variables (via dotenv from .env files)
+        2. YAML config files (config/tools/image.yaml, config/tools/image_tool.yaml, or config/tools/ImageTool.yaml)
+        3. Environment variables (via dotenv from .env files with IMAGE_TOOL_ prefix)
         4. Tool defaults (lowest priority)
+        
+        YAML configuration files are automatically discovered by ToolConfigLoader using multiple naming conventions.
+        See examples/config/tools/image_tool.yaml.example for a configuration template.
         """
+        # Pass tool_name="image" to BaseTool so it can find config/tools/image.yaml
+        if "tool_name" not in kwargs:
+            kwargs["tool_name"] = "image"
         super().__init__(config, **kwargs)
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
