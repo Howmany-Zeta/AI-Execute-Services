@@ -340,15 +340,46 @@ class HybridAgent(BaseAIAgent):
         # Add ReAct instructions (always required for HybridAgent)
         parts.append(
             "You are a reasoning agent that can use tools to complete tasks. "
-            "Follow the ReAct pattern:\n"
+            "Follow the ReAct (Reasoning + Acting) pattern:\n"
             "1. THOUGHT: Analyze the task and decide what to do\n"
             "2. ACTION: Use a tool if needed, or provide final answer\n"
             "3. OBSERVATION: Review the tool result and continue reasoning\n\n"
-            "When you need to use a tool, respond with:\n"
+            "RESPONSE FORMAT REQUIREMENTS:\n"
+            "- Wrap your thinking process in <THOUGHT>...</THOUGHT> tags\n"
+            "- Wrap observations in <OBSERVATION>...</OBSERVATION> tags\n"
+            "- Tool calls (TOOL:, OPERATION:, PARAMETERS:) MUST be OUTSIDE <THOUGHT> tags\n"
+            "- Final answers (FINAL ANSWER:) MUST be OUTSIDE <THOUGHT> tags\n\n"
+            "CORRECT FORMAT EXAMPLE:\n"
+            "<THOUGHT>\n"
+            "I need to search for information about the weather. Let me use the search tool.\n"
+            "</THOUGHT>\n\n"
+            "TOOL: search\n"
+            "OPERATION: query\n"
+            "PARAMETERS: {\"q\": \"weather today\"}\n\n"
+            "<OBSERVATION>\n"
+            "The search tool returned: Today's weather is sunny, 72°F.\n"
+            "</OBSERVATION>\n\n"
+            "<THOUGHT>\n"
+            "I have the weather information. Now I can provide the final answer.\n"
+            "</THOUGHT>\n\n"
+            "FINAL ANSWER: Today's weather is sunny, 72°F.\n\n"
+            "INCORRECT FORMAT (DO NOT DO THIS):\n"
+            "<THOUGHT>\n"
+            "I need to search.\n"
+            "TOOL: search\n"
+            "OPERATION: query\n"
+            "</THOUGHT>\n"
+            "❌ Tool calls must be OUTSIDE the <THOUGHT> tags\n\n"
+            "<THOUGHT>\n"
+            "I know the answer.\n"
+            "FINAL ANSWER: The answer is...\n"
+            "</THOUGHT>\n"
+            "❌ Final answers must be OUTSIDE the <THOUGHT> tags\n\n"
+            "TOOL CALL FORMAT:\n"
             "TOOL: <tool_name>\n"
             "OPERATION: <operation_name>\n"
             "PARAMETERS: <json_parameters>\n\n"
-            "When you have the final answer, respond with:\n"
+            "FINAL ANSWER FORMAT:\n"
             "FINAL ANSWER: <your_answer>"
         )
 
@@ -677,7 +708,11 @@ class HybridAgent(BaseAIAgent):
                         "timestamp": datetime.utcnow().isoformat(),
                     }
 
-            thought = "".join(thought_tokens)
+            thought_raw = "".join(thought_tokens)
+            # Extract thought content from <THOUGHT> tags for parsing (keep raw for display)
+            thought = self._extract_thought_content(thought_raw)
+            # Use raw thought (with tags) for frontend display
+            thought_for_display = thought_raw.strip() if thought_raw.strip() else thought
             
             # Process tool_calls if received from stream
             if tool_calls_from_stream:
@@ -745,7 +780,8 @@ class HybridAgent(BaseAIAgent):
                         }
 
                         # Add tool result to messages
-                        observation = f"Tool '{tool_name}' returned: {tool_result}"
+                        observation_content = f"Tool '{tool_name}' returned: {tool_result}"
+                        observation = f"<OBSERVATION>\n{observation_content}\n</OBSERVATION>"
                         steps.append(
                             {
                                 "type": "observation",
@@ -771,7 +807,8 @@ class HybridAgent(BaseAIAgent):
                         )
 
                     except Exception as e:
-                        error_msg = f"Tool execution failed: {str(e)}"
+                        error_content = f"Tool execution failed: {str(e)}"
+                        error_msg = f"<OBSERVATION>\n{error_content}\n</OBSERVATION>"
                         steps.append(
                             {
                                 "type": "observation",
@@ -800,12 +837,12 @@ class HybridAgent(BaseAIAgent):
             steps.append(
                 {
                     "type": "thought",
-                    "content": thought,
+                    "content": thought_for_display,  # Keep tags for frontend rendering
                     "iteration": iteration + 1,
                 }
             )
 
-            # Check if final answer
+            # Check if final answer (use extracted thought for parsing)
             if "FINAL ANSWER:" in thought:
                 final_answer = self._extract_final_answer(thought)
                 yield {
@@ -856,7 +893,8 @@ class HybridAgent(BaseAIAgent):
                     )
 
                     # OBSERVE: Add tool result to conversation
-                    observation = f"OBSERVATION: Tool '{tool_info['tool']}' returned: {tool_result}"
+                    observation_content = f"Tool '{tool_info['tool']}' returned: {tool_result}"
+                    observation = f"<OBSERVATION>\n{observation_content}\n</OBSERVATION>"
                     steps.append(
                         {
                             "type": "observation",
@@ -878,7 +916,8 @@ class HybridAgent(BaseAIAgent):
                     messages.append(LLMMessage(role="user", content=observation))
 
                 except Exception as e:
-                    error_msg = f"OBSERVATION: Tool execution failed: {str(e)}"
+                    error_content = f"Tool execution failed: {str(e)}"
+                    error_msg = f"<OBSERVATION>\n{error_content}\n</OBSERVATION>"
                     steps.append(
                         {
                             "type": "observation",
@@ -970,7 +1009,11 @@ class HybridAgent(BaseAIAgent):
                     max_tokens=self._config.max_tokens,
                 )
 
-            thought = response.content or ""
+            thought_raw = response.content or ""
+            # Extract thought content from <THOUGHT> tags for parsing (keep raw for display)
+            thought = self._extract_thought_content(thought_raw)
+            # Use raw thought (with tags) for frontend display
+            thought_for_display = thought_raw.strip() if thought_raw.strip() else thought
             total_tokens += getattr(response, "total_tokens", 0)
 
             # Update prompt cache metrics from LLM response
@@ -1059,7 +1102,8 @@ class HybridAgent(BaseAIAgent):
                         )
 
                         # Add tool result to messages
-                        observation = f"Tool '{tool_name}' returned: {tool_result}"
+                        observation_content = f"Tool '{tool_name}' returned: {tool_result}"
+                        observation = f"<OBSERVATION>\n{observation_content}\n</OBSERVATION>"
                         steps.append(
                             {
                                 "type": "observation",
@@ -1085,7 +1129,8 @@ class HybridAgent(BaseAIAgent):
                         )
 
                     except Exception as e:
-                        error_msg = f"Tool execution failed: {str(e)}"
+                        error_content = f"Tool execution failed: {str(e)}"
+                        error_msg = f"<OBSERVATION>\n{error_content}\n</OBSERVATION>"
                         steps.append(
                             {
                                 "type": "observation",
@@ -1109,8 +1154,10 @@ class HybridAgent(BaseAIAgent):
             # If using Function Calling and no tool calls, check if we have a final answer
             if self._use_function_calling and thought:
                 # LLM provided a text response without tool calls - treat as final answer
+                # Extract final answer if FINAL ANSWER: marker is present
+                final_answer = self._extract_final_answer(thought) if "FINAL ANSWER:" in thought else thought
                 return {
-                    "final_answer": thought,
+                    "final_answer": final_answer,
                     "steps": steps,
                     "iterations": iteration + 1,
                     "tool_calls_count": tool_calls_count,
@@ -1120,12 +1167,12 @@ class HybridAgent(BaseAIAgent):
             steps.append(
                 {
                     "type": "thought",
-                    "content": thought,
+                    "content": thought_for_display,  # Keep tags for frontend rendering
                     "iteration": iteration + 1,
                 }
             )
 
-            # Check if final answer (ReAct mode)
+            # Check if final answer (ReAct mode, use extracted thought for parsing)
             if "FINAL ANSWER:" in thought:
                 final_answer = self._extract_final_answer(thought)
                 return {
@@ -1162,7 +1209,8 @@ class HybridAgent(BaseAIAgent):
                     )
 
                     # OBSERVE: Add tool result to conversation
-                    observation = f"OBSERVATION: Tool '{tool_info['tool']}' returned: {tool_result}"
+                    observation_content = f"Tool '{tool_info['tool']}' returned: {tool_result}"
+                    observation = f"<OBSERVATION>\n{observation_content}\n</OBSERVATION>"
                     steps.append(
                         {
                             "type": "observation",
@@ -1176,7 +1224,8 @@ class HybridAgent(BaseAIAgent):
                     messages.append(LLMMessage(role="user", content=observation))
 
                 except Exception as e:
-                    error_msg = f"OBSERVATION: Tool execution failed: {str(e)}"
+                    error_content = f"Tool execution failed: {str(e)}"
+                    error_msg = f"<OBSERVATION>\n{error_content}\n</OBSERVATION>"
                     steps.append(
                         {
                             "type": "observation",
@@ -1230,14 +1279,35 @@ class HybridAgent(BaseAIAgent):
 
         # Add context if provided
         if context:
-            context_str = self._format_context(context)
-            if context_str:
-                messages.append(
-                    LLMMessage(
-                        role="system",
-                        content=f"Additional Context:\n{context_str}",
+            # Special handling: if context contains 'history' as a list of messages,
+            # add them as separate user/assistant messages instead of formatting
+            history = context.get("history")
+            if isinstance(history, list) and len(history) > 0:
+                # Check if history contains message-like dictionaries
+                for msg in history:
+                    if isinstance(msg, dict) and "role" in msg and "content" in msg:
+                        # Valid message format - add as separate message
+                        messages.append(
+                            LLMMessage(
+                                role=msg["role"],
+                                content=msg["content"],
+                            )
+                        )
+                    elif isinstance(msg, LLMMessage):
+                        # Already an LLMMessage instance
+                        messages.append(msg)
+            
+            # Format remaining context fields (excluding history) as Additional Context
+            context_without_history = {k: v for k, v in context.items() if k != "history"}
+            if context_without_history:
+                context_str = self._format_context(context_without_history)
+                if context_str:
+                    messages.append(
+                        LLMMessage(
+                            role="system",
+                            content=f"Additional Context:\n{context_str}",
+                        )
                     )
-                )
 
         # Add task
         messages.append(LLMMessage(role="user", content=f"Task: {task}"))
@@ -1251,6 +1321,54 @@ class HybridAgent(BaseAIAgent):
             if not key.startswith("_") and value is not None:
                 relevant_fields.append(f"{key}: {value}")
         return "\n".join(relevant_fields) if relevant_fields else ""
+
+    def _extract_thought_content(self, text: str) -> str:
+        """
+        Extract content from <THOUGHT>...</THOUGHT> tags.
+        
+        If tags are present, extracts the content inside them.
+        Otherwise, returns the original text.
+        
+        Args:
+            text: Text that may contain THOUGHT tags
+            
+        Returns:
+            Extracted thought content or original text
+        """
+        import re
+        
+        # Try to extract content from <THOUGHT>...</THOUGHT> tags
+        thought_pattern = r'<THOUGHT>(.*?)</THOUGHT>'
+        match = re.search(thought_pattern, text, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        
+        # If no tags found, return original text
+        return text.strip()
+    
+    def _extract_observation_content(self, text: str) -> str:
+        """
+        Extract content from <OBSERVATION>...</OBSERVATION> tags.
+        
+        If tags are present, extracts the content inside them.
+        Otherwise, returns the original text.
+        
+        Args:
+            text: Text that may contain OBSERVATION tags
+            
+        Returns:
+            Extracted observation content or original text
+        """
+        import re
+        
+        # Try to extract content from <OBSERVATION>...</OBSERVATION> tags
+        observation_pattern = r'<OBSERVATION>(.*?)</OBSERVATION>'
+        match = re.search(observation_pattern, text, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        
+        # If no tags found, return original text
+        return text.strip()
 
     def _extract_final_answer(self, thought: str) -> str:
         """Extract final answer from thought."""
