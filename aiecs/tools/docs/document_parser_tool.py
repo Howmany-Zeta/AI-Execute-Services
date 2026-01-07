@@ -798,13 +798,18 @@ class DocumentParserTool(BaseTool):
             raise UnsupportedDocumentError("ImageTool not available for image OCR")
 
         try:
-            # Use image tool for OCR
-            ocr_result = self.image_tool.ocr_image(file_path)
+            # Use image tool for OCR - the ocr method returns a string directly
+            ocr_text = self.image_tool.ocr(file_path=file_path)
 
             if strategy == ParsingStrategy.TEXT_ONLY:
-                return ocr_result.get("text", "")
+                return ocr_text
             else:
-                return ocr_result
+                # Return structured result for other strategies
+                return {
+                    "text": ocr_text,
+                    "file_path": file_path,
+                    "document_type": DocumentType.IMAGE,
+                }
 
         except Exception as e:
             raise ParseError(f"Failed to parse image document: {str(e)}")
