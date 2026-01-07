@@ -23,6 +23,7 @@ pip install python-dotenv
 IMAGE_TOOL_MAX_FILE_SIZE_MB=50
 IMAGE_TOOL_ALLOWED_EXTENSIONS=[".jpg",".jpeg",".png",".bmp",".tiff",".gif"]
 IMAGE_TOOL_TESSERACT_POOL_SIZE=2
+IMAGE_TOOL_DEFAULT_OCR_LANGUAGE=eng
 ```
 
 **3. Load the .env file in your application:**
@@ -105,6 +106,9 @@ IMAGE_TOOL_TESSERACT_POOL_SIZE=1
    
    # Number of Tesseract OCR processes
    IMAGE_TOOL_TESSERACT_POOL_SIZE=2
+   
+   # Default OCR language (e.g., 'eng', 'chi_sim', 'eng+chi_sim')
+   IMAGE_TOOL_DEFAULT_OCR_LANGUAGE=eng
    ```
 
 3. **Document your variables** - Add comments explaining each setting
@@ -195,6 +199,61 @@ export IMAGE_TOOL_TESSERACT_POOL_SIZE=4
 
 **Requirement:** Tesseract must be installed on the system for OCR functionality to work.
 
+### 4. Default OCR Language
+
+**Environment Variable:** `IMAGE_TOOL_DEFAULT_OCR_LANGUAGE`
+
+**Type:** String
+
+**Default:** `eng`
+
+**Description:** Default language code for OCR text extraction. This value is used when the `lang` parameter is not specified in the `ocr()` method call. Supports single language codes (e.g., `eng`, `chi_sim`) or multi-language format using `+` separator (e.g., `eng+chi_sim`).
+
+**Common Language Codes:**
+- `eng` - English (default)
+- `chi_sim` - Simplified Chinese
+- `chi_tra` - Traditional Chinese
+- `spa` - Spanish
+- `fra` - French
+- `jpn` - Japanese
+- `deu` - German
+
+**Multi-Language Support:**
+You can specify multiple languages using the `+` separator. Tesseract will try to recognize text in any of the specified languages:
+- `eng+chi_sim` - English and Simplified Chinese
+- `eng+spa+fra` - English, Spanish, and French
+
+**Examples:**
+```bash
+# Single language (English)
+export IMAGE_TOOL_DEFAULT_OCR_LANGUAGE=eng
+
+# Single language (Simplified Chinese)
+export IMAGE_TOOL_DEFAULT_OCR_LANGUAGE=chi_sim
+
+# Multi-language (English + Simplified Chinese)
+export IMAGE_TOOL_DEFAULT_OCR_LANGUAGE=eng+chi_sim
+```
+
+**Usage:**
+```python
+from aiecs.tools.task_tools.image_tool import ImageTool
+
+# Initialize with default language from config
+image_tool = ImageTool()
+
+# Uses default_ocr_language from config (e.g., 'eng+chi_sim')
+text = image_tool.ocr('image.png')
+
+# Override default language for this call
+text = image_tool.ocr('image.png', lang='chi_sim')
+
+# Use multi-language for this call
+text = image_tool.ocr('image.png', lang='eng+jpn')
+```
+
+**Note:** Make sure the corresponding Tesseract language data packs are installed on your system. See the "Language Data" section below for installation instructions.
+
 ## Usage Examples
 
 ### Example 1: Basic Environment Configuration
@@ -236,7 +295,8 @@ from aiecs.tools.task_tools.image_tool import ImageTool
 image_tool = ImageTool(config={
     'max_file_size_mb': 30,
     'allowed_extensions': ['.jpg', '.jpeg', '.png'],
-    'tesseract_pool_size': 4
+    'tesseract_pool_size': 4,
+    'default_ocr_language': 'eng+chi_sim'  # Multi-language support
 })
 ```
 
@@ -267,7 +327,8 @@ image_tool = ImageTool()
 # Update configuration at runtime
 image_tool.update_config({
     'max_file_size_mb': 100,
-    'tesseract_pool_size': 6  # Pool will be reinitialized
+    'tesseract_pool_size': 6,  # Pool will be reinitialized
+    'default_ocr_language': 'chi_sim'  # Change default language
 })
 ```
 
@@ -320,6 +381,7 @@ Pydantic automatically validates configuration values:
 - `max_file_size_mb` must be a positive integer
 - `allowed_extensions` must be a list of strings
 - `tesseract_pool_size` must be a positive integer
+- `default_ocr_language` must be a non-empty string
 
 ### File Validation
 
@@ -390,12 +452,58 @@ tesseract 4.1.1
 
 ### Using OCR with Different Languages
 
+**Method 1: Configure Default Language**
+
+Set the default language via environment variable or config:
+
+```bash
+# Set default to Chinese
+export IMAGE_TOOL_DEFAULT_OCR_LANGUAGE=chi_sim
+```
+
 ```python
 from aiecs.tools.task_tools.image_tool import ImageTool
 
 image_tool = ImageTool()
 
-# English (default)
+# Uses configured default (chi_sim)
+text = image_tool.ocr('chinese_image.png')
+
+# Override for specific call
+text = image_tool.ocr('english_image.png', lang='eng')
+```
+
+**Method 2: Multi-Language Support**
+
+Enable multi-language recognition by configuring multiple languages:
+
+```bash
+# Set default to English + Chinese
+export IMAGE_TOOL_DEFAULT_OCR_LANGUAGE=eng+chi_sim
+```
+
+```python
+from aiecs.tools.task_tools.image_tool import ImageTool
+
+image_tool = ImageTool()
+
+# Uses configured default (eng+chi_sim) - recognizes both English and Chinese
+text = image_tool.ocr('mixed_image.png')
+
+# Use different multi-language combination for specific call
+text = image_tool.ocr('image.png', lang='eng+jpn+spa')
+```
+
+**Method 3: Per-Call Language Specification**
+
+Specify language for each OCR call:
+
+```python
+from aiecs.tools.task_tools.image_tool import ImageTool
+
+image_tool = ImageTool()
+
+# English (uses default if not configured)
 text = image_tool.ocr('image.png')
 
 # Chinese
@@ -403,6 +511,9 @@ text = image_tool.ocr('chinese_image.png', lang='chi_sim')
 
 # Spanish
 text = image_tool.ocr('spanish_image.png', lang='spa')
+
+# Multi-language
+text = image_tool.ocr('mixed_image.png', lang='eng+chi_sim')
 ```
 
 ## Operations Supported
@@ -491,9 +602,11 @@ tesseract --version
 
 **Solutions:**
 1. Ensure image has good contrast and resolution
-2. Specify correct language: `ocr('image.png', lang='chi_sim')`
-3. Pre-process image (increase contrast, remove noise)
-4. Install appropriate language data packs
+2. Configure default language: `export IMAGE_TOOL_DEFAULT_OCR_LANGUAGE=chi_sim`
+3. Specify correct language per call: `ocr('image.png', lang='chi_sim')`
+4. Use multi-language format: `ocr('image.png', lang='eng+chi_sim')`
+5. Pre-process image (increase contrast, remove noise)
+6. Install appropriate language data packs
 
 ### Issue: Pool size too small for concurrent requests
 
@@ -552,6 +665,7 @@ export IMAGE_TOOL_ALLOWED_EXTENSIONS='[".jpg",".png"]'
 IMAGE_TOOL_MAX_FILE_SIZE_MB=100
 IMAGE_TOOL_TESSERACT_POOL_SIZE=1
 IMAGE_TOOL_ALLOWED_EXTENSIONS='[".jpg",".jpeg",".png",".bmp",".tiff",".gif"]'
+IMAGE_TOOL_DEFAULT_OCR_LANGUAGE=eng
 ```
 
 **Production:**
@@ -559,6 +673,7 @@ IMAGE_TOOL_ALLOWED_EXTENSIONS='[".jpg",".jpeg",".png",".bmp",".tiff",".gif"]'
 IMAGE_TOOL_MAX_FILE_SIZE_MB=20
 IMAGE_TOOL_TESSERACT_POOL_SIZE=4
 IMAGE_TOOL_ALLOWED_EXTENSIONS='[".jpg",".jpeg",".png"]'
+IMAGE_TOOL_DEFAULT_OCR_LANGUAGE=eng+chi_sim  # Multi-language support
 ```
 
 ### Error Handling
