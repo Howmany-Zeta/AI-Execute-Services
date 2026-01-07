@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import warnings
+import hashlib
 from typing import Dict, Any, Optional, List, AsyncGenerator, Union
 import vertexai
 from vertexai.generative_models import (
@@ -14,6 +15,21 @@ from vertexai.generative_models import (
     Content,
     Part,
 )
+
+logger = logging.getLogger(__name__)
+
+# Try to import CachedContent for prompt caching support
+try:
+    from vertexai.preview import caching
+    CACHED_CONTENT_AVAILABLE = True
+except ImportError:
+    try:
+        # Alternative import path for different SDK versions
+        from vertexai import caching
+        CACHED_CONTENT_AVAILABLE = True
+    except ImportError:
+        CACHED_CONTENT_AVAILABLE = False
+        # Note: logger may not be initialized yet, so we'll log later
 
 from aiecs.llm.clients.base_client import (
     BaseLLMClient,
@@ -197,6 +213,8 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             "part_counts": {},  # {part_count: frequency}
             "last_part_count": None,
         }
+        # Cache for CachedContent objects (key: content hash, value: cached_content_id)
+        self._cached_content_cache: Dict[str, str] = {}
 
     def _init_vertex_ai(self):
         """Lazy initialization of Vertex AI with proper authentication"""
@@ -233,6 +251,110 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
 
             except Exception as e:
                 raise ProviderNotAvailableError(f"Failed to initialize Vertex AI: {str(e)}")
+
+    def _generate_content_hash(self, content: str) -> str:
+        """Generate a hash for content to use as cache key."""
+        return hashlib.md5(content.encode('utf-8')).hexdigest()
+
+    async def _create_or_get_cached_content(
+        self,
+        content: str,
+        model_name: str,
+        ttl_seconds: Optional[int] = None,
+    ) -> Optional[str]:
+        """
+        Create or get a CachedContent for the given content.
+        
+        This method implements Gemini's CachedContent API for prompt caching.
+        It preserves the existing cache_control mechanism for developer convenience.
+        
+        The method supports multiple Vertex AI SDK versions and gracefully falls back
+        to regular system_instruction if CachedContent API is unavailable.
+        
+        Args:
+            content: Content to cache (typically system instruction)
+            model_name: Model name to use for caching
+            ttl_seconds: Time to live in seconds (optional, defaults to 3600)
+            
+        Returns:
+            CachedContent resource name (e.g., "projects/.../cachedContents/...") or None if caching unavailable
+        """
+        if not CACHED_CONTENT_AVAILABLE:
+            self.logger.debug("CachedContent API not available, skipping cache creation")
+            return None
+        
+        if not content or not content.strip():
+            return None
+        
+        # Generate cache key
+        cache_key = self._generate_content_hash(content)
+        
+        # Check if we already have this cached
+        if cache_key in self._cached_content_cache:
+            cached_content_id = self._cached_content_cache[cache_key]
+            self.logger.debug(f"Using existing CachedContent: {cached_content_id}")
+            return cached_content_id
+        
+        try:
+            self._init_vertex_ai()
+            
+            # Build the content to cache (system instruction as Content)
+            # For CachedContent, we typically cache the system instruction
+            cached_content_obj = Content(
+                role="user",
+                parts=[Part.from_text(content)]
+            )
+            
+            # Try different API patterns based on SDK version
+            cached_content_id = None
+            
+            # Pattern 1: caching.CachedContent.create() (most common)
+            if hasattr(caching, 'CachedContent'):
+                try:
+                    cached_content = await asyncio.get_event_loop().run_in_executor(
+                        None,
+                        lambda: caching.CachedContent.create(
+                            model=model_name,
+                            contents=[cached_content_obj],
+                            ttl_seconds=ttl_seconds or 3600,  # Default 1 hour
+                        )
+                    )
+                    
+                    # Extract the resource name
+                    if hasattr(cached_content, 'name'):
+                        cached_content_id = cached_content.name
+                    elif hasattr(cached_content, 'resource_name'):
+                        cached_content_id = cached_content.resource_name
+                    else:
+                        cached_content_id = str(cached_content)
+                    
+                    if cached_content_id:
+                        # Store in cache
+                        self._cached_content_cache[cache_key] = cached_content_id
+                        self.logger.info(f"Created CachedContent for prompt caching: {cached_content_id}")
+                        return cached_content_id
+                        
+                except AttributeError as e:
+                    self.logger.debug(f"CachedContent.create() signature may differ: {str(e)}")
+                except Exception as e:
+                    self.logger.debug(f"Failed to create CachedContent using pattern 1: {str(e)}")
+            
+            # Pattern 2: Try alternative API patterns if Pattern 1 fails
+            # Note: Different SDK versions may have different APIs
+            # This is a fallback that allows graceful degradation
+            self.logger.warning(
+                "CachedContent API not available or incompatible with current SDK version. "
+                "Falling back to system_instruction (prompt caching disabled). "
+                "To enable prompt caching, ensure you're using a compatible Vertex AI SDK version."
+            )
+            return None
+                
+        except Exception as e:
+            self.logger.warning(
+                f"Failed to create CachedContent (prompt caching disabled, using system_instruction): {str(e)}"
+            )
+            # Don't raise - allow fallback to regular generation without caching
+            return None
 
     def _convert_messages_to_contents(
         self, messages: List[LLMMessage]
@@ -349,17 +471,37 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
         try:
             # Extract system message from messages if present
             system_msg = None
+            system_cache_control = None
             user_messages = []
             for msg in messages:
                 if msg.role == "system":
                     system_msg = msg.content
+                    system_cache_control = msg.cache_control
                 else:
                     user_messages.append(msg)
 
             # Use explicit system_instruction parameter if provided, else use extracted system message
             final_system_instruction = system_instruction or system_msg
 
+            # Check if we should use CachedContent API for prompt caching
+            cached_content_id = None
+            if final_system_instruction and system_cache_control:
+                # Create or get CachedContent for the system instruction
+                # Extract TTL from cache_control if available (defaults to 3600 seconds)
+                ttl_seconds = getattr(system_cache_control, 'ttl_seconds', None) or 3600
+                cached_content_id = await self._create_or_get_cached_content(
+                    content=final_system_instruction,
+                    model_name=model_name,
+                    ttl_seconds=ttl_seconds,
+                )
+                if cached_content_id:
+                    self.logger.debug(f"Using CachedContent for prompt caching: {cached_content_id}")
+                    # When using CachedContent, we don't pass system_instruction to GenerativeModel
+                    # Instead, we'll pass cached_content_id to generate_content
+                    final_system_instruction = None
+
             # Initialize model WITH system instruction for prompt caching support
+            # Note: If using CachedContent, system_instruction will be None
             model_instance = GenerativeModel(
                 model_name,
                 system_instruction=final_system_instruction
@@ -430,13 +572,18 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 "safety_settings": safety_settings,
             }
             
+            # Add cached_content if using CachedContent API for prompt caching
+            if cached_content_id:
+                api_params["cached_content"] = cached_content_id
+                self.logger.debug(f"Added cached_content to API params: {cached_content_id}")
+            
             # Add tools if available
             if tools_for_api:
                 api_params["tools"] = tools_for_api
             
-            # Add any additional kwargs (but exclude tools/safety_settings to avoid conflicts)
+            # Add any additional kwargs (but exclude tools/safety_settings/cached_content to avoid conflicts)
             for key, value in kwargs.items():
-                if key not in ["tools", "safety_settings"]:
+                if key not in ["tools", "safety_settings", "cached_content"]:
                     api_params[key] = value
             
             response = await asyncio.get_event_loop().run_in_executor(
@@ -736,17 +883,37 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
         try:
             # Extract system message from messages if present
             system_msg = None
+            system_cache_control = None
             user_messages = []
             for msg in messages:
                 if msg.role == "system":
                     system_msg = msg.content
+                    system_cache_control = msg.cache_control
                 else:
                     user_messages.append(msg)
 
             # Use explicit system_instruction parameter if provided, else use extracted system message
             final_system_instruction = system_instruction or system_msg
 
+            # Check if we should use CachedContent API for prompt caching
+            cached_content_id = None
+            if final_system_instruction and system_cache_control:
+                # Create or get CachedContent for the system instruction
+                # Extract TTL from cache_control if available (defaults to 3600 seconds)
+                ttl_seconds = getattr(system_cache_control, 'ttl_seconds', None) or 3600
+                cached_content_id = await self._create_or_get_cached_content(
+                    content=final_system_instruction,
+                    model_name=model_name,
+                    ttl_seconds=ttl_seconds,
+                )
+                if cached_content_id:
+                    self.logger.debug(f"Using CachedContent for prompt caching in streaming: {cached_content_id}")
+                    # When using CachedContent, we don't pass system_instruction to GenerativeModel
+                    # Instead, we'll pass cached_content_id to generate_content
+                    final_system_instruction = None
+
             # Initialize model WITH system instruction for prompt caching support
+            # Note: If using CachedContent, system_instruction will be None
             model_instance = GenerativeModel(
                 model_name,
                 system_instruction=final_system_instruction
@@ -810,6 +977,12 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             # Use mixin method for Function Calling support
             from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
             
+            # Add cached_content to kwargs if using CachedContent API
+            stream_kwargs = kwargs.copy()
+            if cached_content_id:
+                stream_kwargs["cached_content"] = cached_content_id
+                self.logger.debug(f"Added cached_content to streaming API params: {cached_content_id}")
+            
             async for chunk in self._stream_text_with_function_calling(
                 model_instance=model_instance,
                 contents=contents,
@@ -817,7 +990,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 safety_settings=safety_settings,
                 tools=tools_for_api,
                 return_chunks=return_chunks,
-                **kwargs,
+                **stream_kwargs,
             ):
                 # Yield chunk (can be str or StreamChunk)
                 yield chunk

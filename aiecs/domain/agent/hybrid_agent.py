@@ -346,9 +346,22 @@ class HybridAgent(BaseAIAgent):
             "3. OBSERVATION: Review the tool result and continue reasoning\n\n"
             "RESPONSE FORMAT REQUIREMENTS:\n"
             "- Wrap your thinking process in <THOUGHT>...</THOUGHT> tags\n"
-            "- Wrap observations in <OBSERVATION>...</OBSERVATION> tags\n"
+            "- Wrap your insight about tool result in <OBSERVATION>...</OBSERVATION> tags\n"
             "- Tool calls (TOOL:, OPERATION:, PARAMETERS:) MUST be OUTSIDE <THOUGHT> tags\n"
             "- Final answers (FINAL ANSWER:) MUST be OUTSIDE <THOUGHT> tags\n\n"
+            "THINKING GUIDANCE:\n"
+            "When writing <THOUGHT> sections, consider:\n"
+            "- What is the core thing to do?\n"
+            "- What information do I already have?\n"
+            "- What information do I need to gather?\n"
+            "- Which tools would be most helpful?\n"
+            "- What action should I take?\n\n"
+            "OBSERVATION GUIDANCE:\n"
+            "When writing <OBSERVATION> sections, consider:\n"
+            "- What did I learn from the tool results?\n"
+            "- How does this information inform my next work?\n"
+            "- Do I need additional information?\n"
+            "- Am I ready to provide a final answer?\n\n"
             "CORRECT FORMAT EXAMPLE:\n"
             "<THOUGHT>\n"
             "I need to search for information about the weather. Let me use the search tool.\n"
@@ -1304,7 +1317,7 @@ class HybridAgent(BaseAIAgent):
                 if context_str:
                     messages.append(
                         LLMMessage(
-                            role="system",
+                            role="user",
                             content=f"Additional Context:\n{context_str}",
                         )
                     )
