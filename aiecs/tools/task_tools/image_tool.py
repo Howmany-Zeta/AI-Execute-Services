@@ -148,6 +148,10 @@ class ImageTool(BaseTool):
             description="Allowed image file extensions",
         )
         tesseract_pool_size: int = Field(default=2, description="Number of Tesseract processes for OCR")
+        default_ocr_language: str = Field(
+            default="eng",
+            description="Default OCR language code (e.g., 'eng', 'chi_sim'). Supports multi-language format like 'eng+chi_sim'"
+        )
 
     # Schema definitions
     class LoadSchema(BaseFileSchema):
@@ -159,7 +163,10 @@ class ImageTool(BaseTool):
         """Schema for ocr operation"""
 
         file_path: str = Field(description="Path to the image file for OCR text extraction")
-        lang: Optional[str] = Field(default=None, description="Optional language code for OCR (e.g., 'eng', 'chi_sim'). Uses default 'eng' if not specified")
+        lang: Optional[str] = Field(
+            default=None,
+            description="Optional language code for OCR (e.g., 'eng', 'chi_sim', 'eng+chi_sim'). If not specified, uses the configured default_ocr_language"
+        )
 
     class MetadataSchema(BaseFileSchema):
         """Schema for metadata operation"""
@@ -298,11 +305,12 @@ class ImageTool(BaseTool):
 
     def ocr(self, file_path: str, lang: Optional[str] = None) -> str:
         """
-        Extract text from an image using a pooled Tesseract process.
+        Extract text from an image using Tesseract OCR.
 
         Args:
             file_path (str): Path to the image file.
-            lang (Optional[str]): Language code for OCR (e.g., 'eng').
+            lang (Optional[str]): Language code for OCR (e.g., 'eng', 'chi_sim', 'eng+chi_sim').
+                If not specified, uses the configured default_ocr_language.
 
         Returns:
             str: Extracted text.
@@ -312,23 +320,44 @@ class ImageTool(BaseTool):
         """
         # Validate input using schema
         validated_input = self.OcrSchema(file_path=file_path, lang=lang)
+        
+        # Use configured default language if lang is not specified
+        ocr_lang = lang if lang is not None else self.config.default_ocr_language
 
-        proc = self._tesseract_manager.get_process()
-        if not proc:
-            raise FileOperationError(f"ocr: No Tesseract processes available (lang: {lang or 'eng'})")
+        # Prepare temporary file for image processing
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp_file:
             temp_path = temp_file.name
         try:
+            # Preprocess image for better OCR results
             img = Image.open(validated_input.file_path).convert("L").filter(ImageFilter.SHARPEN)
             img.save(temp_path)
-            stdout, stderr = proc.communicate(input=temp_path, timeout=30)
-            if proc.returncode != 0:
-                raise FileOperationError(f"ocr: Tesseract failed for '{file_path}' (lang: {lang or 'eng'}): {stderr}")
-            return stdout.strip()
+            
+            # Call Tesseract with dynamic language parameter
+            # Use subprocess.run instead of process pool to support dynamic languages
+            try:
+                result = subprocess.run(
+                    ["tesseract", "--oem", "1", temp_path, "stdout", "-l", ocr_lang],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    check=False,  # Don't raise on non-zero return code, handle manually
+                )
+            except subprocess.TimeoutExpired:
+                raise FileOperationError(f"ocr: Tesseract timeout for '{file_path}' (lang: {ocr_lang})")
+            except FileNotFoundError:
+                raise FileOperationError("ocr: Tesseract not found. Please install Tesseract OCR.")
+            
+            if result.returncode != 0:
+                raise FileOperationError(
+                    f"ocr: Tesseract failed for '{file_path}' (lang: {ocr_lang}): {result.stderr}"
+                )
+            
+            return result.stdout.strip()
+        except FileOperationError:
+            raise  # Re-raise FileOperationError as-is
         except Exception as e:
-            raise FileOperationError(f"ocr: Failed to process '{file_path}' (lang: {lang or 'eng'}): {e}")
+            raise FileOperationError(f"ocr: Failed to process '{file_path}' (lang: {ocr_lang}): {e}")
         finally:
-            self._tesseract_manager.return_process(proc)
             if os.path.exists(temp_path):
                 try:
                     os.unlink(temp_path)
