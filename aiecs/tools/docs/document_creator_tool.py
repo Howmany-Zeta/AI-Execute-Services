@@ -55,6 +55,8 @@ class DocumentFormat(str, Enum):
     PLAIN_TEXT = "txt"
     JSON = "json"
     XML = "xml"
+    PPTX = "pptx"
+    PPT = "ppt"
 
 
 class TemplateType(str, Enum):
@@ -175,6 +177,9 @@ class DocumentCreatorTool(BaseTool):
         # Initialize templates
         self._init_templates()
 
+        # Initialize office tool for PPTX/DOCX creation
+        self._init_office_tool()
+
         # Initialize document tracking
         self._documents_created: List[Any] = []
 
@@ -196,6 +201,17 @@ class DocumentCreatorTool(BaseTool):
             TemplateType.NEWSLETTER: self._get_newsletter_template(),
             TemplateType.INVOICE: self._get_invoice_template(),
         }
+
+    def _init_office_tool(self):
+        """Initialize office tool for PPTX/DOCX creation"""
+        try:
+            from aiecs.tools.task_tools.office_tool import OfficeTool
+
+            self.office_tool = OfficeTool()
+            self.logger.info("OfficeTool initialized successfully for PPTX/DOCX support")
+        except ImportError:
+            self.logger.warning("OfficeTool not available, PPTX/DOCX creation will be limited")
+            self.office_tool = None
 
     # Schema definitions
     class Create_documentSchema(BaseModel):
@@ -943,7 +959,7 @@ class DocumentCreatorTool(BaseTool):
                 "questions",
                 "contact_info",
             ],
-            "supported_formats": ["markdown", "html"],
+            "supported_formats": ["markdown", "html", "pptx"],
             "style_presets": ["presentation", "modern", "colorful"],
         }
 
@@ -1062,7 +1078,11 @@ class DocumentCreatorTool(BaseTool):
     ) -> str:
         """Generate output path for document"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{document_type}_{timestamp}_{document_id[:8]}.{output_format.value}"
+        # Handle PPT format - use pptx extension
+        file_extension = output_format.value
+        if output_format == DocumentFormat.PPT:
+            file_extension = "pptx"  # PPT format uses PPTX extension
+        filename = f"{document_type}_{timestamp}_{document_id[:8]}.{file_extension}"
         return os.path.join(self.config.output_dir, filename)
 
     def _process_metadata(self, metadata: Dict[str, Any], output_format: DocumentFormat) -> Dict[str, Any]:
@@ -1175,10 +1195,129 @@ class DocumentCreatorTool(BaseTool):
         elif output_format == DocumentFormat.JSON:
             with open(output_path, "w", encoding="utf-8") as f:
                 json.dump({"content": content}, f, indent=2, ensure_ascii=False)
+        elif output_format in [DocumentFormat.PPTX, DocumentFormat.PPT]:
+            # Use office_tool to create PPTX file
+            self._write_pptx_file(output_path, content)
+        elif output_format == DocumentFormat.DOCX:
+            # Use office_tool to create DOCX file
+            self._write_docx_file(output_path, content)
         else:
             # For other formats, write as text for now
             with open(output_path, "w", encoding="utf-8") as f:
                 f.write(content)
+
+    def _write_pptx_file(self, output_path: str, content: str):
+        """Write content to PPTX file using office_tool"""
+        if not self.office_tool:
+            raise DocumentCreationError("OfficeTool not available. Cannot create PPTX files.")
+
+        try:
+            # Parse content to extract slides
+            # Slides are separated by "---" or slide markers like "## Slide X:"
+            slides = self._parse_content_to_slides(content)
+
+            # Use office_tool to create PPTX
+            result = self.office_tool.write_pptx(
+                slides=slides,
+                output_path=output_path,
+                image_path=None,  # Can be enhanced to extract image paths from metadata
+            )
+
+            if not result.get("success"):
+                raise DocumentCreationError(f"Failed to create PPTX file: {result}")
+
+            self.logger.info(f"PPTX file created successfully: {output_path}")
+
+        except Exception as e:
+            raise DocumentCreationError(f"Failed to write PPTX file: {str(e)}")
+
+    def _write_docx_file(self, output_path: str, content: str):
+        """Write content to DOCX file using office_tool"""
+        if not self.office_tool:
+            raise DocumentCreationError("OfficeTool not available. Cannot create DOCX files.")
+
+        try:
+            # Use office_tool to create DOCX
+            result = self.office_tool.write_docx(
+                text=content,
+                output_path=output_path,
+                table_data=None,  # Can be enhanced to extract tables from content
+            )
+
+            if not result.get("success"):
+                raise DocumentCreationError(f"Failed to create DOCX file: {result}")
+
+            self.logger.info(f"DOCX file created successfully: {output_path}")
+
+        except Exception as e:
+            raise DocumentCreationError(f"Failed to write DOCX file: {str(e)}")
+
+    def _parse_content_to_slides(self, content: str) -> List[str]:
+        """Parse content string into list of slide contents
+        
+        Supports multiple slide separation formats:
+        - "---" separator (markdown style)
+        - "## Slide X:" headers
+        - Empty lines between slides
+        """
+        slides = []
+        
+        # Split by "---" separator (common in markdown presentations)
+        if "---" in content:
+            parts = content.split("---")
+            for part in parts:
+                part = part.strip()
+                if part:
+                    # Remove slide headers like "## Slide X: Title"
+                    lines = part.split("\n")
+                    cleaned_lines = []
+                    for line in lines:
+                        # Skip slide headers
+                        if line.strip().startswith("## Slide") and ":" in line:
+                            continue
+                        cleaned_lines.append(line)
+                    slide_content = "\n".join(cleaned_lines).strip()
+                    if slide_content:
+                        slides.append(slide_content)
+        else:
+            # Try to split by "## Slide" headers
+            if "## Slide" in content:
+                parts = content.split("## Slide")
+                for i, part in enumerate(parts):
+                    if i == 0:
+                        # First part might be title slide
+                        part = part.strip()
+                        if part:
+                            slides.append(part)
+                    else:
+                        # Extract content after "Slide X: Title"
+                        lines = part.split("\n", 1)
+                        if len(lines) > 1:
+                            slide_content = lines[1].strip()
+                            if slide_content:
+                                slides.append(slide_content)
+            else:
+                # Fallback: split by double newlines (paragraph breaks)
+                parts = content.split("\n\n")
+                current_slide = []
+                for part in parts:
+                    part = part.strip()
+                    if part:
+                        # If it's a header, start a new slide
+                        if part.startswith("#"):
+                            if current_slide:
+                                slides.append("\n".join(current_slide))
+                                current_slide = []
+                        current_slide.append(part)
+                
+                if current_slide:
+                    slides.append("\n".join(current_slide))
+
+        # If no slides found, create a single slide with all content
+        if not slides:
+            slides = [content.strip()] if content.strip() else [""]
+
+        return slides
 
     def _process_template_variables(self, template_content: str, variables: Dict[str, Any]) -> str:
         """Process template variables in content"""
@@ -1282,6 +1421,8 @@ class DocumentCreatorTool(BaseTool):
             ".tex": DocumentFormat.LATEX,
             ".docx": DocumentFormat.DOCX,
             ".pdf": DocumentFormat.PDF,
+            ".pptx": DocumentFormat.PPTX,
+            ".ppt": DocumentFormat.PPT,
         }
         return format_map.get(ext, DocumentFormat.PLAIN_TEXT)
 

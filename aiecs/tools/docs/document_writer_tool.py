@@ -32,6 +32,8 @@ class DocumentFormat(str, Enum):
     PDF = "pdf"
     DOCX = "docx"
     XLSX = "xlsx"
+    PPTX = "pptx"
+    PPT = "ppt"
     BINARY = "binary"
 
 
@@ -214,6 +216,9 @@ class DocumentWriterTool(BaseTool):
         # Initialize cloud storage
         self._init_cloud_storage()
 
+        # Initialize office tool for PPTX/DOCX writing
+        self._init_office_tool()
+
         # Initialize content validators
         self._init_validators()
 
@@ -259,6 +264,17 @@ class DocumentWriterTool(BaseTool):
         except Exception as e:
             self.logger.warning(f"Cloud storage initialization failed: {e}")
             self.file_storage = None
+
+    def _init_office_tool(self):
+        """Initialize office tool for PPTX/DOCX writing"""
+        try:
+            from aiecs.tools.task_tools.office_tool import OfficeTool
+
+            self.office_tool = OfficeTool()
+            self.logger.info("OfficeTool initialized successfully for PPTX/DOCX support")
+        except ImportError:
+            self.logger.warning("OfficeTool not available, PPTX/DOCX writing will be limited")
+            self.office_tool = None
 
     def _init_validators(self):
         """Initialize content validators"""
@@ -722,6 +738,14 @@ class DocumentWriterTool(BaseTool):
         """Write to local file system with atomic operation"""
 
         try:
+            # Handle PPTX format using office_tool
+            if format in [DocumentFormat.PPTX, DocumentFormat.PPT]:
+                return self._write_pptx_file(target_path, content, plan)
+            
+            # Handle DOCX format using office_tool
+            if format == DocumentFormat.DOCX:
+                return self._write_docx_file(target_path, content, plan)
+
             # Create parent directories
             os.makedirs(os.path.dirname(target_path), exist_ok=True)
 
@@ -788,6 +812,161 @@ class DocumentWriterTool(BaseTool):
 
         except Exception as e:
             raise StorageError(f"Local file write failed: {e}")
+
+    def _write_pptx_file(self, target_path: str, content: Union[str, bytes], plan: Dict) -> Dict:
+        """Write content to PPTX file using office_tool"""
+        if not self.office_tool:
+            raise StorageError("OfficeTool not available. Cannot write PPTX files.")
+
+        try:
+            # Convert bytes to string if needed
+            if isinstance(content, bytes):
+                content_str = content.decode("utf-8")
+            else:
+                content_str = str(content)
+
+            # Parse content to extract slides
+            slides = self._parse_content_to_slides(content_str)
+
+            # Handle append mode
+            if plan["mode"] == WriteMode.APPEND and plan["file_exists"]:
+                # Read existing slides
+                existing_slides = self.office_tool.read_pptx(target_path)
+                slides = existing_slides + slides
+
+            # Use office_tool to write PPTX
+            result = self.office_tool.write_pptx(
+                slides=slides,
+                output_path=target_path,
+                image_path=None,
+            )
+
+            if not result.get("success"):
+                raise StorageError(f"Failed to write PPTX file: {result}")
+
+            # Get file stats
+            stat = os.stat(target_path)
+
+            return {
+                "path": target_path,
+                "size": stat.st_size,
+                "checksum": self._calculate_file_checksum(target_path),
+                "modified_time": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                "atomic_write": False,  # Office tool handles its own atomicity
+            }
+
+        except Exception as e:
+            raise StorageError(f"PPTX file write failed: {e}")
+
+    def _write_docx_file(self, target_path: str, content: Union[str, bytes], plan: Dict) -> Dict:
+        """Write content to DOCX file using office_tool"""
+        if not self.office_tool:
+            raise StorageError("OfficeTool not available. Cannot write DOCX files.")
+
+        try:
+            # Convert bytes to string if needed
+            if isinstance(content, bytes):
+                content_str = content.decode("utf-8")
+            else:
+                content_str = str(content)
+
+            # Handle append mode
+            if plan["mode"] == WriteMode.APPEND and plan["file_exists"]:
+                # Read existing content
+                existing_doc = self.office_tool.read_docx(target_path)
+                existing_text = "\n".join(existing_doc.get("paragraphs", []))
+                content_str = existing_text + "\n" + content_str
+
+            # Use office_tool to write DOCX
+            result = self.office_tool.write_docx(
+                text=content_str,
+                output_path=target_path,
+                table_data=None,
+            )
+
+            if not result.get("success"):
+                raise StorageError(f"Failed to write DOCX file: {result}")
+
+            # Get file stats
+            stat = os.stat(target_path)
+
+            return {
+                "path": target_path,
+                "size": stat.st_size,
+                "checksum": self._calculate_file_checksum(target_path),
+                "modified_time": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                "atomic_write": False,  # Office tool handles its own atomicity
+            }
+
+        except Exception as e:
+            raise StorageError(f"DOCX file write failed: {e}")
+
+    def _parse_content_to_slides(self, content: str) -> List[str]:
+        """Parse content string into list of slide contents
+        
+        Supports multiple slide separation formats:
+        - "---" separator (markdown style)
+        - "## Slide X:" headers
+        - Empty lines between slides
+        """
+        slides = []
+        
+        # Split by "---" separator (common in markdown presentations)
+        if "---" in content:
+            parts = content.split("---")
+            for part in parts:
+                part = part.strip()
+                if part:
+                    # Remove slide headers like "## Slide X: Title"
+                    lines = part.split("\n")
+                    cleaned_lines = []
+                    for line in lines:
+                        # Skip slide headers
+                        if line.strip().startswith("## Slide") and ":" in line:
+                            continue
+                        cleaned_lines.append(line)
+                    slide_content = "\n".join(cleaned_lines).strip()
+                    if slide_content:
+                        slides.append(slide_content)
+        else:
+            # Try to split by "## Slide" headers
+            if "## Slide" in content:
+                parts = content.split("## Slide")
+                for i, part in enumerate(parts):
+                    if i == 0:
+                        # First part might be title slide
+                        part = part.strip()
+                        if part:
+                            slides.append(part)
+                    else:
+                        # Extract content after "Slide X: Title"
+                        lines = part.split("\n", 1)
+                        if len(lines) > 1:
+                            slide_content = lines[1].strip()
+                            if slide_content:
+                                slides.append(slide_content)
+            else:
+                # Fallback: split by double newlines (paragraph breaks)
+                parts = content.split("\n\n")
+                current_slide = []
+                for part in parts:
+                    part = part.strip()
+                    if part:
+                        # If it's a header, start a new slide
+                        if part.startswith("#"):
+                            if current_slide:
+                                slides.append("\n".join(current_slide))
+                                current_slide = []
+                        current_slide.append(part)
+                
+                if current_slide:
+                    slides.append("\n".join(current_slide))
+
+        # If no slides found, create a single slide with all content
+        if not slides:
+            slides = [content.strip()] if content.strip() else [""]
+
+        return slides
 
     async def _write_to_cloud_storage(
         self,
