@@ -212,21 +212,51 @@ class ToolConfigLoader:
                 logger.warning(f"Failed to load {global_config_path}: {e}. Skipping.")
 
         # Load tool-specific config (higher precedence)
+        # Try multiple locations:
+        # 1. config/tools/{tool_name}.yaml (standard location)
+        # 2. config/{tool_name}.yaml (direct in config_dir, for custom paths)
         tools_dir = config_dir / "tools"
+        search_dirs = []
         if tools_dir.exists() and tools_dir.is_dir():
-            tool_config_path = tools_dir / f"{tool_name}.yaml"
-            if tool_config_path.exists():
-                try:
-                    with open(tool_config_path, "r", encoding="utf-8") as f:
-                        tool_data = yaml.safe_load(f)
-                        if tool_data:
-                            # Merge tool-specific config (overrides global)
-                            merged_config.update(tool_data)
-                            logger.debug(f"Loaded tool-specific config from {tool_config_path}")
-                except yaml.YAMLError as e:
-                    logger.warning(f"Invalid YAML in {tool_config_path}: {e}. Skipping.")
-                except Exception as e:
-                    logger.warning(f"Failed to load {tool_config_path}: {e}. Skipping.")
+            search_dirs.append(tools_dir)
+        # Also search directly in config_dir for custom path structures
+        search_dirs.append(config_dir)
+        
+        # Try multiple naming conventions for tool config files
+        # 1. {tool_name}.yaml (e.g., image.yaml)
+        # 2. {tool_name}_tool.yaml (e.g., image_tool.yaml)
+        # 3. {ToolName}.yaml (e.g., ImageTool.yaml)
+        possible_names = [
+            f"{tool_name}.yaml",
+            f"{tool_name}_tool.yaml",
+        ]
+        # Also try with capitalized class name if tool_name is lowercase
+        if tool_name.islower():
+            class_name = tool_name.replace("_", "").title() + "Tool"
+            possible_names.append(f"{class_name}.yaml")
+        
+        tool_config_path = None
+        for search_dir in search_dirs:
+            for name in possible_names:
+                candidate_path = search_dir / name
+                if candidate_path.exists():
+                    tool_config_path = candidate_path
+                    break
+            if tool_config_path:
+                break
+        
+        if tool_config_path:
+            try:
+                with open(tool_config_path, "r", encoding="utf-8") as f:
+                    tool_data = yaml.safe_load(f)
+                    if tool_data:
+                        # Merge tool-specific config (overrides global)
+                        merged_config.update(tool_data)
+                        logger.debug(f"Loaded tool-specific config from {tool_config_path}")
+            except yaml.YAMLError as e:
+                logger.warning(f"Invalid YAML in {tool_config_path}: {e}. Skipping.")
+            except Exception as e:
+                logger.warning(f"Failed to load {tool_config_path}: {e}. Skipping.")
 
         return merged_config
 
@@ -362,17 +392,23 @@ class ToolConfigLoader:
             logger.debug(f"Loaded config for {tool_name}: {len(merged_config)} keys")
             return merged_config
 
-    def set_config_path(self, path: Union[str, Path]) -> None:
+    def set_config_path(self, path: Optional[Union[str, Path]] = None) -> None:
         """
         Set custom config path.
 
         Args:
-            path: Path to config directory or file
+            path: Path to config directory or file. If None, resets to auto-discovery.
         """
-        self._config_path = Path(path)
-        # Clear cached config directory to force re-discovery
-        self._cached_config_dir = None
-        logger.info(f"Set custom config path: {self._config_path}")
+        if path is None:
+            self._config_path = None
+            # Clear cached config directory to force re-discovery
+            self._cached_config_dir = None
+            logger.info("Reset config path to auto-discovery")
+        else:
+            self._config_path = Path(path)
+            # Clear cached config directory to force re-discovery
+            self._cached_config_dir = None
+            logger.info(f"Set custom config path: {self._config_path}")
 
     def get_config_path(self) -> Optional[Path]:
         """
