@@ -19,17 +19,39 @@ from vertexai.generative_models import (
 logger = logging.getLogger(__name__)
 
 # Try to import CachedContent for prompt caching support
+# CachedContent API requires google-cloud-aiplatform >= 1.38.0
+# Reference: https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/cached-content
+CACHED_CONTENT_AVAILABLE = False
+CACHED_CONTENT_IMPORT_PATH = None
+CACHED_CONTENT_SDK_VERSION = None
+
+# Check SDK version
+try:
+    import google.cloud.aiplatform as aiplatform
+    CACHED_CONTENT_SDK_VERSION = getattr(aiplatform, '__version__', None)
+except ImportError:
+    pass
+
+# Try to import CachedContent for prompt caching support
 try:
     from vertexai.preview import caching
-    CACHED_CONTENT_AVAILABLE = True
+    if hasattr(caching, 'CachedContent'):
+        CACHED_CONTENT_AVAILABLE = True
+        CACHED_CONTENT_IMPORT_PATH = 'vertexai.preview.caching'
+    else:
+        # Module exists but CachedContent class not found
+        CACHED_CONTENT_AVAILABLE = False
 except ImportError:
     try:
         # Alternative import path for different SDK versions
         from vertexai import caching
-        CACHED_CONTENT_AVAILABLE = True
+        if hasattr(caching, 'CachedContent'):
+            CACHED_CONTENT_AVAILABLE = True
+            CACHED_CONTENT_IMPORT_PATH = 'vertexai.caching'
+        else:
+            CACHED_CONTENT_AVAILABLE = False
     except ImportError:
         CACHED_CONTENT_AVAILABLE = False
-        # Note: logger may not be initialized yet, so we'll log later
 
 from aiecs.llm.clients.base_client import (
     BaseLLMClient,
@@ -280,7 +302,17 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             CachedContent resource name (e.g., "projects/.../cachedContents/...") or None if caching unavailable
         """
         if not CACHED_CONTENT_AVAILABLE:
-            self.logger.debug("CachedContent API not available, skipping cache creation")
+            # Provide version info if available
+            version_info = ""
+            if CACHED_CONTENT_SDK_VERSION:
+                version_info = f" (SDK version: {CACHED_CONTENT_SDK_VERSION})"
+            elif CACHED_CONTENT_IMPORT_PATH:
+                version_info = f" (import path '{CACHED_CONTENT_IMPORT_PATH}' available but CachedContent class not found)"
+            
+            self.logger.debug(
+                f"CachedContent API not available{version_info}, skipping cache creation. "
+                f"Requires google-cloud-aiplatform >=1.38.0"
+            )
             return None
         
         if not content or not content.strip():
@@ -342,10 +374,22 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             # Pattern 2: Try alternative API patterns if Pattern 1 fails
             # Note: Different SDK versions may have different APIs
             # This is a fallback that allows graceful degradation
+            
+            # Build informative warning message with version info
+            version_info = ""
+            if CACHED_CONTENT_SDK_VERSION:
+                version_info = f" Current SDK version: {CACHED_CONTENT_SDK_VERSION}."
+            else:
+                version_info = " Unable to detect SDK version."
+            
+            required_version = ">=1.38.0"
+            upgrade_command = "pip install --upgrade 'google-cloud-aiplatform>=1.38.0'"
+            
             self.logger.warning(
-                "CachedContent API not available or incompatible with current SDK version. "
-                "Falling back to system_instruction (prompt caching disabled). "
-                "To enable prompt caching, ensure you're using a compatible Vertex AI SDK version."
+                f"CachedContent API not available or incompatible with current SDK version.{version_info} "
+                f"Falling back to system_instruction (prompt caching disabled). "
+                f"To enable prompt caching, upgrade to google-cloud-aiplatform {required_version} or later: "
+                f"{upgrade_command}"
             )
             return None
                 
