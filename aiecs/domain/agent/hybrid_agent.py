@@ -43,6 +43,67 @@ class HybridAgent(BaseAIAgent):
     - BaseLLMClient: Standard LLM clients (OpenAI, xAI, etc.)
     - Custom clients: Any object implementing LLMClientProtocol (duck typing)
 
+    **ReAct Format Reference (for callers to include in their prompts):**
+    
+    The caller is responsible for ensuring the LLM follows the correct format.
+    Below are the standard formats that HybridAgent expects:
+
+    CORRECT FORMAT EXAMPLE::
+
+        <THOUGHT>
+        I need to search for information about the weather. Let me use the search tool.
+        </THOUGHT>
+
+        TOOL: search
+        OPERATION: query
+        PARAMETERS: {"q": "weather today"}
+
+        <OBSERVATION>
+        The search tool returned: Today's weather is sunny, 72°F.
+        </OBSERVATION>
+
+        <THOUGHT>
+        I have the weather information. Now I can provide the final response.
+        </THOUGHT>
+
+        FINAL RESPONSE: Today's weather is sunny, 72°F. finish
+
+    INCORRECT FORMAT (DO NOT DO THIS)::
+
+        <THOUGHT>
+        I need to search.
+        TOOL: search
+        OPERATION: query
+        </THOUGHT>
+        ❌ Tool calls must be OUTSIDE the <THOUGHT> and <OBSERVATION> tags
+
+        <THOUGHT>
+        I know the answer.
+        FINAL RESPONSE: The answer is... finish
+        </THOUGHT>
+        ❌ Final responses must be OUTSIDE the <THOUGHT> and <OBSERVATION> tags
+        ❌ FINAL RESPONSE must end with 'finish' suffix to indicate completion
+
+    TOOL CALL FORMAT::
+
+        TOOL: <tool_name>
+        OPERATION: <operation_name>
+        PARAMETERS: <json_parameters>
+
+    FINAL RESPONSE FORMAT::
+
+        FINAL RESPONSE: <your_response> finish
+
+    **Important Notes for Callers:**
+
+    - FINAL RESPONSE MUST end with 'finish' to indicate completion
+    - If no 'finish' suffix, the system assumes response is incomplete and will continue iteration
+    - LLM can output JSON or any text format - it will be passed through unchanged
+    - Each iteration will inform LLM of current iteration number and remaining iterations
+    - If LLM generation is incomplete, it will be asked to continue from where it left off
+    - Callers can customize max_iterations to control loop behavior
+    - Callers are responsible for parsing and handling LLM output format
+
     Examples:
         # Example 1: Basic usage with tool names (backward compatible)
         agent = HybridAgent(
@@ -339,16 +400,16 @@ class HybridAgent(BaseAIAgent):
 
         # Add ReAct instructions (always required for HybridAgent)
         parts.append(
-            "You are a reasoning agent that can use tools to complete tasks. "
-            "Follow the ReAct (Reasoning + Acting) pattern:\n"
+            "Within the given identity framework, you are also a highly intelligent, responsive, and accurate reasoning agent. that can use tools to complete tasks. "
+            "Follow the ReAct (Reasoning + Acting) pattern to achieve best results:\n"
             "1. THOUGHT: Analyze the task and decide what to do\n"
             "2. ACTION: Use a tool if needed, or provide final answer\n"
             "3. OBSERVATION: Review the tool result and continue reasoning\n\n"
             "RESPONSE FORMAT REQUIREMENTS:\n"
             "- Wrap your thinking process in <THOUGHT>...</THOUGHT> tags\n"
             "- Wrap your insight about tool result in <OBSERVATION>...</OBSERVATION> tags\n"
-            "- Tool calls (TOOL:, OPERATION:, PARAMETERS:) MUST be OUTSIDE <THOUGHT> tags\n"
-            "- Final answers (FINAL ANSWER:) MUST be OUTSIDE <THOUGHT> tags\n\n"
+            "- Tool calls (TOOL:, OPERATION:, PARAMETERS:) MUST be OUTSIDE <THOUGHT> and <OBSERVATION> tags\n"
+            "- Final responses (FINAL RESPONSE:) MUST be OUTSIDE <THOUGHT> and <OBSERVATION> tags\n\n"
             "THINKING GUIDANCE:\n"
             "When writing <THOUGHT> sections, consider:\n"
             "- What is the core thing to do?\n"
@@ -361,39 +422,7 @@ class HybridAgent(BaseAIAgent):
             "- What did I learn from the tool results?\n"
             "- How does this information inform my next work?\n"
             "- Do I need additional information?\n"
-            "- Am I ready to provide a final answer?\n\n"
-            "CORRECT FORMAT EXAMPLE:\n"
-            "<THOUGHT>\n"
-            "I need to search for information about the weather. Let me use the search tool.\n"
-            "</THOUGHT>\n\n"
-            "TOOL: search\n"
-            "OPERATION: query\n"
-            "PARAMETERS: {\"q\": \"weather today\"}\n\n"
-            "<OBSERVATION>\n"
-            "The search tool returned: Today's weather is sunny, 72°F.\n"
-            "</OBSERVATION>\n\n"
-            "<THOUGHT>\n"
-            "I have the weather information. Now I can provide the final answer.\n"
-            "</THOUGHT>\n\n"
-            "FINAL ANSWER: Today's weather is sunny, 72°F.\n\n"
-            "INCORRECT FORMAT (DO NOT DO THIS):\n"
-            "<THOUGHT>\n"
-            "I need to search.\n"
-            "TOOL: search\n"
-            "OPERATION: query\n"
-            "</THOUGHT>\n"
-            "❌ Tool calls must be OUTSIDE the <THOUGHT> tags\n\n"
-            "<THOUGHT>\n"
-            "I know the answer.\n"
-            "FINAL ANSWER: The answer is...\n"
-            "</THOUGHT>\n"
-            "❌ Final answers must be OUTSIDE the <THOUGHT> tags\n\n"
-            "TOOL CALL FORMAT:\n"
-            "TOOL: <tool_name>\n"
-            "OPERATION: <operation_name>\n"
-            "PARAMETERS: <json_parameters>\n\n"
-            "FINAL ANSWER FORMAT:\n"
-            "FINAL ANSWER: <your_answer>"
+            "- Am I ready to provide a final response?"
         )
 
         # Add available tools (always required for HybridAgent)
@@ -452,7 +481,7 @@ class HybridAgent(BaseAIAgent):
 
             return {
                 "success": True,
-                "output": result.get("final_answer"),
+                "output": result.get("final_response"),  # Changed from final_answer
                 "reasoning_steps": result.get("steps"),
                 "tool_calls_count": result.get("tool_calls_count"),
                 "iterations": result.get("iterations"),
@@ -649,11 +678,23 @@ class HybridAgent(BaseAIAgent):
         for iteration in range(self._max_iterations):
             logger.debug(f"HybridAgent {self.agent_id} - ReAct iteration {iteration + 1}")
 
+            # Add iteration info to messages (except first iteration which has task context)
+            if iteration > 0:
+                iteration_info = (
+                    f"[Iteration {iteration + 1}/{self._max_iterations}, "
+                    f"remaining: {self._max_iterations - iteration - 1}]"
+                )
+                # Only add if the last message is not already an iteration info
+                if messages and not messages[-1].content.startswith("[Iteration"):
+                    messages.append(LLMMessage(role="user", content=iteration_info))
+
             # Yield iteration status
             yield {
                 "type": "status",
                 "status": "thinking",
                 "iteration": iteration + 1,
+                "max_iterations": self._max_iterations,
+                "remaining": self._max_iterations - iteration - 1,
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
@@ -722,10 +763,15 @@ class HybridAgent(BaseAIAgent):
                     }
 
             thought_raw = "".join(thought_tokens)
-            # Extract thought content from <THOUGHT> tags for parsing (keep raw for display)
-            thought = self._extract_thought_content(thought_raw)
-            # Use raw thought (with tags) for frontend display
-            thought_for_display = thought_raw.strip() if thought_raw.strip() else thought
+            
+            # Store raw output in steps (no format processing)
+            steps.append(
+                {
+                    "type": "thought",
+                    "content": thought_raw.strip(),  # Return raw output without processing
+                    "iteration": iteration + 1,
+                }
+            )
             
             # Process tool_calls if received from stream
             if tool_calls_from_stream:
@@ -774,17 +820,19 @@ class HybridAgent(BaseAIAgent):
                         tool_result = await self._execute_tool(tool_name, operation, parameters)
                         tool_calls_count += 1
 
+                        # Wrap tool call and result in step
                         steps.append(
                             {
                                 "type": "action",
                                 "tool": tool_name,
                                 "operation": operation,
                                 "parameters": parameters,
+                                "result": str(tool_result),  # Include result in step
                                 "iteration": iteration + 1,
                             }
                         )
 
-                        # Yield tool result event
+                        # Yield tool result event (streaming)
                         yield {
                             "type": "tool_result",
                             "tool_name": tool_name,
@@ -792,16 +840,9 @@ class HybridAgent(BaseAIAgent):
                             "timestamp": datetime.utcnow().isoformat(),
                         }
 
-                        # Add tool result to messages
+                        # Add tool result to messages (for LLM consumption)
                         observation_content = f"Tool '{tool_name}' returned: {tool_result}"
                         observation = f"<OBSERVATION>\n{observation_content}\n</OBSERVATION>"
-                        steps.append(
-                            {
-                                "type": "observation",
-                                "content": observation,
-                                "iteration": iteration + 1,
-                            }
-                        )
 
                         # Add assistant message with tool call and tool result
                         messages.append(
@@ -827,7 +868,7 @@ class HybridAgent(BaseAIAgent):
                                 "type": "observation",
                                 "content": error_msg,
                                 "iteration": iteration + 1,
-                                "error": True,
+                                "has_error": True,
                             }
                         )
                         yield {
@@ -847,21 +888,13 @@ class HybridAgent(BaseAIAgent):
                 # Continue to next iteration
                 continue
 
-            steps.append(
-                {
-                    "type": "thought",
-                    "content": thought_for_display,  # Keep tags for frontend rendering
-                    "iteration": iteration + 1,
-                }
-            )
-
-            # Check if final answer (use extracted thought for parsing)
-            if "FINAL ANSWER:" in thought:
-                final_answer = self._extract_final_answer(thought)
+            # Check for final response (outside tags only)
+            if self._has_final_response(thought_raw):
+                final_response = self._extract_final_response(thought_raw)
                 yield {
                     "type": "result",
                     "success": True,
-                    "output": final_answer,
+                    "output": final_response,  # Return raw output without processing
                     "reasoning_steps": steps,
                     "tool_calls_count": tool_calls_count,
                     "iterations": iteration + 1,
@@ -870,11 +903,11 @@ class HybridAgent(BaseAIAgent):
                 }
                 return
 
-            # Check if tool call
-            if "TOOL:" in thought:
+            # Check if tool call (ReAct mode, outside tags only)
+            if self._has_tool_call(thought_raw):
                 # ACT: Execute tool
                 try:
-                    tool_info = self._parse_tool_call(thought)
+                    tool_info = self._parse_tool_call(thought_raw)  # Parse from raw text
                     tool_name = tool_info.get("tool", "")
                     if not tool_name:
                         raise ValueError("Tool name not found in tool call")
@@ -895,28 +928,19 @@ class HybridAgent(BaseAIAgent):
                     )
                     tool_calls_count += 1
 
+                    # Wrap tool call and result in step
                     steps.append(
                         {
                             "type": "action",
                             "tool": tool_info["tool"],
                             "operation": tool_info.get("operation"),
                             "parameters": tool_info.get("parameters"),
+                            "result": str(tool_result),  # Include result in step
                             "iteration": iteration + 1,
                         }
                     )
 
-                    # OBSERVE: Add tool result to conversation
-                    observation_content = f"Tool '{tool_info['tool']}' returned: {tool_result}"
-                    observation = f"<OBSERVATION>\n{observation_content}\n</OBSERVATION>"
-                    steps.append(
-                        {
-                            "type": "observation",
-                            "content": observation,
-                            "iteration": iteration + 1,
-                        }
-                    )
-
-                    # Yield tool result event
+                    # Yield tool result event (streaming)
                     yield {
                         "type": "tool_result",
                         "tool_name": tool_name,
@@ -924,8 +948,12 @@ class HybridAgent(BaseAIAgent):
                         "timestamp": datetime.utcnow().isoformat(),
                     }
 
+                    # OBSERVE: Add tool result to conversation (for LLM consumption)
+                    observation_content = f"Tool '{tool_info['tool']}' returned: {tool_result}"
+                    observation = f"<OBSERVATION>\n{observation_content}\n</OBSERVATION>"
+
                     # Add to messages for next iteration
-                    messages.append(LLMMessage(role="assistant", content=thought))
+                    messages.append(LLMMessage(role="assistant", content=thought_raw))
                     messages.append(LLMMessage(role="user", content=observation))
 
                 except Exception as e:
@@ -933,8 +961,9 @@ class HybridAgent(BaseAIAgent):
                     error_msg = f"<OBSERVATION>\n{error_content}\n</OBSERVATION>"
                     steps.append(
                         {
-                            "type": "observation",
-                            "content": error_msg,
+                            "type": "action",
+                            "tool": tool_name if "tool_name" in locals() else "unknown",
+                            "error": str(e),
                             "iteration": iteration + 1,
                             "error": True,
                         }
@@ -948,22 +977,37 @@ class HybridAgent(BaseAIAgent):
                         "timestamp": datetime.utcnow().isoformat(),
                     }
 
-                    messages.append(LLMMessage(role="assistant", content=thought))
+                    messages.append(LLMMessage(role="assistant", content=thought_raw))
                     messages.append(LLMMessage(role="user", content=error_msg))
 
             else:
-                # LLM didn't provide clear action - treat as final answer
-                yield {
-                    "type": "result",
-                    "success": True,
-                    "output": thought,
-                    "reasoning_steps": steps,
-                    "tool_calls_count": tool_calls_count,
-                    "iterations": iteration + 1,
-                    "total_tokens": total_tokens,
-                    "timestamp": datetime.utcnow().isoformat(),
-                }
-                return
+                # Check if there's an incomplete final response (has FINAL RESPONSE but no finish)
+                if self._has_incomplete_final_response(thought_raw):
+                    # Incomplete final response - ask LLM to continue
+                    continue_message = (
+                        f"[Iteration {iteration + 1}/{self._max_iterations}, "
+                        f"remaining: {self._max_iterations - iteration - 1}]\n"
+                        "Your FINAL RESPONSE appears incomplete (missing 'finish' suffix). "
+                        "Please continue your response from where you left off and end with 'finish' "
+                        "to indicate completion. If no 'finish' suffix, the system will continue iteration."
+                    )
+                    messages.append(LLMMessage(role="assistant", content=thought_raw))
+                    messages.append(LLMMessage(role="user", content=continue_message))
+                else:
+                    # No tool call or final response detected - ask LLM to continue
+                    continue_message = (
+                        f"[Iteration {iteration + 1}/{self._max_iterations}, "
+                        f"remaining: {self._max_iterations - iteration - 1}]\n"
+                        "Continuing from your previous output. "
+                        "If your generation is incomplete, please continue from where you left off. "
+                        "If you decide to take action, ensure proper format:\n"
+                        "- Tool call: TOOL:, OPERATION:, PARAMETERS: (outside tags)\n"
+                        "- Final response: FINAL RESPONSE: <content> finish (outside tags)"
+                    )
+                    messages.append(LLMMessage(role="assistant", content=thought_raw))
+                    messages.append(LLMMessage(role="user", content=continue_message))
+                # Continue to next iteration
+                continue
 
         # Max iterations reached
         logger.warning(f"HybridAgent {self.agent_id} reached max iterations")
@@ -1000,6 +1044,16 @@ class HybridAgent(BaseAIAgent):
         for iteration in range(self._max_iterations):
             logger.debug(f"HybridAgent {self.agent_id} - ReAct iteration {iteration + 1}")
 
+            # Add iteration info to messages (except first iteration which has task context)
+            if iteration > 0:
+                iteration_info = (
+                    f"[Iteration {iteration + 1}/{self._max_iterations}, "
+                    f"remaining: {self._max_iterations - iteration - 1}]"
+                )
+                # Only add if the last message is not already an iteration info
+                if messages and not messages[-1].content.startswith("[Iteration"):
+                    messages.append(LLMMessage(role="user", content=iteration_info))
+
             # THINK: LLM reasons about next action
             # Use Function Calling if supported, otherwise use ReAct mode
             if self._use_function_calling and self._tool_schemas:
@@ -1023,10 +1077,6 @@ class HybridAgent(BaseAIAgent):
                 )
 
             thought_raw = response.content or ""
-            # Extract thought content from <THOUGHT> tags for parsing (keep raw for display)
-            thought = self._extract_thought_content(thought_raw)
-            # Use raw thought (with tags) for frontend display
-            thought_for_display = thought_raw.strip() if thought_raw.strip() else thought
             total_tokens += getattr(response, "total_tokens", 0)
 
             # Update prompt cache metrics from LLM response
@@ -1039,6 +1089,15 @@ class HybridAgent(BaseAIAgent):
                     cache_creation_tokens=cache_creation_tokens,
                     cache_hit=cache_hit,
                 )
+
+            # Store raw output in steps (no format processing)
+            steps.append(
+                {
+                    "type": "thought",
+                    "content": thought_raw.strip(),  # Return raw output without processing
+                    "iteration": iteration + 1,
+                }
+            )
 
             # Check for Function Calling response
             tool_calls = getattr(response, "tool_calls", None)
@@ -1092,38 +1151,25 @@ class HybridAgent(BaseAIAgent):
                         else:
                             parameters = func_args if func_args else {}
 
-                        steps.append(
-                            {
-                                "type": "thought",
-                                "content": f"Calling tool {func_name}",
-                                "iteration": iteration + 1,
-                            }
-                        )
-
                         # Execute tool
                         tool_result = await self._execute_tool(tool_name, operation, parameters)
                         tool_calls_count += 1
 
+                        # Wrap tool call and result in step
                         steps.append(
                             {
                                 "type": "action",
                                 "tool": tool_name,
                                 "operation": operation,
                                 "parameters": parameters,
+                                "result": str(tool_result),  # Include result in step
                                 "iteration": iteration + 1,
                             }
                         )
 
-                        # Add tool result to messages
+                        # Add tool result to messages (for LLM consumption)
                         observation_content = f"Tool '{tool_name}' returned: {tool_result}"
                         observation = f"<OBSERVATION>\n{observation_content}\n</OBSERVATION>"
-                        steps.append(
-                            {
-                                "type": "observation",
-                                "content": observation,
-                                "iteration": iteration + 1,
-                            }
-                        )
 
                         # Add assistant message with tool call and tool result
                         messages.append(
@@ -1149,7 +1195,7 @@ class HybridAgent(BaseAIAgent):
                                 "type": "observation",
                                 "content": error_msg,
                                 "iteration": iteration + 1,
-                                "error": True,
+                                "has_error": True,
                             }
                         )
                         # Add error to messages
@@ -1164,43 +1210,22 @@ class HybridAgent(BaseAIAgent):
                 # Continue to next iteration
                 continue
 
-            # If using Function Calling and no tool calls, check if we have a final answer
-            if self._use_function_calling and thought:
-                # LLM provided a text response without tool calls - treat as final answer
-                # Extract final answer if FINAL ANSWER: marker is present
-                final_answer = self._extract_final_answer(thought) if "FINAL ANSWER:" in thought else thought
+            # Check for final response (outside tags only)
+            if self._has_final_response(thought_raw):
+                final_response = self._extract_final_response(thought_raw)
                 return {
-                    "final_answer": final_answer,
+                    "final_response": final_response,  # Return raw output without processing
                     "steps": steps,
                     "iterations": iteration + 1,
                     "tool_calls_count": tool_calls_count,
                     "total_tokens": total_tokens,
                 }
 
-            steps.append(
-                {
-                    "type": "thought",
-                    "content": thought_for_display,  # Keep tags for frontend rendering
-                    "iteration": iteration + 1,
-                }
-            )
-
-            # Check if final answer (ReAct mode, use extracted thought for parsing)
-            if "FINAL ANSWER:" in thought:
-                final_answer = self._extract_final_answer(thought)
-                return {
-                    "final_answer": final_answer,
-                    "steps": steps,
-                    "iterations": iteration + 1,
-                    "tool_calls_count": tool_calls_count,
-                    "total_tokens": total_tokens,
-                }
-
-            # Check if tool call (ReAct mode)
-            if "TOOL:" in thought:
+            # Check if tool call (ReAct mode, outside tags only)
+            if self._has_tool_call(thought_raw):
                 # ACT: Execute tool
                 try:
-                    tool_info = self._parse_tool_call(thought)
+                    tool_info = self._parse_tool_call(thought_raw)  # Parse from raw text
                     tool_name = tool_info.get("tool", "")
                     if not tool_name:
                         raise ValueError("Tool name not found in tool call")
@@ -1211,29 +1236,24 @@ class HybridAgent(BaseAIAgent):
                     )
                     tool_calls_count += 1
 
+                    # Wrap tool call and result in step
                     steps.append(
                         {
                             "type": "action",
                             "tool": tool_info["tool"],
                             "operation": tool_info.get("operation"),
                             "parameters": tool_info.get("parameters"),
+                            "result": str(tool_result),  # Include result in step
                             "iteration": iteration + 1,
                         }
                     )
 
-                    # OBSERVE: Add tool result to conversation
+                    # OBSERVE: Add tool result to conversation (for LLM consumption)
                     observation_content = f"Tool '{tool_info['tool']}' returned: {tool_result}"
                     observation = f"<OBSERVATION>\n{observation_content}\n</OBSERVATION>"
-                    steps.append(
-                        {
-                            "type": "observation",
-                            "content": observation,
-                            "iteration": iteration + 1,
-                        }
-                    )
 
                     # Add to messages for next iteration
-                    messages.append(LLMMessage(role="assistant", content=thought))
+                    messages.append(LLMMessage(role="assistant", content=thought_raw))
                     messages.append(LLMMessage(role="user", content=observation))
 
                 except Exception as e:
@@ -1241,29 +1261,49 @@ class HybridAgent(BaseAIAgent):
                     error_msg = f"<OBSERVATION>\n{error_content}\n</OBSERVATION>"
                     steps.append(
                         {
-                            "type": "observation",
-                            "content": error_msg,
+                            "type": "action",
+                            "tool": tool_name if "tool_name" in locals() else "unknown",
+                            "error": str(e),
                             "iteration": iteration + 1,
-                            "error": True,
+                            "has_error": True,
                         }
                     )
-                    messages.append(LLMMessage(role="assistant", content=thought))
+                    messages.append(LLMMessage(role="assistant", content=thought_raw))
                     messages.append(LLMMessage(role="user", content=error_msg))
 
             else:
-                # LLM didn't provide clear action - treat as final answer
-                return {
-                    "final_answer": thought,
-                    "steps": steps,
-                    "iterations": iteration + 1,
-                    "tool_calls_count": tool_calls_count,
-                    "total_tokens": total_tokens,
-                }
+                # Check if there's an incomplete final response (has FINAL RESPONSE but no finish)
+                if self._has_incomplete_final_response(thought_raw):
+                    # Incomplete final response - ask LLM to continue
+                    continue_message = (
+                        f"[Iteration {iteration + 1}/{self._max_iterations}, "
+                        f"remaining: {self._max_iterations - iteration - 1}]\n"
+                        "Your FINAL RESPONSE appears incomplete (missing 'finish' suffix). "
+                        "Please continue your response from where you left off and end with 'finish' "
+                        "to indicate completion. If no 'finish' suffix, the system will continue iteration."
+                    )
+                    messages.append(LLMMessage(role="assistant", content=thought_raw))
+                    messages.append(LLMMessage(role="user", content=continue_message))
+                else:
+                    # No tool call or final response detected - ask LLM to continue
+                    continue_message = (
+                        f"[Iteration {iteration + 1}/{self._max_iterations}, "
+                        f"remaining: {self._max_iterations - iteration - 1}]\n"
+                        "Continuing from your previous output. "
+                        "If your generation is incomplete, please continue from where you left off. "
+                        "If you decide to take action, ensure proper format:\n"
+                        "- Tool call: TOOL:, OPERATION:, PARAMETERS: (outside tags)\n"
+                        "- Final response: FINAL RESPONSE: <content> finish (outside tags)"
+                    )
+                    messages.append(LLMMessage(role="assistant", content=thought_raw))
+                    messages.append(LLMMessage(role="user", content=continue_message))
+                # Continue to next iteration
+                continue
 
         # Max iterations reached
         logger.warning(f"HybridAgent {self.agent_id} reached max iterations")
         return {
-            "final_answer": "Max iterations reached. Unable to complete task fully.",
+            "final_response": "Max iterations reached. Unable to complete task fully.",
             "steps": steps,
             "iterations": self._max_iterations,
             "tool_calls_count": tool_calls_count,
@@ -1322,8 +1362,12 @@ class HybridAgent(BaseAIAgent):
                         )
                     )
 
-        # Add task
-        messages.append(LLMMessage(role="user", content=f"Task: {task}"))
+        # Add task with iteration info
+        task_message = (
+            f"Task: {task}\n\n"
+            f"[Iteration 1/{self._max_iterations}, remaining: {self._max_iterations - 1}]"
+        )
+        messages.append(LLMMessage(role="user", content=task_message))
 
         return messages
 
@@ -1339,59 +1383,143 @@ class HybridAgent(BaseAIAgent):
         """
         Extract content from <THOUGHT>...</THOUGHT> tags.
         
-        If tags are present, extracts the content inside them.
-        Otherwise, returns the original text.
+        DEPRECATED: This method is kept for backward compatibility but no longer
+        extracts content. Returns original text as-is per new design.
         
         Args:
             text: Text that may contain THOUGHT tags
             
         Returns:
-            Extracted thought content or original text
+            Original text (no extraction performed)
         """
-        import re
-        
-        # Try to extract content from <THOUGHT>...</THOUGHT> tags
-        thought_pattern = r'<THOUGHT>(.*?)</THOUGHT>'
-        match = re.search(thought_pattern, text, re.DOTALL)
-        if match:
-            return match.group(1).strip()
-        
-        # If no tags found, return original text
+        # Return original text without processing (new design)
         return text.strip()
     
     def _extract_observation_content(self, text: str) -> str:
         """
         Extract content from <OBSERVATION>...</OBSERVATION> tags.
         
-        If tags are present, extracts the content inside them.
-        Otherwise, returns the original text.
+        DEPRECATED: This method is kept for backward compatibility but no longer
+        extracts content. Returns original text as-is per new design.
         
         Args:
             text: Text that may contain OBSERVATION tags
             
         Returns:
-            Extracted observation content or original text
+            Original text (no extraction performed)
+        """
+        # Return original text without processing (new design)
+        return text.strip()
+
+    def _has_final_response(self, text: str) -> bool:
+        """
+        Check if text contains complete FINAL RESPONSE with 'finish' suffix.
+        
+        The FINAL RESPONSE must end with 'finish' to be considered complete.
+        If FINAL RESPONSE is present but without 'finish', it's considered incomplete
+        and the loop will continue to let LLM complete the response.
+        
+        Args:
+            text: Text to check
+            
+        Returns:
+            True if complete FINAL RESPONSE (with finish suffix) found outside tags
         """
         import re
         
-        # Try to extract content from <OBSERVATION>...</OBSERVATION> tags
-        observation_pattern = r'<OBSERVATION>(.*?)</OBSERVATION>'
-        match = re.search(observation_pattern, text, re.DOTALL)
-        if match:
-            return match.group(1).strip()
+        # Remove content inside THOUGHT and OBSERVATION tags
+        text_without_tags = re.sub(r'<THOUGHT>.*?</THOUGHT>', '', text, flags=re.DOTALL)
+        text_without_tags = re.sub(r'<OBSERVATION>.*?</OBSERVATION>', '', text_without_tags, flags=re.DOTALL)
         
-        # If no tags found, return original text
-        return text.strip()
-
-    def _extract_final_answer(self, thought: str) -> str:
-        """Extract final answer from thought."""
-        if "FINAL ANSWER:" in thought:
-            return thought.split("FINAL ANSWER:", 1)[1].strip()
-        return thought
-
-    def _parse_tool_call(self, thought: str) -> Dict[str, Any]:
+        # Check for FINAL RESPONSE marker with 'finish' suffix in remaining text
+        # The 'finish' must appear after FINAL RESPONSE: content
+        if "FINAL RESPONSE:" not in text_without_tags:
+            return False
+        
+        # Check if 'finish' appears after FINAL RESPONSE:
+        # Use case-insensitive search for 'finish' at the end
+        text_lower = text_without_tags.lower()
+        final_response_idx = text_lower.find("final response:")
+        if final_response_idx == -1:
+            return False
+        
+        # Check if 'finish' appears after the FINAL RESPONSE marker
+        remaining_text = text_without_tags[final_response_idx:]
+        return "finish" in remaining_text.lower()
+    
+    def _has_incomplete_final_response(self, text: str) -> bool:
         """
-        Parse tool call from LLM thought.
+        Check if text contains FINAL RESPONSE marker but without 'finish' suffix.
+        
+        Args:
+            text: Text to check
+            
+        Returns:
+            True if FINAL RESPONSE marker found but without finish suffix
+        """
+        import re
+        
+        # Remove content inside THOUGHT and OBSERVATION tags
+        text_without_tags = re.sub(r'<THOUGHT>.*?</THOUGHT>', '', text, flags=re.DOTALL)
+        text_without_tags = re.sub(r'<OBSERVATION>.*?</OBSERVATION>', '', text_without_tags, flags=re.DOTALL)
+        
+        # Check for FINAL RESPONSE marker without 'finish' suffix
+        if "FINAL RESPONSE:" not in text_without_tags:
+            return False
+        
+        # Check if 'finish' is missing
+        text_lower = text_without_tags.lower()
+        final_response_idx = text_lower.find("final response:")
+        remaining_text = text_without_tags[final_response_idx:]
+        return "finish" not in remaining_text.lower()
+    
+    def _extract_final_response(self, text: str) -> str:
+        """
+        Extract final response from text, preserving original format.
+        Only extracts from outside THOUGHT/OBSERVATION tags.
+        
+        Args:
+            text: Text that may contain FINAL RESPONSE marker
+            
+        Returns:
+            Original text if FINAL RESPONSE found, otherwise empty string
+        """
+        import re
+        
+        # Remove content inside THOUGHT and OBSERVATION tags
+        text_without_tags = re.sub(r'<THOUGHT>.*?</THOUGHT>', '', text, flags=re.DOTALL)
+        text_without_tags = re.sub(r'<OBSERVATION>.*?</OBSERVATION>', '', text_without_tags, flags=re.DOTALL)
+        
+        # Check for FINAL RESPONSE marker
+        if "FINAL RESPONSE:" in text_without_tags:
+            # Return original text without any processing
+            return text.strip()
+        
+        return ""
+
+    def _has_tool_call(self, text: str) -> bool:
+        """
+        Check if text contains TOOL call marker outside of THOUGHT/OBSERVATION tags.
+        
+        Args:
+            text: Text to check
+            
+        Returns:
+            True if TOOL marker found outside tags
+        """
+        import re
+        
+        # Remove content inside THOUGHT and OBSERVATION tags
+        text_without_tags = re.sub(r'<THOUGHT>.*?</THOUGHT>', '', text, flags=re.DOTALL)
+        text_without_tags = re.sub(r'<OBSERVATION>.*?</OBSERVATION>', '', text_without_tags, flags=re.DOTALL)
+        
+        # Check for TOOL marker in remaining text
+        return "TOOL:" in text_without_tags
+    
+    def _parse_tool_call(self, text: str) -> Dict[str, Any]:
+        """
+        Parse tool call from LLM output.
+        Only parses from outside THOUGHT/OBSERVATION tags.
 
         Expected format:
         TOOL: <tool_name>
@@ -1399,28 +1527,33 @@ class HybridAgent(BaseAIAgent):
         PARAMETERS: <json_parameters>
 
         Args:
-            thought: LLM thought containing tool call
+            text: LLM output that may contain tool call
 
         Returns:
             Dictionary with 'tool', 'operation', 'parameters'
         """
         import json
+        import re
 
         result = {}
+        
+        # Remove content inside THOUGHT and OBSERVATION tags
+        text_without_tags = re.sub(r'<THOUGHT>.*?</THOUGHT>', '', text, flags=re.DOTALL)
+        text_without_tags = re.sub(r'<OBSERVATION>.*?</OBSERVATION>', '', text_without_tags, flags=re.DOTALL)
 
-        # Extract tool
-        if "TOOL:" in thought:
-            tool_line = [line for line in thought.split("\n") if line.startswith("TOOL:")][0]
+        # Extract tool from text outside tags
+        if "TOOL:" in text_without_tags:
+            tool_line = [line for line in text_without_tags.split("\n") if line.strip().startswith("TOOL:")][0]
             result["tool"] = tool_line.split("TOOL:", 1)[1].strip()
 
         # Extract operation (optional)
-        if "OPERATION:" in thought:
-            op_line = [line for line in thought.split("\n") if line.startswith("OPERATION:")][0]
+        if "OPERATION:" in text_without_tags:
+            op_line = [line for line in text_without_tags.split("\n") if line.strip().startswith("OPERATION:")][0]
             result["operation"] = op_line.split("OPERATION:", 1)[1].strip()
 
         # Extract parameters (optional)
-        if "PARAMETERS:" in thought:
-            param_line = [line for line in thought.split("\n") if line.startswith("PARAMETERS:")][0]
+        if "PARAMETERS:" in text_without_tags:
+            param_line = [line for line in text_without_tags.split("\n") if line.strip().startswith("PARAMETERS:")][0]
             param_str = param_line.split("PARAMETERS:", 1)[1].strip()
             try:
                 result["parameters"] = json.loads(param_str)
