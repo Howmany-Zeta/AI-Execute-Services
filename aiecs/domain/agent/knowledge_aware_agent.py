@@ -95,7 +95,7 @@ class KnowledgeAwareAgent(HybridAgent):
         graph_store: Optional[GraphStore] = None,
         description: Optional[str] = None,
         version: str = "1.0.0",
-        max_iterations: int = 10,
+        max_iterations: Optional[int] = None,
         enable_graph_reasoning: bool = True,
         config_manager: Optional["ConfigManagerProtocol"] = None,
         checkpointer: Optional["CheckpointerProtocol"] = None,
@@ -118,7 +118,7 @@ class KnowledgeAwareAgent(HybridAgent):
             graph_store: Optional knowledge graph store
             description: Optional description
             version: Agent version
-            max_iterations: Maximum ReAct iterations
+            max_iterations: Maximum ReAct iterations (if None, uses config.max_iterations)
             enable_graph_reasoning: Whether to enable graph reasoning capabilities
             config_manager: Optional configuration manager for dynamic config
             checkpointer: Optional checkpointer for state persistence
