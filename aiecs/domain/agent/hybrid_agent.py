@@ -466,6 +466,24 @@ class HybridAgent(BaseAIAgent):
                     agent_id=self.agent_id,
                 )
 
+            # Extract images from task dict and merge into context
+            task_images = task.get("images")
+            if task_images:
+                # Merge images from task into context
+                # If context already has images, combine them
+                if "images" in context:
+                    existing_images = context["images"]
+                    if isinstance(existing_images, list) and isinstance(task_images, list):
+                        context["images"] = existing_images + task_images
+                    elif isinstance(existing_images, list):
+                        context["images"] = existing_images + [task_images]
+                    elif isinstance(task_images, list):
+                        context["images"] = [existing_images] + task_images
+                    else:
+                        context["images"] = [existing_images, task_images]
+                else:
+                    context["images"] = task_images
+
             # Transition to busy state
             self._transition_state(self.state.__class__.BUSY)
             self._current_task_id = task.get("task_id")
@@ -581,6 +599,24 @@ class HybridAgent(BaseAIAgent):
                     "timestamp": datetime.utcnow().isoformat(),
                 }
                 return
+
+            # Extract images from task dict and merge into context
+            task_images = task.get("images")
+            if task_images:
+                # Merge images from task into context
+                # If context already has images, combine them
+                if "images" in context:
+                    existing_images = context["images"]
+                    if isinstance(existing_images, list) and isinstance(task_images, list):
+                        context["images"] = existing_images + task_images
+                    elif isinstance(existing_images, list):
+                        context["images"] = existing_images + [task_images]
+                    elif isinstance(task_images, list):
+                        context["images"] = [existing_images] + task_images
+                    else:
+                        context["images"] = [existing_images, task_images]
+                else:
+                    context["images"] = task_images
 
             # Transition to busy state
             self._transition_state(self.state.__class__.BUSY)
@@ -1340,6 +1376,9 @@ class HybridAgent(BaseAIAgent):
                 )
             )
 
+        # Collect images from context to attach to task message
+        task_images = []
+
         # Add context if provided
         if context:
             # Special handling: if context contains 'history' as a list of messages,
@@ -1350,18 +1389,40 @@ class HybridAgent(BaseAIAgent):
                 for msg in history:
                     if isinstance(msg, dict) and "role" in msg and "content" in msg:
                         # Valid message format - add as separate message
-                        messages.append(
-                            LLMMessage(
-                                role=msg["role"],
-                                content=msg["content"],
+                        # Extract images if present
+                        msg_images = msg.get("images", [])
+                        if msg_images:
+                            messages.append(
+                                LLMMessage(
+                                    role=msg["role"],
+                                    content=msg["content"],
+                                    images=msg_images if isinstance(msg_images, list) else [msg_images],
+                                )
                             )
-                        )
+                        else:
+                            messages.append(
+                                LLMMessage(
+                                    role=msg["role"],
+                                    content=msg["content"],
+                                )
+                            )
                     elif isinstance(msg, LLMMessage):
-                        # Already an LLMMessage instance
+                        # Already an LLMMessage instance (may already have images)
                         messages.append(msg)
             
-            # Format remaining context fields (excluding history) as Additional Context
-            context_without_history = {k: v for k, v in context.items() if k != "history"}
+            # Extract images from context if present
+            context_images = context.get("images")
+            if context_images:
+                if isinstance(context_images, list):
+                    task_images.extend(context_images)
+                else:
+                    task_images.append(context_images)
+            
+            # Format remaining context fields (excluding history and images) as Additional Context
+            context_without_history = {
+                k: v for k, v in context.items() 
+                if k not in ("history", "images")
+            }
             if context_without_history:
                 context_str = self._format_context(context_without_history)
                 if context_str:
@@ -1377,7 +1438,13 @@ class HybridAgent(BaseAIAgent):
             f"Task: {task}\n\n"
             f"[Iteration 1/{self._max_iterations}, remaining: {self._max_iterations - 1}]"
         )
-        messages.append(LLMMessage(role="user", content=task_message))
+        messages.append(
+            LLMMessage(
+                role="user",
+                content=task_message,
+                images=task_images if task_images else [],
+            )
+        )
 
         return messages
 
