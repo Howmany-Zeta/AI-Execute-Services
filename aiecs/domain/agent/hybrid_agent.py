@@ -242,7 +242,7 @@ class HybridAgent(BaseAIAgent):
         config: AgentConfiguration,
         description: Optional[str] = None,
         version: str = "1.0.0",
-        max_iterations: int = 10,
+        max_iterations: Optional[int] = None,
         config_manager: Optional["ConfigManagerProtocol"] = None,
         checkpointer: Optional["CheckpointerProtocol"] = None,
         context_engine: Optional[Any] = None,
@@ -262,7 +262,7 @@ class HybridAgent(BaseAIAgent):
             config: Agent configuration
             description: Optional description
             version: Agent version
-            max_iterations: Maximum ReAct iterations
+            max_iterations: Maximum ReAct iterations (if None, uses config.max_iterations)
             config_manager: Optional configuration manager for dynamic config
             checkpointer: Optional checkpointer for state persistence
             context_engine: Optional context engine for persistent storage
@@ -316,7 +316,17 @@ class HybridAgent(BaseAIAgent):
 
         # Store LLM client reference (from BaseAIAgent or local)
         self.llm_client = self._llm_client if self._llm_client else llm_client
-        self._max_iterations = max_iterations
+        
+        # Use config.max_iterations if constructor parameter is None
+        # This makes max_iterations consistent with max_tokens (both configurable via config)
+        # If max_iterations is explicitly provided, it takes precedence over config
+        if max_iterations is None:
+            # Use config value (defaults to 10 if not set in config)
+            self._max_iterations = config.max_iterations
+        else:
+            # Constructor parameter explicitly provided, use it
+            self._max_iterations = max_iterations
+        
         self._system_prompt: Optional[str] = None
         self._conversation_history: List[LLMMessage] = []
         self._tool_schemas: List[Dict[str, Any]] = []
