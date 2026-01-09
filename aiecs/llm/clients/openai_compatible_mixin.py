@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from openai import AsyncOpenAI
 
 from .base_client import LLMMessage, LLMResponse
+from aiecs.llm.utils.image_utils import parse_image_source, ImageContent
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ class OpenAICompatibleFunctionCallingMixin:
 
     def _convert_messages_to_openai_format(self, messages: List[LLMMessage]) -> List[Dict[str, Any]]:
         """
-        Convert LLMMessage list to OpenAI message format (support tool calls).
+        Convert LLMMessage list to OpenAI message format (support tool calls and vision).
         
         Args:
             messages: List of LLMMessage objects
@@ -60,8 +61,47 @@ class OpenAICompatibleFunctionCallingMixin:
         openai_messages = []
         for msg in messages:
             msg_dict: Dict[str, Any] = {"role": msg.role}
-            if msg.content is not None:
+            
+            # Handle multimodal content (text + images)
+            if msg.images:
+                # Build content array with text and images
+                content_array = []
+                
+                # Add text content if present
+                if msg.content:
+                    content_array.append({"type": "text", "text": msg.content})
+                
+                # Add images
+                for image_source in msg.images:
+                    image_content = parse_image_source(image_source)
+                    
+                    if image_content.is_url():
+                        # Use URL directly
+                        content_array.append({
+                            "type": "image_url",
+                            "image_url": {
+                                "url": image_content.get_url(),
+                                "detail": image_content.detail,
+                            }
+                        })
+                    else:
+                        # Convert to base64 data URI
+                        base64_data = image_content.get_base64_data()
+                        mime_type = image_content.mime_type
+                        data_uri = f"data:{mime_type};base64,{base64_data}"
+                        content_array.append({
+                            "type": "image_url",
+                            "image_url": {
+                                "url": data_uri,
+                                "detail": image_content.detail,
+                            }
+                        })
+                
+                msg_dict["content"] = content_array
+            elif msg.content is not None:
+                # Text-only content
                 msg_dict["content"] = msg.content
+            
             if msg.tool_calls:
                 msg_dict["tool_calls"] = msg.tool_calls
             if msg.tool_call_id:
