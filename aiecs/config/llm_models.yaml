@@ -463,3 +463,80 @@ providers:
           top_p: 1.0
           top_k: 0
 
+  # OpenRouter Provider
+  openrouter:
+    provider_name: "OpenRouter"
+    default_model: "openai/gpt-4o"
+    models:
+      - name: "openai/gpt-4o"
+        display_name: "GPT-4o (via OpenRouter)"
+        description: "OpenAI GPT-4o model via OpenRouter"
+        costs:
+          input: 0.0025
+          output: 0.01
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 16384
+          context_window: 128000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      - name: "openai/gpt-4-turbo"
+        display_name: "GPT-4 Turbo (via OpenRouter)"
+        description: "OpenAI GPT-4 Turbo via OpenRouter"
+        costs:
+          input: 0.01
+          output: 0.03
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 4096
+          context_window: 128000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      - name: "anthropic/claude-3.5-sonnet"
+        display_name: "Claude 3.5 Sonnet (via OpenRouter)"
+        description: "Anthropic Claude 3.5 Sonnet via OpenRouter"
+        costs:
+          input: 0.003
+          output: 0.015
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 8192
+          context_window: 200000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+      
+      - name: "google/gemini-pro-1.5"
+        display_name: "Gemini Pro 1.5 (via OpenRouter)"
+        description: "Google Gemini Pro 1.5 via OpenRouter"
+        costs:
+          input: 0.00125
+          output: 0.005
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 8192
+          context_window: 1000000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 0.95
+          top_k: 40
+

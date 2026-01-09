@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import base64
 from typing import Optional, List, AsyncGenerator
 
 from google import genai
@@ -14,6 +15,7 @@ from aiecs.llm.clients.base_client import (
     RateLimitError,
 )
 from aiecs.config.config import get_settings
+from aiecs.llm.utils.image_utils import parse_image_source, ImageContent
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +93,33 @@ class GoogleAIClient(BaseLLMClient):
                 parts = []
                 if msg.content:
                     parts.append(types.Part(text=msg.content))
+                
+                # Add images if present
+                if msg.images:
+                    for image_source in msg.images:
+                        image_content = parse_image_source(image_source)
+                        
+                        if image_content.is_url():
+                            # For URLs, use inline_data with downloaded content
+                            # Note: Google AI SDK may support URL directly, but we'll use base64 for compatibility
+                            try:
+                                import urllib.request
+                                with urllib.request.urlopen(image_content.get_url()) as response:
+                                    image_bytes = response.read()
+                                parts.append(types.Part.from_bytes(
+                                    data=image_bytes,
+                                    mime_type=image_content.mime_type
+                                ))
+                            except Exception as e:
+                                logger.warning(f"Failed to download image from URL: {e}")
+                        else:
+                            # Convert to bytes for inline_data
+                            base64_data = image_content.get_base64_data()
+                            image_bytes = base64.b64decode(base64_data)
+                            parts.append(types.Part.from_bytes(
+                                data=image_bytes,
+                                mime_type=image_content.mime_type
+                            ))
 
                 for tool_call in msg.tool_calls:
                     func = tool_call.get("function", {})
@@ -120,10 +149,42 @@ class GoogleAIClient(BaseLLMClient):
             # Handle regular messages (user, assistant without tool_calls)
             else:
                 role = "model" if msg.role == "assistant" else msg.role
+                parts = []
+                
+                # Add text content if present
                 if msg.content:
+                    parts.append(types.Part(text=msg.content))
+                
+                # Add images if present
+                if msg.images:
+                    for image_source in msg.images:
+                        image_content = parse_image_source(image_source)
+                        
+                        if image_content.is_url():
+                            # Download URL and convert to bytes
+                            try:
+                                import urllib.request
+                                with urllib.request.urlopen(image_content.get_url()) as response:
+                                    image_bytes = response.read()
+                                parts.append(types.Part.from_bytes(
+                                    data=image_bytes,
+                                    mime_type=image_content.mime_type
+                                ))
+                            except Exception as e:
+                                logger.warning(f"Failed to download image from URL: {e}")
+                        else:
+                            # Convert to bytes for inline_data
+                            base64_data = image_content.get_base64_data()
+                            image_bytes = base64.b64decode(base64_data)
+                            parts.append(types.Part.from_bytes(
+                                data=image_bytes,
+                                mime_type=image_content.mime_type
+                            ))
+                
+                if parts:
                     contents.append(types.Content(
                         role=role,
-                        parts=[types.Part(text=msg.content)]
+                        parts=parts
                     ))
 
         return contents

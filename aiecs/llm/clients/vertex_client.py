@@ -4,6 +4,7 @@ import logging
 import os
 import warnings
 import hashlib
+import base64
 from typing import Dict, Any, Optional, List, AsyncGenerator, Union
 import vertexai
 from vertexai.generative_models import (
@@ -15,6 +16,8 @@ from vertexai.generative_models import (
     Content,
     Part,
 )
+
+from aiecs.llm.utils.image_utils import parse_image_source, ImageContent
 
 logger = logging.getLogger(__name__)
 
@@ -450,6 +453,24 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 parts = []
                 if msg.content:
                     parts.append(Part.from_text(msg.content))
+                
+                # Add images if present
+                if msg.images:
+                    for image_source in msg.images:
+                        image_content = parse_image_source(image_source)
+                        
+                        if image_content.is_url():
+                            parts.append(Part.from_uri(
+                                uri=image_content.get_url(),
+                                mime_type=image_content.mime_type
+                            ))
+                        else:
+                            base64_data = image_content.get_base64_data()
+                            image_bytes = base64.b64decode(base64_data)
+                            parts.append(Part.from_bytes(
+                                data=image_bytes,
+                                mime_type=image_content.mime_type
+                            ))
 
                 for tool_call in msg.tool_calls:
                     func = tool_call.get("function", {})
@@ -481,11 +502,34 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             # Handle regular messages (user, assistant without tool_calls)
             else:
                 role = "model" if msg.role == "assistant" else msg.role
+                parts = []
+                
+                # Add text content if present
                 if msg.content:
-                    contents.append(Content(
-                        role=role,
-                        parts=[Part.from_text(msg.content)]
-                    ))
+                    parts.append(Part.from_text(msg.content))
+                
+                # Add images if present
+                if msg.images:
+                    for image_source in msg.images:
+                        image_content = parse_image_source(image_source)
+                        
+                        if image_content.is_url():
+                            # Use Part.from_uri for URLs
+                            parts.append(Part.from_uri(
+                                uri=image_content.get_url(),
+                                mime_type=image_content.mime_type
+                            ))
+                        else:
+                            # Convert to bytes for inline_data
+                            base64_data = image_content.get_base64_data()
+                            image_bytes = base64.b64decode(base64_data)
+                            parts.append(Part.from_bytes(
+                                data=image_bytes,
+                                mime_type=image_content.mime_type
+                            ))
+                
+                if parts:
+                    contents.append(Content(role=role, parts=parts))
 
         return contents
 
