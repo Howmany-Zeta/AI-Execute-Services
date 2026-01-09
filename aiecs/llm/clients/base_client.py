@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List, AsyncGenerator
-from dataclasses import dataclass
+from typing import Dict, Any, Optional, List, AsyncGenerator, Union
+from dataclasses import dataclass, field
 import logging
 
 logger = logging.getLogger(__name__)
@@ -35,6 +35,7 @@ class LLMMessage:
     Attributes:
         role: Message role - "system", "user", "assistant", or "tool"
         content: Text content of the message (None when using tool calls)
+        images: List of image sources (URLs, base64 data URIs, or file paths) for vision support
         tool_calls: Tool call information for assistant messages
         tool_call_id: Tool call ID for tool response messages
         cache_control: Cache control marker for prompt caching support
@@ -42,6 +43,7 @@ class LLMMessage:
 
     role: str  # "system", "user", "assistant", "tool"
     content: Optional[str] = None  # None when using tool calls
+    images: List[Union[str, Dict[str, Any]]] = field(default_factory=list)  # Image sources for vision support
     tool_calls: Optional[List[Dict[str, Any]]] = None  # For assistant messages with tool calls
     tool_call_id: Optional[str] = None  # For tool messages
     cache_control: Optional[CacheControl] = None  # Cache control for prompt caching
@@ -221,6 +223,7 @@ class BaseLLMClient(ABC):
                     LLMMessage(
                         role=msg.role,
                         content=msg.content,
+                        images=msg.images,
                         tool_calls=msg.tool_calls,
                         tool_call_id=msg.tool_call_id,
                         cache_control=CacheControl(type="ephemeral"),

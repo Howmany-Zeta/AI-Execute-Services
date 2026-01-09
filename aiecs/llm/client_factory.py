@@ -7,6 +7,7 @@ from .clients.openai_client import OpenAIClient
 from .clients.vertex_client import VertexAIClient
 from .clients.googleai_client import GoogleAIClient
 from .clients.xai_client import XAIClient
+from .clients.openrouter_client import OpenRouterClient
 from .clients.openai_compatible_mixin import StreamChunk
 from .callbacks.custom_callbacks import CustomAsyncCallbackHandler
 
@@ -21,6 +22,7 @@ class AIProvider(str, Enum):
     VERTEX = "Vertex"
     GOOGLEAI = "GoogleAI"
     XAI = "xAI"
+    OPENROUTER = "OpenRouter"
 
 
 class LLMClientFactory:
@@ -133,6 +135,8 @@ class LLMClientFactory:
             return GoogleAIClient()
         elif provider == AIProvider.XAI:
             return XAIClient()
+        elif provider == AIProvider.OPENROUTER:
+            return OpenRouterClient()
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 

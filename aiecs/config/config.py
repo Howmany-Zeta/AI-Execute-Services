@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     google_cse_id: str = Field(default="", alias="GOOGLE_CSE_ID")
     xai_api_key: str = Field(default="", alias="XAI_API_KEY")
     grok_api_key: str = Field(default="", alias="GROK_API_KEY")  # Backward compatibility
+    openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
+    openrouter_http_referer: str = Field(default="", alias="OPENROUTER_HTTP_REFERER")
+    openrouter_x_title: str = Field(default="", alias="OPENROUTER_X_TITLE")
 
     # LLM Models Configuration
     llm_models_config_path: str = Field(
