@@ -466,8 +466,9 @@ async def test_context_without_history():
     messages = agent._build_initial_messages("Test task", context)
     
     # Verify context is formatted as Additional Context
-    system_messages = [msg for msg in messages if msg.role == "system"]
-    context_message = [msg for msg in system_messages if "Additional Context" in msg.content]
+    # Note: Additional Context is added as a user message
+    user_messages = [msg for msg in messages if msg.role == "user"]
+    context_message = [msg for msg in user_messages if "Additional Context" in msg.content]
     
     assert len(context_message) > 0
     assert "user_id: user123" in context_message[0].content
@@ -540,4 +541,160 @@ async def test_thought_and_observation_preserved_for_display():
     assert "<THOUGHT>" in thought_for_display
     assert "</THOUGHT>" in thought_for_display
     assert "TOOL: search" in thought_for_display  # Tool call outside tag
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_images_in_context():
+    """Test that images from context are added to task message."""
+    config = AgentConfiguration(
+        llm_model="mock-model",
+    )
+    
+    agent = HybridAgent(
+        agent_id="test_images_context",
+        name="Test Agent",
+        llm_client=MockLLMClient(),
+        tools=[],
+        config=config,
+    )
+    
+    await agent.initialize()
+    
+    context = {
+        "images": ["https://example.com/image.jpg"],
+        "user_id": "user123"
+    }
+    
+    messages = agent._build_initial_messages("Describe this image", context)
+    
+    # Find the task message
+    task_messages = [msg for msg in messages if msg.role == "user" and "Task:" in msg.content]
+    assert len(task_messages) == 1
+    
+    task_msg = task_messages[0]
+    assert task_msg.images == ["https://example.com/image.jpg"]
+    assert "Describe this image" in task_msg.content
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_images_in_history():
+    """Test that images from history messages are preserved."""
+    config = AgentConfiguration(
+        llm_model="mock-model",
+    )
+    
+    agent = HybridAgent(
+        agent_id="test_images_history",
+        name="Test Agent",
+        llm_client=MockLLMClient(),
+        tools=[],
+        config=config,
+    )
+    
+    await agent.initialize()
+    
+    context = {
+        "history": [
+            {
+                "role": "user",
+                "content": "What's in this image?",
+                "images": ["https://example.com/image1.jpg"]
+            },
+            {
+                "role": "assistant",
+                "content": "It's a cat."
+            }
+        ]
+    }
+    
+    messages = agent._build_initial_messages("Tell me more", context)
+    
+    # Find the history message with images
+    history_with_images = [
+        msg for msg in messages 
+        if msg.role == "user" and msg.images
+    ]
+    assert len(history_with_images) == 1
+    assert history_with_images[0].images == ["https://example.com/image1.jpg"]
+    assert "What's in this image?" in history_with_images[0].content
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_images_in_task_dict():
+    """Test that images from task dict are passed through to messages."""
+    config = AgentConfiguration(
+        llm_model="mock-model",
+    )
+    
+    agent = HybridAgent(
+        agent_id="test_images_task",
+        name="Test Agent",
+        llm_client=MockLLMClient(),
+        tools=[],
+        config=config,
+    )
+    
+    await agent.initialize()
+    
+    task = {
+        "description": "Analyze this image",
+        "images": ["https://example.com/task-image.jpg"]
+    }
+    
+    context = {}
+    
+    # Execute task (which should extract images and add to context)
+    # We'll test by checking _build_initial_messages with images in context
+    context["images"] = task["images"]
+    messages = agent._build_initial_messages(task["description"], context)
+    
+    # Find the task message
+    task_messages = [msg for msg in messages if msg.role == "user" and "Task:" in msg.content]
+    assert len(task_messages) == 1
+    
+    task_msg = task_messages[0]
+    assert task_msg.images == ["https://example.com/task-image.jpg"]
+    assert "Analyze this image" in task_msg.content
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_multiple_images():
+    """Test that multiple images are handled correctly."""
+    config = AgentConfiguration(
+        llm_model="mock-model",
+    )
+    
+    agent = HybridAgent(
+        agent_id="test_multiple_images",
+        name="Test Agent",
+        llm_client=MockLLMClient(),
+        tools=[],
+        config=config,
+    )
+    
+    await agent.initialize()
+    
+    context = {
+        "images": [
+            "https://example.com/image1.jpg",
+            "https://example.com/image2.jpg",
+            "/path/to/local/image.png"
+        ]
+    }
+    
+    messages = agent._build_initial_messages("Compare these images", context)
+    
+    # Find the task message
+    task_messages = [msg for msg in messages if msg.role == "user" and "Task:" in msg.content]
+    assert len(task_messages) == 1
+    
+    task_msg = task_messages[0]
+    assert len(task_msg.images) == 3
+    assert "https://example.com/image1.jpg" in task_msg.images
+    assert "https://example.com/image2.jpg" in task_msg.images
+    assert "/path/to/local/image.png" in task_msg.images
 
