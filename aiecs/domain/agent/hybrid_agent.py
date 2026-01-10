@@ -758,6 +758,7 @@ class HybridAgent(BaseAIAgent):
                     model=self._config.llm_model,
                     temperature=self._config.temperature,
                     max_tokens=self._config.max_tokens,
+                    context=context,
                     tools=tools,
                     tool_choice="auto",
                     return_chunks=True,  # Enable tool_calls accumulation
@@ -769,6 +770,7 @@ class HybridAgent(BaseAIAgent):
                     model=self._config.llm_model,
                     temperature=self._config.temperature,
                     max_tokens=self._config.max_tokens,
+                    context=context,
                 )
 
             # Stream tokens and collect tool calls
@@ -1110,6 +1112,7 @@ class HybridAgent(BaseAIAgent):
                     model=self._config.llm_model,
                     temperature=self._config.temperature,
                     max_tokens=self._config.max_tokens,
+                    context=context,
                     tools=tools,
                     tool_choice="auto",
                 )
@@ -1120,6 +1123,7 @@ class HybridAgent(BaseAIAgent):
                     model=self._config.llm_model,
                     temperature=self._config.temperature,
                     max_tokens=self._config.max_tokens,
+                    context=context,
                 )
 
             thought_raw = response.content or ""

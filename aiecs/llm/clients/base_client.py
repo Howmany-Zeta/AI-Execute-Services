@@ -165,9 +165,28 @@ class BaseLLMClient(ABC):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> LLMResponse:
-        """Generate text using the provider's API"""
+        """
+        Generate text using the provider's API.
+
+        Args:
+            messages: List of conversation messages
+            model: Model name (optional, uses default if not provided)
+            temperature: Sampling temperature (0.0 to 1.0)
+            max_tokens: Maximum tokens to generate
+            context: Optional context dictionary containing metadata such as:
+                - user_id: User identifier for tracking/billing
+                - tenant_id: Tenant identifier for multi-tenant setups
+                - request_id: Request identifier for tracing
+                - session_id: Session identifier
+                - Any other custom metadata for observability or middleware
+            **kwargs: Additional provider-specific parameters
+
+        Returns:
+            LLMResponse with generated text and metadata
+        """
 
     @abstractmethod
     async def stream_text(
@@ -176,9 +195,28 @@ class BaseLLMClient(ABC):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]:
-        """Stream text generation using the provider's API"""
+        """
+        Stream text generation using the provider's API.
+
+        Args:
+            messages: List of conversation messages
+            model: Model name (optional, uses default if not provided)
+            temperature: Sampling temperature (0.0 to 1.0)
+            max_tokens: Maximum tokens to generate
+            context: Optional context dictionary containing metadata such as:
+                - user_id: User identifier for tracking/billing
+                - tenant_id: Tenant identifier for multi-tenant setups
+                - request_id: Request identifier for tracing
+                - session_id: Session identifier
+                - Any other custom metadata for observability or middleware
+            **kwargs: Additional provider-specific parameters
+
+        Yields:
+            Text tokens as they are generated
+        """
 
     @abstractmethod
     async def close(self):

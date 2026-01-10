@@ -539,13 +539,36 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
         functions: Optional[List[Dict[str, Any]]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Any] = None,
         system_instruction: Optional[str] = None,
         **kwargs,
     ) -> LLMResponse:
-        """Generate text using Vertex AI"""
+        """
+        Generate text using Vertex AI.
+
+        Args:
+            messages: List of conversation messages
+            model: Model name (optional, uses default if not provided)
+            temperature: Sampling temperature (0.0 to 1.0)
+            max_tokens: Maximum tokens to generate
+            context: Optional context dictionary containing metadata such as:
+                - user_id: User identifier for tracking/billing
+                - tenant_id: Tenant identifier for multi-tenant setups
+                - request_id: Request identifier for tracing
+                - session_id: Session identifier
+                - Any other custom metadata for observability or middleware
+            functions: List of function schemas (legacy format)
+            tools: List of tool schemas (new format, recommended)
+            tool_choice: Tool choice strategy
+            system_instruction: System instruction for the model
+            **kwargs: Additional provider-specific parameters
+
+        Returns:
+            LLMResponse with generated text and metadata
+        """
         self._init_vertex_ai()
 
         # Get model name from config if not provided
@@ -933,6 +956,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
         functions: Optional[List[Dict[str, Any]]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Any] = None,
@@ -948,6 +972,12 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             model: Model name (optional)
             temperature: Temperature for generation
             max_tokens: Maximum tokens to generate
+            context: Optional context dictionary containing metadata such as:
+                - user_id: User identifier for tracking/billing
+                - tenant_id: Tenant identifier for multi-tenant setups
+                - request_id: Request identifier for tracing
+                - session_id: Session identifier
+                - Any other custom metadata for observability or middleware
             functions: List of function schemas (legacy format)
             tools: List of tool schemas (new format)
             tool_choice: Tool choice strategy (not used for Google Vertex AI)

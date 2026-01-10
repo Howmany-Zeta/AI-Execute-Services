@@ -6,7 +6,7 @@ Uses a lightweight LLM to determine the best retrieval approach based on query c
 """
 
 import logging
-from typing import Optional, Dict, TYPE_CHECKING
+from typing import Optional, Dict, Any, TYPE_CHECKING
 from aiecs.application.knowledge_graph.retrieval.strategy_types import RetrievalStrategy
 
 if TYPE_CHECKING:
@@ -58,12 +58,13 @@ class QueryIntentClassifier:
         self.enable_caching = enable_caching
         self._cache: Dict[str, RetrievalStrategy] = {}
 
-    async def classify_intent(self, query: str) -> RetrievalStrategy:
+    async def classify_intent(self, query: str, context: Optional[Dict[str, Any]] = None) -> RetrievalStrategy:
         """
         Classify query intent and return optimal retrieval strategy.
 
         Args:
             query: Query string to classify
+            context: Optional context dictionary for tracking/observability
 
         Returns:
             RetrievalStrategy enum value
@@ -82,7 +83,7 @@ class QueryIntentClassifier:
         # Use LLM classification if client is available
         if self.llm_client is not None:
             try:
-                strategy = await self._classify_with_llm(query)
+                strategy = await self._classify_with_llm(query, context)
             except Exception as e:
                 logger.warning(f"LLM classification failed: {e}, falling back to rule-based")
                 strategy = self._classify_with_rules(query)
@@ -96,7 +97,7 @@ class QueryIntentClassifier:
 
         return strategy
 
-    async def _classify_with_llm(self, query: str) -> RetrievalStrategy:
+    async def _classify_with_llm(self, query: str, context: Optional[Dict[str, Any]] = None) -> RetrievalStrategy:
         """
         Classify query using LLM.
 
@@ -127,11 +128,12 @@ Respond with ONLY the strategy name (e.g., "MULTI_HOP"). No explanation needed."
         if self.llm_client is None:
             # Fallback to rule-based classification if no LLM client
             return self._classify_with_rules(query)
-        
+
         response = await self.llm_client.generate_text(
             messages=messages,
             temperature=0.0,  # Deterministic classification
             max_tokens=20,  # Short response
+            context=context,
         )
 
         # Parse response
