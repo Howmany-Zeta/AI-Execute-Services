@@ -87,6 +87,7 @@ class XAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
         functions: Optional[List[Dict[str, Any]]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Any] = None,
@@ -94,8 +95,27 @@ class XAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
     ) -> LLMResponse:
         """
         Generate text using xAI API via OpenAI library (supports all Grok models).
-        
+
         xAI API is OpenAI-compatible, so it supports Function Calling.
+
+        Args:
+            messages: List of conversation messages
+            model: Model name (optional, uses default if not provided)
+            temperature: Sampling temperature (0.0 to 1.0)
+            max_tokens: Maximum tokens to generate
+            context: Optional context dictionary containing metadata such as:
+                - user_id: User identifier for tracking/billing
+                - tenant_id: Tenant identifier for multi-tenant setups
+                - request_id: Request identifier for tracing
+                - session_id: Session identifier
+                - Any other custom metadata for observability or middleware
+            functions: List of function schemas (legacy format)
+            tools: List of tool schemas (new format, recommended)
+            tool_choice: Tool choice strategy
+            **kwargs: Additional provider-specific parameters
+
+        Returns:
+            LLMResponse with generated text and metadata
         """
         # Check API key availability
         api_key = self._get_api_key()
@@ -144,6 +164,7 @@ class XAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
         functions: Optional[List[Dict[str, Any]]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Any] = None,
@@ -152,11 +173,28 @@ class XAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
     ) -> AsyncGenerator[Any, None]:
         """
         Stream text using xAI API via OpenAI library (supports all Grok models).
-        
+
         xAI API is OpenAI-compatible, so it supports Function Calling.
-        
+
         Args:
+            messages: List of conversation messages
+            model: Model name (optional, uses default if not provided)
+            temperature: Sampling temperature (0.0 to 1.0)
+            max_tokens: Maximum tokens to generate
+            context: Optional context dictionary containing metadata such as:
+                - user_id: User identifier for tracking/billing
+                - tenant_id: Tenant identifier for multi-tenant setups
+                - request_id: Request identifier for tracing
+                - session_id: Session identifier
+                - Any other custom metadata for observability or middleware
+            functions: List of function schemas (legacy format)
+            tools: List of tool schemas (new format, recommended)
+            tool_choice: Tool choice strategy
             return_chunks: If True, returns StreamChunk objects with tool_calls info; if False, returns str tokens only
+            **kwargs: Additional provider-specific parameters
+
+        Yields:
+            str or StreamChunk: Text tokens or StreamChunk objects
         """
         # Check API key availability
         api_key = self._get_api_key()

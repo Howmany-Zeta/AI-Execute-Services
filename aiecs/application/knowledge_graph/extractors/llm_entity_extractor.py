@@ -162,7 +162,7 @@ class LLMEntityExtractor(EntityExtractor):
         Args:
             text: Input text to extract entities from
             entity_types: Optional filter for specific entity types
-            **kwargs: Additional parameters (e.g., custom prompt, examples)
+            **kwargs: Additional parameters (e.g., custom prompt, examples, context)
 
         Returns:
             List of extracted Entity objects
@@ -173,6 +173,9 @@ class LLMEntityExtractor(EntityExtractor):
         """
         if not text or not text.strip():
             raise ValueError("Input text cannot be empty")
+
+        # Extract context from kwargs if provided
+        context = kwargs.get("context")
 
         # Build extraction prompt
         prompt = self._build_extraction_prompt(text, entity_types)
@@ -189,6 +192,7 @@ class LLMEntityExtractor(EntityExtractor):
                     model=self.model,
                     temperature=self.temperature,
                     max_tokens=self.max_tokens,
+                    context=context,
                 )
             # Otherwise use LLM manager with provider
             else:

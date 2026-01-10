@@ -4,7 +4,7 @@ LLM Client Protocols
 Defines Protocol interfaces for LLM clients to enable duck typing and flexible integration.
 """
 
-from typing import Protocol, List, Optional, AsyncGenerator, runtime_checkable
+from typing import Protocol, List, Optional, AsyncGenerator, runtime_checkable, Dict, Any
 from aiecs.llm.clients.base_client import LLMMessage, LLMResponse
 
 
@@ -31,9 +31,12 @@ class LLMClientProtocol(Protocol):
                 model: Optional[str] = None,
                 temperature: float = 0.7,
                 max_tokens: Optional[int] = None,
+                context: Optional[Dict[str, Any]] = None,
                 **kwargs
             ) -> LLMResponse:
                 # Custom implementation
+                # Use context for tracking, billing, observability, etc.
+                user_id = context.get("user_id") if context else None
                 pass
 
             async def stream_text(
@@ -42,6 +45,7 @@ class LLMClientProtocol(Protocol):
                 model: Optional[str] = None,
                 temperature: float = 0.7,
                 max_tokens: Optional[int] = None,
+                context: Optional[Dict[str, Any]] = None,
                 **kwargs
             ) -> AsyncGenerator[str, None]:
                 # Custom implementation
@@ -67,6 +71,7 @@ class LLMClientProtocol(Protocol):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> LLMResponse:
         """
@@ -77,6 +82,12 @@ class LLMClientProtocol(Protocol):
             model: Model name (optional, uses default if not provided)
             temperature: Sampling temperature (0.0 to 1.0)
             max_tokens: Maximum tokens to generate
+            context: Optional context dictionary containing metadata such as:
+                - user_id: User identifier for tracking/billing
+                - tenant_id: Tenant identifier for multi-tenant setups
+                - request_id: Request identifier for tracing
+                - session_id: Session identifier
+                - Any other custom metadata for observability or middleware
             **kwargs: Additional provider-specific parameters
 
         Returns:
@@ -90,6 +101,7 @@ class LLMClientProtocol(Protocol):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]:
         """
@@ -100,6 +112,12 @@ class LLMClientProtocol(Protocol):
             model: Model name (optional, uses default if not provided)
             temperature: Sampling temperature (0.0 to 1.0)
             max_tokens: Maximum tokens to generate
+            context: Optional context dictionary containing metadata such as:
+                - user_id: User identifier for tracking/billing
+                - tenant_id: Tenant identifier for multi-tenant setups
+                - request_id: Request identifier for tracing
+                - session_id: Session identifier
+                - Any other custom metadata for observability or middleware
             **kwargs: Additional provider-specific parameters
 
         Yields:
