@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import base64
-from typing import Optional, List, AsyncGenerator
+from typing import Optional, List, AsyncGenerator, Dict, Any
 
 from google import genai
 from google.genai import types
@@ -195,10 +195,30 @@ class GoogleAIClient(BaseLLMClient):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
         system_instruction: Optional[str] = None,
         **kwargs,
     ) -> LLMResponse:
-        """Generate text using Google AI (google.genai SDK)"""
+        """
+        Generate text using Google AI (google.genai SDK).
+
+        Args:
+            messages: List of conversation messages
+            model: Model name (optional, uses default if not provided)
+            temperature: Sampling temperature (0.0 to 1.0)
+            max_tokens: Maximum tokens to generate
+            context: Optional context dictionary containing metadata such as:
+                - user_id: User identifier for tracking/billing
+                - tenant_id: Tenant identifier for multi-tenant setups
+                - request_id: Request identifier for tracing
+                - session_id: Session identifier
+                - Any other custom metadata for observability or middleware
+            system_instruction: System instruction for the model
+            **kwargs: Additional provider-specific parameters
+
+        Returns:
+            LLMResponse with generated text and metadata
+        """
         client = self._init_google_ai()
 
         # Get model name from config if not provided
@@ -298,10 +318,30 @@ class GoogleAIClient(BaseLLMClient):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
         system_instruction: Optional[str] = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]:
-        """Stream text generation using Google AI (google.genai SDK)"""
+        """
+        Stream text generation using Google AI (google.genai SDK).
+
+        Args:
+            messages: List of conversation messages
+            model: Model name (optional, uses default if not provided)
+            temperature: Sampling temperature (0.0 to 1.0)
+            max_tokens: Maximum tokens to generate
+            context: Optional context dictionary containing metadata such as:
+                - user_id: User identifier for tracking/billing
+                - tenant_id: Tenant identifier for multi-tenant setups
+                - request_id: Request identifier for tracing
+                - session_id: Session identifier
+                - Any other custom metadata for observability or middleware
+            system_instruction: System instruction for the model
+            **kwargs: Additional provider-specific parameters
+
+        Yields:
+            Text tokens as they are generated
+        """
         client = self._init_google_ai()
 
         # Get model name from config if not provided

@@ -52,6 +52,7 @@ class OpenAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
         functions: Optional[List[Dict[str, Any]]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Any] = None,
@@ -65,6 +66,11 @@ class OpenAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
             model: Model name (optional)
             temperature: Temperature for generation
             max_tokens: Maximum tokens to generate
+            context: Optional context dictionary containing metadata such as:
+                - user_id: User identifier for tracking/billing
+                - tenant_id: Tenant identifier for multi-tenant setups
+                - request_id: Request identifier for tracing
+                - session_id: Session identifier
             functions: List of function schemas (legacy format)
             tools: List of tool schemas (new format, recommended)
             tool_choice: Tool choice strategy ("auto", "none", or specific tool)
@@ -103,6 +109,7 @@ class OpenAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
         functions: Optional[List[Dict[str, Any]]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Any] = None,
@@ -117,6 +124,11 @@ class OpenAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
             model: Model name (optional)
             temperature: Temperature for generation
             max_tokens: Maximum tokens to generate
+            context: Optional context dictionary containing metadata such as:
+                - user_id: User identifier for tracking/billing
+                - tenant_id: Tenant identifier for multi-tenant setups
+                - request_id: Request identifier for tracing
+                - session_id: Session identifier
             functions: List of function schemas (legacy format)
             tools: List of tool schemas (new format, recommended)
             tool_choice: Tool choice strategy ("auto", "none", or specific tool)

@@ -745,6 +745,7 @@ Use graph reasoning proactively when questions involve:
                 model=self._config.llm_model,
                 temperature=self._config.temperature,
                 max_tokens=self._config.max_tokens,
+                context=context,
             )
 
             thought = response.content
