@@ -100,7 +100,7 @@ class ScraperTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the scraper tool
-        
+
         Automatically reads from environment variables with SCRAPER_TOOL_ prefix.
         Example: SCRAPER_TOOL_USER_AGENT -> user_agent
         """
@@ -125,6 +125,10 @@ class ScraperTool(BaseTool):
         playwright_available: bool = Field(
             default=False,
             description="Whether Playwright is available (auto-detected)",
+        )
+        use_stealth: bool = Field(
+            default=False,
+            description="Whether to use stealth mode with Playwright to avoid bot detection",
         )
 
     # Schema definitions
@@ -508,6 +512,7 @@ class ScraperTool(BaseTool):
         headers: Optional[Dict[str, str]] = None,
         output_format: Optional[OutputFormat] = None,
         output_path: Optional[str] = None,
+        use_stealth: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """
         Render a web page using a headless browser (Playwright).
@@ -523,6 +528,7 @@ class ScraperTool(BaseTool):
             headers (Optional[Dict[str, str]]): Custom headers.
             output_format (Optional[OutputFormat]): Output format.
             output_path (Optional[str]): Path to save output.
+            use_stealth (Optional[bool]): Whether to use stealth mode. If None, uses config value.
 
         Returns:
             Dict[str, Any]: Rendered page content {'html': str, 'title': str, 'url': str, 'screenshot': Optional[str]}.
@@ -541,6 +547,7 @@ class ScraperTool(BaseTool):
                     scroll_to_bottom,
                     screenshot,
                     screenshot_path,
+                    use_stealth if use_stealth is not None else self.config.use_stealth,
                 )
             else:
                 raise RenderingError(f"Unsupported rendering engine: {engine}. Only PLAYWRIGHT is supported.")
@@ -559,8 +566,22 @@ class ScraperTool(BaseTool):
         scroll_to_bottom: bool,
         screenshot: bool,
         screenshot_path: Optional[str],
+        use_stealth: bool = False,
     ) -> Dict[str, Any]:
-        """Render a web page using Playwright with async API."""
+        """Render a web page using Playwright with async API.
+
+        Args:
+            url (str): URL to render.
+            wait_time (int): Time to wait for JS execution.
+            wait_selector (Optional[str]): CSS selector to wait for.
+            scroll_to_bottom (bool): Whether to scroll to the bottom of the page.
+            screenshot (bool): Whether to take a screenshot.
+            screenshot_path (Optional[str]): Path to save the screenshot.
+            use_stealth (bool): Whether to use stealth mode to avoid bot detection.
+
+        Returns:
+            Dict[str, Any]: Rendered page content.
+        """
         from playwright.async_api import async_playwright
 
         async with async_playwright() as p:
@@ -569,6 +590,22 @@ class ScraperTool(BaseTool):
                 user_agent=self.config.user_agent,
                 viewport={"width": 1280, "height": 800},
             )
+
+            # Apply stealth mode if enabled
+            if use_stealth:
+                try:
+                    from playwright_stealth import stealth_async
+                    await stealth_async(page)
+                    self.logger.info("Stealth mode enabled for Playwright")
+                except ImportError:
+                    self.logger.warning(
+                        "playwright-stealth is not installed. "
+                        "Install it with 'pip install playwright-stealth' to use stealth mode. "
+                        "Continuing without stealth mode."
+                    )
+                except Exception as e:
+                    self.logger.warning(f"Failed to apply stealth mode: {str(e)}. Continuing without stealth mode.")
+
             try:
                 await page.goto(url)
                 if wait_selector:
