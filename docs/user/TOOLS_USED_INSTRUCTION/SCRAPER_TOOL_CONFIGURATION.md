@@ -26,6 +26,7 @@ SCRAPER_TOOL_OUTPUT_DIR=/path/to/outputs
 SCRAPER_TOOL_SCRAPY_COMMAND=scrapy
 SCRAPER_TOOL_ALLOWED_DOMAINS=["example.com","api.example.com"]
 SCRAPER_TOOL_BLOCKED_DOMAINS=["blocked.com","malicious.com"]
+SCRAPER_TOOL_USE_STEALTH=false
 ```
 
 **3. Load the .env file in your application:**
@@ -75,6 +76,7 @@ SCRAPER_TOOL_MAX_CONTENT_LENGTH=52428800
 SCRAPER_TOOL_OUTPUT_DIR=/app/scraper_outputs
 SCRAPER_TOOL_ALLOWED_DOMAINS=["trusted-site.com","api.trusted-site.com"]
 SCRAPER_TOOL_BLOCKED_DOMAINS=["malicious.com","spam.com"]
+SCRAPER_TOOL_USE_STEALTH=true
 ```
 
 **Example `.env.development`:**
@@ -85,6 +87,7 @@ SCRAPER_TOOL_MAX_CONTENT_LENGTH=10485760
 SCRAPER_TOOL_OUTPUT_DIR=./scraper_outputs
 SCRAPER_TOOL_ALLOWED_DOMAINS=[]
 SCRAPER_TOOL_BLOCKED_DOMAINS=[]
+SCRAPER_TOOL_USE_STEALTH=false
 ```
 
 ### Best Practices for .env Files
@@ -103,24 +106,27 @@ SCRAPER_TOOL_BLOCKED_DOMAINS=[]
    ```bash
    # .env.example
    # Scraper Tool Configuration
-   
+
    # User agent for HTTP requests
    SCRAPER_TOOL_USER_AGENT=MyScraperBot/1.0
-   
+
    # Maximum content length in bytes (10MB)
    SCRAPER_TOOL_MAX_CONTENT_LENGTH=10485760
-   
+
    # Directory for output files
    SCRAPER_TOOL_OUTPUT_DIR=./scraper_outputs
-   
+
    # Command to run Scrapy
    SCRAPER_TOOL_SCRAPY_COMMAND=scrapy
-   
+
    # Allowed domains for scraping (JSON array)
    SCRAPER_TOOL_ALLOWED_DOMAINS=["example.com","api.example.com"]
-   
+
    # Blocked domains for scraping (JSON array)
    SCRAPER_TOOL_BLOCKED_DOMAINS=["blocked.com","malicious.com"]
+
+   # Enable stealth mode for Playwright (requires playwright-stealth)
+   SCRAPER_TOOL_USE_STEALTH=false
    ```
 
 3. **Document your variables** - Add comments explaining each setting
@@ -274,7 +280,50 @@ export SCRAPER_TOOL_BLOCKED_DOMAINS='["malicious.com","spam.com","blocked-site.c
 
 **Security Note:** Regularly update blocked domains list based on security advisories.
 
-### 7. Playwright Available (Read-Only)
+### 7. Use Stealth Mode
+
+**Environment Variable:** `SCRAPER_TOOL_USE_STEALTH`
+
+**Type:** Boolean
+
+**Default:** `False`
+
+**Description:** Whether to use stealth mode with Playwright to avoid bot detection. When enabled, the tool applies various techniques to make the browser appear more like a regular user browser, helping to bypass anti-bot measures.
+
+**Stealth Features:**
+- Removes webdriver property
+- Masks automation indicators
+- Randomizes browser fingerprints
+- Mimics human-like behavior
+- Bypasses common bot detection methods
+
+**Requirements:**
+```bash
+# Install playwright-stealth
+pip install playwright-stealth
+
+# Or install with scraper extras
+pip install aiecs[scraper]
+```
+
+**Example:**
+```bash
+# Enable stealth mode globally
+export SCRAPER_TOOL_USE_STEALTH=true
+
+# Or in .env file
+SCRAPER_TOOL_USE_STEALTH=true
+```
+
+**Use Cases:**
+- Scraping sites with anti-bot protection
+- Accessing content that blocks automated browsers
+- Bypassing Cloudflare and similar protections
+- Testing website behavior with realistic browser profiles
+
+**Note:** Stealth mode only works with Playwright rendering. It has no effect on regular HTTP requests. If `playwright-stealth` is not installed, the tool will log a warning and continue without stealth mode.
+
+### 8. Playwright Available (Read-Only)
 
 **Environment Variable:** Not configurable via environment
 
@@ -337,11 +386,53 @@ scraper_tool = ScraperTool(config={
     'max_content_length': 52428800,
     'output_dir': '/app/scraper_outputs',
     'allowed_domains': ['example.com', 'api.example.com'],
-    'blocked_domains': ['malicious.com']
+    'blocked_domains': ['malicious.com'],
+    'use_stealth': True  # Enable stealth mode
 })
 ```
 
-### Example 5: Mixed Configuration
+### Example 5: Stealth Mode Configuration
+
+Using stealth mode to bypass bot detection:
+
+```python
+from aiecs.tools.task_tools.scraper_tool import ScraperTool
+
+# Method 1: Enable stealth mode via configuration
+scraper_with_stealth = ScraperTool(config={'use_stealth': True})
+
+# Render a page with stealth mode (uses config setting)
+result = await scraper_with_stealth.render(
+    url="https://example.com",
+    wait_time=5,
+    screenshot=True
+)
+
+# Method 2: Override stealth mode per request
+scraper_default = ScraperTool()
+
+# Enable stealth for this specific request
+result = await scraper_default.render(
+    url="https://example.com",
+    wait_time=5,
+    use_stealth=True  # Override config setting
+)
+
+# Disable stealth for this specific request
+result = await scraper_default.render(
+    url="https://example.com",
+    wait_time=5,
+    use_stealth=False  # Override config setting
+)
+```
+
+**Environment Variable:**
+```bash
+# Enable stealth mode globally
+export SCRAPER_TOOL_USE_STEALTH=true
+```
+
+### Example 6: Mixed Configuration
 
 Environment variables are used as defaults, but can be overridden programmatically:
 
@@ -349,13 +440,15 @@ Environment variables are used as defaults, but can be overridden programmatical
 # Set environment defaults
 export SCRAPER_TOOL_USER_AGENT="DefaultBot/1.0"
 export SCRAPER_TOOL_MAX_CONTENT_LENGTH=10485760
+export SCRAPER_TOOL_USE_STEALTH=true
 ```
 
 ```python
 # Override for specific instance
 scraper_tool = ScraperTool(config={
     'user_agent': 'CustomBot/2.0',  # This overrides the environment variable
-    'max_content_length': 52428800  # This overrides the environment variable
+    'max_content_length': 52428800,  # This overrides the environment variable
+    'use_stealth': False  # This overrides the environment variable
 })
 ```
 
@@ -601,6 +694,56 @@ mkdir -p /path/to/outputs
 chmod 755 /path/to/outputs
 ```
 
+### Issue: Stealth mode not working
+
+**Error:** `playwright-stealth is not installed` warning in logs
+
+**Solutions:**
+```bash
+# Install playwright-stealth
+pip install playwright-stealth
+
+# Or install with scraper extras
+pip install aiecs[scraper]
+
+# Verify installation
+python -c "from playwright_stealth import stealth_async; print('OK')"
+```
+
+### Issue: Bot detection still occurring with stealth mode
+
+**Symptoms:** Website still detects automation despite stealth mode enabled
+
+**Solutions:**
+1. **Verify stealth mode is enabled:**
+   ```python
+   # Check logs for "Stealth mode enabled for Playwright" message
+   scraper = ScraperTool(config={'use_stealth': True})
+   result = await scraper.render(url, use_stealth=True)
+   ```
+
+2. **Add additional delays:**
+   ```python
+   # Wait longer for page to load
+   result = await scraper.render(
+       url=url,
+       wait_time=10,  # Increase wait time
+       use_stealth=True
+   )
+   ```
+
+3. **Use realistic user agent:**
+   ```bash
+   export SCRAPER_TOOL_USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+   ```
+
+4. **Implement rate limiting:**
+   - Add delays between requests
+   - Randomize request timing
+   - Respect robots.txt
+
+5. **Note:** Some advanced bot detection systems may still detect automation. Stealth mode improves success rate but is not foolproof.
+
 ## Best Practices
 
 ### Web Scraping Ethics
@@ -686,6 +829,12 @@ pip install httpx beautifulsoup4 lxml
 
 # Install optional dependencies
 pip install playwright scrapy
+
+# Install stealth mode support
+pip install playwright-stealth
+
+# Or install all scraper extras at once
+pip install aiecs[scraper]
 ```
 
 ### Playwright Setup
@@ -701,6 +850,16 @@ playwright install
 playwright install chromium
 playwright install firefox
 playwright install webkit
+```
+
+### Stealth Mode Setup
+
+```bash
+# Install playwright-stealth for anti-bot detection
+pip install playwright-stealth
+
+# Verify installation
+python -c "from playwright_stealth import stealth_async; print('Stealth mode available')"
 ```
 
 ### Scrapy Setup
