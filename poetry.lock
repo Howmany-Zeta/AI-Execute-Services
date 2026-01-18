@@ -7890,4 +7890,4 @@ scraper = ["playwright-stealth"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.13"
-content-hash = "f55bb7f1ae54ec685e80e6e32580706cc07a195e2d38f9ee37a550074c6aa4c9"
+content-hash = "6af0944f0d0f58be94425018e16bb4699a6a72ed1fbc5842c6ff90b2d62f5d2a"
