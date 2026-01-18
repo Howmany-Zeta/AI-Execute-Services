@@ -266,14 +266,16 @@ class LLMClientManager:
         final_provider = context_provider or provider or AIProvider.OPENAI
         final_model = context_model or model
 
-        # Convert string prompt to messages format
-        if isinstance(messages, str):
+        # Convert string prompt to messages format and handle None
+        if messages is None:
+            messages = []
+        elif isinstance(messages, str):
             messages = [LLMMessage(role="user", content=messages)]
 
         # Execute on_llm_start callbacks
         if callbacks:
             # Convert LLMMessage objects to dictionaries for callbacks
-            messages_dict = [{"role": msg.role, "content": msg.content} for msg in messages]
+            messages_dict = [{"role": msg.role, "content": msg.content} for msg in messages] if messages else []
             for callback in callbacks:
                 try:
                     await callback.on_llm_start(
@@ -376,14 +378,16 @@ class LLMClientManager:
         final_provider = context_provider or provider or AIProvider.OPENAI
         final_model = context_model or model
 
-        # Convert string prompt to messages format
-        if isinstance(messages, str):
+        # Convert string prompt to messages format and handle None
+        if messages is None:
+            messages = []
+        elif isinstance(messages, str):
             messages = [LLMMessage(role="user", content=messages)]
 
         # Execute on_llm_start callbacks
         if callbacks:
             # Convert LLMMessage objects to dictionaries for callbacks
-            messages_dict = [{"role": msg.role, "content": msg.content} for msg in messages]
+            messages_dict = [{"role": msg.role, "content": msg.content} for msg in messages] if messages else []
             for callback in callbacks:
                 try:
                     await callback.on_llm_start(

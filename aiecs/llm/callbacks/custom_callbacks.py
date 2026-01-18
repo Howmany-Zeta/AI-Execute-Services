@@ -33,7 +33,9 @@ class RedisTokenCallbackHandler(CustomAsyncCallbackHandler):
         self.start_time = time.time()
         self.messages = messages
 
-        logger.info(f"[Callback] LLM call started for user '{self.user_id}' with {len(messages)} messages")
+        # Defensive check for None messages
+        message_count = len(messages) if messages is not None else 0
+        logger.info(f"[Callback] LLM call started for user '{self.user_id}' with {message_count} messages")
 
     async def on_llm_end(self, response: dict, **kwargs: Any) -> None:
         """Triggered when LLM call ends successfully"""
@@ -93,8 +95,8 @@ class DetailedRedisTokenCallbackHandler(CustomAsyncCallbackHandler):
         self.start_time = time.time()
         self.messages = messages
 
-        # Estimate input token count
-        self.prompt_tokens = self._estimate_prompt_tokens(messages)
+        # Estimate input token count with None check
+        self.prompt_tokens = self._estimate_prompt_tokens(messages) if messages else 0
 
         logger.info(f"[DetailedCallback] LLM call started for user '{self.user_id}' with estimated {self.prompt_tokens} prompt tokens")
 
@@ -144,6 +146,8 @@ class DetailedRedisTokenCallbackHandler(CustomAsyncCallbackHandler):
 
     def _estimate_prompt_tokens(self, messages: List[dict]) -> int:
         """Estimate token count for input messages"""
+        if not messages:
+            return 0
         total_chars = sum(len(msg.get("content", "")) for msg in messages)
         # Rough estimation: 4 characters ≈ 1 token
         return total_chars // 4
