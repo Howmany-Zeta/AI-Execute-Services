@@ -148,7 +148,8 @@ class DetailedRedisTokenCallbackHandler(CustomAsyncCallbackHandler):
         """Estimate token count for input messages"""
         if not messages:
             return 0
-        total_chars = sum(len(msg.get("content", "")) for msg in messages)
+        # Use `or ""` to handle both missing key AND None value
+        total_chars = sum(len(msg.get("content") or "") for msg in messages)
         # Rough estimation: 4 characters ≈ 1 token
         return total_chars // 4
 
