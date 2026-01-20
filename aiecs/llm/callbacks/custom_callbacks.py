@@ -176,13 +176,15 @@ class DetailedRedisTokenCallbackHandler(CustomAsyncCallbackHandler):
             return prompt_tokens, completion_tokens
 
         # If no token information, try to estimate from response content
-        content = response.get("content", "")
+        content = response.get("content") or ""
         if content:
             completion_tokens = len(content) // 4
             prompt_tokens = self.prompt_tokens
             return prompt_tokens, completion_tokens
 
-        return 0, 0
+        # Even if no token info and empty content (e.g., tool call response),
+        # return the estimated prompt tokens
+        return self.prompt_tokens, 0
 
 
 class CompositeCallbackHandler(CustomAsyncCallbackHandler):
