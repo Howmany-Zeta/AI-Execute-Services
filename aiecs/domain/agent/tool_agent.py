@@ -269,13 +269,24 @@ class ToolAgent(BaseAIAgent):
         logger.info(f"ToolAgent {self.agent_id} shut down")
 
     def _build_system_prompt(self) -> str:
-        """Build system prompt for tool selection."""
+        """Build system prompt for tool selection.
+
+        If skills are enabled and attached, skill context is included to provide
+        domain knowledge and guide tool selection.
+        """
         parts = []
 
         # Get base prompt from shared method
         base_prompt = self._build_base_system_prompt()
         if base_prompt != "You are a helpful AI assistant.":
             parts.append(base_prompt)
+
+        # Add skill context if skills are enabled and attached
+        # This provides domain knowledge and tool recommendations for tool selection
+        if self._config.skills_enabled and self._attached_skills:
+            skill_context = self.get_skill_context(include_all_skills=True)
+            if skill_context:
+                parts.append(skill_context)
 
         # Add tool agent instructions
         parts.append(
@@ -551,7 +562,11 @@ class ToolAgent(BaseAIAgent):
         return parts[0], None
 
     def _build_messages(self, user_message: str, context: Dict[str, Any]) -> List[LLMMessage]:
-        """Build LLM messages for function calling."""
+        """Build LLM messages for function calling.
+
+        If skills are enabled and attached, request-specific skill context is added
+        to help guide tool selection for the specific user request.
+        """
         messages = []
 
         # Add system prompt
@@ -570,6 +585,21 @@ class ToolAgent(BaseAIAgent):
             context_str = self._format_context(context)
             if context_str:
                 messages.append(LLMMessage(role="system", content=f"Context:\n{context_str}"))
+
+        # Add request-specific skill context if skills are enabled
+        # This provides skills matched to the specific user request for tool selection
+        if self._config.skills_enabled and self._attached_skills:
+            skill_context = self.get_skill_context(
+                request=user_message,
+                include_all_skills=False,  # Only include matched skills
+            )
+            if skill_context:
+                messages.append(
+                    LLMMessage(
+                        role="system",
+                        content=f"Relevant Skills for this Request:\n{skill_context}",
+                    )
+                )
 
         # Add user message
         messages.append(LLMMessage(role="user", content=user_message))
@@ -842,6 +872,21 @@ class ToolAgent(BaseAIAgent):
         self._current_task_id = None
         self.last_active_at = datetime.utcnow()
 
+        # AIECS Fix: Ensure final response is streamed when tokens weren't received
+        # Some LLM providers (e.g., Vertex AI) don't stream tokens in function calling mode
+        # when the model decides not to call any tools. In this case, yield the complete
+        # response as a single token to ensure consumers receive the content.
+        tokens_were_streamed = len(response_tokens) > 0
+        if not tokens_were_streamed and tool_calls_count == 0 and llm_response:
+            # No tokens were streamed and no tools were called - yield response as token
+            logger.debug(f"Yielding unstreamed LLM response as fallback token ({len(llm_response)} chars)")
+            yield {
+                "type": "token",
+                "content": llm_response,
+                "timestamp": datetime.utcnow().isoformat(),
+                "is_fallback": True,  # Flag to indicate this is a fallback, not true streaming
+            }
+
         # Yield final result
         yield {
             "type": "result",
@@ -851,6 +896,7 @@ class ToolAgent(BaseAIAgent):
             "tool_results": tool_results,
             "tool_calls_count": tool_calls_count,
             "execution_time": execution_time,
+            "tokens_streamed": tokens_were_streamed,  # Add flag for debugging
             "timestamp": datetime.utcnow().isoformat(),
         }
 
