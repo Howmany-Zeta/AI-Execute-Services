@@ -5,6 +5,13 @@ Contains application configuration and service registry.
 
 from .config import Settings, get_settings, validate_required_settings
 from .tool_config import ToolConfigLoader, get_tool_config_loader
+from .skills_config import (
+    SkillsConfig,
+    get_skills_config,
+    validate_skills_config,
+    SKILL_DIRECTORIES_ENV,
+    DEFAULT_SKILL_DIRECTORY,
+)
 
 # Re-export registry functions from core.registry for backward compatibility
 # The registry has been moved to aiecs.core.registry to prevent circular imports
@@ -27,4 +34,10 @@ __all__ = [
     "clear_registry",  # Re-exported from core.registry
     "ToolConfigLoader",
     "get_tool_config_loader",
+    # Skills configuration
+    "SkillsConfig",
+    "get_skills_config",
+    "validate_skills_config",
+    "SKILL_DIRECTORIES_ENV",
+    "DEFAULT_SKILL_DIRECTORY",
 ]

@@ -40,6 +40,8 @@ if TYPE_CHECKING:
     )
     from aiecs.tools.base_tool import BaseTool
     from aiecs.domain.context.context_engine import ContextEngine
+    from aiecs.domain.agent.tools import SkillScriptRegistry, Tool
+    from aiecs.domain.agent.skills import SkillRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -220,7 +222,11 @@ class CacheConfig:
         return self.tool_specific_ttl.get(tool_name, self.default_ttl)
 
 
-class BaseAIAgent(ABC):
+# Import SkillCapableMixin for skill support
+from .skills.mixin import SkillCapableMixin
+
+
+class BaseAIAgent(SkillCapableMixin, ABC):
     """
     Abstract base class for AI agents.
 
@@ -566,6 +572,8 @@ class BaseAIAgent(ABC):
         agent_registry: Optional[Dict[str, Any]] = None,
         learning_enabled: bool = False,
         resource_limits: Optional[Any] = None,
+        skill_script_registry: Optional["SkillScriptRegistry"] = None,
+        skill_registry: Optional["SkillRegistry"] = None,
     ):
         """
         Initialize the base agent.
@@ -591,6 +599,10 @@ class BaseAIAgent(ABC):
             resource_limits: Optional resource limits configuration
                           and session management. If provided, enables persistent storage
                           across agent restarts.
+            skill_script_registry: Optional SkillScriptRegistry for managing tools from skill scripts.
+                          If provided, enables dynamic tool registration via add_tool(), remove_tool(), etc.
+            skill_registry: Optional SkillRegistry for loading skills by name.
+                          If provided along with config.skills_enabled=True, enables skill support.
 
         Example:
             # With tool instances and ContextEngine
@@ -665,6 +677,9 @@ class BaseAIAgent(ABC):
         self._available_tools: Optional[List[str]] = None
         self._tool_instances: Optional[Dict[str, "BaseTool"]] = None
 
+        # Skill script registry (optional - for dynamic tool management from skills)
+        self._skill_script_registry: Optional["SkillScriptRegistry"] = skill_script_registry
+
         # LLM client (optional)
         self._llm_client = llm_client
 
@@ -698,6 +713,13 @@ class BaseAIAgent(ABC):
         self._token_usage_window: List[tuple] = []  # List of (timestamp, token_count)
         self._tool_call_window: List[float] = []  # List of timestamps
 
+        # Skill support (via SkillCapableMixin)
+        # Initialize skill-related state from the mixin
+        self.__init_skills__(
+            skill_registry=skill_registry,
+            tool_registry=skill_script_registry,  # Use skill_script_registry as tool_registry
+        )
+
         features = []
         if context_engine:
             features.append("ContextEngine")
@@ -707,6 +729,8 @@ class BaseAIAgent(ABC):
             features.append("learning")
         if resource_limits:
             features.append("resource limits")
+        if config.skills_enabled:
+            features.append("skills")
 
         feature_str = f" with {', '.join(features)}" if features else ""
         logger.info(f"Agent initialized: {self.agent_id} ({self.name}, {self.agent_type.value}){feature_str}")
@@ -919,6 +943,154 @@ class BaseAIAgent(ABC):
             Dictionary of tool instances, or None if no tool instances available
         """
         return self._tool_instances
+
+    # ==================== Skill Script Tool Management Methods ====================
+
+    def add_tool(self, tool: "Tool", replace: bool = False) -> None:
+        """
+        Add a tool from a skill script to the agent's registry.
+
+        This method registers a lightweight Tool instance (from skill scripts)
+        to the agent's SkillScriptRegistry. This is separate from BaseTool
+        instances managed via _tool_instances.
+
+        Args:
+            tool: Tool instance to register
+            replace: If True, replace existing tool with same name
+
+        Raises:
+            RuntimeError: If no SkillScriptRegistry is configured
+            SkillScriptRegistryError: If tool already exists and replace=False
+
+        Example:
+            tool = Tool(
+                name="my-tool",
+                description="A custom tool",
+                execute=my_async_function
+            )
+            agent.add_tool(tool)
+        """
+        if self._skill_script_registry is None:
+            raise RuntimeError(
+                "Cannot add tool: no SkillScriptRegistry configured. "
+                "Pass skill_script_registry to agent constructor."
+            )
+        self._skill_script_registry.register_tool(tool, replace=replace)
+        logger.debug(f"Agent {self.agent_id}: Added tool '{tool.name}'")
+
+    def has_tool(self, tool_name: str) -> bool:
+        """
+        Check if a tool exists in the skill script registry.
+
+        Args:
+            tool_name: Name of the tool to check
+
+        Returns:
+            True if tool exists, False otherwise
+        """
+        if self._skill_script_registry is None:
+            return False
+        return self._skill_script_registry.has_tool(tool_name)
+
+    def remove_tool(self, tool_name: str) -> bool:
+        """
+        Remove a tool from the skill script registry.
+
+        Args:
+            tool_name: Name of the tool to remove
+
+        Returns:
+            True if tool was removed, False if not found
+
+        Raises:
+            RuntimeError: If no SkillScriptRegistry is configured
+        """
+        if self._skill_script_registry is None:
+            raise RuntimeError(
+                "Cannot remove tool: no SkillScriptRegistry configured. "
+                "Pass skill_script_registry to agent constructor."
+            )
+        result = self._skill_script_registry.unregister_tool(tool_name)
+        if result:
+            logger.debug(f"Agent {self.agent_id}: Removed tool '{tool_name}'")
+        return result
+
+    def get_tool(self, tool_name: str) -> Optional["Tool"]:
+        """
+        Get a tool from the skill script registry by name.
+
+        Args:
+            tool_name: Name of the tool to retrieve
+
+        Returns:
+            Tool instance if found, None otherwise
+        """
+        if self._skill_script_registry is None:
+            return None
+        return self._skill_script_registry.get_tool(tool_name)
+
+    def list_skill_tools(
+        self,
+        tags: Optional[List[str]] = None,
+        source: Optional[str] = None,
+    ) -> List["Tool"]:
+        """
+        List tools from the skill script registry.
+
+        Args:
+            tags: Optional list of tags to filter by (tools must have all tags)
+            source: Optional source to filter by (e.g., skill name)
+
+        Returns:
+            List of matching Tool instances
+        """
+        if self._skill_script_registry is None:
+            return []
+        return self._skill_script_registry.list_tools(tags=tags, source=source)
+
+    @property
+    def skill_script_registry(self) -> Optional["SkillScriptRegistry"]:
+        """Get the skill script registry, if configured."""
+        return self._skill_script_registry
+
+    # ==================== SkillCapableMixin Hook Overrides ====================
+    # These methods override the default implementations in SkillCapableMixin
+    # to integrate with BaseAIAgent's tool management system.
+
+    def _has_tool(self, tool_name: str) -> bool:
+        """
+        Check if a tool exists (SkillCapableMixin hook override).
+
+        Integrates with BaseAIAgent's has_tool() method and also checks
+        _skill_tools from the mixin.
+        """
+        # Check mixin's skill tools first
+        if tool_name in self._skill_tools:
+            return True
+        # Then check the skill script registry
+        return self.has_tool(tool_name)
+
+    def _add_tool(self, tool: "Tool") -> None:
+        """
+        Add a tool to the agent (SkillCapableMixin hook override).
+
+        Integrates with BaseAIAgent's add_tool() method.
+        """
+        if self._skill_script_registry is not None:
+            self.add_tool(tool, replace=False)
+
+    def _remove_tool(self, tool_name: str) -> None:
+        """
+        Remove a tool from the agent (SkillCapableMixin hook override).
+
+        Integrates with BaseAIAgent's remove_tool() method.
+        """
+        if self._skill_script_registry is not None:
+            try:
+                self.remove_tool(tool_name)
+            except RuntimeError:
+                # Registry not configured, ignore
+                pass
 
     def _build_base_system_prompt(self) -> str:
         """
@@ -1907,7 +2079,7 @@ class BaseAIAgent(ABC):
             SerializationError: If serialization fails
         """
         try:
-            return {
+            result = {
                 "agent_id": self.agent_id,
                 "name": self.name,
                 "agent_type": self.agent_type.value,
@@ -1925,6 +2097,20 @@ class BaseAIAgent(ABC):
                 "updated_at": self.updated_at.isoformat(),
                 "last_active_at": (self.last_active_at.isoformat() if self.last_active_at else None),
             }
+
+            # Add skill state if skills are enabled (Phase 4 - Agent Skills Extension)
+            if self._config.skills_enabled and self._attached_skills:
+                result["attached_skills"] = [
+                    {
+                        "name": skill.metadata.name,
+                        "version": skill.metadata.version,
+                        "description": skill.metadata.description,
+                    }
+                    for skill in self._attached_skills
+                ]
+                result["skill_tools"] = list(self._skill_tools.keys())
+
+            return result
         except Exception as e:
             raise SerializationError(
                 f"Failed to serialize agent: {str(e)}",

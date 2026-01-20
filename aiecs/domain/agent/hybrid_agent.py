@@ -374,6 +374,9 @@ class HybridAgent(BaseAIAgent):
 
         Note: ReAct instructions and tool info are always appended regardless
         of whether system_prompt is used, as they're essential for agent operation.
+
+        If skills are enabled and attached, skill context is also included to provide
+        domain knowledge and guide tool selection.
         """
         parts = []
 
@@ -382,6 +385,13 @@ class HybridAgent(BaseAIAgent):
         # Only add if not the default fallback (we want ReAct to be the main instruction)
         if base_prompt != "You are a helpful AI assistant.":
             parts.append(base_prompt)
+
+        # Add skill context if skills are enabled and attached
+        # This provides domain knowledge and tool recommendations for the ReAct loop
+        if self._config.skills_enabled and self._attached_skills:
+            skill_context = self.get_skill_context(include_all_skills=True)
+            if skill_context:
+                parts.append(skill_context)
 
         # Add ReAct instructions (always required for HybridAgent)
         parts.append(
@@ -1394,7 +1404,7 @@ class HybridAgent(BaseAIAgent):
             
             # Format remaining context fields (excluding history and images) as Additional Context
             context_without_history = {
-                k: v for k, v in context.items() 
+                k: v for k, v in context.items()
                 if k not in ("history", "images")
             }
             if context_without_history:
@@ -1406,6 +1416,21 @@ class HybridAgent(BaseAIAgent):
                             content=f"Additional Context:\n{context_str}",
                         )
                     )
+
+        # Add request-specific skill context if skills are enabled
+        # This provides skills matched to the specific task for tool selection guidance
+        if self._config.skills_enabled and self._attached_skills:
+            skill_context = self.get_skill_context(
+                request=task,
+                include_all_skills=False,  # Only include matched skills
+            )
+            if skill_context:
+                messages.append(
+                    LLMMessage(
+                        role="system",
+                        content=f"Relevant Skills for this Task:\n{skill_context}",
+                    )
+                )
 
         # Add task with iteration info
         task_message = (

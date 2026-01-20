@@ -211,17 +211,232 @@ class TestBaseAIAgent:
     def test_capability_declaration(self, agent):
         """Test capability declaration."""
         from aiecs.domain.agent.models import CapabilityLevel
-        
+
         # Use the method signature: declare_capability(capability_type, level, ...)
         agent.declare_capability(
             capability_type="text_generation",
             level=CapabilityLevel.ADVANCED.value,  # Pass string value
             description="Can generate text"
         )
-        
+
         assert agent.has_capability("text_generation")
         # Get capability from internal dict
         retrieved = agent._capabilities.get("text_generation")
         assert retrieved is not None
         assert retrieved.level == CapabilityLevel.ADVANCED
 
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+class TestBaseAIAgentSkillScriptTools:
+    """Test BaseAIAgent skill script tool management methods."""
+
+    @pytest.fixture
+    def config(self):
+        """Create test configuration."""
+        return AgentConfiguration(
+            goal="Test agent goal",
+            temperature=0.7
+        )
+
+    @pytest.fixture
+    def registry(self):
+        """Create a SkillScriptRegistry for testing."""
+        from aiecs.domain.agent.tools import SkillScriptRegistry
+        return SkillScriptRegistry()
+
+    @pytest.fixture
+    def agent_with_registry(self, config, registry):
+        """Create test agent with SkillScriptRegistry."""
+        return MockAgent(
+            agent_id="test-agent-1",
+            name="Test Agent",
+            agent_type=AgentType.CONVERSATIONAL,
+            config=config,
+            skill_script_registry=registry
+        )
+
+    @pytest.fixture
+    def agent_without_registry(self, config):
+        """Create test agent without SkillScriptRegistry."""
+        return MockAgent(
+            agent_id="test-agent-2",
+            name="Test Agent",
+            agent_type=AgentType.CONVERSATIONAL,
+            config=config
+        )
+
+    @pytest.fixture
+    def sample_tool(self):
+        """Create a sample Tool for testing."""
+        from aiecs.domain.agent.tools import Tool
+
+        async def sample_execute(input_data):
+            return {"result": input_data.get("value", 0) * 2}
+
+        return Tool(
+            name="sample-tool",
+            description="A sample tool for testing",
+            execute=sample_execute,
+            tags=["test", "sample"],
+            source="test-skill"
+        )
+
+    def test_skill_script_registry_property(self, agent_with_registry, registry):
+        """Test skill_script_registry property returns the registry."""
+        assert agent_with_registry.skill_script_registry is registry
+
+    def test_skill_script_registry_property_none(self, agent_without_registry):
+        """Test skill_script_registry property returns None when not configured."""
+        assert agent_without_registry.skill_script_registry is None
+
+    def test_add_tool_success(self, agent_with_registry, sample_tool):
+        """Test adding a tool to the registry."""
+        agent_with_registry.add_tool(sample_tool)
+        assert agent_with_registry.has_tool("sample-tool")
+
+    def test_add_tool_without_registry_raises(self, agent_without_registry, sample_tool):
+        """Test adding a tool without registry raises RuntimeError."""
+        with pytest.raises(RuntimeError, match="no SkillScriptRegistry configured"):
+            agent_without_registry.add_tool(sample_tool)
+
+    def test_add_tool_replace(self, agent_with_registry, sample_tool):
+        """Test replacing an existing tool."""
+        from aiecs.domain.agent.tools import Tool
+
+        agent_with_registry.add_tool(sample_tool)
+
+        async def new_execute(input_data):
+            return {"result": "new"}
+
+        new_tool = Tool(
+            name="sample-tool",
+            description="Replaced tool",
+            execute=new_execute
+        )
+        agent_with_registry.add_tool(new_tool, replace=True)
+
+        retrieved = agent_with_registry.get_tool("sample-tool")
+        assert retrieved.description == "Replaced tool"
+
+    def test_has_tool_true(self, agent_with_registry, sample_tool):
+        """Test has_tool returns True for existing tool."""
+        agent_with_registry.add_tool(sample_tool)
+        assert agent_with_registry.has_tool("sample-tool") is True
+
+    def test_has_tool_false(self, agent_with_registry):
+        """Test has_tool returns False for non-existing tool."""
+        assert agent_with_registry.has_tool("nonexistent") is False
+
+    def test_has_tool_without_registry(self, agent_without_registry):
+        """Test has_tool returns False when no registry configured."""
+        assert agent_without_registry.has_tool("any-tool") is False
+
+    def test_get_tool_success(self, agent_with_registry, sample_tool):
+        """Test getting a tool by name."""
+        agent_with_registry.add_tool(sample_tool)
+        retrieved = agent_with_registry.get_tool("sample-tool")
+        assert retrieved is not None
+        assert retrieved.name == "sample-tool"
+        assert retrieved.description == "A sample tool for testing"
+
+    def test_get_tool_not_found(self, agent_with_registry):
+        """Test getting a non-existing tool returns None."""
+        assert agent_with_registry.get_tool("nonexistent") is None
+
+    def test_get_tool_without_registry(self, agent_without_registry):
+        """Test getting a tool without registry returns None."""
+        assert agent_without_registry.get_tool("any-tool") is None
+
+    def test_remove_tool_success(self, agent_with_registry, sample_tool):
+        """Test removing a tool."""
+        agent_with_registry.add_tool(sample_tool)
+        assert agent_with_registry.has_tool("sample-tool")
+
+        result = agent_with_registry.remove_tool("sample-tool")
+        assert result is True
+        assert agent_with_registry.has_tool("sample-tool") is False
+
+    def test_remove_tool_not_found(self, agent_with_registry):
+        """Test removing a non-existing tool returns False."""
+        result = agent_with_registry.remove_tool("nonexistent")
+        assert result is False
+
+    def test_remove_tool_without_registry_raises(self, agent_without_registry):
+        """Test removing a tool without registry raises RuntimeError."""
+        with pytest.raises(RuntimeError, match="no SkillScriptRegistry configured"):
+            agent_without_registry.remove_tool("any-tool")
+
+    def test_list_skill_tools_all(self, agent_with_registry, sample_tool):
+        """Test listing all tools."""
+        from aiecs.domain.agent.tools import Tool
+
+        async def another_execute(input_data):
+            return {}
+
+        another_tool = Tool(
+            name="another-tool",
+            description="Another tool",
+            execute=another_execute,
+            source="other-skill"
+        )
+
+        agent_with_registry.add_tool(sample_tool)
+        agent_with_registry.add_tool(another_tool)
+
+        tools = agent_with_registry.list_skill_tools()
+        assert len(tools) == 2
+
+    def test_list_skill_tools_by_source(self, agent_with_registry, sample_tool):
+        """Test listing tools filtered by source."""
+        from aiecs.domain.agent.tools import Tool
+
+        async def another_execute(input_data):
+            return {}
+
+        another_tool = Tool(
+            name="another-tool",
+            description="Another tool",
+            execute=another_execute,
+            source="other-skill"
+        )
+
+        agent_with_registry.add_tool(sample_tool)
+        agent_with_registry.add_tool(another_tool)
+
+        tools = agent_with_registry.list_skill_tools(source="test-skill")
+        assert len(tools) == 1
+        assert tools[0].name == "sample-tool"
+
+    def test_list_skill_tools_by_tags(self, agent_with_registry, sample_tool):
+        """Test listing tools filtered by tags."""
+        from aiecs.domain.agent.tools import Tool
+
+        async def another_execute(input_data):
+            return {}
+
+        another_tool = Tool(
+            name="another-tool",
+            description="Another tool",
+            execute=another_execute,
+            tags=["other"]
+        )
+
+        agent_with_registry.add_tool(sample_tool)
+        agent_with_registry.add_tool(another_tool)
+
+        tools = agent_with_registry.list_skill_tools(tags=["test"])
+        assert len(tools) == 1
+        assert tools[0].name == "sample-tool"
+
+    def test_list_skill_tools_without_registry(self, agent_without_registry):
+        """Test listing tools without registry returns empty list."""
+        tools = agent_without_registry.list_skill_tools()
+        assert tools == []
+
+    async def test_tool_execution_via_agent(self, agent_with_registry, sample_tool):
+        """Test executing a tool retrieved from the agent."""
+        agent_with_registry.add_tool(sample_tool)
+        tool = agent_with_registry.get_tool("sample-tool")
+        result = await tool({"value": 5})
+        assert result == {"result": 10}

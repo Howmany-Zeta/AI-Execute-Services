@@ -5,6 +5,7 @@ import os
 import warnings
 import hashlib
 import base64
+from datetime import timedelta
 from typing import Dict, Any, Optional, List, AsyncGenerator, Union
 import vertexai
 from vertexai.generative_models import (
@@ -346,15 +347,18 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             # Pattern 1: caching.CachedContent.create() (most common)
             if hasattr(caching, 'CachedContent'):
                 try:
+                    # Convert ttl_seconds to timedelta as required by the API
+                    ttl_delta = timedelta(seconds=ttl_seconds or 3600)  # Default 1 hour
+
                     cached_content = await asyncio.get_event_loop().run_in_executor(
                         None,
                         lambda: caching.CachedContent.create(
-                            model=model_name,
+                            model_name=model_name,  # Correct parameter name
                             contents=[cached_content_obj],
-                            ttl_seconds=ttl_seconds or 3600,  # Default 1 hour
+                            ttl=ttl_delta,  # Use timedelta, not ttl_seconds
                         )
                     )
-                    
+
                     # Extract the resource name
                     if hasattr(cached_content, 'name'):
                         cached_content_id = cached_content.name
@@ -362,13 +366,13 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                         cached_content_id = cached_content.resource_name
                     else:
                         cached_content_id = str(cached_content)
-                    
+
                     if cached_content_id:
                         # Store in cache
                         self._cached_content_cache[cache_key] = cached_content_id
                         self.logger.info(f"Created CachedContent for prompt caching: {cached_content_id}")
                         return cached_content_id
-                        
+
                 except AttributeError as e:
                     self.logger.debug(f"CachedContent.create() signature may differ: {str(e)}")
                 except Exception as e:
