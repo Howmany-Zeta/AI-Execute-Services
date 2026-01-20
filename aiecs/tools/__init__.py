@@ -195,6 +195,8 @@ def _auto_discover_tools():
         ("search_tool", "task"),  # Enhanced search tool
         ("api_sources", "task"),  # API data sources (legacy)
         ("apisource", "task"),  # API Source Tool (new modular version)
+        ("scraper_tool", "task"),  # Scraper Tool (new simplified version)
+        ("knowledge_graph", "knowledge_graph"),  # Knowledge Graph tools
     ]
 
     discovered_tools = []

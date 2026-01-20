@@ -21,7 +21,7 @@ if command -v aiecs-tools-schema-coverage &> /dev/null; then
     fi
     
     # Parse JSON to check if any tools are below threshold
-    python3 << EOF
+    poetry run python << EOF
 import json
 import sys
 
@@ -59,7 +59,7 @@ EOF
 
 else
     # Fallback to Python module
-    python3 -m aiecs.scripts.tools_develop.validate_tool_schemas --min-coverage "$MIN_COVERAGE" --export-coverage /tmp/schema_coverage.json
+    poetry run python -m aiecs.scripts.tools_develop.validate_tool_schemas --min-coverage "$MIN_COVERAGE" --export-coverage /tmp/schema_coverage.json
 fi
 
 echo "✅ Schema coverage check passed!"

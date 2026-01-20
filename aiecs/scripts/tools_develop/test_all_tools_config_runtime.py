@@ -86,7 +86,7 @@ def main():
         ("AIReportOrchestratorTool", "aiecs.tools.statistics.ai_report_orchestrator_tool", "AIReportOrchestratorTool"),
         
         # Task Tools
-        ("ScraperTool", "aiecs.tools.task_tools.scraper_tool", "ScraperTool"),
+        ("ScraperTool", "aiecs.tools.scraper_tool.core", "ScraperTool"),
         ("ImageTool", "aiecs.tools.task_tools.image_tool", "ImageTool"),
         ("OfficeTool", "aiecs.tools.task_tools.office_tool", "OfficeTool"),
         ("ChartTool", "aiecs.tools.task_tools.chart_tool", "ChartTool"),
