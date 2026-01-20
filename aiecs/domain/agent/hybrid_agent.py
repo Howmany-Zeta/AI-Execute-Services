@@ -339,27 +339,12 @@ class HybridAgent(BaseAIAgent):
         # Validate LLM client using BaseAIAgent helper
         self._validate_llm_client()
 
-        # Load tools using BaseAIAgent helper
-        self._load_tools()
-
-        # Get tool instances from BaseAIAgent (if provided as instances)
-        base_tool_instances = self._get_tool_instances()
-
-        if base_tool_instances:
-            # Tool instances were provided - use them directly
-            self._tool_instances = base_tool_instances
-            logger.info(f"HybridAgent {self.agent_id} using " f"{len(self._tool_instances)} pre-configured tool instances")
-        elif self._available_tools:
-            # Tool names were provided - load them
-            self._tool_instances = {}
-            for tool_name in self._available_tools:
-                try:
-                    self._tool_instances[tool_name] = get_tool(tool_name)
-                    logger.debug(f"HybridAgent {self.agent_id} loaded tool: {tool_name}")
-                except Exception as e:
-                    logger.warning(f"Failed to load tool {tool_name}: {e}")
-
-            logger.info(f"HybridAgent {self.agent_id} initialized with {len(self._tool_instances)} tools")
+        # Load tools using shared method from BaseAIAgent
+        self._tool_instances = self._initialize_tools_from_config()
+        logger.info(
+            f"HybridAgent {self.agent_id} initialized with "
+            f"{len(self._tool_instances)} tools"
+        )
 
         # Generate tool schemas for Function Calling
         self._generate_tool_schemas()
@@ -384,29 +369,19 @@ class HybridAgent(BaseAIAgent):
     def _build_system_prompt(self) -> str:
         """Build system prompt including tool descriptions.
 
-        Precedence order for base prompt:
-        1. config.system_prompt - Direct custom prompt (highest priority)
-        2. Assembled from goal/backstory/domain_knowledge
-        3. Default: Empty (ReAct instructions will be added)
+        Uses the shared _build_base_system_prompt() from BaseAIAgent for the base
+        prompt, then appends ReAct instructions and tool info.
 
         Note: ReAct instructions and tool info are always appended regardless
         of whether system_prompt is used, as they're essential for agent operation.
         """
         parts = []
 
-        # 1. Custom system_prompt takes precedence over goal/backstory
-        if self._config.system_prompt:
-            parts.append(self._config.system_prompt)
-        else:
-            # 2. Assemble from individual fields
-            if self._config.goal:
-                parts.append(f"Goal: {self._config.goal}")
-
-            if self._config.backstory:
-                parts.append(f"Background: {self._config.backstory}")
-
-            if self._config.domain_knowledge:
-                parts.append(f"Domain Knowledge: {self._config.domain_knowledge}")
+        # Get base prompt from shared method
+        base_prompt = self._build_base_system_prompt()
+        # Only add if not the default fallback (we want ReAct to be the main instruction)
+        if base_prompt != "You are a helpful AI assistant.":
+            parts.append(base_prompt)
 
         # Add ReAct instructions (always required for HybridAgent)
         parts.append(
@@ -458,13 +433,8 @@ class HybridAgent(BaseAIAgent):
         start_time = datetime.utcnow()
 
         try:
-            # Extract task description
-            task_description = task.get("description") or task.get("prompt") or task.get("task")
-            if not task_description:
-                raise TaskExecutionError(
-                    "Task must contain 'description', 'prompt', or 'task' field",
-                    agent_id=self.agent_id,
-                )
+            # Extract task description using shared method
+            task_description = self._extract_task_description(task)
 
             # Extract images from task dict and merge into context
             task_images = task.get("images")

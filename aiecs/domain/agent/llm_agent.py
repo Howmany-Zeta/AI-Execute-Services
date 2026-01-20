@@ -308,35 +308,9 @@ class LLMAgent(BaseAIAgent):
     def _build_system_prompt(self) -> str:
         """Build system prompt from configuration.
 
-        Precedence order:
-        1. config.system_prompt - Direct custom prompt (highest priority)
-        2. Assembled from goal/backstory/domain_knowledge/reasoning_guidance
-        3. Default fallback: "You are a helpful AI assistant."
+        Uses the shared _build_base_system_prompt() method from BaseAIAgent.
         """
-        # 1. Custom system_prompt takes precedence
-        if self._config.system_prompt:
-            return self._config.system_prompt
-
-        # 2. Assemble from individual fields
-        parts = []
-
-        if self._config.goal:
-            parts.append(f"Goal: {self._config.goal}")
-
-        if self._config.backstory:
-            parts.append(f"Background: {self._config.backstory}")
-
-        if self._config.domain_knowledge:
-            parts.append(f"Domain Knowledge: {self._config.domain_knowledge}")
-
-        if self._config.reasoning_guidance:
-            parts.append(f"Reasoning Approach: {self._config.reasoning_guidance}")
-
-        if parts:
-            return "\n\n".join(parts)
-
-        # 3. Default fallback
-        return "You are a helpful AI assistant."
+        return self._build_base_system_prompt()
 
     async def execute_task(self, task: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -355,13 +329,8 @@ class LLMAgent(BaseAIAgent):
         start_time = datetime.utcnow()
 
         try:
-            # Extract task description
-            task_description = task.get("description") or task.get("prompt") or task.get("task")
-            if not task_description:
-                raise TaskExecutionError(
-                    "Task must contain 'description', 'prompt', or 'task' field",
-                    agent_id=self.agent_id,
-                )
+            # Extract task description using shared method
+            task_description = self._extract_task_description(task)
 
             # Transition to busy state
             self._transition_state(self.state.__class__.BUSY)

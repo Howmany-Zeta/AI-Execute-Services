@@ -920,6 +920,140 @@ class BaseAIAgent(ABC):
         """
         return self._tool_instances
 
+    def _build_base_system_prompt(self) -> str:
+        """
+        Build base system prompt from configuration.
+
+        This shared method builds a system prompt from AgentConfiguration fields.
+        Subclasses can use this directly or extend it with additional instructions.
+
+        Precedence order:
+        1. config.system_prompt - Direct custom prompt (highest priority)
+        2. Assembled from goal/backstory/domain_knowledge/reasoning_guidance
+        3. Default fallback: "You are a helpful AI assistant."
+
+        Returns:
+            Formatted system prompt string
+
+        Example:
+            ```python
+            # In LLMAgent - use directly
+            def _build_system_prompt(self) -> str:
+                return self._build_base_system_prompt()
+
+            # In HybridAgent - extend with ReAct instructions
+            def _build_system_prompt(self) -> str:
+                base = self._build_base_system_prompt()
+                react_instructions = "Follow the ReAct pattern..."
+                return f"{base}\\n\\n{react_instructions}"
+            ```
+        """
+        # 1. Custom system_prompt takes precedence
+        if self._config.system_prompt:
+            return self._config.system_prompt
+
+        # 2. Assemble from individual fields
+        parts = []
+
+        if self._config.goal:
+            parts.append(f"Goal: {self._config.goal}")
+
+        if self._config.backstory:
+            parts.append(f"Background: {self._config.backstory}")
+
+        if self._config.domain_knowledge:
+            parts.append(f"Domain Knowledge: {self._config.domain_knowledge}")
+
+        if self._config.reasoning_guidance:
+            parts.append(f"Reasoning Approach: {self._config.reasoning_guidance}")
+
+        if parts:
+            return "\n\n".join(parts)
+
+        # 3. Default fallback
+        return "You are a helpful AI assistant."
+
+    def _initialize_tools_from_config(self) -> Dict[str, "BaseTool"]:
+        """
+        Initialize and return tool instances from configuration.
+
+        This shared method handles both tool names (List[str]) and tool instances
+        (Dict[str, BaseTool]). It consolidates the tool loading logic used by
+        ToolAgent and HybridAgent.
+
+        Returns:
+            Dictionary of tool name to BaseTool instance
+
+        Example:
+            ```python
+            async def _initialize(self) -> None:
+                # Load tools using shared method
+                self._tool_instances = self._initialize_tools_from_config()
+            ```
+        """
+        from aiecs.tools import get_tool
+
+        # First, call _load_tools to process the tools input
+        self._load_tools()
+
+        # Get tool instances from BaseAIAgent (if provided as instances)
+        base_tool_instances = self._get_tool_instances()
+
+        if base_tool_instances:
+            # Tool instances were provided - use them directly
+            logger.debug(
+                f"Agent {self.agent_id}: Using {len(base_tool_instances)} "
+                "pre-configured tool instances"
+            )
+            return base_tool_instances
+
+        # Tool names were provided - load them
+        tool_instances: Dict[str, "BaseTool"] = {}
+        if self._available_tools:
+            for tool_name in self._available_tools:
+                try:
+                    tool_instances[tool_name] = get_tool(tool_name)
+                    logger.debug(f"Agent {self.agent_id}: Loaded tool: {tool_name}")
+                except Exception as e:
+                    logger.warning(f"Failed to load tool {tool_name}: {e}")
+
+            logger.debug(
+                f"Agent {self.agent_id}: Initialized {len(tool_instances)} tools"
+            )
+
+        return tool_instances
+
+    def _extract_task_description(self, task: Dict[str, Any]) -> str:
+        """
+        Extract task description from task dictionary.
+
+        This shared method extracts the task description from various possible
+        field names, providing a unified interface for all agent types.
+
+        Args:
+            task: Task specification dictionary
+
+        Returns:
+            Extracted task description string
+
+        Raises:
+            TaskExecutionError: If no description field is found
+
+        Example:
+            ```python
+            async def execute_task(self, task, context):
+                description = self._extract_task_description(task)
+                # Use description for task execution
+            ```
+        """
+        description = task.get("description") or task.get("prompt") or task.get("task")
+        if not description:
+            raise TaskExecutionError(
+                "Task must contain 'description', 'prompt', or 'task' field",
+                agent_id=self.agent_id,
+            )
+        return description
+
     def get_config_manager(self) -> Optional["ConfigManagerProtocol"]:
         """
         Get the configuration manager.
