@@ -162,7 +162,7 @@ def analyze_tool_schemas(tool_name: str, tool_class: Type) -> Dict[str, Any]:
             continue
 
         # 跳过基类方法
-        if method_name in ["run", "run_async", "run_batch"]:
+        if method_name in ["run", "run_async", "run_batch", "close", "get_schema_coverage"]:
             continue
 
         method = getattr(tool_class, method_name)

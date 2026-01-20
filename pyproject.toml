@@ -130,6 +130,8 @@ dependencies = [
     "beautifulsoup4 (>=4.13.4,<5.0.0)",             # HTML/XML parsing library
     "lxml (>=5.4.0,<6.0.0)",                        # Fast XML and HTML processing
     "playwright (>=1.52.0,<2.0.0)",                 # Browser automation for dynamic content
+    "playwright-stealth>=1.0.6,<2.0.0",             # Stealth mode for Playwright to avoid bot detection
+    "curl_cffi (>=0.7.0,<1.0.0)",                   # HTTP client with TLS fingerprint simulation
     "pytesseract (>=0.3.13,<0.4.0)",                # OCR (Optical Character Recognition) wrapper
     "pillow (>=11.2.1,<12.0.0)",                    # Image processing library (PIL fork)
     "scrapy (>=2.13.3,<3.0.0)",                     # Web scraping framework
@@ -188,9 +190,6 @@ docs = [
     "sphinx-autodoc-typehints>=2.0.0,<3.0.0",
     "myst-parser>=2.0.0,<3.0.0",
     "sphinx-copybutton>=0.5.0,<1.0.0",
-]
-scraper = [
-    "playwright-stealth>=1.0.6,<2.0.0",  # Stealth mode for Playwright to avoid bot detection
 ]
 
 [project.scripts]

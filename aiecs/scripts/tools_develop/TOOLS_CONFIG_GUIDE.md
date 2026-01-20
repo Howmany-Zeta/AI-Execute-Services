@@ -1180,45 +1180,99 @@ export RESEARCH_TOOL_SPACY_MODEL=<value>
 
 ## ScraperTool
 
-**配置字段数**: 8 (必需: 8, 可选: 0)
+**配置字段数**: 10 (必需: 0, 可选: 10)
 
 | 字段名 | 类型 | 必需 | 默认值 | 说明 |
 |--------|------|------|--------|------|
-| `Example` | SCRAPER_TOOL_USER_AGENT -> user_agent | ✅ | `-` | - |
-| `allowed_domains` | List[str] | ✅ | `[]` | Allowed domains for scraping |
-| `blocked_domains` | List[str] | ✅ | `[]` | Blocked domains for scraping |
-| `max_content_length` | int | ✅ | `-` | - |
-| `output_dir` | str | ✅ | `-` | - |
-| `playwright_available` | bool | ✅ | `-` | - |
-| `scrapy_command` | str | ✅ | `"scrapy"` | Command to run Scrapy |
-| `user_agent` | str | ✅ | `-` | - |
+| `timeout` | int | 🟢 | `30` | Request timeout in seconds |
+| `max_retries` | int | 🟢 | `3` | Max retry attempts |
+| `impersonate` | str | 🟢 | `"chrome120"` | Browser to impersonate (curl_cffi) |
+| `proxy` | Optional[str] | 🟢 | `None` | Proxy URL |
+| `requests_per_minute` | int | 🟢 | `30` | Max requests per minute per domain |
+| `circuit_breaker_threshold` | int | 🟢 | `5` | Failures before circuit opens |
+| `enable_cache` | bool | 🟢 | `True` | Enable response caching |
+| `cache_ttl` | int | 🟢 | `3600` | Default cache TTL in seconds |
+| `redis_url` | Optional[str] | 🟢 | `None` | Redis URL for distributed cache |
+| `enable_js_render` | bool | 🟢 | `False` | Enable Playwright for JS pages |
+| `use_stealth` | bool | 🟢 | `True` | Use stealth mode for rendering |
 
 ### 配置示例
 
 ```python
 scrapertool_config = {
-    'Example': None,
-    'allowed_domains': [],  # Allowed domains for scraping
-    'blocked_domains': [],  # Blocked domains for scraping
-    'max_content_length': 0,
-    'output_dir': "your_output_dir",
-    'playwright_available': False,
-    'scrapy_command': "scrapy",  # Command to run Scrapy
-    'user_agent': "your_user_agent",
+    'timeout': 30,  # Request timeout in seconds
+    'max_retries': 3,  # Max retry attempts
+    'impersonate': "chrome120",  # Browser to impersonate (curl_cffi)
+    'proxy': None,  # Proxy URL (optional)
+    'requests_per_minute': 30,  # Max requests per minute per domain
+    'circuit_breaker_threshold': 5,  # Failures before circuit opens
+    'enable_cache': True,  # Enable response caching
+    'cache_ttl': 3600,  # Default cache TTL in seconds
+    'redis_url': None,  # Redis URL for distributed cache (optional)
+    'enable_js_render': False,  # Enable Playwright for JS pages
+    'use_stealth': True,  # Use stealth mode for rendering
 }
 ```
 
 ### 环境变量映射
 
 ```bash
-export SCRAPER_TOOL_EXAMPLE=<value>
-export SCRAPER_TOOL_ALLOWED_DOMAINS=<value>
-export SCRAPER_TOOL_BLOCKED_DOMAINS=<value>
-export SCRAPER_TOOL_MAX_CONTENT_LENGTH=<value>
-export SCRAPER_TOOL_OUTPUT_DIR=<value>
-export SCRAPER_TOOL_PLAYWRIGHT_AVAILABLE=<value>
-export SCRAPER_TOOL_SCRAPY_COMMAND=<value>
-export SCRAPER_TOOL_USER_AGENT=<value>
+export SCRAPER_TOOL_TIMEOUT=30
+export SCRAPER_TOOL_MAX_RETRIES=3
+export SCRAPER_TOOL_IMPERSONATE=chrome120
+export SCRAPER_TOOL_PROXY=http://proxy:8080  # Optional
+export SCRAPER_TOOL_REQUESTS_PER_MINUTE=30
+export SCRAPER_TOOL_CIRCUIT_BREAKER_THRESHOLD=5
+export SCRAPER_TOOL_ENABLE_CACHE=true
+export SCRAPER_TOOL_CACHE_TTL=3600
+export SCRAPER_TOOL_REDIS_URL=redis://localhost:6379  # Optional
+export SCRAPER_TOOL_ENABLE_JS_RENDER=false
+export SCRAPER_TOOL_USE_STEALTH=true
+```
+
+### 使用说明
+
+ScraperTool 是一个简化的网页抓取工具，专为AI代理设计。
+
+**主要功能**：
+- ✅ HTTP请求（使用curl_cffi进行TLS指纹模拟）
+- ✅ HTML解析和元数据提取
+- ✅ 速率限制和熔断器保护
+- ✅ 响应缓存（内存或Redis）
+- ✅ JavaScript渲染（可选，需要Playwright）
+- ✅ 反检测机制（Stealth模式）
+
+**AI调用示例**：
+```python
+from aiecs.tools.scraper_tool import ScraperTool
+
+tool = ScraperTool()
+
+# 基础抓取
+result = await tool.fetch("https://example.com")
+
+# 带需求的抓取
+result = await tool.fetch(
+    url="https://example.com",
+    requirements="Extract the main article title and content"
+)
+```
+
+**返回结构**：
+```python
+{
+    "success": True,
+    "url": "https://example.com",
+    "title": "Example Domain",
+    "content": "<html>...</html>",
+    "extracted_data": {
+        "metadata": {...},
+        "text_preview": "...",
+        "links_count": 5,
+        "requirements": "..."
+    },
+    "cached": False
+}
 ```
 
 ---

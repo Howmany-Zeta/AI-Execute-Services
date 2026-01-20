@@ -11,12 +11,12 @@ This module contains specialized tools for various task-oriented operations:
 - pandas_tool: Data analysis and manipulation operations
 - report_tool: Report generation and formatting operations
 - research_tool: Research and information gathering operations
-- scraper_tool: Web scraping and data extraction operations
 - stats_tool: Statistical analysis and computation operations
 
 Note:
 - apisource_tool is now a standalone package at aiecs.tools.apisource
 - search_tool is now a standalone package at aiecs.tools.search_tool
+- scraper_tool is now a standalone package at aiecs.tools.scraper_tool
 """
 
 # Lazy import all task tools to avoid heavy dependencies at import time
@@ -30,7 +30,6 @@ _AVAILABLE_TOOLS = [
     "pandas_tool",
     "report_tool",
     "research_tool",
-    "scraper_tool",
     "stats_tool",
 ]
 
@@ -70,8 +69,6 @@ def _lazy_load_tool(tool_name: str):
         elif tool_name == "report_tool":
             pass
         elif tool_name == "research_tool":
-            pass
-        elif tool_name == "scraper_tool":
             pass
         elif tool_name == "stats_tool":
             pass
