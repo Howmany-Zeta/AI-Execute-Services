@@ -309,8 +309,17 @@ class LLMAgent(BaseAIAgent):
         """Build system prompt from configuration.
 
         Uses the shared _build_base_system_prompt() method from BaseAIAgent.
+        If skills are enabled and attached, appends skill context to the prompt.
         """
-        return self._build_base_system_prompt()
+        base_prompt = self._build_base_system_prompt()
+
+        # Add skill context if skills are enabled and attached
+        if self._config.skills_enabled and self._attached_skills:
+            skill_context = self.get_skill_context(include_all_skills=True)
+            if skill_context:
+                base_prompt = f"{base_prompt}\n\n{skill_context}"
+
+        return base_prompt
 
     async def execute_task(self, task: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -608,6 +617,21 @@ class LLMAgent(BaseAIAgent):
             # Limit history to prevent token overflow
             max_history = 10  # Keep last 10 exchanges
             messages.extend(self._conversation_history[-max_history:])
+
+        # Add request-specific skill context if skills are enabled
+        # This provides skills matched to the specific user message
+        if self._config.skills_enabled and self._attached_skills:
+            skill_context = self.get_skill_context(
+                request=user_message,
+                include_all_skills=False,  # Only include matched skills
+            )
+            if skill_context:
+                messages.append(
+                    LLMMessage(
+                        role="system",
+                        content=f"Relevant Skills:\n{skill_context}",
+                    )
+                )
 
         # Add additional context if provided
         if context:

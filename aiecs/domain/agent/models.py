@@ -268,6 +268,32 @@ class AgentConfiguration(BaseModel):
         description="Entity extraction provider: 'llm' (LLM-based extraction), 'ner' (Named Entity Recognition), or custom provider name",
     )
 
+    # Skill configuration
+    skills_enabled: bool = Field(
+        default=False,
+        description="Enable skill support for the agent. When True, the agent can attach and use skills.",
+    )
+    skill_names: List[str] = Field(
+        default_factory=list,
+        description="List of skill names to attach on initialization. Skills are loaded from the skill registry.",
+    )
+    skill_auto_register_tools: bool = Field(
+        default=False,
+        description="When True, skill scripts are automatically registered as tools for LLM-driven execution. "
+        "When False (default), scripts are available via context injection only.",
+    )
+    skill_inject_script_paths: bool = Field(
+        default=True,
+        description="When True (default), skill script paths are included in context injection. "
+        "When False, only skill knowledge is injected without script details.",
+    )
+    skill_context_max_skills: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Maximum number of skills to include in context per request (default: 3).",
+    )
+
     # Metadata
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional configuration metadata")
 
