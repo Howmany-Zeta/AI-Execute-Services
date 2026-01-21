@@ -609,19 +609,22 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                     model_name=model_name,
                     ttl_seconds=ttl_seconds,
                 )
-                if cached_content_id:
-                    self.logger.debug(f"Using CachedContent for prompt caching: {cached_content_id}")
-                    # When using CachedContent, we don't pass system_instruction to GenerativeModel
-                    # Instead, we'll pass cached_content_id to generate_content
-                    final_system_instruction = None
 
-            # Initialize model WITH system instruction for prompt caching support
-            # Note: If using CachedContent, system_instruction will be None
-            model_instance = GenerativeModel(
-                model_name,
-                system_instruction=final_system_instruction
-            )
-            self.logger.debug(f"Initialized Vertex AI model: {model_name}")
+            # Initialize model instance
+            # If using CachedContent, create model from cached content
+            # Otherwise, create model with system instruction
+            if cached_content_id:
+                self.logger.debug(f"Using CachedContent for prompt caching: {cached_content_id}")
+                # Use GenerativeModel.from_cached_content() to create model instance
+                model_instance = GenerativeModel.from_cached_content(cached_content_id)
+                self.logger.debug(f"Initialized Vertex AI model from cached content: {model_name}")
+            else:
+                # Initialize model WITH system instruction
+                model_instance = GenerativeModel(
+                    model_name,
+                    system_instruction=final_system_instruction
+                )
+                self.logger.debug(f"Initialized Vertex AI model: {model_name}")
 
             # Convert messages to Vertex AI format
             if len(user_messages) == 1 and user_messages[0].role == "user":
@@ -681,24 +684,23 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                     tools_for_api = google_tools
             
             # Build API call parameters
+            # Note: When using cached_content, the model instance is already created
+            # from the cached content, so we don't pass cached_content as a parameter
+            # IMPORTANT: When using cached content, tools/tool_config/system_instruction must be None
+            # because they are already included in the cached content
             api_params = {
                 "contents": contents,
                 "generation_config": generation_config,
                 "safety_settings": safety_settings,
             }
-            
-            # Add cached_content if using CachedContent API for prompt caching
-            if cached_content_id:
-                api_params["cached_content"] = cached_content_id
-                self.logger.debug(f"Added cached_content to API params: {cached_content_id}")
-            
-            # Add tools if available
-            if tools_for_api:
+
+            # Add tools if available (but NOT when using cached content)
+            if tools_for_api and not cached_content_id:
                 api_params["tools"] = tools_for_api
-            
-            # Add any additional kwargs (but exclude tools/safety_settings/cached_content to avoid conflicts)
+
+            # Add any additional kwargs (but exclude tools/safety_settings to avoid conflicts)
             for key, value in kwargs.items():
-                if key not in ["tools", "safety_settings", "cached_content"]:
+                if key not in ["tools", "safety_settings"]:
                     api_params[key] = value
             
             response = await asyncio.get_event_loop().run_in_executor(
@@ -1028,19 +1030,22 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                     model_name=model_name,
                     ttl_seconds=ttl_seconds,
                 )
-                if cached_content_id:
-                    self.logger.debug(f"Using CachedContent for prompt caching in streaming: {cached_content_id}")
-                    # When using CachedContent, we don't pass system_instruction to GenerativeModel
-                    # Instead, we'll pass cached_content_id to generate_content
-                    final_system_instruction = None
 
-            # Initialize model WITH system instruction for prompt caching support
-            # Note: If using CachedContent, system_instruction will be None
-            model_instance = GenerativeModel(
-                model_name,
-                system_instruction=final_system_instruction
-            )
-            self.logger.debug(f"Initialized Vertex AI model for streaming: {model_name}")
+            # Initialize model instance
+            # If using CachedContent, create model from cached content
+            # Otherwise, create model with system instruction
+            if cached_content_id:
+                self.logger.debug(f"Using CachedContent for prompt caching in streaming: {cached_content_id}")
+                # Use GenerativeModel.from_cached_content() to create model instance
+                model_instance = GenerativeModel.from_cached_content(cached_content_id)
+                self.logger.debug(f"Initialized Vertex AI model from cached content for streaming: {model_name}")
+            else:
+                # Initialize model WITH system instruction
+                model_instance = GenerativeModel(
+                    model_name,
+                    system_instruction=final_system_instruction
+                )
+                self.logger.debug(f"Initialized Vertex AI model for streaming: {model_name}")
 
             # Convert messages to Vertex AI format
             if len(user_messages) == 1 and user_messages[0].role == "user":
@@ -1098,21 +1103,19 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             
             # Use mixin method for Function Calling support
             from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
-            
-            # Add cached_content to kwargs if using CachedContent API
-            stream_kwargs = kwargs.copy()
-            if cached_content_id:
-                stream_kwargs["cached_content"] = cached_content_id
-                self.logger.debug(f"Added cached_content to streaming API params: {cached_content_id}")
-            
+
+            # Note: When using cached_content, the model instance is already created
+            # from the cached content, so we don't pass cached_content as a parameter
+            # IMPORTANT: When using cached content, tools/tool_config/system_instruction must be None
+            # because they are already included in the cached content
             async for chunk in self._stream_text_with_function_calling(
                 model_instance=model_instance,
                 contents=contents,
                 generation_config=generation_config,
                 safety_settings=safety_settings,
-                tools=tools_for_api,
+                tools=None if cached_content_id else tools_for_api,
                 return_chunks=return_chunks,
-                **stream_kwargs,
+                **kwargs,
             ):
                 # Yield chunk (can be str or StreamChunk)
                 yield chunk
