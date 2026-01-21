@@ -278,6 +278,35 @@ AIECS comes with a comprehensive set of pre-built tools:
 - **Research Tools**: Academic research, report generation
 - **Chart Generation**: Data visualization tools
 
+## Agent Skills
+
+AIECS includes an Agent Skills Extension that provides modular, reusable knowledge packages for agents. Skills enable agents to dynamically acquire specialized knowledge and capabilities.
+
+### Key Features
+
+- **Progressive Disclosure**: Metadata loads instantly, content loads on demand
+- **Auto-Discovery**: Automatically find and load skills from configured directories
+- **Script Execution**: Run skill scripts in native Python or subprocess modes
+- **Tool Recommendations**: Skills can recommend tools for specific tasks
+
+### Quick Example
+
+```python
+from aiecs.domain.agent.skills import SkillCapableMixin, SkillRegistry
+
+class MyAgent(SkillCapableMixin, BaseAIAgent):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__init_skills__(skill_registry=SkillRegistry.get_instance())
+
+# Attach skills and get context
+agent = MyAgent(name="assistant", llm_client=client)
+agent.attach_skills(["python-coding", "data-analysis"])
+context = agent.get_skill_context()
+```
+
+For detailed documentation, see [Agent Skills Documentation](docs/agent_skills/README.md).
+
 ## Architecture
 
 AIECS follows a clean architecture pattern with clear separation of concerns:

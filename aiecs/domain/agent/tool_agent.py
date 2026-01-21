@@ -367,6 +367,24 @@ class ToolAgent(BaseAIAgent):
             )
 
             if use_llm_mode:
+                # Extract images from task dict and merge into context
+                task_images = task.get("images")
+                if task_images:
+                    # Merge images from task into context
+                    # If context already has images, combine them
+                    if "images" in context:
+                        existing_images = context["images"]
+                        if isinstance(existing_images, list) and isinstance(task_images, list):
+                            context["images"] = existing_images + task_images
+                        elif isinstance(existing_images, list):
+                            context["images"] = existing_images + [task_images]
+                        elif isinstance(task_images, list):
+                            context["images"] = [existing_images] + task_images
+                        else:
+                            context["images"] = [existing_images, task_images]
+                    else:
+                        context["images"] = task_images
+
                 # LLM-powered Function Calling mode
                 return await self._execute_with_llm(task, context, start_time)
 
@@ -566,6 +584,9 @@ class ToolAgent(BaseAIAgent):
 
         If skills are enabled and attached, request-specific skill context is added
         to help guide tool selection for the specific user request.
+
+        Supports conversation history via context['history'] and images via context['images'].
+        History format matches HybridAgent implementation for consistency.
         """
         messages = []
 
@@ -580,11 +601,62 @@ class ToolAgent(BaseAIAgent):
                 LLMMessage(role="system", content=self._system_prompt, cache_control=cache_control)
             )
 
+        # Collect images from context to attach to user message
+        user_message_images = []
+
         # Add context if provided
         if context:
-            context_str = self._format_context(context)
-            if context_str:
-                messages.append(LLMMessage(role="system", content=f"Context:\n{context_str}"))
+            # Special handling: if context contains 'history' as a list of messages,
+            # add them as separate user/assistant messages instead of formatting
+            history = context.get("history")
+            if isinstance(history, list) and len(history) > 0:
+                # Check if history contains message-like dictionaries
+                for msg in history:
+                    if isinstance(msg, dict) and "role" in msg and "content" in msg:
+                        # Valid message format - add as separate message
+                        # Extract images if present
+                        msg_images = msg.get("images", [])
+                        if msg_images:
+                            messages.append(
+                                LLMMessage(
+                                    role=msg["role"],
+                                    content=msg["content"],
+                                    images=msg_images if isinstance(msg_images, list) else [msg_images],
+                                )
+                            )
+                        else:
+                            messages.append(
+                                LLMMessage(
+                                    role=msg["role"],
+                                    content=msg["content"],
+                                )
+                            )
+                    elif isinstance(msg, LLMMessage):
+                        # Already an LLMMessage instance (may already have images)
+                        messages.append(msg)
+
+            # Extract images from context if present
+            context_images = context.get("images")
+            if context_images:
+                if isinstance(context_images, list):
+                    user_message_images.extend(context_images)
+                else:
+                    user_message_images.append(context_images)
+
+            # Format remaining context fields (excluding history and images) as Additional Context
+            context_without_history = {
+                k: v for k, v in context.items()
+                if k not in ("history", "images")
+            }
+            if context_without_history:
+                context_str = self._format_context(context_without_history)
+                if context_str:
+                    messages.append(
+                        LLMMessage(
+                            role="system",
+                            content=f"Additional Context:\n{context_str}",
+                        )
+                    )
 
         # Add request-specific skill context if skills are enabled
         # This provides skills matched to the specific user request for tool selection
@@ -601,8 +673,14 @@ class ToolAgent(BaseAIAgent):
                     )
                 )
 
-        # Add user message
-        messages.append(LLMMessage(role="user", content=user_message))
+        # Add user message with images if present
+        messages.append(
+            LLMMessage(
+                role="user",
+                content=user_message,
+                images=user_message_images if user_message_images else [],
+            )
+        )
 
         return messages
 
@@ -706,6 +784,24 @@ class ToolAgent(BaseAIAgent):
                     "timestamp": datetime.utcnow().isoformat(),
                 }
                 return
+
+            # Extract images from task dict and merge into context
+            task_images = task.get("images")
+            if task_images:
+                # Merge images from task into context
+                # If context already has images, combine them
+                if "images" in context:
+                    existing_images = context["images"]
+                    if isinstance(existing_images, list) and isinstance(task_images, list):
+                        context["images"] = existing_images + task_images
+                    elif isinstance(existing_images, list):
+                        context["images"] = existing_images + [task_images]
+                    elif isinstance(task_images, list):
+                        context["images"] = [existing_images] + task_images
+                    else:
+                        context["images"] = [existing_images, task_images]
+                else:
+                    context["images"] = task_images
 
             # LLM streaming mode
             async for event in self._execute_with_llm_streaming(task, context, start_time):
