@@ -152,7 +152,7 @@ class SkillLoader:
         Raises:
             SkillLoadError: If required fields are missing
         """
-        required_fields = ['name', 'description', 'version']
+        required_fields = ['name', 'description']  # version is optional with default
         missing = [f for f in required_fields if f not in metadata_dict]
         if missing:
             raise SkillLoadError(f"Missing required fields: {missing}")
@@ -161,7 +161,7 @@ class SkillLoader:
             return SkillMetadata(
                 name=metadata_dict['name'],
                 description=metadata_dict['description'],
-                version=metadata_dict['version'],
+                version=metadata_dict.get('version', '1.0.0'),  # Default version
                 author=metadata_dict.get('author'),
                 tags=metadata_dict.get('tags'),
                 dependencies=metadata_dict.get('dependencies'),

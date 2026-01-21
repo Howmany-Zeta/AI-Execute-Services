@@ -15,11 +15,11 @@ import re
 class SkillMetadata:
     """
     Metadata for a skill extracted from YAML frontmatter.
-    
+
     Attributes:
         name: Unique skill identifier (kebab-case)
         description: Brief description for skill triggering
-        version: Semantic version (e.g., "1.0.0")
+        version: Semantic version (e.g., "1.0.0"), defaults to "1.0.0" if not specified
         author: Optional author information
         tags: Optional tags for categorization
         dependencies: Optional list of required skills
@@ -27,12 +27,12 @@ class SkillMetadata:
     """
     name: str
     description: str
-    version: str
+    version: str = "1.0.0"  # Default version for backward compatibility
     author: Optional[str] = None
     tags: Optional[List[str]] = None
     dependencies: Optional[List[str]] = None
     recommended_tools: Optional[List[str]] = None
-    
+
     def __post_init__(self):
         """Validate metadata fields."""
         # Validate name is kebab-case
@@ -40,7 +40,7 @@ class SkillMetadata:
             raise ValueError(
                 f"Skill name must be kebab-case (lowercase with hyphens): {self.name}"
             )
-        
+
         # Validate version is semver-like
         if not re.match(r'^\d+\.\d+\.\d+', self.version):
             raise ValueError(
