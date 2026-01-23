@@ -46,22 +46,35 @@ def pytest_configure(config):
 
 @pytest.fixture(scope="session", autouse=True)
 def load_env_config():
-    """Load environment variables from .env.apisource"""
-    env_file = Path(__file__).parent.parent.parent.parent.parent / '.env.apisource'
-    
+    """Load environment variables from .env.apisource and .env.test"""
+    root_path = Path(__file__).parent.parent.parent.parent.parent
+
+    # Try .env.apisource first
+    env_file = root_path / '.env.apisource'
     if env_file.exists():
         load_dotenv(env_file)
         logger.info(f"✓ Loaded environment from {env_file}")
     else:
         logger.warning(f"⚠ Environment file not found: {env_file}")
+
+    # Also load .env.test (will override .env.apisource if both exist)
+    env_test_file = root_path / '.env.test'
+    if env_test_file.exists():
+        load_dotenv(env_test_file, override=True)
+        logger.info(f"✓ Loaded environment from {env_test_file}")
+    else:
+        logger.warning(f"⚠ Environment file not found: {env_test_file}")
+
+    if not env_file.exists() and not env_test_file.exists():
         logger.warning("  Some tests may fail without API keys")
-    
+
     # Log configuration (without exposing keys)
     logger.info("Environment Configuration:")
     logger.info(f"  - FRED_API_KEY: {'✓ Set' if os.getenv('FRED_API_KEY') else '✗ Not set'}")
     logger.info(f"  - NEWSAPI_API_KEY: {'✓ Set' if os.getenv('NEWSAPI_API_KEY') else '✗ Not set'}")
     logger.info(f"  - CENSUS_API_KEY: {'✓ Set' if os.getenv('CENSUS_API_KEY') else '✗ Not set'}")
     logger.info(f"  - ALPHAVANTAGE_API_KEY: {'✓ Set' if os.getenv('ALPHAVANTAGE_API_KEY') else '✗ Not set'}")
+    logger.info(f"  - EXCHANGERATE_API_KEY: {'✓ Set' if os.getenv('EXCHANGERATE_API_KEY') else '✗ Not set'}")
     logger.info(f"  - DEBUG_MODE: {os.getenv('DEBUG_MODE', 'false')}")
     logger.info(f"  - VERBOSE_API_CALLS: {os.getenv('VERBOSE_API_CALLS', 'false')}")
 
@@ -151,6 +164,17 @@ def restcountries_config() -> Dict[str, Any]:
         'timeout': int(os.getenv('RESTCOUNTRIES_TIMEOUT', '30')),
         'rate_limit': int(os.getenv('RESTCOUNTRIES_RATE_LIMIT', '10')),
         'max_burst': int(os.getenv('RESTCOUNTRIES_MAX_BURST', '20')),
+    }
+
+
+@pytest.fixture
+def exchangerate_config(api_keys) -> Dict[str, Any]:
+    """Configuration for ExchangeRate-API provider (API key optional)"""
+    return {
+        'api_key': os.getenv('EXCHANGERATE_API_KEY'),  # Optional - free tier works without key
+        'timeout': int(os.getenv('EXCHANGERATE_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('EXCHANGERATE_RATE_LIMIT', '10')),
+        'max_burst': int(os.getenv('EXCHANGERATE_MAX_BURST', '20')),
     }
 
 
