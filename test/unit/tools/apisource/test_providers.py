@@ -31,6 +31,8 @@ from aiecs.tools.apisource.providers.alphavantage import AlphaVantageProvider
 from aiecs.tools.apisource.providers.restcountries import RESTCountriesProvider
 from aiecs.tools.apisource.providers.exchangerate import ExchangeRateProvider
 from aiecs.tools.apisource.providers.openlibrary import OpenLibraryProvider
+from aiecs.tools.apisource.providers.coingecko import CoinGeckoProvider
+from aiecs.tools.apisource.providers.openweathermap import OpenWeatherMapProvider
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +57,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary']
+        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -1790,4 +1792,265 @@ class TestOpenLibraryProvider:
         debug_output("Open Library search_books Schema", schema)
 
         print("✓ Operation schema retrieved successfully")
+
+
+class TestCoinGeckoProvider:
+    """Test CoinGecko API provider"""
+
+    def test_provider_metadata(self, coingecko_config, debug_output):
+        """Test CoinGecko provider metadata"""
+        print("\n=== Testing CoinGecko Provider Metadata ===")
+
+        provider = CoinGeckoProvider(coingecko_config)
+
+        assert provider.name == 'coingecko'
+        assert provider.description
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+
+        debug_output("CoinGecko Metadata", {
+            'name': metadata['name'],
+            'description': metadata['description'],
+            'operations': metadata['operations'],
+        })
+
+        print("✓ CoinGecko metadata retrieved successfully")
+
+    @pytest.mark.network
+    def test_get_coin_price(self, coingecko_config, debug_output, measure_performance):
+        """Test CoinGecko get_coin_price operation"""
+        print("\n=== Testing CoinGecko get_coin_price ===")
+
+        provider = CoinGeckoProvider(coingecko_config)
+
+        measure_performance.start()
+        result = provider.get_coin_price(
+            ids='bitcoin,ethereum',
+            vs_currencies='usd,eur'
+        )
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'bitcoin' in result
+        assert 'ethereum' in result
+        assert 'usd' in result['bitcoin']
+        assert 'eur' in result['bitcoin']
+
+        debug_output("CoinGecko Coin Prices", {
+            'bitcoin_usd': result['bitcoin']['usd'],
+            'ethereum_usd': result['ethereum']['usd'],
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("CoinGecko get_coin_price")
+        print("✓ Retrieved coin prices successfully")
+
+    @pytest.mark.network
+    def test_get_trending_coins(self, coingecko_config, debug_output, measure_performance):
+        """Test CoinGecko get_trending_coins operation"""
+        print("\n=== Testing CoinGecko get_trending_coins ===")
+
+        provider = CoinGeckoProvider(coingecko_config)
+
+        measure_performance.start()
+        result = provider.get_trending_coins()
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'coins' in result
+
+        debug_output("CoinGecko Trending Coins", {
+            'trending_count': len(result['coins']),
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("CoinGecko get_trending_coins")
+        print("✓ Retrieved trending coins successfully")
+
+    @pytest.mark.network
+    def test_search_coins(self, coingecko_config, debug_output):
+        """Test CoinGecko search_coins operation"""
+        print("\n=== Testing CoinGecko search_coins ===")
+
+        provider = CoinGeckoProvider(coingecko_config)
+
+        result = provider.search_coins(query='bitcoin')
+
+        assert result is not None
+        assert 'coins' in result
+        assert len(result['coins']) > 0
+
+        debug_output("CoinGecko Search Results", {
+            'query': 'bitcoin',
+            'results_count': len(result['coins']),
+        })
+
+        print("✓ Search executed successfully")
+
+    def test_validate_params(self, coingecko_config):
+        """Test CoinGecko parameter validation"""
+        print("\n=== Testing CoinGecko Parameter Validation ===")
+
+        provider = CoinGeckoProvider(coingecko_config)
+
+        # Valid params
+        is_valid, error = provider.validate_params('get_coin_price', {
+            'ids': 'bitcoin',
+            'vs_currencies': 'usd'
+        })
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params - missing ids
+        is_valid, error = provider.validate_params('get_coin_price', {
+            'vs_currencies': 'usd'
+        })
+        assert is_valid is False
+        assert error is not None
+        assert 'ids' in error
+
+        # Invalid params - missing vs_currencies
+        is_valid, error = provider.validate_params('get_coin_price', {
+            'ids': 'bitcoin'
+        })
+        assert is_valid is False
+        assert error is not None
+        assert 'vs_currencies' in error
+
+        print("✓ Parameter validation working correctly")
+
+
+class TestOpenWeatherMapProvider:
+    """Test OpenWeatherMap API provider"""
+
+    def test_provider_metadata(self, openweathermap_config, debug_output):
+        """Test OpenWeatherMap provider metadata"""
+        print("\n=== Testing OpenWeatherMap Provider Metadata ===")
+
+        provider = OpenWeatherMapProvider(openweathermap_config)
+
+        assert provider.name == 'openweathermap'
+        assert provider.description
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+
+        debug_output("OpenWeatherMap Metadata", {
+            'name': metadata['name'],
+            'description': metadata['description'],
+            'operations': metadata['operations'],
+        })
+
+        print("✓ OpenWeatherMap metadata retrieved successfully")
+
+    @pytest.mark.network
+    def test_get_current_weather(self, openweathermap_config, skip_if_no_api_key, debug_output, measure_performance):
+        """Test OpenWeatherMap get_current_weather operation"""
+        skip_if_no_api_key('openweathermap')
+        print("\n=== Testing OpenWeatherMap get_current_weather ===")
+
+        provider = OpenWeatherMapProvider(openweathermap_config)
+
+        measure_performance.start()
+        result = provider.get_current_weather(
+            appid=openweathermap_config.get('api_key', 'test'),
+            q='London,UK',
+            units='metric'
+        )
+        duration = measure_performance.stop()
+
+        assert result is not None
+        if 'error' not in result:
+            assert 'main' in result
+            assert 'temp' in result['main']
+            assert 'weather' in result
+
+            debug_output("OpenWeatherMap Current Weather", {
+                'location': 'London,UK',
+                'temperature': result['main']['temp'],
+                'weather': result['weather'][0]['description'] if result['weather'] else 'N/A',
+                'duration_seconds': duration,
+            })
+
+            measure_performance.print_result("OpenWeatherMap get_current_weather")
+            print("✓ Retrieved current weather successfully")
+        else:
+            print(f"⚠️  API key required or rate limited: {result.get('error')}")
+
+    @pytest.mark.network
+    def test_geocode_location(self, openweathermap_config, skip_if_no_api_key, debug_output):
+        """Test OpenWeatherMap geocode_location operation"""
+        skip_if_no_api_key('openweathermap')
+        print("\n=== Testing OpenWeatherMap geocode_location ===")
+
+        provider = OpenWeatherMapProvider(openweathermap_config)
+
+        result = provider.geocode_location(
+            appid=openweathermap_config.get('api_key', 'test'),
+            q='London,UK',
+            limit=5
+        )
+
+        assert result is not None
+        if 'error' not in result and isinstance(result, list):
+            assert len(result) > 0
+            first_result = result[0]
+            assert 'lat' in first_result
+            assert 'lon' in first_result
+            assert 'name' in first_result
+
+            debug_output("OpenWeatherMap Geocoding", {
+                'query': 'London,UK',
+                'results_count': len(result),
+                'first_result': {
+                    'name': first_result['name'],
+                    'lat': first_result['lat'],
+                    'lon': first_result['lon'],
+                },
+            })
+
+            print("✓ Geocoding executed successfully")
+        else:
+            print(f"⚠️  API key required or rate limited")
+
+    def test_validate_params(self, openweathermap_config):
+        """Test OpenWeatherMap parameter validation"""
+        print("\n=== Testing OpenWeatherMap Parameter Validation ===")
+
+        provider = OpenWeatherMapProvider(openweathermap_config)
+
+        # Valid params with city
+        is_valid, error = provider.validate_params('get_current_weather', {
+            'appid': 'test_key',
+            'q': 'London'
+        })
+        assert is_valid is True
+        assert error is None
+
+        # Valid params with coordinates
+        is_valid, error = provider.validate_params('get_current_weather', {
+            'appid': 'test_key',
+            'lat': 51.5074,
+            'lon': -0.1278
+        })
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params - missing API key
+        is_valid, error = provider.validate_params('get_current_weather', {
+            'q': 'London'
+        })
+        assert is_valid is False
+        assert error is not None
+        assert 'appid' in error
+
+        # Invalid params - missing location
+        is_valid, error = provider.validate_params('get_current_weather', {
+            'appid': 'test_key'
+        })
+        assert is_valid is False
+        assert error is not None
+
+        print("✓ Parameter validation working correctly")
 
