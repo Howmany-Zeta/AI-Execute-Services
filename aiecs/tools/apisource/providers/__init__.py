@@ -19,6 +19,7 @@ from aiecs.tools.apisource.providers.wikipedia import WikipediaProvider
 from aiecs.tools.apisource.providers.github import GitHubProvider
 from aiecs.tools.apisource.providers.arxiv import ArxivProvider
 from aiecs.tools.apisource.providers.pubmed import PubMedProvider
+from aiecs.tools.apisource.providers.crossref import CrossRefProvider
 
 import logging
 from typing import Dict, List, Optional, Type, Any
@@ -116,6 +117,7 @@ register_provider(WikipediaProvider)
 register_provider(GitHubProvider)
 register_provider(ArxivProvider)
 register_provider(PubMedProvider)
+register_provider(CrossRefProvider)
 
 
 __all__ = [
@@ -135,6 +137,7 @@ __all__ = [
     "GitHubProvider",
     "ArxivProvider",
     "PubMedProvider",
+    "CrossRefProvider",
     "register_provider",
     "get_provider",
     "list_providers",

@@ -255,6 +255,17 @@ def pubmed_config() -> Dict[str, Any]:
 
 
 @pytest.fixture
+def crossref_config() -> Dict[str, Any]:
+    """Configuration for CrossRef provider (no API key needed)"""
+    return {
+        'mailto': os.getenv('CROSSREF_MAILTO', 'iretbl@gmail.com'),  # For polite pool access
+        'timeout': int(os.getenv('CROSSREF_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('CROSSREF_RATE_LIMIT', '10')),
+        'max_burst': int(os.getenv('CROSSREF_MAX_BURST', '20')),
+    }
+
+
+@pytest.fixture
 def skip_if_no_api_key():
     """Skip test if required API keys are not available"""
     def _skip_if_no_key(provider: str):

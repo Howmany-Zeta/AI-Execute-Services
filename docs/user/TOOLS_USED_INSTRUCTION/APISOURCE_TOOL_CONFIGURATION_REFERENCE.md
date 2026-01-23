@@ -477,6 +477,50 @@ tool = APISourceTool(config)
 - `search_by_author`: Search for papers by author name
 - `get_paper_details`: Get detailed paper information including abstract and citations
 
+### 3.15 CrossRef API
+
+**No API Key Required**:
+```python
+# CrossRef API is completely free and open
+tool = APISourceTool()  # No key needed for CrossRef
+```
+
+**Configuration (Optional)**:
+```python
+config = {
+    'crossref_config': {
+        'mailto': 'your-email@example.com',  # For polite pool access (better rate limits)
+        'timeout': 30,
+        'rate_limit': 10,
+        'user_agent': 'AIECS-APISource/2.0 (https://github.com/your-org/aiecs; your-email@example.com)'
+    }
+}
+tool = APISourceTool(config)
+```
+
+**Environment Variable**:
+```bash
+export CROSSREF_MAILTO="your-email@example.com"
+```
+
+**Important API Rules**:
+1. **Rate Limiting**: Use polite pool (include mailto parameter) for better rate limits
+2. **User-Agent**: Set a descriptive User-Agent header
+3. **Caching**: Cache responses when possible to reduce server load
+4. **Attribution**: Acknowledge CrossRef when using the data
+
+**API Documentation**:
+- REST API Documentation: https://www.crossref.org/documentation/retrieve-metadata/rest-api/
+- API Etiquette: https://github.com/CrossRef/rest-api-doc#etiquette
+- Metadata Plus: https://www.crossref.org/services/metadata-delivery/
+
+**Supported Operations**:
+- `get_work_by_doi`: Get metadata for a work by its DOI
+- `search_works`: Search for works by query string
+- `get_journal_works`: Get works published in a specific journal by ISSN
+- `search_funders`: Search for funders in the Open Funder Registry
+- `get_funder_works`: Get works associated with a specific funder
+
 ---
 
 ## 4. Performance Settings
@@ -908,6 +952,52 @@ config = {
 - E-utilities API Guide: https://www.ncbi.nlm.nih.gov/books/NBK25501/
 - PubMed Help: https://pubmed.ncbi.nlm.nih.gov/help/
 
+### 6.15 CrossRef Provider
+
+```python
+config = {
+    'crossref_config': {
+        'base_url': 'https://api.crossref.org',
+        'mailto': 'your-email@example.com',  # For polite pool access
+        'timeout': 30,
+        'rate_limit': 10,    # Requests per second
+        'max_burst': 20,     # Maximum burst size
+        'user_agent': 'AIECS-APISource/2.0 (https://github.com/your-org/aiecs; your-email@example.com)'
+    }
+}
+```
+
+**Features**:
+- Get work metadata by DOI
+- Search for scholarly works
+- Get works from specific journals by ISSN
+- Search for funders in Open Funder Registry
+- Get works funded by specific funders
+- Access to extensive scholarly metadata including citations, references, authors, affiliations
+
+**Supported Operations**:
+- `get_work_by_doi` - Get metadata for a work by its DOI
+- `search_works` - Search for works by query string with pagination and sorting
+- `get_journal_works` - Get works published in a specific journal by ISSN
+- `search_funders` - Search for funders in the Open Funder Registry
+- `get_funder_works` - Get works associated with a specific funder
+
+**Important Configuration Notes**:
+- **No API Key Required**: CrossRef API is completely free and open
+- **Polite Pool**: Provide an email address (mailto parameter) for better rate limits
+- **User-Agent**: Set a descriptive User-Agent header with contact information
+- **Caching**: Strongly recommended to cache responses to reduce server load
+- **Attribution**: Acknowledge CrossRef when using the data in publications
+
+**Obtaining Access**:
+- No API key required - completely free and open access
+- Optional: Register email for polite pool access (better rate limits)
+
+**API Documentation**:
+- REST API Documentation: https://www.crossref.org/documentation/retrieve-metadata/rest-api/
+- API Etiquette: https://github.com/CrossRef/rest-api-doc#etiquette
+- Metadata Plus: https://www.crossref.org/services/metadata-delivery/
+
 ---
 
 ## 7. Environment Variables
@@ -926,6 +1016,7 @@ export APISOURCE_EXCHANGERATE_API_KEY="your_exchangerate_key"  # Optional
 export APISOURCE_OPENWEATHERMAP_API_KEY="your_openweathermap_key"
 export APISOURCE_GITHUB_API_KEY="your_github_token"  # Recommended
 export APISOURCE_PUBMED_API_KEY="your_ncbi_api_key"  # Optional but recommended
+export CROSSREF_MAILTO="your-email@example.com"  # Optional but recommended for polite pool
 
 # Performance
 export APISOURCE_CACHE_TTL="300"

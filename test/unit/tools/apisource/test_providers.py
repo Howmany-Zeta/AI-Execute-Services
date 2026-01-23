@@ -37,6 +37,7 @@ from aiecs.tools.apisource.providers.wikipedia import WikipediaProvider
 from aiecs.tools.apisource.providers.github import GitHubProvider
 from aiecs.tools.apisource.providers.arxiv import ArxivProvider
 from aiecs.tools.apisource.providers.pubmed import PubMedProvider
+from aiecs.tools.apisource.providers.crossref import CrossRefProvider
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed']
+        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -3348,6 +3349,265 @@ class TestPubMedProvider:
         schema = provider.get_operation_schema('search_by_author')
         assert schema is not None
         assert 'author' in schema['properties']
+
+        print("✓ Operation schemas retrieved successfully")
+
+
+class TestCrossRefProvider:
+    """Test CrossRef API provider"""
+
+    def test_provider_metadata(self, crossref_config, debug_output):
+        """Test CrossRef provider metadata"""
+        print("\n=== Testing CrossRef Provider Metadata ===")
+
+        provider = CrossRefProvider(crossref_config)
+
+        assert provider.name == "crossref"
+        assert provider.description is not None
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+        assert metadata['name'] == 'crossref'
+        assert 'operations' in metadata
+
+        debug_output("CrossRef Provider Metadata", {
+            'name': provider.name,
+            'description': provider.description,
+            'operations': provider.supported_operations,
+        })
+
+        print("✓ CrossRef provider metadata validated")
+
+    @pytest.mark.network
+    def test_get_work_by_doi(self, crossref_config, debug_output, measure_performance):
+        """Test getting work metadata by DOI"""
+        print("\n=== Testing CrossRef get_work_by_doi ===")
+
+        provider = CrossRefProvider(crossref_config)
+
+        # Use a well-known DOI
+        measure_performance.start()
+        result = provider.get_work_by_doi(doi="10.1038/nature12373")
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'DOI' in result['data']
+        assert 'title' in result['data']
+
+        debug_output("CrossRef Get Work by DOI", {
+            'doi': '10.1038/nature12373',
+            'title': result['data'].get('title', ['N/A'])[0] if isinstance(result['data'].get('title'), list) else 'N/A',
+            'type': result['data'].get('type', 'N/A'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  CrossRef get_work_by_doi took {duration:.3f} seconds")
+        print("✓ Retrieved work metadata successfully")
+
+    @pytest.mark.network
+    def test_search_works(self, crossref_config, debug_output, measure_performance):
+        """Test searching for works"""
+        print("\n=== Testing CrossRef search_works ===")
+
+        provider = CrossRefProvider(crossref_config)
+
+        measure_performance.start()
+        result = provider.search_works(query="machine learning", rows=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        # Check first work structure
+        first_work = result['data'][0]
+        assert 'DOI' in first_work
+        assert 'title' in first_work
+
+        # Check metadata
+        assert 'metadata' in result
+        assert 'search_info' in result['metadata']
+        assert 'total_results' in result['metadata']['search_info']
+
+        debug_output("CrossRef Search Works", {
+            'query': 'machine learning',
+            'results_count': len(result['data']),
+            'total_results': result['metadata']['search_info']['total_results'],
+            'first_work_doi': first_work.get('DOI', 'N/A'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  CrossRef search_works took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data'])} works")
+
+    @pytest.mark.network
+    def test_get_journal_works(self, crossref_config, debug_output, measure_performance):
+        """Test getting works from a specific journal"""
+        print("\n=== Testing CrossRef get_journal_works ===")
+
+        provider = CrossRefProvider(crossref_config)
+
+        # Use Nature's ISSN
+        measure_performance.start()
+        result = provider.get_journal_works(issn="0028-0836", rows=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        # Check metadata
+        assert 'metadata' in result
+        assert 'journal_info' in result['metadata']
+        assert result['metadata']['journal_info']['issn'] == "0028-0836"
+
+        debug_output("CrossRef Get Journal Works", {
+            'issn': '0028-0836',
+            'journal': 'Nature',
+            'results_count': len(result['data']),
+            'total_results': result['metadata']['journal_info']['total_results'],
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  CrossRef get_journal_works took {duration:.3f} seconds")
+        print(f"✓ Retrieved {len(result['data'])} works from journal")
+
+    @pytest.mark.network
+    def test_search_funders(self, crossref_config, debug_output, measure_performance):
+        """Test searching for funders"""
+        print("\n=== Testing CrossRef search_funders ===")
+
+        provider = CrossRefProvider(crossref_config)
+
+        measure_performance.start()
+        result = provider.search_funders(query="National Science Foundation", rows=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        # Check first funder structure
+        first_funder = result['data'][0]
+        assert 'id' in first_funder
+        assert 'name' in first_funder
+
+        debug_output("CrossRef Search Funders", {
+            'query': 'National Science Foundation',
+            'results_count': len(result['data']),
+            'first_funder_name': first_funder.get('name', 'N/A'),
+            'first_funder_id': first_funder.get('id', 'N/A'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  CrossRef search_funders took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data'])} funders")
+
+    @pytest.mark.network
+    def test_get_funder_works(self, crossref_config, debug_output, measure_performance):
+        """Test getting works funded by a specific funder"""
+        print("\n=== Testing CrossRef get_funder_works ===")
+
+        provider = CrossRefProvider(crossref_config)
+
+        # Use NSF funder ID
+        measure_performance.start()
+        result = provider.get_funder_works(funder_id="100000001", rows=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        # Check metadata
+        assert 'metadata' in result
+        assert 'funder_info' in result['metadata']
+        assert result['metadata']['funder_info']['funder_id'] == "100000001"
+
+        debug_output("CrossRef Get Funder Works", {
+            'funder_id': '100000001',
+            'funder': 'NSF',
+            'results_count': len(result['data']),
+            'total_results': result['metadata']['funder_info']['total_results'],
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  CrossRef get_funder_works took {duration:.3f} seconds")
+        print(f"✓ Retrieved {len(result['data'])} works funded by NSF")
+
+    def test_validate_params(self, crossref_config):
+        """Test CrossRef parameter validation"""
+        print("\n=== Testing CrossRef Parameter Validation ===")
+
+        provider = CrossRefProvider(crossref_config)
+
+        # Valid params for get_work_by_doi
+        is_valid, error = provider.validate_params('get_work_by_doi', {'doi': '10.1038/nature12373'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params - missing required
+        is_valid, error = provider.validate_params('get_work_by_doi', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for search_works
+        is_valid, error = provider.validate_params('search_works', {'query': 'climate change'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for search_works
+        is_valid, error = provider.validate_params('search_works', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_journal_works
+        is_valid, error = provider.validate_params('get_journal_works', {'issn': '0028-0836'})
+        assert is_valid is True
+        assert error is None
+
+        # Valid params for search_funders
+        is_valid, error = provider.validate_params('search_funders', {'query': 'NSF'})
+        assert is_valid is True
+        assert error is None
+
+        # Valid params for get_funder_works
+        is_valid, error = provider.validate_params('get_funder_works', {'funder_id': '100000001'})
+        assert is_valid is True
+        assert error is None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, crossref_config, debug_output):
+        """Test CrossRef operation schema"""
+        print("\n=== Testing CrossRef Operation Schema ===")
+
+        provider = CrossRefProvider(crossref_config)
+
+        # Test get_work_by_doi schema
+        schema = provider.get_operation_schema('get_work_by_doi')
+        assert schema is not None
+        assert 'type' in schema
+        assert 'properties' in schema
+        assert 'doi' in schema['properties']
+
+        debug_output("CrossRef get_work_by_doi Schema", schema)
+
+        # Test search_works schema
+        schema = provider.get_operation_schema('search_works')
+        assert schema is not None
+        assert 'query' in schema['properties']
+
+        # Test get_journal_works schema
+        schema = provider.get_operation_schema('get_journal_works')
+        assert schema is not None
+        assert 'issn' in schema['properties']
 
         print("✓ Operation schemas retrieved successfully")
 
