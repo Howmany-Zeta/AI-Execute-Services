@@ -9,6 +9,8 @@ from aiecs.tools.apisource.providers.fred import FREDProvider
 from aiecs.tools.apisource.providers.worldbank import WorldBankProvider
 from aiecs.tools.apisource.providers.newsapi import NewsAPIProvider
 from aiecs.tools.apisource.providers.census import CensusProvider
+from aiecs.tools.apisource.providers.alphavantage import AlphaVantageProvider
+from aiecs.tools.apisource.providers.restcountries import RESTCountriesProvider
 
 import logging
 from typing import Dict, List, Optional, Type, Any
@@ -96,6 +98,8 @@ register_provider(FREDProvider)
 register_provider(WorldBankProvider)
 register_provider(NewsAPIProvider)
 register_provider(CensusProvider)
+register_provider(AlphaVantageProvider)
+register_provider(RESTCountriesProvider)
 
 
 __all__ = [
@@ -105,6 +109,8 @@ __all__ = [
     "WorldBankProvider",
     "NewsAPIProvider",
     "CensusProvider",
+    "AlphaVantageProvider",
+    "RESTCountriesProvider",
     "register_provider",
     "get_provider",
     "list_providers",

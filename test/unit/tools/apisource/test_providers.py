@@ -27,6 +27,8 @@ from aiecs.tools.apisource.providers.fred import FREDProvider
 from aiecs.tools.apisource.providers.newsapi import NewsAPIProvider
 from aiecs.tools.apisource.providers.worldbank import WorldBankProvider
 from aiecs.tools.apisource.providers.census import CensusProvider
+from aiecs.tools.apisource.providers.alphavantage import AlphaVantageProvider
+from aiecs.tools.apisource.providers.restcountries import RESTCountriesProvider
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +53,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census']
+        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -547,6 +549,361 @@ class TestCensusProvider:
         print("✓ Listed datasets successfully")
 
 
+class TestAlphaVantageProvider:
+    """Test Alpha Vantage API provider"""
+
+    def test_provider_metadata(self, alphavantage_config, debug_output):
+        """Test Alpha Vantage provider metadata"""
+        print("\n=== Testing Alpha Vantage Provider Metadata ===")
+
+        provider = AlphaVantageProvider(alphavantage_config)
+
+        assert provider.name == 'alphavantage'
+        assert provider.description
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+
+        debug_output("Alpha Vantage Metadata", {
+            'name': metadata['name'],
+            'description': metadata['description'],
+            'operations': metadata['operations'],
+        })
+
+        print("✓ Alpha Vantage metadata retrieved successfully")
+
+    @pytest.mark.network
+    def test_search_symbol(self, alphavantage_config, skip_if_no_api_key, debug_output,
+                          measure_performance):
+        """Test Alpha Vantage search_symbol operation"""
+        skip_if_no_api_key('alphavantage')
+        print("\n=== Testing Alpha Vantage search_symbol ===")
+
+        provider = AlphaVantageProvider(alphavantage_config)
+
+        measure_performance.start()
+        result = provider.execute('search_symbol', {
+            'keywords': 'Apple'
+        })
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'alphavantage'
+        assert result['operation'] == 'search_symbol'
+        assert 'data' in result
+
+        debug_output("Alpha Vantage Search Results", {
+            'keywords': 'Apple',
+            'results_count': len(result['data']) if isinstance(result['data'], list) else 'N/A',
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("Alpha Vantage search_symbol")
+        print("✓ Symbol search executed successfully")
+
+    @pytest.mark.network
+    def test_get_global_quote(self, alphavantage_config, skip_if_no_api_key, debug_output,
+                              measure_performance):
+        """Test Alpha Vantage get_global_quote operation"""
+        skip_if_no_api_key('alphavantage')
+        print("\n=== Testing Alpha Vantage get_global_quote ===")
+
+        provider = AlphaVantageProvider(alphavantage_config)
+
+        measure_performance.start()
+        result = provider.execute('get_global_quote', {
+            'symbol': 'AAPL'
+        })
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'alphavantage'
+        assert result['operation'] == 'get_global_quote'
+        assert 'data' in result
+
+        debug_output("Alpha Vantage Global Quote", {
+            'symbol': 'AAPL',
+            'data_type': type(result['data']).__name__,
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("Alpha Vantage get_global_quote")
+        print("✓ Retrieved global quote successfully")
+
+    @pytest.mark.network
+    def test_get_time_series_daily(self, alphavantage_config, skip_if_no_api_key, debug_output,
+                                   measure_performance):
+        """Test Alpha Vantage get_time_series_daily operation"""
+        skip_if_no_api_key('alphavantage')
+        print("\n=== Testing Alpha Vantage get_time_series_daily ===")
+
+        provider = AlphaVantageProvider(alphavantage_config)
+
+        measure_performance.start()
+        result = provider.execute('get_time_series_daily', {
+            'symbol': 'AAPL',
+            'outputsize': 'compact'
+        })
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'alphavantage'
+        assert result['operation'] == 'get_time_series_daily'
+        assert 'data' in result
+
+        debug_output("Alpha Vantage Daily Time Series", {
+            'symbol': 'AAPL',
+            'data_type': type(result['data']).__name__,
+            'data_points': len(result['data']) if isinstance(result['data'], dict) else 'N/A',
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("Alpha Vantage get_time_series_daily")
+        print("✓ Retrieved daily time series successfully")
+
+    @pytest.mark.network
+    def test_get_time_series_intraday(self, alphavantage_config, skip_if_no_api_key, debug_output):
+        """Test Alpha Vantage get_time_series_intraday operation"""
+        skip_if_no_api_key('alphavantage')
+        print("\n=== Testing Alpha Vantage get_time_series_intraday ===")
+
+        provider = AlphaVantageProvider(alphavantage_config)
+
+        result = provider.execute('get_time_series_intraday', {
+            'symbol': 'AAPL',
+            'interval': '5min',
+            'outputsize': 'compact'
+        })
+
+        assert result['provider'] == 'alphavantage'
+        assert result['operation'] == 'get_time_series_intraday'
+        assert 'data' in result
+
+        debug_output("Alpha Vantage Intraday Time Series", {
+            'symbol': 'AAPL',
+            'interval': '5min',
+            'data_type': type(result['data']).__name__,
+        })
+
+        print("✓ Retrieved intraday time series successfully")
+
+    def test_validate_params(self, alphavantage_config):
+        """Test Alpha Vantage parameter validation"""
+        print("\n=== Testing Alpha Vantage Parameter Validation ===")
+
+        provider = AlphaVantageProvider(alphavantage_config)
+
+        # Valid params
+        is_valid, error = provider.validate_params('search_symbol', {'keywords': 'Apple'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params - missing required
+        is_valid, error = provider.validate_params('search_symbol', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_global_quote
+        is_valid, error = provider.validate_params('get_global_quote', {'symbol': 'AAPL'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for get_forex_rate
+        is_valid, error = provider.validate_params('get_forex_rate', {'from_currency': 'USD'})
+        assert is_valid is False
+        assert error is not None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, alphavantage_config, debug_output):
+        """Test Alpha Vantage operation schema"""
+        print("\n=== Testing Alpha Vantage Operation Schema ===")
+
+        provider = AlphaVantageProvider(alphavantage_config)
+
+        schema = provider.get_operation_schema('get_global_quote')
+
+        assert schema is not None
+        assert 'description' in schema
+        assert 'parameters' in schema
+
+        debug_output("Alpha Vantage get_global_quote Schema", schema)
+
+        print("✓ Operation schema retrieved successfully")
+
+
+class TestRESTCountriesProvider:
+    """Test REST Countries provider"""
+
+    def test_provider_metadata(self, restcountries_config, debug_output):
+        """Test REST Countries provider metadata"""
+        print("\n=== Testing REST Countries Provider Metadata ===")
+
+        provider = RESTCountriesProvider(restcountries_config)
+
+        assert provider.name == 'restcountries'
+        assert provider.description is not None
+        assert len(provider.supported_operations) > 0
+
+        debug_output("REST Countries Metadata", {
+            'name': provider.name,
+            'description': provider.description,
+            'operations': f'list (length: {len(provider.supported_operations)})',
+        })
+
+        print("✓ REST Countries metadata retrieved successfully")
+
+    def test_get_all_countries(self, restcountries_config, debug_output, measure_time):
+        """Test getting all countries"""
+        print("\n=== Testing REST Countries get_all_countries ===")
+
+        provider = RESTCountriesProvider(restcountries_config)
+
+        with measure_time() as timer:
+            result = provider.get_all_countries()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        debug_output("REST Countries All Countries", {
+            'countries_count': len(result['data']),
+            'duration_seconds': timer.duration,
+        })
+
+        print(f"⏱  REST Countries get_all_countries took {timer.duration:.3f} seconds")
+        print("✓ Retrieved all countries successfully")
+
+    def test_get_country_by_name(self, restcountries_config, debug_output, measure_time):
+        """Test getting country by name"""
+        print("\n=== Testing REST Countries get_country_by_name ===")
+
+        provider = RESTCountriesProvider(restcountries_config)
+
+        with measure_time() as timer:
+            result = provider.get_country_by_name(name='United States')
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        debug_output("REST Countries Search by Name", {
+            'name': 'United States',
+            'results_count': len(result['data']),
+            'duration_seconds': timer.duration,
+        })
+
+        print(f"⏱  REST Countries get_country_by_name took {timer.duration:.3f} seconds")
+        print("✓ Retrieved country by name successfully")
+
+    def test_get_country_by_code(self, restcountries_config, debug_output, measure_time):
+        """Test getting country by code"""
+        print("\n=== Testing REST Countries get_country_by_code ===")
+
+        provider = RESTCountriesProvider(restcountries_config)
+
+        with measure_time() as timer:
+            result = provider.get_country_by_code(code='US')
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        debug_output("REST Countries Get by Code", {
+            'code': 'US',
+            'data_type': type(result['data']).__name__,
+            'duration_seconds': timer.duration,
+        })
+
+        print(f"⏱  REST Countries get_country_by_code took {timer.duration:.3f} seconds")
+        print("✓ Retrieved country by code successfully")
+
+    def test_get_countries_by_region(self, restcountries_config, debug_output, measure_time):
+        """Test getting countries by region"""
+        print("\n=== Testing REST Countries get_countries_by_region ===")
+
+        provider = RESTCountriesProvider(restcountries_config)
+
+        with measure_time() as timer:
+            result = provider.get_countries_by_region(region='Europe')
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        debug_output("REST Countries Get by Region", {
+            'region': 'Europe',
+            'countries_count': len(result['data']),
+            'duration_seconds': timer.duration,
+        })
+
+        print(f"⏱  REST Countries get_countries_by_region took {timer.duration:.3f} seconds")
+        print("✓ Retrieved countries by region successfully")
+
+    def test_get_countries_by_language(self, restcountries_config, debug_output, measure_time):
+        """Test getting countries by language"""
+        print("\n=== Testing REST Countries get_countries_by_language ===")
+
+        provider = RESTCountriesProvider(restcountries_config)
+
+        with measure_time() as timer:
+            result = provider.get_countries_by_language(language='spanish')
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        debug_output("REST Countries Get by Language", {
+            'language': 'spanish',
+            'countries_count': len(result['data']),
+            'duration_seconds': timer.duration,
+        })
+
+        print(f"⏱  REST Countries get_countries_by_language took {timer.duration:.3f} seconds")
+        print("✓ Retrieved countries by language successfully")
+
+    def test_validate_params(self, restcountries_config):
+        """Test REST Countries parameter validation"""
+        print("\n=== Testing REST Countries Parameter Validation ===")
+
+        provider = RESTCountriesProvider(restcountries_config)
+
+        # Invalid params for get_country_by_name
+        is_valid, error = provider.validate_params('get_country_by_name', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_country_by_name
+        is_valid, error = provider.validate_params('get_country_by_name', {'name': 'Germany'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for get_countries_by_region
+        is_valid, error = provider.validate_params('get_countries_by_region', {})
+        assert is_valid is False
+        assert error is not None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, restcountries_config, debug_output):
+        """Test REST Countries operation schema"""
+        print("\n=== Testing REST Countries Operation Schema ===")
+
+        provider = RESTCountriesProvider(restcountries_config)
+
+        schema = provider.get_operation_schema('get_country_by_name')
+
+        assert schema is not None
+        assert 'description' in schema
+        assert 'parameters' in schema
+
+        debug_output("REST Countries get_country_by_name Schema", schema)
+
+        print("✓ Operation schema retrieved successfully")
+
+
 class TestProviderErrorHandling:
     """Test error handling across all providers"""
 
@@ -555,6 +912,8 @@ class TestProviderErrorHandling:
         (NewsAPIProvider, 'newsapi_config'),
         (WorldBankProvider, 'worldbank_config'),
         (CensusProvider, 'census_config'),
+        (AlphaVantageProvider, 'alphavantage_config'),
+        (RESTCountriesProvider, 'restcountries_config'),
     ])
     def test_invalid_operation(self, provider_class, config_fixture, request):
         """Test handling of invalid operations"""
@@ -577,6 +936,8 @@ class TestProviderErrorHandling:
         (NewsAPIProvider, 'newsapi_config', 'search_everything', {}),
         (WorldBankProvider, 'worldbank_config', 'get_indicator', {}),
         (CensusProvider, 'census_config', 'get_acs_data', {}),
+        (AlphaVantageProvider, 'alphavantage_config', 'search_symbol', {}),
+        (RESTCountriesProvider, 'restcountries_config', 'get_country_by_name', {}),
     ])
     def test_missing_required_params(self, provider_class, config_fixture, operation, params, request):
         """Test handling of missing required parameters"""

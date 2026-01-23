@@ -61,6 +61,7 @@ def load_env_config():
     logger.info(f"  - FRED_API_KEY: {'✓ Set' if os.getenv('FRED_API_KEY') else '✗ Not set'}")
     logger.info(f"  - NEWSAPI_API_KEY: {'✓ Set' if os.getenv('NEWSAPI_API_KEY') else '✗ Not set'}")
     logger.info(f"  - CENSUS_API_KEY: {'✓ Set' if os.getenv('CENSUS_API_KEY') else '✗ Not set'}")
+    logger.info(f"  - ALPHAVANTAGE_API_KEY: {'✓ Set' if os.getenv('ALPHAVANTAGE_API_KEY') else '✗ Not set'}")
     logger.info(f"  - DEBUG_MODE: {os.getenv('DEBUG_MODE', 'false')}")
     logger.info(f"  - VERBOSE_API_CALLS: {os.getenv('VERBOSE_API_CALLS', 'false')}")
 
@@ -72,6 +73,7 @@ def api_keys() -> Dict[str, str]:
         'fred_api_key': os.getenv('FRED_API_KEY'),
         'newsapi_api_key': os.getenv('NEWSAPI_API_KEY'),
         'census_api_key': os.getenv('CENSUS_API_KEY'),
+        'alphavantage_api_key': os.getenv('ALPHAVANTAGE_API_KEY'),
     }
 
 
@@ -132,6 +134,27 @@ def worldbank_config() -> Dict[str, Any]:
 
 
 @pytest.fixture
+def alphavantage_config(api_keys) -> Dict[str, Any]:
+    """Configuration for Alpha Vantage provider"""
+    return {
+        'api_key': api_keys['alphavantage_api_key'],
+        'timeout': int(os.getenv('ALPHAVANTAGE_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('ALPHAVANTAGE_RATE_LIMIT', '5')),
+        'max_burst': int(os.getenv('ALPHAVANTAGE_MAX_BURST', '10')),
+    }
+
+
+@pytest.fixture
+def restcountries_config() -> Dict[str, Any]:
+    """Configuration for REST Countries provider (no API key needed)"""
+    return {
+        'timeout': int(os.getenv('RESTCOUNTRIES_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('RESTCOUNTRIES_RATE_LIMIT', '10')),
+        'max_burst': int(os.getenv('RESTCOUNTRIES_MAX_BURST', '20')),
+    }
+
+
+@pytest.fixture
 def skip_if_no_api_key():
     """Skip test if required API keys are not available"""
     def _skip_if_no_key(provider: str):
@@ -139,12 +162,13 @@ def skip_if_no_api_key():
             'fred': 'FRED_API_KEY',
             'newsapi': 'NEWSAPI_API_KEY',
             'census': 'CENSUS_API_KEY',
+            'alphavantage': 'ALPHAVANTAGE_API_KEY',
         }
-        
+
         env_var = key_map.get(provider.lower())
         if env_var and not os.getenv(env_var):
             pytest.skip(f"Skipping test: {env_var} not set")
-    
+
     return _skip_if_no_key
 
 
