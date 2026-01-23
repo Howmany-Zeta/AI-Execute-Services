@@ -20,6 +20,7 @@ from aiecs.tools.apisource.providers.github import GitHubProvider
 from aiecs.tools.apisource.providers.arxiv import ArxivProvider
 from aiecs.tools.apisource.providers.pubmed import PubMedProvider
 from aiecs.tools.apisource.providers.crossref import CrossRefProvider
+from aiecs.tools.apisource.providers.semanticscholar import SemanticScholarProvider
 
 import logging
 from typing import Dict, List, Optional, Type, Any
@@ -118,6 +119,7 @@ register_provider(GitHubProvider)
 register_provider(ArxivProvider)
 register_provider(PubMedProvider)
 register_provider(CrossRefProvider)
+register_provider(SemanticScholarProvider)
 
 
 __all__ = [
@@ -138,6 +140,7 @@ __all__ = [
     "ArxivProvider",
     "PubMedProvider",
     "CrossRefProvider",
+    "SemanticScholarProvider",
     "register_provider",
     "get_provider",
     "list_providers",

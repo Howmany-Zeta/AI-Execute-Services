@@ -266,6 +266,16 @@ def crossref_config() -> Dict[str, Any]:
 
 
 @pytest.fixture
+def semanticscholar_config() -> Dict[str, Any]:
+    """Configuration for Semantic Scholar provider (no API key needed)"""
+    return {
+        'timeout': int(os.getenv('SEMANTICSCHOLAR_TIMEOUT', '30')),
+        'rate_limit': float(os.getenv('SEMANTICSCHOLAR_RATE_LIMIT', '1')),  # 1 req/s recommended
+        'max_burst': int(os.getenv('SEMANTICSCHOLAR_MAX_BURST', '5')),
+    }
+
+
+@pytest.fixture
 def skip_if_no_api_key():
     """Skip test if required API keys are not available"""
     def _skip_if_no_key(provider: str):
