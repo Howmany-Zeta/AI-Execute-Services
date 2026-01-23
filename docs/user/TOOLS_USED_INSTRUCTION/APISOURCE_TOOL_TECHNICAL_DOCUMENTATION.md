@@ -37,7 +37,15 @@ APISourceTool (BaseTool)
 │   ├── FRED Provider (Economic Data)
 │   ├── World Bank Provider (Global Development)
 │   ├── News API Provider (News Articles)
-│   └── Census Provider (US Demographics)
+│   ├── Census Provider (US Demographics)
+│   ├── Alpha Vantage Provider (Stock Market Data)
+│   ├── REST Countries Provider (Country Information)
+│   ├── ExchangeRate Provider (Currency Exchange Rates)
+│   ├── Open Library Provider (Books & Bibliography)
+│   ├── CoinGecko Provider (Cryptocurrency Data)
+│   ├── OpenWeatherMap Provider (Weather Data)
+│   ├── Wikipedia Provider (Encyclopedia Articles)
+│   └── GitHub Provider (Repositories & Code)
 ├── Intelligence Layer
 │   ├── QueryIntentAnalyzer (Intent Detection)
 │   ├── QueryEnhancer (Parameter Auto-completion)
@@ -70,7 +78,15 @@ aiecs/tools/apisource/
 │   ├── fred.py             # Federal Reserve Economic Data
 │   ├── worldbank.py        # World Bank API
 │   ├── newsapi.py          # News API
-│   └── census.py           # US Census Bureau
+│   ├── census.py           # US Census Bureau
+│   ├── alphavantage.py     # Alpha Vantage Stock Market Data
+│   ├── restcountries.py    # REST Countries Information
+│   ├── exchangerate.py     # Currency Exchange Rates
+│   ├── openlibrary.py      # Open Library Books
+│   ├── coingecko.py        # CoinGecko Cryptocurrency
+│   ├── openweathermap.py   # OpenWeatherMap Weather Data
+│   ├── wikipedia.py        # Wikipedia Encyclopedia
+│   └── github.py           # GitHub Repositories & Code
 │
 ├── intelligence/            # Intelligent analysis modules
 │   ├── __init__.py
