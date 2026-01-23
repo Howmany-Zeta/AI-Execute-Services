@@ -352,6 +352,40 @@ tool = APISourceTool(config)
 - REST API: https://en.wikipedia.org/api/rest_v1/
 - API Etiquette: https://www.mediawiki.org/wiki/API:Etiquette
 
+### 3.12 GitHub API
+
+**API Key Recommended**:
+```python
+config = {
+    'github_api_key': 'YOUR_GITHUB_TOKEN'
+}
+tool = APISourceTool(config)
+```
+
+**Environment Variable**:
+```bash
+export GITHUB_API_KEY="your_github_personal_access_token"
+```
+
+**Rate Limits**:
+- **Authenticated**: 5,000 requests per hour
+- **Unauthenticated**: 60 requests per hour
+- Strongly recommended to use authentication for higher limits
+
+**Obtaining an API Key**:
+1. Visit https://github.com/settings/tokens
+2. Click "Generate new token" → "Generate new token (classic)"
+3. Select scopes based on your needs:
+   - `public_repo` - Access public repositories
+   - `repo` - Full control of private repositories (if needed)
+   - `user` - Read user profile data
+4. Generate and copy the token
+
+**API Documentation**:
+- REST API: https://docs.github.com/en/rest
+- Authentication: https://docs.github.com/en/rest/authentication
+- Rate Limiting: https://docs.github.com/en/rest/rate-limit
+
 ---
 
 ## 4. Performance Settings
@@ -656,6 +690,49 @@ config = {
 - **Rate Limit**: Maximum 200 req/s allowed, default config uses 10 req/s
 - **API Etiquette**: Follow https://www.mediawiki.org/wiki/API:Etiquette
 
+### 6.12 GitHub Provider
+
+```python
+config = {
+    'github_api_key': 'YOUR_GITHUB_TOKEN',  # Recommended for higher rate limits
+    'github_config': {
+        'base_url': 'https://api.github.com',
+        'timeout': 30,
+        'rate_limit': 10,  # Requests per second
+        'max_burst': 20,   # Maximum burst size
+        'user_agent': 'AIECS-APISource/2.0 (https://github.com/your-org/aiecs)'
+    }
+}
+```
+
+**Features**:
+- Repository information and statistics
+- Search repositories, users, and code
+- User profiles and activity
+- Repository issues and pull requests
+- Organization data
+
+**Supported Operations**:
+- `get_repository` - Get detailed repository information
+- `search_repositories` - Search for repositories
+- `get_user` - Get user profile information
+- `search_users` - Search for users
+- `get_repository_issues` - Get repository issues
+- `get_repository_pulls` - Get repository pull requests
+- `search_code` - Search for code across repositories
+
+**Important Configuration Notes**:
+- **API Key Recommended**: Use a Personal Access Token for 5,000 req/hour (vs 60 unauthenticated)
+- **Rate Limits**: Authenticated: 5,000/hour, Unauthenticated: 60/hour
+- **Token Scopes**: Use minimal scopes needed (e.g., `public_repo` for public data)
+- **API Version**: Uses GitHub REST API v3 with `application/vnd.github+json` accept header
+
+**Obtaining the Key**:
+1. Visit https://github.com/settings/tokens
+2. Generate new token (classic)
+3. Select appropriate scopes
+4. Copy and store the token securely
+
 ---
 
 ## 7. Environment Variables
@@ -672,6 +749,7 @@ export APISOURCE_CENSUS_API_KEY="your_census_key"
 export APISOURCE_ALPHAVANTAGE_API_KEY="your_alphavantage_key"
 export APISOURCE_EXCHANGERATE_API_KEY="your_exchangerate_key"  # Optional
 export APISOURCE_OPENWEATHERMAP_API_KEY="your_openweathermap_key"
+export APISOURCE_GITHUB_API_KEY="your_github_token"  # Recommended
 
 # Performance
 export APISOURCE_CACHE_TTL="300"
