@@ -244,6 +244,17 @@ def arxiv_config() -> Dict[str, Any]:
 
 
 @pytest.fixture
+def pubmed_config() -> Dict[str, Any]:
+    """Configuration for PubMed provider (API key optional but recommended)"""
+    return {
+        'api_key': os.getenv('PUBMED_API_KEY'),  # Optional - improves rate limits
+        'timeout': int(os.getenv('PUBMED_TIMEOUT', '30')),
+        'rate_limit': float(os.getenv('PUBMED_RATE_LIMIT', '3')),  # 3 req/s without key, 10 with key
+        'max_burst': int(os.getenv('PUBMED_MAX_BURST', '5')),
+    }
+
+
+@pytest.fixture
 def skip_if_no_api_key():
     """Skip test if required API keys are not available"""
     def _skip_if_no_key(provider: str):

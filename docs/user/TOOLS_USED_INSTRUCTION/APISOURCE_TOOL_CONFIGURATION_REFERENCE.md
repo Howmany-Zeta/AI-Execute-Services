@@ -417,6 +417,66 @@ tool = APISourceTool(config)
 - API Basics: https://info.arxiv.org/help/api/basics.html
 - arXiv Categories: https://arxiv.org/category_taxonomy
 
+### 3.14 PubMed/NCBI E-utilities API
+
+**API Key Optional but Recommended**:
+```python
+# Works without API key (3 requests/second limit)
+tool = APISourceTool()
+
+# With API key (10 requests/second limit)
+config = {
+    'pubmed_api_key': 'YOUR_PUBMED_API_KEY'
+}
+tool = APISourceTool(config)
+```
+
+**Environment Variable**:
+```bash
+export PUBMED_API_KEY="your_ncbi_api_key"
+```
+
+**Configuration (Optional)**:
+```python
+config = {
+    'pubmed_config': {
+        'api_key': 'YOUR_API_KEY',  # Optional but recommended
+        'timeout': 30,
+        'rate_limit': 3,  # 3 req/s without key, 10 with key
+        'user_agent': 'AIECS-APISource/2.0 (https://github.com/your-org/aiecs; iretbl@gmail.com)'
+    }
+}
+tool = APISourceTool(config)
+```
+
+**Rate Limits**:
+- **Without API key**: 3 requests per second
+- **With API key**: 10 requests per second
+- API key strongly recommended for better service
+
+**Obtaining an API Key**:
+1. Visit https://www.ncbi.nlm.nih.gov/account/
+2. Register for a free NCBI account
+3. Go to Settings → API Key Management
+4. Generate a new API key
+
+**Important API Rules**:
+1. **Rate Limiting**: Max 3 requests/second without API key, 10 with API key
+2. **User-Agent**: Set a descriptive User-Agent header with email
+3. **Caching**: Cache responses when possible to reduce server load
+4. **API Key**: Recommended for higher rate limits and better service
+
+**API Documentation**:
+- E-utilities Quick Start: https://www.ncbi.nlm.nih.gov/books/NBK25500/
+- E-utilities API Guide: https://www.ncbi.nlm.nih.gov/books/NBK25501/
+- PubMed Help: https://pubmed.ncbi.nlm.nih.gov/help/
+
+**Supported Operations**:
+- `search_papers`: Search for papers by query string
+- `get_paper_by_id`: Get paper metadata by PubMed ID (PMID)
+- `search_by_author`: Search for papers by author name
+- `get_paper_details`: Get detailed paper information including abstract and citations
+
 ---
 
 ## 4. Performance Settings
@@ -801,6 +861,53 @@ config = {
 - API Basics: https://info.arxiv.org/help/api/basics.html
 - Category Taxonomy: https://arxiv.org/category_taxonomy
 
+### 6.14 PubMed Provider
+
+```python
+config = {
+    'pubmed_api_key': 'YOUR_NCBI_API_KEY',  # Optional but recommended
+    'pubmed_config': {
+        'base_url': 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils',
+        'timeout': 30,
+        'rate_limit': 3,     # Requests per second (3 without key, 10 with key)
+        'max_burst': 5,      # Maximum burst size
+        'user_agent': 'AIECS-APISource/2.0 (https://github.com/your-org/aiecs; iretbl@gmail.com)'
+    }
+}
+```
+
+**Features**:
+- Search biomedical and life sciences literature
+- Get paper metadata by PubMed ID (PMID)
+- Search by author name
+- Get detailed paper information including abstracts
+- Access to 35+ million citations from MEDLINE, PubMed, and other databases
+- Full metadata including authors, journal, DOI, publication date
+
+**Supported Operations**:
+- `search_papers` - Search for papers by query string
+- `get_paper_by_id` - Get paper metadata by PMID
+- `search_by_author` - Search for papers by author name
+- `get_paper_details` - Get detailed paper information including abstract
+
+**Important Configuration Notes**:
+- **API Key Optional but Recommended**: Increases rate limit from 3 to 10 requests/second
+- **Rate Limits**: 3 req/s without API key, 10 req/s with API key
+- **User-Agent**: Should include contact email for NCBI to reach you if needed
+- **Caching**: Strongly recommended to cache responses to reduce server load
+- **API Etiquette**: Follow NCBI E-utilities guidelines
+
+**Obtaining the Key**:
+1. Visit https://www.ncbi.nlm.nih.gov/account/
+2. Register for a free NCBI account
+3. Go to Settings → API Key Management
+4. Generate a new API key
+
+**API Documentation**:
+- E-utilities Quick Start: https://www.ncbi.nlm.nih.gov/books/NBK25500/
+- E-utilities API Guide: https://www.ncbi.nlm.nih.gov/books/NBK25501/
+- PubMed Help: https://pubmed.ncbi.nlm.nih.gov/help/
+
 ---
 
 ## 7. Environment Variables
@@ -818,6 +925,7 @@ export APISOURCE_ALPHAVANTAGE_API_KEY="your_alphavantage_key"
 export APISOURCE_EXCHANGERATE_API_KEY="your_exchangerate_key"  # Optional
 export APISOURCE_OPENWEATHERMAP_API_KEY="your_openweathermap_key"
 export APISOURCE_GITHUB_API_KEY="your_github_token"  # Recommended
+export APISOURCE_PUBMED_API_KEY="your_ncbi_api_key"  # Optional but recommended
 
 # Performance
 export APISOURCE_CACHE_TTL="300"
