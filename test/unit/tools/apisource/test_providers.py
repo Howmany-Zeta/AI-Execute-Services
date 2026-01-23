@@ -36,6 +36,7 @@ from aiecs.tools.apisource.providers.openweathermap import OpenWeatherMapProvide
 from aiecs.tools.apisource.providers.wikipedia import WikipediaProvider
 from aiecs.tools.apisource.providers.github import GitHubProvider
 from aiecs.tools.apisource.providers.arxiv import ArxivProvider
+from aiecs.tools.apisource.providers.pubmed import PubMedProvider
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv']
+        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -3138,4 +3139,215 @@ class TestArxivProvider:
         })
 
         print(f"✓ Found {papers_with_multiple_cats} papers with multiple categories")
+
+
+class TestPubMedProvider:
+    """Test PubMed/NCBI E-utilities API provider"""
+
+    def test_provider_metadata(self, pubmed_config, debug_output):
+        """Test PubMed provider metadata"""
+        print("\n=== Testing PubMed Provider Metadata ===")
+
+        provider = PubMedProvider(pubmed_config)
+
+        assert provider.name == "pubmed"
+        assert provider.description is not None
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+        assert metadata['name'] == 'pubmed'
+        assert 'operations' in metadata
+
+        debug_output("PubMed Provider Metadata", {
+            'name': provider.name,
+            'description': provider.description,
+            'operations': provider.supported_operations,
+        })
+
+        print("✓ PubMed provider metadata validated")
+
+    @pytest.mark.network
+    def test_search_papers(self, pubmed_config, debug_output, measure_performance):
+        """Test searching for papers"""
+        print("\n=== Testing PubMed search_papers ===")
+
+        provider = PubMedProvider(pubmed_config)
+
+        measure_performance.start()
+        result = provider.search_papers(query="COVID-19 vaccine", max_results=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        # Check first paper structure
+        first_paper = result['data'][0]
+        assert 'title' in first_paper
+        assert 'pmid' in first_paper
+
+        debug_output("PubMed Search Papers", {
+            'query': 'COVID-19 vaccine',
+            'results_count': len(result['data']),
+            'first_paper_title': first_paper.get('title', 'N/A'),
+            'first_paper_pmid': first_paper.get('pmid', 'N/A'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  PubMed search_papers took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data'])} papers")
+
+    @pytest.mark.network
+    def test_get_paper_by_id(self, pubmed_config, debug_output, measure_performance):
+        """Test getting a specific paper by PMID"""
+        print("\n=== Testing PubMed get_paper_by_id ===")
+
+        provider = PubMedProvider(pubmed_config)
+
+        # Use a well-known PubMed paper ID
+        measure_performance.start()
+        result = provider.get_paper_by_id(pmid="33301246")  # COVID-19 vaccine paper
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'title' in result['data']
+        assert 'pmid' in result['data']
+        assert result['data']['pmid'] == "33301246"
+
+        debug_output("PubMed Get Paper by ID", {
+            'pmid': '33301246',
+            'title': result['data'].get('title', 'N/A'),
+            'authors_count': len(result['data'].get('authors', [])),
+            'has_abstract': 'abstract' in result['data'],
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  PubMed get_paper_by_id took {duration:.3f} seconds")
+        print("✓ Retrieved paper successfully")
+
+    @pytest.mark.network
+    def test_search_by_author(self, pubmed_config, debug_output, measure_performance):
+        """Test searching papers by author"""
+        print("\n=== Testing PubMed search_by_author ===")
+
+        provider = PubMedProvider(pubmed_config)
+
+        measure_performance.start()
+        result = provider.search_by_author(author="Fauci AS", max_results=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        debug_output("PubMed Search by Author", {
+            'author': 'Fauci AS',
+            'results_count': len(result['data']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  PubMed search_by_author took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data'])} papers")
+
+    @pytest.mark.network
+    def test_get_paper_details(self, pubmed_config, debug_output, measure_performance):
+        """Test getting detailed paper information"""
+        print("\n=== Testing PubMed get_paper_details ===")
+
+        provider = PubMedProvider(pubmed_config)
+
+        measure_performance.start()
+        result = provider.get_paper_details(pmid="33301246")
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'title' in result['data']
+        assert 'abstract' in result['data']
+        assert 'authors' in result['data']
+
+        debug_output("PubMed Get Paper Details", {
+            'pmid': '33301246',
+            'title': result['data'].get('title', 'N/A'),
+            'has_abstract': 'abstract' in result['data'],
+            'has_authors': 'authors' in result['data'],
+            'has_journal': 'journal' in result['data'],
+            'has_doi': 'doi' in result['data'],
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  PubMed get_paper_details took {duration:.3f} seconds")
+        print("✓ Retrieved detailed paper information successfully")
+
+    def test_validate_params(self, pubmed_config):
+        """Test PubMed parameter validation"""
+        print("\n=== Testing PubMed Parameter Validation ===")
+
+        provider = PubMedProvider(pubmed_config)
+
+        # Valid params for search_papers
+        is_valid, error = provider.validate_params('search_papers', {'query': 'cancer'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params - missing required
+        is_valid, error = provider.validate_params('search_papers', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_paper_by_id
+        is_valid, error = provider.validate_params('get_paper_by_id', {'pmid': '12345678'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for get_paper_by_id
+        is_valid, error = provider.validate_params('get_paper_by_id', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for search_by_author
+        is_valid, error = provider.validate_params('search_by_author', {'author': 'Smith J'})
+        assert is_valid is True
+        assert error is None
+
+        # Valid params for get_paper_details
+        is_valid, error = provider.validate_params('get_paper_details', {'pmid': '12345678'})
+        assert is_valid is True
+        assert error is None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, pubmed_config, debug_output):
+        """Test PubMed operation schema"""
+        print("\n=== Testing PubMed Operation Schema ===")
+
+        provider = PubMedProvider(pubmed_config)
+
+        # Test search_papers schema
+        schema = provider.get_operation_schema('search_papers')
+        assert schema is not None
+        assert 'type' in schema
+        assert 'properties' in schema
+        assert 'query' in schema['properties']
+        assert 'required' in schema
+        assert 'query' in schema['required']
+
+        debug_output("PubMed search_papers Schema", schema)
+
+        # Test get_paper_by_id schema
+        schema = provider.get_operation_schema('get_paper_by_id')
+        assert schema is not None
+        assert 'pmid' in schema['properties']
+
+        # Test search_by_author schema
+        schema = provider.get_operation_schema('search_by_author')
+        assert schema is not None
+        assert 'author' in schema['properties']
+
+        print("✓ Operation schemas retrieved successfully")
 
