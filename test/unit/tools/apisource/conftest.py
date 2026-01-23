@@ -76,6 +76,7 @@ def load_env_config():
     logger.info(f"  - ALPHAVANTAGE_API_KEY: {'✓ Set' if os.getenv('ALPHAVANTAGE_API_KEY') else '✗ Not set'}")
     logger.info(f"  - EXCHANGERATE_API_KEY: {'✓ Set' if os.getenv('EXCHANGERATE_API_KEY') else '✗ Not set'}")
     logger.info(f"  - OPENWEATHERMAP_API_KEY: {'✓ Set' if os.getenv('OPENWEATHERMAP_API_KEY') else '✗ Not set'}")
+    logger.info(f"  - GITHUB_API_KEY: {'✓ Set' if os.getenv('GITHUB_API_KEY') else '✗ Not set'}")
     logger.info(f"  - DEBUG_MODE: {os.getenv('DEBUG_MODE', 'false')}")
     logger.info(f"  - VERBOSE_API_CALLS: {os.getenv('VERBOSE_API_CALLS', 'false')}")
 
@@ -88,6 +89,7 @@ def api_keys() -> Dict[str, str]:
         'newsapi_api_key': os.getenv('NEWSAPI_API_KEY'),
         'census_api_key': os.getenv('CENSUS_API_KEY'),
         'alphavantage_api_key': os.getenv('ALPHAVANTAGE_API_KEY'),
+        'github_api_key': os.getenv('GITHUB_API_KEY'),
     }
 
 
@@ -221,6 +223,17 @@ def wikipedia_config() -> Dict[str, Any]:
 
 
 @pytest.fixture
+def github_config(api_keys) -> Dict[str, Any]:
+    """Configuration for GitHub provider (API key optional but recommended)"""
+    return {
+        'api_key': api_keys['github_api_key'],
+        'timeout': int(os.getenv('GITHUB_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('GITHUB_RATE_LIMIT', '10')),
+        'max_burst': int(os.getenv('GITHUB_MAX_BURST', '20')),
+    }
+
+
+@pytest.fixture
 def skip_if_no_api_key():
     """Skip test if required API keys are not available"""
     def _skip_if_no_key(provider: str):
@@ -230,6 +243,7 @@ def skip_if_no_api_key():
             'census': 'CENSUS_API_KEY',
             'alphavantage': 'ALPHAVANTAGE_API_KEY',
             'openweathermap': 'OPENWEATHERMAP_API_KEY',
+            'github': 'GITHUB_API_KEY',
         }
 
         env_var = key_map.get(provider.lower())

@@ -34,6 +34,7 @@ from aiecs.tools.apisource.providers.openlibrary import OpenLibraryProvider
 from aiecs.tools.apisource.providers.coingecko import CoinGeckoProvider
 from aiecs.tools.apisource.providers.openweathermap import OpenWeatherMapProvider
 from aiecs.tools.apisource.providers.wikipedia import WikipediaProvider
+from aiecs.tools.apisource.providers.github import GitHubProvider
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia']
+        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -2359,4 +2360,449 @@ class TestWikipediaProvider:
         except Exception as e:
             # If it raises an exception, that's also acceptable
             print(f"✓ Invalid title raised exception: {type(e).__name__}")
+
+
+class TestGitHubProvider:
+    """Test GitHub API provider"""
+
+    def test_provider_metadata(self, github_config, debug_output):
+        """Test GitHub provider metadata"""
+        print("\n=== Testing GitHub Provider Metadata ===")
+
+        provider = GitHubProvider(github_config)
+
+        assert provider.name == "github"
+        assert provider.description is not None
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+        assert metadata['name'] == 'github'
+        assert 'operations' in metadata
+
+        debug_output("GitHub Provider Metadata", {
+            'name': provider.name,
+            'description': provider.description,
+            'operations': provider.supported_operations,
+        })
+
+        print("✓ GitHub provider metadata validated")
+
+    @pytest.mark.network
+    def test_get_repository(self, github_config, debug_output, measure_performance):
+        """Test getting repository information"""
+        print("\n=== Testing GitHub get_repository ===")
+
+        provider = GitHubProvider(github_config)
+
+        measure_performance.start()
+        result = provider.get_repository(owner="octocat", repo="Hello-World")
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'name' in result['data']
+        assert 'owner' in result['data']
+
+        debug_output("GitHub Repository Data", {
+            'owner': 'octocat',
+            'repo': 'Hello-World',
+            'name': result['data'].get('name'),
+            'stars': result['data'].get('stargazers_count'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  GitHub get_repository took {duration:.3f} seconds")
+        print("✓ Retrieved repository data successfully")
+
+    @pytest.mark.network
+    def test_search_repositories(self, github_config, debug_output, measure_performance):
+        """Test searching repositories"""
+        print("\n=== Testing GitHub search_repositories ===")
+
+        provider = GitHubProvider(github_config)
+
+        measure_performance.start()
+        result = provider.search_repositories(query="language:python stars:>1000", per_page=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        # Check first result structure
+        first_result = result['data'][0]
+        assert 'name' in first_result
+        assert 'owner' in first_result or 'full_name' in first_result
+
+        debug_output("GitHub Repository Search Results", {
+            'query': 'language:python stars:>1000',
+            'results_count': len(result['data']),
+            'first_result_name': first_result.get('name') or first_result.get('full_name'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  GitHub search_repositories took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data'])} repositories")
+
+    @pytest.mark.network
+    def test_get_user(self, github_config, debug_output, measure_performance):
+        """Test getting user information"""
+        print("\n=== Testing GitHub get_user ===")
+
+        provider = GitHubProvider(github_config)
+
+        measure_performance.start()
+        result = provider.get_user(username="octocat")
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'login' in result['data']
+
+        debug_output("GitHub User Data", {
+            'username': 'octocat',
+            'login': result['data'].get('login'),
+            'public_repos': result['data'].get('public_repos'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  GitHub get_user took {duration:.3f} seconds")
+        print("✓ Retrieved user data successfully")
+
+    @pytest.mark.network
+    def test_search_users(self, github_config, debug_output, measure_performance):
+        """Test searching users"""
+        print("\n=== Testing GitHub search_users ===")
+
+        provider = GitHubProvider(github_config)
+
+        measure_performance.start()
+        result = provider.search_users(query="followers:>1000", per_page=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        # Check first result structure
+        first_result = result['data'][0]
+        assert 'login' in first_result
+
+        debug_output("GitHub User Search Results", {
+            'query': 'followers:>1000',
+            'results_count': len(result['data']),
+            'first_result_login': first_result.get('login'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  GitHub search_users took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data'])} users")
+
+    @pytest.mark.network
+    def test_get_repository_issues(self, github_config, debug_output, measure_performance):
+        """Test getting repository issues"""
+        print("\n=== Testing GitHub get_repository_issues ===")
+
+        provider = GitHubProvider(github_config)
+
+        measure_performance.start()
+        result = provider.get_repository_issues(owner="octocat", repo="Hello-World", state="all", per_page=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+
+        debug_output("GitHub Repository Issues", {
+            'owner': 'octocat',
+            'repo': 'Hello-World',
+            'issues_count': len(result['data']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  GitHub get_repository_issues took {duration:.3f} seconds")
+        print(f"✓ Retrieved {len(result['data'])} issues")
+
+    @pytest.mark.network
+    def test_get_repository_pulls(self, github_config, debug_output, measure_performance):
+        """Test getting repository pull requests"""
+        print("\n=== Testing GitHub get_repository_pulls ===")
+
+        provider = GitHubProvider(github_config)
+
+        measure_performance.start()
+        result = provider.get_repository_pulls(owner="microsoft", repo="vscode", state="closed", per_page=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+
+        debug_output("GitHub Repository Pull Requests", {
+            'owner': 'microsoft',
+            'repo': 'vscode',
+            'pulls_count': len(result['data']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  GitHub get_repository_pulls took {duration:.3f} seconds")
+        print(f"✓ Retrieved {len(result['data'])} pull requests")
+
+    def test_validate_params(self, github_config):
+        """Test GitHub parameter validation"""
+        print("\n=== Testing GitHub Parameter Validation ===")
+
+        provider = GitHubProvider(github_config)
+
+        # Valid params for get_repository
+        is_valid, error = provider.validate_params('get_repository', {'owner': 'octocat', 'repo': 'Hello-World'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params - missing required
+        is_valid, error = provider.validate_params('get_repository', {'owner': 'octocat'})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for search_repositories
+        is_valid, error = provider.validate_params('search_repositories', {'query': 'python'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for search_repositories
+        is_valid, error = provider.validate_params('search_repositories', {})
+        assert is_valid is False
+        assert error is not None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, github_config, debug_output):
+        """Test GitHub operation schema"""
+        print("\n=== Testing GitHub Operation Schema ===")
+
+        provider = GitHubProvider(github_config)
+
+        schema = provider.get_operation_schema('get_repository')
+
+        assert schema is not None
+        assert 'description' in schema
+        assert 'parameters' in schema
+
+        debug_output("GitHub get_repository Schema", schema)
+
+        print("✓ Operation schema retrieved successfully")
+
+
+class TestGitHubProvider:
+    """Test GitHub API provider"""
+
+    def test_provider_metadata(self, github_config, debug_output):
+        """Test GitHub provider metadata"""
+        print("\n=== Testing GitHub Provider Metadata ===")
+
+        provider = GitHubProvider(github_config)
+
+        assert provider.name == "github"
+        assert provider.description is not None
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+        assert metadata['name'] == 'github'
+        assert 'operations' in metadata
+
+        debug_output("GitHub Provider Metadata", {
+            'name': provider.name,
+            'description': provider.description,
+            'operations': provider.supported_operations,
+        })
+
+        print("✓ GitHub provider metadata validated")
+
+    @pytest.mark.network
+    def test_get_repository(self, github_config, debug_output, measure_performance):
+        """Test getting repository information"""
+        print("\n=== Testing GitHub get_repository ===")
+
+        provider = GitHubProvider(github_config)
+
+        measure_performance.start()
+        result = provider.get_repository(owner="octocat", repo="Hello-World")
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'name' in result['data']
+        assert 'owner' in result['data']
+
+        debug_output("GitHub Repository Data", {
+            'owner': 'octocat',
+            'repo': 'Hello-World',
+            'name': result['data'].get('name'),
+            'stars': result['data'].get('stargazers_count'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  GitHub get_repository took {duration:.3f} seconds")
+        print("✓ Retrieved repository data successfully")
+
+    @pytest.mark.network
+    def test_search_repositories(self, github_config, debug_output, measure_performance):
+        """Test searching repositories"""
+        print("\n=== Testing GitHub search_repositories ===")
+
+        provider = GitHubProvider(github_config)
+
+        measure_performance.start()
+        result = provider.search_repositories(query="language:python stars:>1000", per_page=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        # Check first result structure
+        first_result = result['data'][0]
+        assert 'name' in first_result
+        assert 'owner' in first_result or 'full_name' in first_result
+
+        debug_output("GitHub Repository Search Results", {
+            'query': 'language:python stars:>1000',
+            'results_count': len(result['data']),
+            'first_result_name': first_result.get('name') or first_result.get('full_name'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  GitHub search_repositories took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data'])} repositories")
+
+    @pytest.mark.network
+    def test_get_user(self, github_config, debug_output, measure_performance):
+        """Test getting user information"""
+        print("\n=== Testing GitHub get_user ===")
+
+        provider = GitHubProvider(github_config)
+
+        measure_performance.start()
+        result = provider.get_user(username="octocat")
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'login' in result['data']
+
+        debug_output("GitHub User Data", {
+            'username': 'octocat',
+            'login': result['data'].get('login'),
+            'public_repos': result['data'].get('public_repos'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  GitHub get_user took {duration:.3f} seconds")
+        print("✓ Retrieved user data successfully")
+
+    @pytest.mark.network
+    def test_search_users(self, github_config, debug_output, measure_performance):
+        """Test searching users"""
+        print("\n=== Testing GitHub search_users ===")
+
+        provider = GitHubProvider(github_config)
+
+        measure_performance.start()
+        result = provider.search_users(query="followers:>1000", per_page=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        # Check first result structure
+        first_result = result['data'][0]
+        assert 'login' in first_result
+
+        debug_output("GitHub User Search Results", {
+            'query': 'followers:>1000',
+            'results_count': len(result['data']),
+            'first_result_login': first_result.get('login'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  GitHub search_users took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data'])} users")
+
+    @pytest.mark.network
+    def test_get_repository_issues(self, github_config, debug_output, measure_performance):
+        """Test getting repository issues"""
+        print("\n=== Testing GitHub get_repository_issues ===")
+
+        provider = GitHubProvider(github_config)
+
+        measure_performance.start()
+        result = provider.get_repository_issues(owner="octocat", repo="Hello-World", state="all", per_page=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+
+        debug_output("GitHub Repository Issues", {
+            'owner': 'octocat',
+            'repo': 'Hello-World',
+            'issues_count': len(result['data']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  GitHub get_repository_issues took {duration:.3f} seconds")
+        print(f"✓ Retrieved {len(result['data'])} issues")
+
+    def test_validate_params(self, github_config):
+        """Test GitHub parameter validation"""
+        print("\n=== Testing GitHub Parameter Validation ===")
+
+        provider = GitHubProvider(github_config)
+
+        # Valid params for get_repository
+        is_valid, error = provider.validate_params('get_repository', {'owner': 'octocat', 'repo': 'Hello-World'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params - missing required
+        is_valid, error = provider.validate_params('get_repository', {'owner': 'octocat'})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for search_repositories
+        is_valid, error = provider.validate_params('search_repositories', {'query': 'python'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for search_repositories
+        is_valid, error = provider.validate_params('search_repositories', {})
+        assert is_valid is False
+        assert error is not None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, github_config, debug_output):
+        """Test GitHub operation schema"""
+        print("\n=== Testing GitHub Operation Schema ===")
+
+        provider = GitHubProvider(github_config)
+
+        schema = provider.get_operation_schema('get_repository')
+
+        assert schema is not None
+        assert 'description' in schema
+        assert 'parameters' in schema
+
+        debug_output("GitHub get_repository Schema", schema)
+
+        print("✓ Operation schema retrieved successfully")
 
