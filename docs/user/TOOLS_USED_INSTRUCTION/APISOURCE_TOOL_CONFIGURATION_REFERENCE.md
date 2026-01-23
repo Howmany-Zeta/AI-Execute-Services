@@ -521,6 +521,57 @@ export CROSSREF_MAILTO="your-email@example.com"
 - `search_funders`: Search for funders in the Open Funder Registry
 - `get_funder_works`: Get works associated with a specific funder
 
+### 3.16 Semantic Scholar API
+
+**No API Key Required**:
+```python
+# Semantic Scholar API is completely free and open
+tool = APISourceTool()  # No key needed for Semantic Scholar
+```
+
+**Configuration (Optional)**:
+```python
+config = {
+    'semanticscholar_config': {
+        'timeout': 30,
+        'rate_limit': 1,  # Requests per second (recommended for sustained use)
+        'user_agent': 'AIECS-APISource/2.0 (https://github.com/your-org/aiecs; your-email@example.com)'
+    }
+}
+tool = APISourceTool(config)
+```
+
+**Environment Variables**:
+```bash
+export SEMANTICSCHOLAR_TIMEOUT=30
+export SEMANTICSCHOLAR_RATE_LIMIT=1
+export SEMANTICSCHOLAR_MAX_BURST=5
+```
+
+**Rate Limits**:
+- Free tier: 1 request per second recommended (100 requests per 5 minutes)
+- Higher limits available upon request
+
+**Important API Rules**:
+1. **Rate Limiting**: Recommended 1 request per second for sustained use
+2. **Max Results**: Limited to 100 results per request for search, use pagination for more
+3. **Caching**: Cache responses when possible to reduce server load
+4. **User-Agent**: Set a descriptive User-Agent header
+
+**API Documentation**:
+- API Documentation: https://api.semanticscholar.org/api-docs/
+- Academic Graph API: https://www.semanticscholar.org/product/api
+- API Tutorial: https://www.semanticscholar.org/product/api/tutorial
+
+**Supported Operations**:
+- `search_papers`: Search for papers by query string
+- `get_paper`: Get paper details by ID (S2 ID, DOI, arXiv ID, etc.)
+- `get_paper_authors`: Get authors of a specific paper
+- `get_paper_citations`: Get papers that cite this paper
+- `get_paper_references`: Get papers referenced by this paper
+- `get_author`: Get author details by ID
+- `get_author_papers`: Get papers by a specific author
+
 ---
 
 ## 4. Performance Settings
@@ -998,6 +1049,54 @@ config = {
 - API Etiquette: https://github.com/CrossRef/rest-api-doc#etiquette
 - Metadata Plus: https://www.crossref.org/services/metadata-delivery/
 
+### 6.16 Semantic Scholar Provider
+
+```python
+config = {
+    'semanticscholar_config': {
+        'base_url': 'https://api.semanticscholar.org/graph/v1',
+        'timeout': 30,
+        'rate_limit': 1,     # Requests per second (recommended for sustained use)
+        'max_burst': 5,      # Maximum burst size
+        'user_agent': 'AIECS-APISource/2.0 (https://github.com/your-org/aiecs; your-email@example.com)'
+    }
+}
+```
+
+**Features**:
+- Search for academic papers by query
+- Get paper metadata by ID (S2 ID, DOI, arXiv ID, etc.)
+- Get paper authors, citations, and references
+- Get author information and publications
+- Access to extensive academic paper database with citation data
+- Support for multiple paper ID formats (S2 ID, DOI, arXiv ID, PubMed ID, etc.)
+
+**Supported Operations**:
+- `search_papers` - Search for papers by query string
+- `get_paper` - Get paper details by ID (S2 ID, DOI, arXiv ID, etc.)
+- `get_paper_authors` - Get authors of a specific paper
+- `get_paper_citations` - Get papers that cite this paper
+- `get_paper_references` - Get papers referenced by this paper
+- `get_author` - Get author details by ID
+- `get_author_papers` - Get papers by a specific author
+
+**Important Configuration Notes**:
+- **No API Key Required**: Semantic Scholar API is completely free and open
+- **Rate Limit**: Recommended 1 request per second for sustained use (100 requests per 5 minutes)
+- **Max Results**: Limited to 100 results per request for search, use pagination for more
+- **User-Agent**: Set a descriptive User-Agent header with contact information
+- **Caching**: Strongly recommended to cache responses to reduce server load
+- **Paper IDs**: Supports multiple ID formats (S2 ID, DOI, arXiv ID, PubMed ID, etc.)
+
+**Obtaining Access**:
+- No API key required - completely free and open access
+- Optional: Contact Semantic Scholar for higher rate limits if needed
+
+**API Documentation**:
+- API Documentation: https://api.semanticscholar.org/api-docs/
+- Academic Graph API: https://www.semanticscholar.org/product/api
+- API Tutorial: https://www.semanticscholar.org/product/api/tutorial
+
 ---
 
 ## 7. Environment Variables
@@ -1017,6 +1116,11 @@ export APISOURCE_OPENWEATHERMAP_API_KEY="your_openweathermap_key"
 export APISOURCE_GITHUB_API_KEY="your_github_token"  # Recommended
 export APISOURCE_PUBMED_API_KEY="your_ncbi_api_key"  # Optional but recommended
 export CROSSREF_MAILTO="your-email@example.com"  # Optional but recommended for polite pool
+
+# Provider-specific Configuration
+export SEMANTICSCHOLAR_TIMEOUT=30
+export SEMANTICSCHOLAR_RATE_LIMIT=1
+export SEMANTICSCHOLAR_MAX_BURST=5
 
 # Performance
 export APISOURCE_CACHE_TTL="300"

@@ -13,6 +13,7 @@ Coverage:
 """
 
 import logging
+import time
 from typing import Dict, Any
 
 import pytest
@@ -38,6 +39,7 @@ from aiecs.tools.apisource.providers.github import GitHubProvider
 from aiecs.tools.apisource.providers.arxiv import ArxivProvider
 from aiecs.tools.apisource.providers.pubmed import PubMedProvider
 from aiecs.tools.apisource.providers.crossref import CrossRefProvider
+from aiecs.tools.apisource.providers.semanticscholar import SemanticScholarProvider
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +64,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref']
+        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -3608,6 +3610,217 @@ class TestCrossRefProvider:
         schema = provider.get_operation_schema('get_journal_works')
         assert schema is not None
         assert 'issn' in schema['properties']
+
+        print("✓ Operation schemas retrieved successfully")
+
+
+class TestSemanticScholarProvider:
+    """Test Semantic Scholar API provider"""
+
+    def test_provider_metadata(self, semanticscholar_config, debug_output):
+        """Test Semantic Scholar provider metadata"""
+        print("\n=== Testing Semantic Scholar Provider Metadata ===")
+
+        provider = SemanticScholarProvider(semanticscholar_config)
+
+        assert provider.name == "semanticscholar"
+        assert provider.description is not None
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+        assert metadata['name'] == 'semanticscholar'
+        assert 'operations' in metadata
+
+        debug_output("Semantic Scholar Provider Metadata", {
+            'name': provider.name,
+            'description': provider.description,
+            'operations': provider.supported_operations,
+        })
+
+        print("✓ Semantic Scholar provider metadata validated")
+
+    @pytest.mark.network
+    def test_search_papers(self, semanticscholar_config, debug_output, measure_performance):
+        """Test searching for papers"""
+        print("\n=== Testing Semantic Scholar search_papers ===")
+
+        provider = SemanticScholarProvider(semanticscholar_config)
+
+        measure_performance.start()
+        result = provider.search_papers(query="machine learning", limit=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        # Check first paper structure
+        first_paper = result['data'][0]
+        assert 'paperId' in first_paper or 'title' in first_paper
+
+        debug_output("Semantic Scholar Search Papers", {
+            'query': 'machine learning',
+            'results_count': len(result['data']),
+            'first_paper_title': first_paper.get('title', 'N/A'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Semantic Scholar search_papers took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data'])} papers")
+
+    @pytest.mark.network
+    def test_get_paper(self, semanticscholar_config, debug_output, measure_performance):
+        """Test getting a specific paper by ID"""
+        print("\n=== Testing Semantic Scholar get_paper ===")
+
+        # Add delay to respect rate limits (1 req/sec)
+        time.sleep(2)
+
+        provider = SemanticScholarProvider(semanticscholar_config)
+
+        # Use a well-known paper ID (Attention Is All You Need)
+        measure_performance.start()
+        result = provider.get_paper(paper_id="204e3073870fae3d05bcbc2f6a8e263d9b72e776")
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'title' in result['data'] or 'paperId' in result['data']
+
+        debug_output("Semantic Scholar Get Paper", {
+            'paper_id': '204e3073870fae3d05bcbc2f6a8e263d9b72e776',
+            'title': result['data'].get('title', 'N/A'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Semantic Scholar get_paper took {duration:.3f} seconds")
+        print("✓ Retrieved paper successfully")
+
+    @pytest.mark.network
+    def test_get_paper_citations(self, semanticscholar_config, debug_output, measure_performance):
+        """Test getting papers that cite a specific paper"""
+        print("\n=== Testing Semantic Scholar get_paper_citations ===")
+
+        provider = SemanticScholarProvider(semanticscholar_config)
+
+        # Use a well-known paper ID
+        measure_performance.start()
+        result = provider.get_paper_citations(
+            paper_id="204e3073870fae3d05bcbc2f6a8e263d9b72e776",
+            limit=5
+        )
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+
+        debug_output("Semantic Scholar Get Paper Citations", {
+            'paper_id': '204e3073870fae3d05bcbc2f6a8e263d9b72e776',
+            'citations_count': len(result['data']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Semantic Scholar get_paper_citations took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data'])} citations")
+
+    @pytest.mark.network
+    def test_get_paper_references(self, semanticscholar_config, debug_output, measure_performance):
+        """Test getting papers referenced by a specific paper"""
+        print("\n=== Testing Semantic Scholar get_paper_references ===")
+
+        provider = SemanticScholarProvider(semanticscholar_config)
+
+        # Use a well-known paper ID
+        measure_performance.start()
+        result = provider.get_paper_references(
+            paper_id="204e3073870fae3d05bcbc2f6a8e263d9b72e776",
+            limit=5
+        )
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+
+        debug_output("Semantic Scholar Get Paper References", {
+            'paper_id': '204e3073870fae3d05bcbc2f6a8e263d9b72e776',
+            'references_count': len(result['data']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Semantic Scholar get_paper_references took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data'])} references")
+
+    def test_validate_params(self, semanticscholar_config):
+        """Test Semantic Scholar parameter validation"""
+        print("\n=== Testing Semantic Scholar Parameter Validation ===")
+
+        provider = SemanticScholarProvider(semanticscholar_config)
+
+        # Valid params for search_papers
+        is_valid, error = provider.validate_params('search_papers', {'query': 'deep learning'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params - missing required
+        is_valid, error = provider.validate_params('search_papers', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_paper
+        is_valid, error = provider.validate_params('get_paper', {'paper_id': '123456'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for get_paper
+        is_valid, error = provider.validate_params('get_paper', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_paper_citations
+        is_valid, error = provider.validate_params('get_paper_citations', {'paper_id': '123456'})
+        assert is_valid is True
+        assert error is None
+
+        # Valid params for get_author
+        is_valid, error = provider.validate_params('get_author', {'author_id': '123456'})
+        assert is_valid is True
+        assert error is None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, semanticscholar_config, debug_output):
+        """Test Semantic Scholar operation schema"""
+        print("\n=== Testing Semantic Scholar Operation Schema ===")
+
+        provider = SemanticScholarProvider(semanticscholar_config)
+
+        # Test search_papers schema
+        schema = provider.get_operation_schema('search_papers')
+        assert schema is not None
+        assert 'type' in schema
+        assert 'properties' in schema
+        assert 'query' in schema['properties']
+
+        debug_output("Semantic Scholar search_papers Schema", schema)
+
+        # Test get_paper schema
+        schema = provider.get_operation_schema('get_paper')
+        assert schema is not None
+        assert 'paper_id' in schema['properties']
+
+        # Test get_paper_citations schema
+        schema = provider.get_operation_schema('get_paper_citations')
+        assert schema is not None
+        assert 'paper_id' in schema['properties']
+
+        # Test get_author schema
+        schema = provider.get_operation_schema('get_author')
+        assert schema is not None
+        assert 'author_id' in schema['properties']
 
         print("✓ Operation schemas retrieved successfully")
 
