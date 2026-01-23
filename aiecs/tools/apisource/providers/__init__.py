@@ -11,6 +11,7 @@ from aiecs.tools.apisource.providers.newsapi import NewsAPIProvider
 from aiecs.tools.apisource.providers.census import CensusProvider
 from aiecs.tools.apisource.providers.alphavantage import AlphaVantageProvider
 from aiecs.tools.apisource.providers.restcountries import RESTCountriesProvider
+from aiecs.tools.apisource.providers.exchangerate import ExchangeRateProvider
 
 import logging
 from typing import Dict, List, Optional, Type, Any
@@ -100,6 +101,7 @@ register_provider(NewsAPIProvider)
 register_provider(CensusProvider)
 register_provider(AlphaVantageProvider)
 register_provider(RESTCountriesProvider)
+register_provider(ExchangeRateProvider)
 
 
 __all__ = [
@@ -111,6 +113,7 @@ __all__ = [
     "CensusProvider",
     "AlphaVantageProvider",
     "RESTCountriesProvider",
+    "ExchangeRateProvider",
     "register_provider",
     "get_provider",
     "list_providers",
