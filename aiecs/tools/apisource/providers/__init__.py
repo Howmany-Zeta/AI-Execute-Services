@@ -17,6 +17,7 @@ from aiecs.tools.apisource.providers.coingecko import CoinGeckoProvider
 from aiecs.tools.apisource.providers.openweathermap import OpenWeatherMapProvider
 from aiecs.tools.apisource.providers.wikipedia import WikipediaProvider
 from aiecs.tools.apisource.providers.github import GitHubProvider
+from aiecs.tools.apisource.providers.arxiv import ArxivProvider
 
 import logging
 from typing import Dict, List, Optional, Type, Any
@@ -112,6 +113,7 @@ register_provider(CoinGeckoProvider)
 register_provider(OpenWeatherMapProvider)
 register_provider(WikipediaProvider)
 register_provider(GitHubProvider)
+register_provider(ArxivProvider)
 
 
 __all__ = [
@@ -129,6 +131,7 @@ __all__ = [
     "OpenWeatherMapProvider",
     "WikipediaProvider",
     "GitHubProvider",
+    "ArxivProvider",
     "register_provider",
     "get_provider",
     "list_providers",
