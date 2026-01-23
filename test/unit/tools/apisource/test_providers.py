@@ -33,6 +33,7 @@ from aiecs.tools.apisource.providers.exchangerate import ExchangeRateProvider
 from aiecs.tools.apisource.providers.openlibrary import OpenLibraryProvider
 from aiecs.tools.apisource.providers.coingecko import CoinGeckoProvider
 from aiecs.tools.apisource.providers.openweathermap import OpenWeatherMapProvider
+from aiecs.tools.apisource.providers.wikipedia import WikipediaProvider
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap']
+        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -2053,4 +2054,309 @@ class TestOpenWeatherMapProvider:
         assert error is not None
 
         print("✓ Parameter validation working correctly")
+
+
+class TestWikipediaProvider:
+    """Test Wikipedia API provider"""
+
+    def test_provider_metadata(self, wikipedia_config, debug_output):
+        """Test Wikipedia provider metadata"""
+        print("\n=== Testing Wikipedia Provider Metadata ===")
+
+        provider = WikipediaProvider(wikipedia_config)
+
+        assert provider.name == "wikipedia"
+        assert provider.description is not None
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+        assert metadata['name'] == 'wikipedia'
+        assert 'operations' in metadata
+
+        debug_output("Wikipedia Provider Metadata", {
+            'name': provider.name,
+            'description': provider.description,
+            'operations': provider.supported_operations,
+        })
+
+        print("✓ Wikipedia provider metadata validated")
+
+    @pytest.mark.network
+    def test_search_pages(self, wikipedia_config, debug_output, measure_performance):
+        """Test searching Wikipedia pages"""
+        print("\n=== Testing Wikipedia search_pages ===")
+
+        provider = WikipediaProvider(wikipedia_config)
+
+        measure_performance.start()
+        result = provider.search_pages(query="Python programming", limit=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        # Check first result structure
+        first_result = result['data'][0]
+        assert 'title' in first_result
+        assert 'snippet' in first_result or 'pageid' in first_result
+
+        debug_output("Wikipedia Search Results", {
+            'query': 'Python programming',
+            'results_count': len(result['data']),
+            'first_result_title': first_result.get('title'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Wikipedia search_pages took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data'])} results")
+
+    @pytest.mark.network
+    def test_get_page_summary(self, wikipedia_config, debug_output, measure_performance):
+        """Test getting page summary"""
+        print("\n=== Testing Wikipedia get_page_summary ===")
+
+        provider = WikipediaProvider(wikipedia_config)
+
+        measure_performance.start()
+        result = provider.get_page_summary(title="Python (programming language)")
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+
+        # Check summary structure
+        data = result['data']
+        assert 'title' in data or 'extract' in data
+
+        debug_output("Wikipedia Page Summary", {
+            'title': 'Python (programming language)',
+            'has_extract': 'extract' in data,
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Wikipedia get_page_summary took {duration:.3f} seconds")
+        print("✓ Retrieved page summary successfully")
+
+    @pytest.mark.network
+    def test_get_page_content(self, wikipedia_config, debug_output, measure_performance):
+        """Test getting full page content"""
+        print("\n=== Testing Wikipedia get_page_content ===")
+
+        provider = WikipediaProvider(wikipedia_config)
+
+        measure_performance.start()
+        result = provider.get_page_content(title="Python (programming language)")
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+
+        debug_output("Wikipedia Page Content", {
+            'title': 'Python (programming language)',
+            'data_keys': list(result['data'].keys()) if isinstance(result['data'], dict) else 'N/A',
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Wikipedia get_page_content took {duration:.3f} seconds")
+        print("✓ Retrieved page content successfully")
+
+    @pytest.mark.network
+    def test_get_random_page(self, wikipedia_config, debug_output, measure_performance):
+        """Test getting random page"""
+        print("\n=== Testing Wikipedia get_random_page ===")
+
+        provider = WikipediaProvider(wikipedia_config)
+
+        measure_performance.start()
+        result = provider.get_random_page()
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        # Check random page structure
+        first_page = result['data'][0]
+        assert 'title' in first_page or 'id' in first_page
+
+        debug_output("Wikipedia Random Page", {
+            'page_title': first_page.get('title', 'N/A'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Wikipedia get_random_page took {duration:.3f} seconds")
+        print("✓ Retrieved random page successfully")
+
+    @pytest.mark.network
+    def test_get_page_info(self, wikipedia_config, debug_output, measure_performance):
+        """Test getting page information"""
+        print("\n=== Testing Wikipedia get_page_info ===")
+
+        provider = WikipediaProvider(wikipedia_config)
+
+        measure_performance.start()
+        result = provider.get_page_info(title="Python (programming language)")
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+
+        debug_output("Wikipedia Page Info", {
+            'title': 'Python (programming language)',
+            'data_keys': list(result['data'].keys()) if isinstance(result['data'], dict) else 'N/A',
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Wikipedia get_page_info took {duration:.3f} seconds")
+        print("✓ Retrieved page info successfully")
+
+    def test_validate_params(self, wikipedia_config):
+        """Test Wikipedia parameter validation"""
+        print("\n=== Testing Wikipedia Parameter Validation ===")
+
+        provider = WikipediaProvider(wikipedia_config)
+
+        # Valid params for search_pages
+        is_valid, error = provider.validate_params('search_pages', {'query': 'Python'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for search_pages - missing query
+        is_valid, error = provider.validate_params('search_pages', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_page_summary
+        is_valid, error = provider.validate_params('get_page_summary', {'title': 'Python'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for get_page_summary - missing title
+        is_valid, error = provider.validate_params('get_page_summary', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_random_page (no params required)
+        is_valid, error = provider.validate_params('get_random_page', {})
+        assert is_valid is True
+        assert error is None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, wikipedia_config, debug_output):
+        """Test operation schema retrieval"""
+        print("\n=== Testing Wikipedia Operation Schema ===")
+
+        provider = WikipediaProvider(wikipedia_config)
+
+        # Test search_pages schema
+        schema = provider.get_operation_schema("search_pages")
+        assert schema is not None
+        assert 'description' in schema
+        assert 'parameters' in schema
+        assert 'query' in schema['parameters']
+
+        # Test get_page_summary schema
+        schema = provider.get_operation_schema("get_page_summary")
+        assert schema is not None
+        assert 'description' in schema
+        assert 'parameters' in schema
+        assert 'title' in schema['parameters']
+
+        debug_output("Wikipedia Operation Schema", {
+            'operations': provider.supported_operations,
+            'sample_schema': schema,
+        })
+
+        print("✓ Operation schemas retrieved successfully")
+
+    @pytest.mark.network
+    def test_multiple_searches(self, wikipedia_config, debug_output, measure_performance):
+        """Test multiple search queries"""
+        print("\n=== Testing Wikipedia Multiple Searches ===")
+
+        provider = WikipediaProvider(wikipedia_config)
+
+        search_queries = [
+            "Artificial Intelligence",
+            "Machine Learning",
+            "Deep Learning",
+        ]
+
+        results = []
+        measure_performance.start()
+
+        for query in search_queries:
+            result = provider.search_pages(query=query, limit=3)
+            assert result is not None
+            assert 'data' in result
+            results.append({
+                'query': query,
+                'results_count': len(result['data'])
+            })
+
+        duration = measure_performance.stop()
+
+        debug_output("Wikipedia Multiple Searches", {
+            'queries_tested': len(search_queries),
+            'results': results,
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Testing {len(search_queries)} queries took {duration:.3f} seconds")
+        print("✓ All searches executed successfully")
+
+    @pytest.mark.network
+    def test_response_validation(self, wikipedia_config, debug_output):
+        """Test response structure validation"""
+        print("\n=== Testing Wikipedia Response Validation ===")
+
+        provider = WikipediaProvider(wikipedia_config)
+
+        result = provider.search_pages(query="Python", limit=5)
+
+        # Validate response structure
+        assert 'provider' in result
+        assert 'operation' in result
+        assert 'data' in result
+        assert 'metadata' in result
+
+        assert result['provider'] == 'wikipedia'
+        assert result['operation'] == 'search_pages'
+
+        metadata = result['metadata']
+        assert 'timestamp' in metadata
+        assert 'source' in metadata
+
+        debug_output("Wikipedia Response Structure", {
+            'provider': result['provider'],
+            'operation': result['operation'],
+            'has_data': 'data' in result,
+            'has_metadata': 'metadata' in result,
+        })
+
+        print("✓ Response structure validated")
+
+    @pytest.mark.network
+    def test_error_handling_invalid_title(self, wikipedia_config):
+        """Test error handling for invalid page title"""
+        print("\n=== Testing Wikipedia Invalid Title Error ===")
+
+        provider = WikipediaProvider(wikipedia_config)
+
+        # This should not raise an exception, but return empty or error data
+        try:
+            result = provider.get_page_summary(title="ThisPageDefinitelyDoesNotExist12345XYZ")
+            # Wikipedia API may return an error or empty result
+            assert result is not None
+            print("✓ Invalid title handled gracefully")
+        except Exception as e:
+            # If it raises an exception, that's also acceptable
+            print(f"✓ Invalid title raised exception: {type(e).__name__}")
 

@@ -211,6 +211,16 @@ def openweathermap_config() -> Dict[str, Any]:
 
 
 @pytest.fixture
+def wikipedia_config() -> Dict[str, Any]:
+    """Configuration for Wikipedia provider (no API key needed)"""
+    return {
+        'timeout': int(os.getenv('WIKIPEDIA_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('WIKIPEDIA_RATE_LIMIT', '10')),
+        'max_burst': int(os.getenv('WIKIPEDIA_MAX_BURST', '20')),
+    }
+
+
+@pytest.fixture
 def skip_if_no_api_key():
     """Skip test if required API keys are not available"""
     def _skip_if_no_key(provider: str):

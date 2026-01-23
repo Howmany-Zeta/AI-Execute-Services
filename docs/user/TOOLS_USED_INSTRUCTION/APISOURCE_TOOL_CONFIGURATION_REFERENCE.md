@@ -288,6 +288,70 @@ tool = APISourceTool()  # No key needed for Open Library
 - Recommended: Max 10 requests per second
 - Be respectful of the free service
 
+### 3.9 CoinGecko API
+
+**No API Key Required**:
+```python
+# CoinGecko API is free for basic usage
+tool = APISourceTool()  # No key needed for free tier
+```
+
+**Rate Limits**:
+- Free tier: 10-50 calls/minute (varies by endpoint)
+- Pro tier available with API key for higher limits
+
+### 3.10 OpenWeatherMap API
+
+**Obtaining the Key**:
+1. Visit https://openweathermap.org/api
+2. Sign up for a free account
+3. Generate an API key from your account dashboard
+
+**Configuration**:
+```python
+tool = APISourceTool({'openweathermap_api_key': 'YOUR_OPENWEATHERMAP_KEY'})
+```
+
+**Rate Limits**:
+- Free tier: 60 calls/minute, 1,000,000 calls/month
+- Various paid tiers available
+
+### 3.11 Wikipedia API
+
+**No API Key Required**:
+```python
+# Wikipedia API is completely free and open
+tool = APISourceTool()  # No key needed for Wikipedia
+```
+
+**Configuration with User-Agent (REQUIRED)**:
+```python
+config = {
+    'wikipedia_config': {
+        'user_agent': 'AIECS-APISource/2.0 (https://github.com/your-org/aiecs; iretbl@gmail.com)'
+    }
+}
+tool = APISourceTool(config)
+```
+
+**Rate Limits**:
+- Maximum: 200 requests per second
+- Recommended: 10 requests per second (default in configuration)
+- Be respectful of the free service
+
+**API Rules** (https://www.mediawiki.org/wiki/API:Etiquette):
+1. **User-Agent Header REQUIRED**: Must include a unique User-Agent header with:
+   - Application name and version
+   - Contact URL or email address
+   - Format: `"AppName/Version (URL; contact@email.com)"`
+2. **Rate Limiting**: Limit to 200 requests/second maximum
+3. **Caching**: Cache responses when possible to reduce load
+
+**API Documentation**:
+- MediaWiki Action API: https://www.mediawiki.org/wiki/API:Main_page
+- REST API: https://en.wikipedia.org/api/rest_v1/
+- API Etiquette: https://www.mediawiki.org/wiki/API:Etiquette
+
 ---
 
 ## 4. Performance Settings
@@ -563,6 +627,34 @@ config = {
 1. Visit https://openweathermap.org/api
 2. Sign up for a free account
 3. Generate an API key from your account dashboard
+
+### 6.11 Wikipedia Provider
+
+```python
+config = {
+    'wikipedia_config': {
+        'base_url': 'https://en.wikipedia.org/w/api.php',
+        'rest_base_url': 'https://en.wikipedia.org/api/rest_v1',
+        'timeout': 30,
+        'rate_limit': 10,  # Requests per second (max 200 allowed)
+        'max_burst': 20,   # Maximum burst size
+        'user_agent': 'AIECS-APISource/2.0 (https://github.com/your-org/aiecs; iretbl@gmail.com)'  # REQUIRED
+    }
+}
+```
+
+**Features**:
+- Article search by title or content
+- Page summaries and extracts
+- Full page content retrieval
+- Random article discovery
+- Page metadata and information
+
+**Important Configuration Notes**:
+- **No API Key Required**: Wikipedia API is completely free and open
+- **User-Agent REQUIRED**: Must set a unique User-Agent with contact information
+- **Rate Limit**: Maximum 200 req/s allowed, default config uses 10 req/s
+- **API Etiquette**: Follow https://www.mediawiki.org/wiki/API:Etiquette
 
 ---
 
