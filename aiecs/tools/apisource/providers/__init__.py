@@ -18,6 +18,7 @@ from aiecs.tools.apisource.providers.openweathermap import OpenWeatherMapProvide
 from aiecs.tools.apisource.providers.wikipedia import WikipediaProvider
 from aiecs.tools.apisource.providers.github import GitHubProvider
 from aiecs.tools.apisource.providers.arxiv import ArxivProvider
+from aiecs.tools.apisource.providers.pubmed import PubMedProvider
 
 import logging
 from typing import Dict, List, Optional, Type, Any
@@ -114,6 +115,7 @@ register_provider(OpenWeatherMapProvider)
 register_provider(WikipediaProvider)
 register_provider(GitHubProvider)
 register_provider(ArxivProvider)
+register_provider(PubMedProvider)
 
 
 __all__ = [
@@ -132,6 +134,7 @@ __all__ = [
     "WikipediaProvider",
     "GitHubProvider",
     "ArxivProvider",
+    "PubMedProvider",
     "register_provider",
     "get_provider",
     "list_providers",
