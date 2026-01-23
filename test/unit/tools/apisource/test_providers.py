@@ -35,6 +35,7 @@ from aiecs.tools.apisource.providers.coingecko import CoinGeckoProvider
 from aiecs.tools.apisource.providers.openweathermap import OpenWeatherMapProvider
 from aiecs.tools.apisource.providers.wikipedia import WikipediaProvider
 from aiecs.tools.apisource.providers.github import GitHubProvider
+from aiecs.tools.apisource.providers.arxiv import ArxivProvider
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github']
+        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -2805,4 +2806,336 @@ class TestGitHubProvider:
         debug_output("GitHub get_repository Schema", schema)
 
         print("✓ Operation schema retrieved successfully")
+
+
+class TestArxivProvider:
+    """Test arXiv API provider"""
+
+    def test_provider_metadata(self, arxiv_config, debug_output):
+        """Test arXiv provider metadata"""
+        print("\n=== Testing arXiv Provider Metadata ===")
+
+        provider = ArxivProvider(arxiv_config)
+
+        assert provider.name == "arxiv"
+        assert provider.description is not None
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+        assert metadata['name'] == 'arxiv'
+        assert 'operations' in metadata
+
+        debug_output("arXiv Provider Metadata", {
+            'name': provider.name,
+            'description': provider.description,
+            'operations': provider.supported_operations,
+        })
+
+        print("✓ arXiv provider metadata validated")
+
+    @pytest.mark.network
+    def test_search_papers(self, arxiv_config, debug_output, measure_performance):
+        """Test searching for papers"""
+        print("\n=== Testing arXiv search_papers ===")
+
+        provider = ArxivProvider(arxiv_config)
+
+        measure_performance.start()
+        result = provider.search_papers(query="machine learning", max_results=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        # Check first paper structure
+        first_paper = result['data'][0]
+        assert 'title' in first_paper
+        assert 'authors' in first_paper
+        assert 'abstract' in first_paper
+
+        debug_output("arXiv Search Papers", {
+            'query': 'machine learning',
+            'results_count': len(result['data']),
+            'first_paper_title': first_paper.get('title', 'N/A'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  arXiv search_papers took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data'])} papers")
+
+    @pytest.mark.network
+    def test_get_paper_by_id(self, arxiv_config, debug_output, measure_performance):
+        """Test getting a specific paper by arXiv ID"""
+        print("\n=== Testing arXiv get_paper_by_id ===")
+
+        provider = ArxivProvider(arxiv_config)
+
+        # Use a well-known arXiv paper ID
+        measure_performance.start()
+        result = provider.get_paper_by_id(arxiv_id="1706.03762")  # "Attention Is All You Need"
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'title' in result['data']
+        assert 'authors' in result['data']
+        assert 'abstract' in result['data']
+
+        debug_output("arXiv Get Paper by ID", {
+            'arxiv_id': '1706.03762',
+            'title': result['data'].get('title', 'N/A'),
+            'authors_count': len(result['data'].get('authors', [])),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  arXiv get_paper_by_id took {duration:.3f} seconds")
+        print("✓ Retrieved paper successfully")
+
+    @pytest.mark.network
+    def test_search_by_author(self, arxiv_config, debug_output, measure_performance):
+        """Test searching papers by author"""
+        print("\n=== Testing arXiv search_by_author ===")
+
+        provider = ArxivProvider(arxiv_config)
+
+        measure_performance.start()
+        result = provider.search_by_author(author="Yoshua Bengio", max_results=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        debug_output("arXiv Search by Author", {
+            'author': 'Yoshua Bengio',
+            'results_count': len(result['data']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  arXiv search_by_author took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data'])} papers")
+
+    @pytest.mark.network
+    def test_search_by_category(self, arxiv_config, debug_output, measure_performance):
+        """Test searching papers by category"""
+        print("\n=== Testing arXiv search_by_category ===")
+
+        provider = ArxivProvider(arxiv_config)
+
+        measure_performance.start()
+        result = provider.search_by_category(category="cs.AI", max_results=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        # Verify papers have the category
+        for paper in result['data']:
+            assert 'categories' in paper or 'primary_category' in paper
+
+        debug_output("arXiv Search by Category", {
+            'category': 'cs.AI',
+            'results_count': len(result['data']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  arXiv search_by_category took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data'])} papers in cs.AI category")
+
+    def test_validate_params(self, arxiv_config):
+        """Test arXiv parameter validation"""
+        print("\n=== Testing arXiv Parameter Validation ===")
+
+        provider = ArxivProvider(arxiv_config)
+
+        # Valid params for search_papers
+        is_valid, error = provider.validate_params('search_papers', {'query': 'quantum computing'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params - missing required
+        is_valid, error = provider.validate_params('search_papers', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_paper_by_id
+        is_valid, error = provider.validate_params('get_paper_by_id', {'arxiv_id': '1234.5678'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for get_paper_by_id
+        is_valid, error = provider.validate_params('get_paper_by_id', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for search_by_author
+        is_valid, error = provider.validate_params('search_by_author', {'author': 'John Doe'})
+        assert is_valid is True
+        assert error is None
+
+        # Valid params for search_by_category
+        is_valid, error = provider.validate_params('search_by_category', {'category': 'cs.LG'})
+        assert is_valid is True
+        assert error is None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, arxiv_config, debug_output):
+        """Test arXiv operation schema"""
+        print("\n=== Testing arXiv Operation Schema ===")
+
+        provider = ArxivProvider(arxiv_config)
+
+        # Test search_papers schema
+        schema = provider.get_operation_schema('search_papers')
+        assert schema is not None
+        assert 'type' in schema
+        assert 'properties' in schema
+        assert 'query' in schema['properties']
+
+        # Test get_paper_by_id schema
+        schema = provider.get_operation_schema('get_paper_by_id')
+        assert schema is not None
+        assert 'properties' in schema
+        assert 'arxiv_id' in schema['properties']
+
+        debug_output("arXiv Operation Schema", {
+            'operations': provider.supported_operations,
+            'sample_schema': schema,
+        })
+
+        print("✓ Operation schemas retrieved successfully")
+
+    @pytest.mark.network
+    def test_response_validation(self, arxiv_config, debug_output):
+        """Test response structure validation"""
+        print("\n=== Testing arXiv Response Validation ===")
+
+        provider = ArxivProvider(arxiv_config)
+
+        result = provider.search_papers(query="neural networks", max_results=3)
+
+        # Validate response structure
+        assert 'provider' in result
+        assert 'operation' in result
+        assert 'data' in result
+        assert 'metadata' in result
+
+        assert result['provider'] == 'arxiv'
+        assert result['operation'] == 'search_papers'
+
+        metadata = result['metadata']
+        assert 'timestamp' in metadata
+        assert 'source' in metadata
+
+        debug_output("arXiv Response Structure", {
+            'provider': result['provider'],
+            'operation': result['operation'],
+            'has_data': 'data' in result,
+            'has_metadata': 'metadata' in result,
+            'total_results': metadata.get('total_results', 'N/A'),
+        })
+
+        print("✓ Response structure validated")
+
+    @pytest.mark.network
+    def test_paper_data_structure(self, arxiv_config, debug_output):
+        """Test the structure of paper data returned"""
+        print("\n=== Testing arXiv Paper Data Structure ===")
+
+        provider = ArxivProvider(arxiv_config)
+
+        result = provider.get_paper_by_id(arxiv_id="1706.03762")
+
+        paper = result['data']
+        assert isinstance(paper, dict)
+
+        # Check required fields
+        assert 'title' in paper
+        assert 'authors' in paper
+        assert 'abstract' in paper
+
+        # Check optional but common fields
+        expected_fields = ['arxiv_id', 'published', 'updated', 'categories', 'pdf_url', 'abs_url']
+        present_fields = [field for field in expected_fields if field in paper]
+
+        debug_output("arXiv Paper Data Structure", {
+            'has_title': 'title' in paper,
+            'has_authors': 'authors' in paper,
+            'has_abstract': 'abstract' in paper,
+            'authors_count': len(paper.get('authors', [])),
+            'categories_count': len(paper.get('categories', [])),
+            'present_fields': present_fields,
+        })
+
+        print("✓ Paper data structure is valid")
+
+    @pytest.mark.network
+    def test_pagination(self, arxiv_config, debug_output, measure_performance):
+        """Test pagination with start parameter"""
+        print("\n=== Testing arXiv Pagination ===")
+
+        provider = ArxivProvider(arxiv_config)
+
+        # Get first page
+        measure_performance.start()
+        result1 = provider.search_papers(query="deep learning", max_results=3, start=0)
+        duration1 = measure_performance.stop()
+
+        # Get second page
+        measure_performance.start()
+        result2 = provider.search_papers(query="deep learning", max_results=3, start=3)
+        duration2 = measure_performance.stop()
+
+        assert result1 is not None
+        assert result2 is not None
+        assert len(result1['data']) > 0
+        assert len(result2['data']) > 0
+
+        # Papers should be different
+        first_page_ids = [p.get('arxiv_id', p.get('id')) for p in result1['data']]
+        second_page_ids = [p.get('arxiv_id', p.get('id')) for p in result2['data']]
+
+        # At least some papers should be different
+        assert first_page_ids != second_page_ids
+
+        debug_output("arXiv Pagination", {
+            'first_page_count': len(result1['data']),
+            'second_page_count': len(result2['data']),
+            'duration_page1': duration1,
+            'duration_page2': duration2,
+        })
+
+        print("✓ Pagination working correctly")
+
+    @pytest.mark.network
+    def test_multiple_categories(self, arxiv_config, debug_output):
+        """Test papers with multiple categories"""
+        print("\n=== Testing arXiv Multiple Categories ===")
+
+        provider = ArxivProvider(arxiv_config)
+
+        result = provider.search_by_category(category="cs.LG", max_results=5)
+
+        assert result is not None
+        assert len(result['data']) > 0
+
+        # Check that papers have categories
+        papers_with_multiple_cats = 0
+        for paper in result['data']:
+            if 'categories' in paper and len(paper['categories']) > 1:
+                papers_with_multiple_cats += 1
+
+        debug_output("arXiv Multiple Categories", {
+            'total_papers': len(result['data']),
+            'papers_with_multiple_categories': papers_with_multiple_cats,
+        })
+
+        print(f"✓ Found {papers_with_multiple_cats} papers with multiple categories")
 

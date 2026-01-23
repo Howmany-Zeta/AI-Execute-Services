@@ -386,6 +386,37 @@ export GITHUB_API_KEY="your_github_personal_access_token"
 - Authentication: https://docs.github.com/en/rest/authentication
 - Rate Limiting: https://docs.github.com/en/rest/rate-limit
 
+### 3.13 arXiv API
+
+**No API Key Required**:
+```python
+# arXiv API is completely free and open
+tool = APISourceTool()  # No key needed for arXiv
+```
+
+**Configuration (Optional)**:
+```python
+config = {
+    'arxiv_config': {
+        'timeout': 30,
+        'rate_limit': 0.33,  # ~3 second delays between requests (1/3 req/s)
+        'user_agent': 'AIECS-APISource/2.0 (https://github.com/your-org/aiecs; iretbl@gmail.com)'
+    }
+}
+tool = APISourceTool(config)
+```
+
+**Important API Rules**:
+1. **Rate Limiting**: Be respectful - implement 3 second delays between requests
+2. **Max Results**: Limited to 30,000 results in slices of at most 2,000 at a time
+3. **Caching**: Cache responses when possible to reduce server load
+4. **User-Agent**: Set a descriptive User-Agent header
+
+**API Documentation**:
+- API User Manual: https://info.arxiv.org/help/api/user-manual.html
+- API Basics: https://info.arxiv.org/help/api/basics.html
+- arXiv Categories: https://arxiv.org/category_taxonomy
+
 ---
 
 ## 4. Performance Settings
@@ -732,6 +763,43 @@ config = {
 2. Generate new token (classic)
 3. Select appropriate scopes
 4. Copy and store the token securely
+
+### 6.13 arXiv Provider
+
+```python
+config = {
+    'arxiv_config': {
+        'base_url': 'http://export.arxiv.org/api/query',
+        'timeout': 30,
+        'rate_limit': 0.33,  # Requests per second (~3 second delays between requests)
+        'max_burst': 2,      # Maximum burst size
+        'user_agent': 'AIECS-APISource/2.0 (https://github.com/your-org/aiecs; iretbl@gmail.com)'
+    }
+}
+```
+
+**Features**:
+- Search papers by query (all fields)
+- Get paper by arXiv ID
+- Search by author name
+- Search by category (e.g., cs.AI, math.CO)
+- Pagination support
+- Full metadata including authors, abstract, categories, PDF links
+
+**Important Configuration Notes**:
+- **No API Key Required**: arXiv API is completely free and open
+- **Rate Limit**: Be respectful - implement 3 second delays between requests
+- **Max Results**: Limited to 30,000 results in slices of at most 2,000 at a time
+- **Caching**: Strongly recommended to cache responses to reduce server load
+- **API Etiquette**: Follow https://info.arxiv.org/help/api/user-manual.html
+
+**Obtaining the Key**:
+- No API key required - completely free and open access
+
+**API Documentation**:
+- API User Manual: https://info.arxiv.org/help/api/user-manual.html
+- API Basics: https://info.arxiv.org/help/api/basics.html
+- Category Taxonomy: https://arxiv.org/category_taxonomy
 
 ---
 

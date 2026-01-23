@@ -234,6 +234,16 @@ def github_config(api_keys) -> Dict[str, Any]:
 
 
 @pytest.fixture
+def arxiv_config() -> Dict[str, Any]:
+    """Configuration for arXiv provider (no API key needed)"""
+    return {
+        'timeout': int(os.getenv('ARXIV_TIMEOUT', '30')),
+        'rate_limit': float(os.getenv('ARXIV_RATE_LIMIT', '0.33')),  # ~3 second delays (1/3 req/s)
+        'max_burst': int(os.getenv('ARXIV_MAX_BURST', '2')),
+    }
+
+
+@pytest.fixture
 def skip_if_no_api_key():
     """Skip test if required API keys are not available"""
     def _skip_if_no_key(provider: str):
