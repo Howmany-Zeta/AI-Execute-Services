@@ -529,6 +529,41 @@ config = {
 }
 ```
 
+### 6.9 CoinGecko Provider
+
+```python
+config = {
+    'coingecko_config': {
+        'base_url': 'https://api.coingecko.com/api/v3',
+        'timeout': 30,
+        'rate_limit': 10,  # Requests per second (free tier)
+        'max_burst': 20    # Maximum burst size
+    }
+}
+```
+
+**Note**: CoinGecko free tier does not require an API key. For higher rate limits and additional features, consider the Pro API.
+
+### 6.10 OpenWeatherMap Provider
+
+```python
+config = {
+    'openweathermap_api_key': 'YOUR_KEY',
+    'openweathermap_config': {
+        'base_url': 'https://api.openweathermap.org/data/2.5',
+        'geo_url': 'https://api.openweathermap.org/geo/1.0',
+        'timeout': 30,
+        'rate_limit': 10,  # Requests per second
+        'max_burst': 20    # Maximum burst size
+    }
+}
+```
+
+**Obtaining the Key**:
+1. Visit https://openweathermap.org/api
+2. Sign up for a free account
+3. Generate an API key from your account dashboard
+
 ---
 
 ## 7. Environment Variables
@@ -544,6 +579,7 @@ export APISOURCE_NEWSAPI_API_KEY="your_news_key"
 export APISOURCE_CENSUS_API_KEY="your_census_key"
 export APISOURCE_ALPHAVANTAGE_API_KEY="your_alphavantage_key"
 export APISOURCE_EXCHANGERATE_API_KEY="your_exchangerate_key"  # Optional
+export APISOURCE_OPENWEATHERMAP_API_KEY="your_openweathermap_key"
 
 # Performance
 export APISOURCE_CACHE_TTL="300"

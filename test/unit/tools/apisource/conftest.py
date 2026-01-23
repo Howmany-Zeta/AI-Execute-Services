@@ -75,6 +75,7 @@ def load_env_config():
     logger.info(f"  - CENSUS_API_KEY: {'✓ Set' if os.getenv('CENSUS_API_KEY') else '✗ Not set'}")
     logger.info(f"  - ALPHAVANTAGE_API_KEY: {'✓ Set' if os.getenv('ALPHAVANTAGE_API_KEY') else '✗ Not set'}")
     logger.info(f"  - EXCHANGERATE_API_KEY: {'✓ Set' if os.getenv('EXCHANGERATE_API_KEY') else '✗ Not set'}")
+    logger.info(f"  - OPENWEATHERMAP_API_KEY: {'✓ Set' if os.getenv('OPENWEATHERMAP_API_KEY') else '✗ Not set'}")
     logger.info(f"  - DEBUG_MODE: {os.getenv('DEBUG_MODE', 'false')}")
     logger.info(f"  - VERBOSE_API_CALLS: {os.getenv('VERBOSE_API_CALLS', 'false')}")
 
@@ -189,6 +190,27 @@ def openlibrary_config() -> Dict[str, Any]:
 
 
 @pytest.fixture
+def coingecko_config() -> Dict[str, Any]:
+    """Configuration for CoinGecko provider (no API key needed)"""
+    return {
+        'timeout': int(os.getenv('COINGECKO_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('COINGECKO_RATE_LIMIT', '10')),
+        'max_burst': int(os.getenv('COINGECKO_MAX_BURST', '20')),
+    }
+
+
+@pytest.fixture
+def openweathermap_config() -> Dict[str, Any]:
+    """Configuration for OpenWeatherMap provider"""
+    return {
+        'api_key': os.getenv('OPENWEATHERMAP_API_KEY'),
+        'timeout': int(os.getenv('OPENWEATHERMAP_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('OPENWEATHERMAP_RATE_LIMIT', '10')),
+        'max_burst': int(os.getenv('OPENWEATHERMAP_MAX_BURST', '20')),
+    }
+
+
+@pytest.fixture
 def skip_if_no_api_key():
     """Skip test if required API keys are not available"""
     def _skip_if_no_key(provider: str):
@@ -197,6 +219,7 @@ def skip_if_no_api_key():
             'newsapi': 'NEWSAPI_API_KEY',
             'census': 'CENSUS_API_KEY',
             'alphavantage': 'ALPHAVANTAGE_API_KEY',
+            'openweathermap': 'OPENWEATHERMAP_API_KEY',
         }
 
         env_var = key_map.get(provider.lower())

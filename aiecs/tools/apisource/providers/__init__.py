@@ -13,6 +13,8 @@ from aiecs.tools.apisource.providers.alphavantage import AlphaVantageProvider
 from aiecs.tools.apisource.providers.restcountries import RESTCountriesProvider
 from aiecs.tools.apisource.providers.exchangerate import ExchangeRateProvider
 from aiecs.tools.apisource.providers.openlibrary import OpenLibraryProvider
+from aiecs.tools.apisource.providers.coingecko import CoinGeckoProvider
+from aiecs.tools.apisource.providers.openweathermap import OpenWeatherMapProvider
 
 import logging
 from typing import Dict, List, Optional, Type, Any
@@ -104,6 +106,8 @@ register_provider(AlphaVantageProvider)
 register_provider(RESTCountriesProvider)
 register_provider(ExchangeRateProvider)
 register_provider(OpenLibraryProvider)
+register_provider(CoinGeckoProvider)
+register_provider(OpenWeatherMapProvider)
 
 
 __all__ = [
@@ -117,6 +121,8 @@ __all__ = [
     "RESTCountriesProvider",
     "ExchangeRateProvider",
     "OpenLibraryProvider",
+    "CoinGeckoProvider",
+    "OpenWeatherMapProvider",
     "register_provider",
     "get_provider",
     "list_providers",
