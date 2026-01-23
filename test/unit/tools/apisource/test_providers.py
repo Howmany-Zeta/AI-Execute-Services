@@ -30,6 +30,7 @@ from aiecs.tools.apisource.providers.census import CensusProvider
 from aiecs.tools.apisource.providers.alphavantage import AlphaVantageProvider
 from aiecs.tools.apisource.providers.restcountries import RESTCountriesProvider
 from aiecs.tools.apisource.providers.exchangerate import ExchangeRateProvider
+from aiecs.tools.apisource.providers.openlibrary import OpenLibraryProvider
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate']
+        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -1589,4 +1590,204 @@ class TestProviderErrorHandling:
         assert error is not None
 
         print(f"✓ {provider_class.__name__} validated parameters correctly")
+
+
+class TestOpenLibraryProvider:
+    """Test Open Library API provider"""
+
+    def test_provider_metadata(self, openlibrary_config, debug_output):
+        """Test Open Library provider metadata"""
+        print("\n=== Testing Open Library Provider Metadata ===")
+
+        provider = OpenLibraryProvider(openlibrary_config)
+
+        assert provider.name == "openlibrary"
+        assert provider.description is not None
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+        assert metadata['name'] == 'openlibrary'
+        assert 'operations' in metadata
+
+        debug_output("Open Library Provider Metadata", {
+            'name': provider.name,
+            'description': provider.description,
+            'operations': provider.supported_operations,
+        })
+
+        print("✓ Open Library provider metadata validated")
+
+    @pytest.mark.network
+    def test_search_books(self, openlibrary_config, debug_output, measure_performance):
+        """Test searching for books"""
+        print("\n=== Testing Open Library search_books ===")
+
+        provider = OpenLibraryProvider(openlibrary_config)
+
+        measure_performance.start()
+        result = provider.search_books(q="the lord of the rings", limit=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        # Check first result structure
+        first_result = result['data'][0]
+        assert isinstance(first_result, dict)
+        assert 'title' in first_result or 'key' in first_result
+
+        debug_output("Open Library Search Results", {
+            'query': 'the lord of the rings',
+            'results_count': len(result['data']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Open Library search_books took {duration:.3f} seconds")
+        print("✓ Retrieved book search results successfully")
+
+    @pytest.mark.network
+    def test_search_books_by_author(self, openlibrary_config, debug_output, measure_performance):
+        """Test searching for books by author"""
+        print("\n=== Testing Open Library search_books by author ===")
+
+        provider = OpenLibraryProvider(openlibrary_config)
+
+        measure_performance.start()
+        result = provider.search_books(author="J.R.R. Tolkien", limit=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        debug_output("Open Library Author Search", {
+            'author': 'J.R.R. Tolkien',
+            'results_count': len(result['data']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Open Library search by author took {duration:.3f} seconds")
+        print("✓ Retrieved books by author successfully")
+
+    @pytest.mark.network
+    def test_get_work(self, openlibrary_config, debug_output, measure_performance):
+        """Test getting work details"""
+        print("\n=== Testing Open Library get_work ===")
+
+        provider = OpenLibraryProvider(openlibrary_config)
+
+        measure_performance.start()
+        result = provider.get_work(work_id="OL27448W")  # The Lord of the Rings
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'title' in result['data'] or 'key' in result['data']
+
+        debug_output("Open Library Work Details", {
+            'work_id': 'OL27448W',
+            'data_type': type(result['data']).__name__,
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Open Library get_work took {duration:.3f} seconds")
+        print("✓ Retrieved work details successfully")
+
+    @pytest.mark.network
+    def test_search_authors(self, openlibrary_config, debug_output, measure_performance):
+        """Test searching for authors"""
+        print("\n=== Testing Open Library search_authors ===")
+
+        provider = OpenLibraryProvider(openlibrary_config)
+
+        measure_performance.start()
+        result = provider.search_authors(q="Mark Twain", limit=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        debug_output("Open Library Author Search", {
+            'query': 'Mark Twain',
+            'results_count': len(result['data']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Open Library search_authors took {duration:.3f} seconds")
+        print("✓ Retrieved author search results successfully")
+
+    @pytest.mark.network
+    def test_get_subject(self, openlibrary_config, debug_output, measure_performance):
+        """Test getting books by subject"""
+        print("\n=== Testing Open Library get_subject ===")
+
+        provider = OpenLibraryProvider(openlibrary_config)
+
+        measure_performance.start()
+        result = provider.get_subject(subject="science_fiction", limit=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        # Subject endpoint may return dict or list
+        assert isinstance(result['data'], (dict, list))
+
+        debug_output("Open Library Subject Books", {
+            'subject': 'science_fiction',
+            'data_type': type(result['data']).__name__,
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Open Library get_subject took {duration:.3f} seconds")
+        print("✓ Retrieved books by subject successfully")
+
+    def test_validate_params(self, openlibrary_config):
+        """Test Open Library parameter validation"""
+        print("\n=== Testing Open Library Parameter Validation ===")
+
+        provider = OpenLibraryProvider(openlibrary_config)
+
+        # Valid params for search_books
+        is_valid, error = provider.validate_params('search_books', {'q': 'python'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params - missing all search parameters
+        is_valid, error = provider.validate_params('search_books', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_work
+        is_valid, error = provider.validate_params('get_work', {'work_id': 'OL27448W'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for get_work
+        is_valid, error = provider.validate_params('get_work', {})
+        assert is_valid is False
+        assert error is not None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, openlibrary_config, debug_output):
+        """Test Open Library operation schema"""
+        print("\n=== Testing Open Library Operation Schema ===")
+
+        provider = OpenLibraryProvider(openlibrary_config)
+
+        schema = provider.get_operation_schema('search_books')
+
+        assert schema is not None
+        assert 'description' in schema
+        assert 'parameters' in schema
+
+        debug_output("Open Library search_books Schema", schema)
+
+        print("✓ Operation schema retrieved successfully")
 

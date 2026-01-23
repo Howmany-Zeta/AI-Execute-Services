@@ -12,6 +12,7 @@ from aiecs.tools.apisource.providers.census import CensusProvider
 from aiecs.tools.apisource.providers.alphavantage import AlphaVantageProvider
 from aiecs.tools.apisource.providers.restcountries import RESTCountriesProvider
 from aiecs.tools.apisource.providers.exchangerate import ExchangeRateProvider
+from aiecs.tools.apisource.providers.openlibrary import OpenLibraryProvider
 
 import logging
 from typing import Dict, List, Optional, Type, Any
@@ -102,6 +103,7 @@ register_provider(CensusProvider)
 register_provider(AlphaVantageProvider)
 register_provider(RESTCountriesProvider)
 register_provider(ExchangeRateProvider)
+register_provider(OpenLibraryProvider)
 
 
 __all__ = [
@@ -114,6 +116,7 @@ __all__ = [
     "AlphaVantageProvider",
     "RESTCountriesProvider",
     "ExchangeRateProvider",
+    "OpenLibraryProvider",
     "register_provider",
     "get_provider",
     "list_providers",

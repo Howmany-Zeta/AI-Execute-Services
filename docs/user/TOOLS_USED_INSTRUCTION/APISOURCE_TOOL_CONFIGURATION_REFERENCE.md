@@ -230,6 +230,64 @@ tool = APISourceTool()  # No key needed for World Bank
 - No official rate limit
 - Recommended: Max 10 requests per second
 
+### 3.5 Alpha Vantage API Key
+
+**Obtaining the Key**:
+1. Visit https://www.alphavantage.co/support/#api-key
+2. Register for a free account
+3. Get your API key
+
+**Configuration**:
+```python
+tool = APISourceTool({'alphavantage_api_key': 'YOUR_ALPHAVANTAGE_KEY'})
+```
+
+**Rate Limits**:
+- Free tier: 5 API requests per minute, 500 per day
+- Premium tiers available with higher limits
+
+### 3.6 REST Countries API
+
+**No API Key Required**:
+```python
+# REST Countries API is publicly accessible
+tool = APISourceTool()  # No key needed for REST Countries
+```
+
+**Rate Limits**:
+- No official rate limit
+- Recommended: Max 10 requests per second
+
+### 3.7 ExchangeRate-API
+
+**No API Key Required (Free Tier)**:
+```python
+# ExchangeRate-API free tier works without key
+tool = APISourceTool()  # No key needed for free tier
+```
+
+**Optional API Key for Enhanced Features**:
+```python
+tool = APISourceTool({'exchangerate_api_key': 'YOUR_EXCHANGERATE_KEY'})
+```
+
+**Rate Limits**:
+- Free tier: 1,500 requests per month
+- Standard tier: Higher limits with API key
+
+### 3.8 Open Library API
+
+**No API Key Required**:
+```python
+# Open Library API is completely free and open
+tool = APISourceTool()  # No key needed for Open Library
+```
+
+**Rate Limits**:
+- No official rate limit
+- Recommended: Max 10 requests per second
+- Be respectful of the free service
+
 ---
 
 ## 4. Performance Settings
@@ -422,6 +480,55 @@ config = {
 }
 ```
 
+### 6.5 Alpha Vantage Provider
+
+```python
+config = {
+    'alphavantage_api_key': 'YOUR_KEY',
+    'alphavantage_config': {
+        'base_url': 'https://www.alphavantage.co/query',
+        'timeout': 30,
+        'default_datatype': 'json'
+    }
+}
+```
+
+### 6.6 REST Countries Provider
+
+```python
+config = {
+    'restcountries_config': {
+        'base_url': 'https://restcountries.com/v3.1',
+        'timeout': 30
+    }
+}
+```
+
+### 6.7 ExchangeRate Provider
+
+```python
+config = {
+    'exchangerate_api_key': 'YOUR_KEY',  # Optional
+    'exchangerate_config': {
+        'base_url': 'https://api.exchangerate-api.com/v4',
+        'timeout': 30
+    }
+}
+```
+
+### 6.8 Open Library Provider
+
+```python
+config = {
+    'openlibrary_config': {
+        'base_url': 'https://openlibrary.org',
+        'timeout': 30,
+        'rate_limit': 10,  # Requests per second
+        'max_burst': 20    # Maximum burst size
+    }
+}
+```
+
 ---
 
 ## 7. Environment Variables
@@ -435,6 +542,8 @@ All configuration parameters can be set via environment variables with the `APIS
 export APISOURCE_FRED_API_KEY="your_fred_key"
 export APISOURCE_NEWSAPI_API_KEY="your_news_key"
 export APISOURCE_CENSUS_API_KEY="your_census_key"
+export APISOURCE_ALPHAVANTAGE_API_KEY="your_alphavantage_key"
+export APISOURCE_EXCHANGERATE_API_KEY="your_exchangerate_key"  # Optional
 
 # Performance
 export APISOURCE_CACHE_TTL="300"

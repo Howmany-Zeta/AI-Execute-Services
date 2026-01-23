@@ -179,6 +179,16 @@ def exchangerate_config(api_keys) -> Dict[str, Any]:
 
 
 @pytest.fixture
+def openlibrary_config() -> Dict[str, Any]:
+    """Configuration for Open Library provider (no API key needed)"""
+    return {
+        'timeout': int(os.getenv('OPENLIBRARY_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('OPENLIBRARY_RATE_LIMIT', '10')),
+        'max_burst': int(os.getenv('OPENLIBRARY_MAX_BURST', '20')),
+    }
+
+
+@pytest.fixture
 def skip_if_no_api_key():
     """Skip test if required API keys are not available"""
     def _skip_if_no_key(provider: str):
