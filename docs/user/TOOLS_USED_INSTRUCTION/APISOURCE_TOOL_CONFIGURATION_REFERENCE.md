@@ -572,6 +572,37 @@ export SEMANTICSCHOLAR_MAX_BURST=5
 - `get_author`: Get author details by ID
 - `get_author_papers`: Get papers by a specific author
 
+### 3.17 CORE API Key
+
+**Obtaining the Key**:
+1. Visit https://core.ac.uk/services/api
+2. Register for a free account
+3. Request an API key from your account dashboard
+
+**Configuration**:
+```python
+# Method 1: Direct configuration
+tool = APISourceTool({'core_api_key': 'YOUR_CORE_KEY'})
+
+# Method 2: Environment variable
+export CORE_API_KEY="YOUR_CORE_KEY"
+
+# Method 3: Configuration file
+{
+    "core_api_key": "YOUR_CORE_KEY"
+}
+```
+
+**Rate Limits**:
+- Free tier: Reasonable usage with rate limiting
+- Contact CORE for higher limits if needed
+
+**Features**:
+- Access to millions of open access research papers
+- Search by query, DOI, or title
+- Full metadata including authors, abstract, citations
+- Support for pagination
+
 ---
 
 ## 4. Performance Settings
@@ -1097,6 +1128,51 @@ config = {
 - Academic Graph API: https://www.semanticscholar.org/product/api
 - API Tutorial: https://www.semanticscholar.org/product/api/tutorial
 
+### 6.17 CORE Provider
+
+```python
+config = {
+    'core_api_key': 'YOUR_CORE_API_KEY',  # Required
+    'core_config': {
+        'base_url': 'https://api.core.ac.uk/v3',
+        'timeout': 30,
+        'rate_limit': 10,    # Requests per second
+        'max_burst': 20,     # Maximum burst size
+    }
+}
+```
+
+**Features**:
+- Search for open access research papers
+- Get work metadata by CORE ID
+- Search by DOI
+- Search by title
+- Access to millions of open access research papers
+- Full metadata including authors, abstract, publication date, citations
+
+**Supported Operations**:
+- `search_works` - Search for works by query string
+- `get_work` - Get work details by CORE ID
+- `search_by_doi` - Search for works by DOI
+- `search_by_title` - Search for works by title
+
+**Important Configuration Notes**:
+- **API Key Required**: CORE API requires an API key for access
+- **Rate Limit**: Free tier allows reasonable usage with rate limiting
+- **Max Results**: Limited to 100 results per request for search, use pagination for more
+- **Caching**: Strongly recommended to cache responses to reduce server load
+- **Attribution**: Acknowledge CORE when using the data in publications
+
+**Obtaining the Key**:
+1. Visit https://core.ac.uk/services/api
+2. Register for a free account
+3. Request an API key from your account dashboard
+
+**API Documentation**:
+- API Documentation: https://core.ac.uk/documentation/api
+- API Services: https://core.ac.uk/services/api
+- About CORE: https://core.ac.uk/about
+
 ---
 
 ## 7. Environment Variables
@@ -1116,11 +1192,15 @@ export APISOURCE_OPENWEATHERMAP_API_KEY="your_openweathermap_key"
 export APISOURCE_GITHUB_API_KEY="your_github_token"  # Recommended
 export APISOURCE_PUBMED_API_KEY="your_ncbi_api_key"  # Optional but recommended
 export CROSSREF_MAILTO="your-email@example.com"  # Optional but recommended for polite pool
+export APISOURCE_CORE_API_KEY="your_core_api_key"  # Required
 
 # Provider-specific Configuration
 export SEMANTICSCHOLAR_TIMEOUT=30
 export SEMANTICSCHOLAR_RATE_LIMIT=1
 export SEMANTICSCHOLAR_MAX_BURST=5
+export CORE_TIMEOUT=30
+export CORE_RATE_LIMIT=10
+export CORE_MAX_BURST=20
 
 # Performance
 export APISOURCE_CACHE_TTL="300"
