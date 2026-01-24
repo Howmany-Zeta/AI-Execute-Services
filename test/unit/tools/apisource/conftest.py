@@ -312,6 +312,17 @@ def secedgar_config() -> Dict[str, Any]:
 
 
 @pytest.fixture
+def stackexchange_config() -> Dict[str, Any]:
+    """Configuration for Stack Exchange provider (API key optional but recommended)"""
+    return {
+        'api_key': os.getenv('STACKEXCHANGE_API_KEY'),
+        'timeout': int(os.getenv('STACKEXCHANGE_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('STACKEXCHANGE_RATE_LIMIT', '10')),
+        'max_burst': int(os.getenv('STACKEXCHANGE_MAX_BURST', '20')),
+    }
+
+
+@pytest.fixture
 def skip_if_no_api_key():
     """Skip test if required API keys are not available"""
     def _skip_if_no_key(provider: str):

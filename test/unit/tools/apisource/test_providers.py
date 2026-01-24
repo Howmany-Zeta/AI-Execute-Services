@@ -43,6 +43,7 @@ from aiecs.tools.apisource.providers.semanticscholar import SemanticScholarProvi
 from aiecs.tools.apisource.providers.core import COREProvider
 from aiecs.tools.apisource.providers.uspto import USPTOProvider
 from aiecs.tools.apisource.providers.secedgar import SECEdgarProvider
+from aiecs.tools.apisource.providers.stackexchange import StackExchangeProvider
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar']
+        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -4598,4 +4599,337 @@ class TestSECEdgarProvider:
         })
 
         print(f"✓ Retrieved {data.get('count', 0)} insider transactions in {duration:.2f}ms")
+
+
+class TestStackExchangeProvider:
+    """Test Stack Exchange API provider"""
+
+    def test_provider_metadata(self, stackexchange_config, debug_output):
+        """Test Stack Exchange provider metadata"""
+        print("\n=== Testing Stack Exchange Provider Metadata ===")
+
+        provider = StackExchangeProvider(stackexchange_config)
+
+        assert provider.name == "stackexchange"
+        assert provider.description is not None
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+        assert metadata['name'] == 'stackexchange'
+        assert 'operations' in metadata
+
+        debug_output("Stack Exchange Provider Metadata", {
+            'name': provider.name,
+            'description': provider.description,
+            'operations': provider.supported_operations,
+        })
+
+        print("✓ Stack Exchange provider metadata validated")
+
+    @pytest.mark.network
+    def test_search_questions(self, stackexchange_config, debug_output, measure_performance):
+        """Test searching for questions on Stack Overflow"""
+        print("\n=== Testing Stack Exchange search_questions ===")
+
+        provider = StackExchangeProvider(stackexchange_config)
+
+        measure_performance.start()
+        result = provider.search_questions(
+            site="stackoverflow",
+            q="python",
+            pagesize=5,
+            sort="votes"
+        )
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        # Check first question structure
+        first_question = result['data'][0]
+        assert 'title' in first_question
+        assert 'question_id' in first_question
+
+        debug_output("Stack Exchange Search Questions", {
+            'site': 'stackoverflow',
+            'query': 'python',
+            'results_count': len(result['data']),
+            'first_question_title': first_question.get('title', 'N/A'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Stack Exchange search_questions took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data'])} questions")
+
+    @pytest.mark.network
+    def test_get_question(self, stackexchange_config, debug_output, measure_performance):
+        """Test getting a specific question by ID"""
+        print("\n=== Testing Stack Exchange get_question ===")
+
+        provider = StackExchangeProvider(stackexchange_config)
+
+        # Use a well-known Stack Overflow question ID
+        measure_performance.start()
+        result = provider.get_question(
+            question_id=11227809,  # "Why is processing a sorted array faster than processing an unsorted array?"
+            site="stackoverflow"
+        )
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'title' in result['data']
+        assert 'question_id' in result['data']
+
+        debug_output("Stack Exchange Get Question", {
+            'question_id': 11227809,
+            'title': result['data'].get('title', 'N/A'),
+            'score': result['data'].get('score', 'N/A'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Stack Exchange get_question took {duration:.3f} seconds")
+        print("✓ Retrieved question successfully")
+
+    @pytest.mark.network
+    def test_get_answers(self, stackexchange_config, debug_output, measure_performance):
+        """Test getting answers for a question"""
+        print("\n=== Testing Stack Exchange get_answers ===")
+
+        provider = StackExchangeProvider(stackexchange_config)
+
+        measure_performance.start()
+        result = provider.get_answers(
+            question_id=11227809,
+            site="stackoverflow",
+            pagesize=5,
+            sort="votes"
+        )
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+
+        debug_output("Stack Exchange Get Answers", {
+            'question_id': 11227809,
+            'answers_count': len(result['data']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Stack Exchange get_answers took {duration:.3f} seconds")
+        print(f"✓ Retrieved {len(result['data'])} answers")
+
+    @pytest.mark.network
+    def test_search_users(self, stackexchange_config, debug_output, measure_performance):
+        """Test searching for users"""
+        print("\n=== Testing Stack Exchange search_users ===")
+
+        provider = StackExchangeProvider(stackexchange_config)
+
+        measure_performance.start()
+        result = provider.search_users(
+            site="stackoverflow",
+            inname="Jon Skeet",
+            pagesize=5
+        )
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        debug_output("Stack Exchange Search Users", {
+            'site': 'stackoverflow',
+            'search': 'Jon Skeet',
+            'results_count': len(result['data']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Stack Exchange search_users took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data'])} users")
+
+    @pytest.mark.network
+    def test_get_tags(self, stackexchange_config, debug_output, measure_performance):
+        """Test getting tags"""
+        print("\n=== Testing Stack Exchange get_tags ===")
+
+        provider = StackExchangeProvider(stackexchange_config)
+
+        measure_performance.start()
+        result = provider.get_tags(
+            site="stackoverflow",
+            inname="python",
+            pagesize=10,
+            sort="popular"
+        )
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        # Check first tag structure
+        first_tag = result['data'][0]
+        assert 'name' in first_tag
+
+        debug_output("Stack Exchange Get Tags", {
+            'site': 'stackoverflow',
+            'filter': 'python',
+            'results_count': len(result['data']),
+            'first_tag': first_tag.get('name', 'N/A'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Stack Exchange get_tags took {duration:.3f} seconds")
+        print(f"✓ Retrieved {len(result['data'])} tags")
+
+    @pytest.mark.network
+    def test_get_sites(self, stackexchange_config, debug_output, measure_performance):
+        """Test getting all Stack Exchange sites"""
+        print("\n=== Testing Stack Exchange get_sites ===")
+
+        provider = StackExchangeProvider(stackexchange_config)
+
+        measure_performance.start()
+        result = provider.get_sites(pagesize=10)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        # Check first site structure
+        first_site = result['data'][0]
+        assert 'name' in first_site
+        assert 'site_url' in first_site
+
+        debug_output("Stack Exchange Get Sites", {
+            'results_count': len(result['data']),
+            'first_site': first_site.get('name', 'N/A'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Stack Exchange get_sites took {duration:.3f} seconds")
+        print(f"✓ Retrieved {len(result['data'])} sites")
+
+    def test_validate_params(self, stackexchange_config):
+        """Test Stack Exchange parameter validation"""
+        print("\n=== Testing Stack Exchange Parameter Validation ===")
+
+        provider = StackExchangeProvider(stackexchange_config)
+
+        # Valid params for search_questions
+        is_valid, error = provider.validate_params('search_questions', {
+            'site': 'stackoverflow',
+            'q': 'python'
+        })
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params - missing site
+        is_valid, error = provider.validate_params('search_questions', {
+            'q': 'python'
+        })
+        assert is_valid is False
+        assert error is not None
+        assert 'site' in error
+
+        # Valid params for get_question
+        is_valid, error = provider.validate_params('get_question', {
+            'question_id': 12345,
+            'site': 'stackoverflow'
+        })
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params - missing question_id
+        is_valid, error = provider.validate_params('get_question', {
+            'site': 'stackoverflow'
+        })
+        assert is_valid is False
+        assert error is not None
+        assert 'question_id' in error
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, stackexchange_config, debug_output):
+        """Test Stack Exchange operation schema"""
+        print("\n=== Testing Stack Exchange Operation Schema ===")
+
+        provider = StackExchangeProvider(stackexchange_config)
+
+        schema = provider.get_operation_schema('search_questions')
+
+        assert schema is not None
+        assert 'properties' in schema
+        assert 'required' in schema
+        assert 'site' in schema['required']
+
+        debug_output("Stack Exchange search_questions Schema", schema)
+
+        print("✓ Operation schema retrieved successfully")
+
+    @pytest.mark.network
+    def test_search_with_tags(self, stackexchange_config, debug_output):
+        """Test searching questions with specific tags"""
+        print("\n=== Testing Stack Exchange search with tags ===")
+
+        provider = StackExchangeProvider(stackexchange_config)
+
+        result = provider.search_questions(
+            site="stackoverflow",
+            tagged="python;django",
+            pagesize=5
+        )
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+
+        debug_output("Stack Exchange Tagged Search", {
+            'tags': 'python;django',
+            'results_count': len(result['data']),
+        })
+
+        print("✓ Tagged search executed successfully")
+
+    @pytest.mark.network
+    def test_metadata_fields(self, stackexchange_config, debug_output):
+        """Test that metadata fields are present in responses"""
+        print("\n=== Testing Stack Exchange Metadata Fields ===")
+
+        provider = StackExchangeProvider(stackexchange_config)
+
+        result = provider.search_questions(
+            site="stackoverflow",
+            q="python",
+            pagesize=5
+        )
+
+        assert result is not None
+        assert 'metadata' in result
+        assert 'provider' in result
+        assert result['provider'] == 'stackexchange'
+        assert 'operation' in result
+        assert result['operation'] == 'search_questions'
+
+        metadata = result['metadata']
+        # Stack Exchange API includes quota information
+        if 'quota_remaining' in metadata:
+            assert isinstance(metadata['quota_remaining'], int)
+
+        debug_output("Stack Exchange Metadata", {
+            'provider': result['provider'],
+            'operation': result['operation'],
+            'has_quota_info': 'quota_remaining' in metadata,
+        })
+
+        print("✓ Metadata fields validated")
 
