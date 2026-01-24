@@ -4636,7 +4636,7 @@ class TestStackExchangeProvider:
         measure_performance.start()
         result = provider.search_questions(
             site="stackoverflow",
-            q="python",
+            intitle="python async",
             pagesize=5,
             sort="votes"
         )
@@ -4654,7 +4654,7 @@ class TestStackExchangeProvider:
 
         debug_output("Stack Exchange Search Questions", {
             'site': 'stackoverflow',
-            'query': 'python',
+            'query': 'python async',
             'results_count': len(result['data']),
             'first_question_title': first_question.get('title', 'N/A'),
             'duration_seconds': duration,
@@ -4825,17 +4825,25 @@ class TestStackExchangeProvider:
 
         provider = StackExchangeProvider(stackexchange_config)
 
-        # Valid params for search_questions
+        # Valid params for search_questions with intitle
         is_valid, error = provider.validate_params('search_questions', {
             'site': 'stackoverflow',
-            'q': 'python'
+            'intitle': 'python'
+        })
+        assert is_valid is True
+        assert error is None
+
+        # Valid params for search_questions with tagged
+        is_valid, error = provider.validate_params('search_questions', {
+            'site': 'stackoverflow',
+            'tagged': 'python'
         })
         assert is_valid is True
         assert error is None
 
         # Invalid params - missing site
         is_valid, error = provider.validate_params('search_questions', {
-            'q': 'python'
+            'intitle': 'python'
         })
         assert is_valid is False
         assert error is not None
@@ -4909,7 +4917,7 @@ class TestStackExchangeProvider:
 
         result = provider.search_questions(
             site="stackoverflow",
-            q="python",
+            intitle="python",
             pagesize=5
         )
 

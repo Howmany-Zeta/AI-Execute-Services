@@ -111,8 +111,9 @@ class StackExchangeProvider(BaseAPIProvider):
     def search_questions(
         self,
         site: str,
-        q: Optional[str] = None,
+        intitle: Optional[str] = None,
         tagged: Optional[str] = None,
+        nottagged: Optional[str] = None,
         sort: Optional[str] = None,
         order: Optional[str] = None,
         page: Optional[int] = None,
@@ -121,10 +122,13 @@ class StackExchangeProvider(BaseAPIProvider):
         """
         Search for questions on a Stack Exchange site.
 
+        Note: At least one of 'intitle' or 'tagged' must be provided.
+
         Args:
             site: Site parameter (e.g., 'stackoverflow', 'serverfault', 'superuser')
-            q: Search query string
+            intitle: Search string to match in question titles
             tagged: Semicolon-delimited list of tags (e.g., 'python;django')
+            nottagged: Semicolon-delimited list of tags to exclude (only used if tagged is set)
             sort: Sort by 'activity', 'votes', 'creation', or 'relevance'
             order: Sort order 'desc' or 'asc'
             page: Page number for pagination (default: 1)
@@ -134,10 +138,12 @@ class StackExchangeProvider(BaseAPIProvider):
             Dictionary containing search results and metadata
         """
         params: Dict[str, Any] = {"site": site}
-        if q:
-            params["q"] = q
+        if intitle:
+            params["intitle"] = intitle
         if tagged:
             params["tagged"] = tagged
+        if nottagged:
+            params["nottagged"] = nottagged
         if sort:
             params["sort"] = sort
         if order:
@@ -343,7 +349,7 @@ class StackExchangeProvider(BaseAPIProvider):
         if operation == "search_questions":
             endpoint = f"{self.BASE_URL}/search"
             # Copy all params to query_params
-            for key in ["site", "q", "tagged", "sort", "order", "page", "pagesize"]:
+            for key in ["site", "intitle", "tagged", "nottagged", "sort", "order", "page", "pagesize"]:
                 if key in params:
                     query_params[key] = params[key]
 
@@ -449,13 +455,17 @@ class StackExchangeProvider(BaseAPIProvider):
                         "type": "string",
                         "description": "Site parameter (e.g., 'stackoverflow', 'serverfault', 'superuser')",
                     },
-                    "q": {
+                    "intitle": {
                         "type": "string",
-                        "description": "Search query string",
+                        "description": "Search string to match in question titles (at least one of 'intitle' or 'tagged' required)",
                     },
                     "tagged": {
                         "type": "string",
-                        "description": "Semicolon-delimited list of tags (e.g., 'python;django')",
+                        "description": "Semicolon-delimited list of tags (e.g., 'python;django') (at least one of 'intitle' or 'tagged' required)",
+                    },
+                    "nottagged": {
+                        "type": "string",
+                        "description": "Semicolon-delimited list of tags to exclude (only used if tagged is set)",
                     },
                     "sort": {
                         "type": "string",
@@ -480,6 +490,10 @@ class StackExchangeProvider(BaseAPIProvider):
                     },
                 },
                 "required": ["site"],
+                "anyOf": [
+                    {"required": ["intitle"]},
+                    {"required": ["tagged"]}
+                ],
             },
             "get_question": {
                 "type": "object",
