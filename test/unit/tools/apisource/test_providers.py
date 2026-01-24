@@ -44,6 +44,7 @@ from aiecs.tools.apisource.providers.core import COREProvider
 from aiecs.tools.apisource.providers.uspto import USPTOProvider
 from aiecs.tools.apisource.providers.secedgar import SECEdgarProvider
 from aiecs.tools.apisource.providers.stackexchange import StackExchangeProvider
+from aiecs.tools.apisource.providers.hackernews import HackerNewsProvider
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange']
+        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange', 'hackernews']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -4940,4 +4941,350 @@ class TestStackExchangeProvider:
         })
 
         print("✓ Metadata fields validated")
+
+
+class TestHackerNewsProvider:
+    """Test Hacker News (Algolia Search API) provider"""
+
+    def test_provider_metadata(self, hackernews_config, debug_output):
+        """Test Hacker News provider metadata"""
+        print("\n=== Testing Hacker News Provider Metadata ===")
+
+        provider = HackerNewsProvider(hackernews_config)
+
+        assert provider.name == "hackernews"
+        assert provider.description is not None
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+        assert metadata['name'] == 'hackernews'
+        assert 'operations' in metadata
+
+        debug_output("Hacker News Provider Metadata", {
+            'name': provider.name,
+            'description': provider.description,
+            'operations': provider.supported_operations,
+        })
+
+        print("✓ Hacker News provider metadata validated")
+
+    @pytest.mark.network
+    def test_search_stories(self, hackernews_config, debug_output, measure_performance):
+        """Test searching Hacker News stories"""
+        print("\n=== Testing Hacker News search_stories ===")
+
+        provider = HackerNewsProvider(hackernews_config)
+
+        measure_performance.start()
+        result = provider.search_stories(query="python", hits_per_page=10)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'hits' in result['data']
+        assert isinstance(result['data']['hits'], list)
+        assert len(result['data']['hits']) > 0
+
+        # Check first story structure
+        first_story = result['data']['hits'][0]
+        assert 'title' in first_story or 'story_title' in first_story
+
+        debug_output("Hacker News Search Stories", {
+            'query': 'python',
+            'hits_count': len(result['data']['hits']),
+            'total_hits': result['data'].get('nb_hits', 0),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Hacker News search_stories took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data']['hits'])} stories")
+
+    @pytest.mark.network
+    def test_search_comments(self, hackernews_config, debug_output, measure_performance):
+        """Test searching Hacker News comments"""
+        print("\n=== Testing Hacker News search_comments ===")
+
+        provider = HackerNewsProvider(hackernews_config)
+
+        measure_performance.start()
+        result = provider.search_comments(query="machine learning", hits_per_page=10)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'hits' in result['data']
+        assert isinstance(result['data']['hits'], list)
+
+        debug_output("Hacker News Search Comments", {
+            'query': 'machine learning',
+            'hits_count': len(result['data']['hits']),
+            'total_hits': result['data'].get('nb_hits', 0),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Hacker News search_comments took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data']['hits'])} comments")
+
+    @pytest.mark.network
+    def test_search_by_date(self, hackernews_config, debug_output, measure_performance):
+        """Test searching Hacker News items by date"""
+        print("\n=== Testing Hacker News search_by_date ===")
+
+        provider = HackerNewsProvider(hackernews_config)
+
+        measure_performance.start()
+        result = provider.search_by_date(query="AI", tags="story", hits_per_page=10)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'hits' in result['data']
+        assert isinstance(result['data']['hits'], list)
+
+        debug_output("Hacker News Search by Date", {
+            'query': 'AI',
+            'tags': 'story',
+            'hits_count': len(result['data']['hits']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Hacker News search_by_date took {duration:.3f} seconds")
+        print("✓ Search by date executed successfully")
+
+    @pytest.mark.network
+    def test_get_item(self, hackernews_config, debug_output, measure_performance):
+        """Test getting a specific Hacker News item"""
+        print("\n=== Testing Hacker News get_item ===")
+
+        provider = HackerNewsProvider(hackernews_config)
+
+        # Use a well-known HN item ID (the first story ever posted)
+        measure_performance.start()
+        result = provider.get_item(item_id=1)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'id' in result['data']
+
+        debug_output("Hacker News Get Item", {
+            'item_id': 1,
+            'data_keys': list(result['data'].keys()),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Hacker News get_item took {duration:.3f} seconds")
+        print("✓ Retrieved item successfully")
+
+
+class TestHackerNewsProvider:
+    """Test Hacker News (Algolia Search API) provider"""
+
+    def test_provider_metadata(self, hackernews_config, debug_output):
+        """Test Hacker News provider metadata"""
+        print("\n=== Testing Hacker News Provider Metadata ===")
+
+        provider = HackerNewsProvider(hackernews_config)
+
+        assert provider.name == "hackernews"
+        assert provider.description is not None
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+        assert metadata['name'] == 'hackernews'
+        assert 'operations' in metadata
+
+        debug_output("Hacker News Provider Metadata", {
+            'name': provider.name,
+            'description': provider.description,
+            'operations': provider.supported_operations,
+        })
+
+        print("✓ Hacker News provider metadata validated")
+
+    @pytest.mark.network
+    def test_search_stories(self, hackernews_config, debug_output, measure_performance):
+        """Test searching Hacker News stories"""
+        print("\n=== Testing Hacker News search_stories ===")
+
+        provider = HackerNewsProvider(hackernews_config)
+
+        measure_performance.start()
+        result = provider.search_stories(query="python", hits_per_page=10)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'hits' in result['data']
+        assert isinstance(result['data']['hits'], list)
+        assert len(result['data']['hits']) > 0
+
+        # Check first story structure
+        first_story = result['data']['hits'][0]
+        assert 'title' in first_story or 'story_title' in first_story
+
+        debug_output("Hacker News Search Stories", {
+            'query': 'python',
+            'hits_count': len(result['data']['hits']),
+            'total_hits': result['data'].get('nb_hits', 0),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Hacker News search_stories took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data']['hits'])} stories")
+
+    @pytest.mark.network
+    def test_search_comments(self, hackernews_config, debug_output, measure_performance):
+        """Test searching Hacker News comments"""
+        print("\n=== Testing Hacker News search_comments ===")
+
+        provider = HackerNewsProvider(hackernews_config)
+
+        measure_performance.start()
+        result = provider.search_comments(query="machine learning", hits_per_page=10)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'hits' in result['data']
+        assert isinstance(result['data']['hits'], list)
+
+        debug_output("Hacker News Search Comments", {
+            'query': 'machine learning',
+            'hits_count': len(result['data']['hits']),
+            'total_hits': result['data'].get('nb_hits', 0),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Hacker News search_comments took {duration:.3f} seconds")
+        print(f"✓ Found {len(result['data']['hits'])} comments")
+
+    @pytest.mark.network
+    def test_search_by_date(self, hackernews_config, debug_output, measure_performance):
+        """Test searching Hacker News items by date"""
+        print("\n=== Testing Hacker News search_by_date ===")
+
+        provider = HackerNewsProvider(hackernews_config)
+
+        measure_performance.start()
+        result = provider.search_by_date(query="AI", tags="story", hits_per_page=10)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'hits' in result['data']
+        assert isinstance(result['data']['hits'], list)
+
+        debug_output("Hacker News Search by Date", {
+            'query': 'AI',
+            'tags': 'story',
+            'hits_count': len(result['data']['hits']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Hacker News search_by_date took {duration:.3f} seconds")
+        print("✓ Search by date executed successfully")
+
+    @pytest.mark.network
+    def test_get_item(self, hackernews_config, debug_output, measure_performance):
+        """Test getting a specific Hacker News item"""
+        print("\n=== Testing Hacker News get_item ===")
+
+        provider = HackerNewsProvider(hackernews_config)
+
+        # Use a well-known HN item ID (the first story ever posted)
+        measure_performance.start()
+        result = provider.get_item(item_id=1)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'id' in result['data']
+
+        debug_output("Hacker News Get Item", {
+            'item_id': 1,
+            'data_keys': list(result['data'].keys()),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Hacker News get_item took {duration:.3f} seconds")
+        print("✓ Retrieved item successfully")
+
+    @pytest.mark.network
+    def test_get_user(self, hackernews_config, debug_output, measure_performance):
+        """Test getting Hacker News user information"""
+        print("\n=== Testing Hacker News get_user ===")
+
+        provider = HackerNewsProvider(hackernews_config)
+
+        # Use a well-known HN user (pg = Paul Graham)
+        measure_performance.start()
+        result = provider.get_user(username="pg")
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'username' in result['data']
+
+        debug_output("Hacker News Get User", {
+            'username': 'pg',
+            'data_keys': list(result['data'].keys()),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Hacker News get_user took {duration:.3f} seconds")
+        print("✓ Retrieved user information successfully")
+
+    def test_validate_params(self, hackernews_config):
+        """Test Hacker News parameter validation"""
+        print("\n=== Testing Hacker News Parameter Validation ===")
+
+        provider = HackerNewsProvider(hackernews_config)
+
+        # Valid params for search_stories
+        is_valid, error = provider.validate_params('search_stories', {'query': 'python'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params - missing required query
+        is_valid, error = provider.validate_params('search_stories', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_item
+        is_valid, error = provider.validate_params('get_item', {'item_id': 1})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for get_item
+        is_valid, error = provider.validate_params('get_item', {})
+        assert is_valid is False
+        assert error is not None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, hackernews_config, debug_output):
+        """Test Hacker News operation schema"""
+        print("\n=== Testing Hacker News Operation Schema ===")
+
+        provider = HackerNewsProvider(hackernews_config)
+
+        schema = provider.get_operation_schema('search_stories')
+
+        assert schema is not None
+        assert 'description' in schema
+        assert 'parameters' in schema
+
+        debug_output("Hacker News search_stories Schema", schema)
+
+        print("✓ Operation schema retrieved successfully")
 
