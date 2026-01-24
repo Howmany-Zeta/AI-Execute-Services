@@ -603,6 +603,37 @@ export CORE_API_KEY="YOUR_CORE_KEY"
 - Full metadata including authors, abstract, citations
 - Support for pagination
 
+### 3.18 USPTO API Key
+
+**Obtaining the Key**:
+1. Visit https://developer.uspto.gov/
+2. Register for a free developer account
+3. Request an API key from your account dashboard
+
+**Configuration**:
+```python
+# Method 1: Direct configuration
+tool = APISourceTool({'uspto_api_key': 'YOUR_USPTO_KEY'})
+
+# Method 2: Environment variable
+export USPTO_API_KEY="YOUR_USPTO_KEY"
+
+# Method 3: Configuration file
+{
+    "uspto_api_key": "YOUR_USPTO_KEY"
+}
+```
+
+**Rate Limits**:
+- Free tier: Reasonable usage with rate limiting
+- Contact USPTO for higher limits if needed
+
+**Features**:
+- Search US patents by query, inventor, or assignee
+- Get detailed patent information by patent number
+- Access to comprehensive US patent database
+- Full metadata including inventors, assignees, classifications, citations
+
 ---
 
 ## 4. Performance Settings
@@ -1173,6 +1204,51 @@ config = {
 - API Services: https://core.ac.uk/services/api
 - About CORE: https://core.ac.uk/about
 
+### 6.18 USPTO Provider
+
+```python
+config = {
+    'uspto_api_key': 'YOUR_USPTO_API_KEY',  # Required
+    'uspto_config': {
+        'base_url': 'https://developer.uspto.gov/ibd-api/v1',
+        'timeout': 30,
+        'rate_limit': 10,    # Requests per second
+        'max_burst': 20,     # Maximum burst size
+    }
+}
+```
+
+**Features**:
+- Search for US patents by query
+- Get patent details by patent number
+- Search patents by inventor name
+- Search patents by assignee (company/organization)
+- Access to comprehensive US patent database
+- Full metadata including title, abstract, inventors, assignees, classifications, citations
+
+**Supported Operations**:
+- `search_patents` - Search for patents by query string
+- `get_patent` - Get patent details by patent number/ID
+- `search_by_inventor` - Search for patents by inventor name
+- `search_by_assignee` - Search for patents by assignee name
+
+**Important Configuration Notes**:
+- **API Key Required**: USPTO API requires an API key for access
+- **Rate Limit**: Free tier allows reasonable usage with rate limiting
+- **Max Results**: Pagination supported for large result sets
+- **Caching**: Strongly recommended to cache responses to reduce server load
+- **Attribution**: Acknowledge USPTO when using patent data in publications
+
+**Obtaining the Key**:
+1. Visit https://developer.uspto.gov/
+2. Register for a free developer account
+3. Request an API key from your account dashboard
+
+**API Documentation**:
+- API Catalog: https://developer.uspto.gov/api-catalog
+- Patent Search API: https://developer.uspto.gov/api-catalog/patent-search-api
+- Developer Portal: https://developer.uspto.gov/
+
 ---
 
 ## 7. Environment Variables
@@ -1193,6 +1269,7 @@ export APISOURCE_GITHUB_API_KEY="your_github_token"  # Recommended
 export APISOURCE_PUBMED_API_KEY="your_ncbi_api_key"  # Optional but recommended
 export CROSSREF_MAILTO="your-email@example.com"  # Optional but recommended for polite pool
 export APISOURCE_CORE_API_KEY="your_core_api_key"  # Required
+export APISOURCE_USPTO_API_KEY="your_uspto_api_key"  # Required
 
 # Provider-specific Configuration
 export SEMANTICSCHOLAR_TIMEOUT=30
@@ -1201,6 +1278,9 @@ export SEMANTICSCHOLAR_MAX_BURST=5
 export CORE_TIMEOUT=30
 export CORE_RATE_LIMIT=10
 export CORE_MAX_BURST=20
+export USPTO_TIMEOUT=30
+export USPTO_RATE_LIMIT=10
+export USPTO_MAX_BURST=20
 
 # Performance
 export APISOURCE_CACHE_TTL="300"

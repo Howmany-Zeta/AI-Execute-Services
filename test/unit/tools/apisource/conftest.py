@@ -78,6 +78,7 @@ def load_env_config():
     logger.info(f"  - OPENWEATHERMAP_API_KEY: {'✓ Set' if os.getenv('OPENWEATHERMAP_API_KEY') else '✗ Not set'}")
     logger.info(f"  - GITHUB_API_KEY: {'✓ Set' if os.getenv('GITHUB_API_KEY') else '✗ Not set'}")
     logger.info(f"  - CORE_API_KEY: {'✓ Set' if os.getenv('CORE_API_KEY') else '✗ Not set'}")
+    logger.info(f"  - USPTO_API_KEY: {'✓ Set' if os.getenv('USPTO_API_KEY') else '✗ Not set'}")
     logger.info(f"  - DEBUG_MODE: {os.getenv('DEBUG_MODE', 'false')}")
     logger.info(f"  - VERBOSE_API_CALLS: {os.getenv('VERBOSE_API_CALLS', 'false')}")
 
@@ -288,6 +289,17 @@ def core_config() -> Dict[str, Any]:
 
 
 @pytest.fixture
+def uspto_config() -> Dict[str, Any]:
+    """Configuration for USPTO provider"""
+    return {
+        'api_key': os.getenv('USPTO_API_KEY'),
+        'timeout': int(os.getenv('USPTO_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('USPTO_RATE_LIMIT', '10')),
+        'max_burst': int(os.getenv('USPTO_MAX_BURST', '20')),
+    }
+
+
+@pytest.fixture
 def skip_if_no_api_key():
     """Skip test if required API keys are not available"""
     def _skip_if_no_key(provider: str):
@@ -299,6 +311,7 @@ def skip_if_no_api_key():
             'openweathermap': 'OPENWEATHERMAP_API_KEY',
             'github': 'GITHUB_API_KEY',
             'core': 'CORE_API_KEY',
+            'uspto': 'USPTO_API_KEY',
         }
 
         env_var = key_map.get(provider.lower())

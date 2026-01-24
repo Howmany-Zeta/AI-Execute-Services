@@ -41,6 +41,7 @@ from aiecs.tools.apisource.providers.pubmed import PubMedProvider
 from aiecs.tools.apisource.providers.crossref import CrossRefProvider
 from aiecs.tools.apisource.providers.semanticscholar import SemanticScholarProvider
 from aiecs.tools.apisource.providers.core import COREProvider
+from aiecs.tools.apisource.providers.uspto import USPTOProvider
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core']
+        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -3988,6 +3989,212 @@ class TestCOREProvider:
         schema = provider.get_operation_schema('search_by_doi')
         assert schema is not None
         assert 'doi' in schema['properties']
+
+        print("✓ Operation schemas retrieved successfully")
+
+
+class TestUSPTOProvider:
+    """Test USPTO Patent API provider"""
+
+    def test_provider_metadata(self, uspto_config, debug_output):
+        """Test USPTO provider metadata"""
+        print("\n=== Testing USPTO Provider Metadata ===")
+
+        provider = USPTOProvider(uspto_config)
+
+        assert provider.name == 'uspto'
+        assert provider.description
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+
+        debug_output("USPTO Metadata", {
+            'name': metadata['name'],
+            'description': metadata['description'],
+            'operations_count': len(metadata['operations']),
+            'operations': metadata['operations'],
+            'health': metadata['health'],
+        })
+
+        print("✓ USPTO metadata retrieved successfully")
+
+    @pytest.mark.network
+    def test_search_patents(self, uspto_config, skip_if_no_api_key, debug_output, measure_performance):
+        """Test USPTO search_patents operation"""
+        skip_if_no_api_key('uspto')
+        print("\n=== Testing USPTO search_patents ===")
+
+        provider = USPTOProvider(uspto_config)
+
+        measure_performance.start()
+        result = provider.search_patents(
+            query='artificial intelligence',
+            max_results=5
+        )
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+
+        debug_output("USPTO Patent Search", {
+            'query': 'artificial intelligence',
+            'results_count': len(result['data']) if isinstance(result['data'], list) else 'N/A',
+            'sample_result': result['data'][0] if result['data'] else None,
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("USPTO search_patents")
+        print("✓ Patent search executed successfully")
+
+    @pytest.mark.network
+    def test_get_patent(self, uspto_config, skip_if_no_api_key, debug_output, measure_performance):
+        """Test USPTO get_patent operation"""
+        skip_if_no_api_key('uspto')
+        print("\n=== Testing USPTO get_patent ===")
+
+        provider = USPTOProvider(uspto_config)
+
+        measure_performance.start()
+        result = provider.get_patent(patent_id='10881042')
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+
+        debug_output("USPTO Patent Details", {
+            'patent_id': '10881042',
+            'data_keys': list(result['data'].keys()) if isinstance(result['data'], dict) else 'N/A',
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("USPTO get_patent")
+        print("✓ Patent retrieval executed successfully")
+
+    @pytest.mark.network
+    def test_search_by_inventor(self, uspto_config, skip_if_no_api_key, debug_output, measure_performance):
+        """Test USPTO search_by_inventor operation"""
+        skip_if_no_api_key('uspto')
+        print("\n=== Testing USPTO search_by_inventor ===")
+
+        provider = USPTOProvider(uspto_config)
+
+        measure_performance.start()
+        result = provider.search_by_inventor(
+            inventor_name='Thomas Edison',
+            max_results=5
+        )
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+
+        debug_output("USPTO Inventor Search", {
+            'inventor_name': 'Thomas Edison',
+            'results_count': len(result['data']) if isinstance(result['data'], list) else 'N/A',
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("USPTO search_by_inventor")
+        print("✓ Inventor search executed successfully")
+
+    @pytest.mark.network
+    def test_search_by_assignee(self, uspto_config, skip_if_no_api_key, debug_output, measure_performance):
+        """Test USPTO search_by_assignee operation"""
+        skip_if_no_api_key('uspto')
+        print("\n=== Testing USPTO search_by_assignee ===")
+
+        provider = USPTOProvider(uspto_config)
+
+        measure_performance.start()
+        result = provider.search_by_assignee(
+            assignee_name='IBM',
+            max_results=5
+        )
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+
+        debug_output("USPTO Assignee Search", {
+            'assignee_name': 'IBM',
+            'results_count': len(result['data']) if isinstance(result['data'], list) else 'N/A',
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("USPTO search_by_assignee")
+        print("✓ Assignee search executed successfully")
+
+    def test_validate_params(self, uspto_config):
+        """Test USPTO parameter validation"""
+        print("\n=== Testing USPTO Parameter Validation ===")
+
+        provider = USPTOProvider(uspto_config)
+
+        # Valid params for search_patents
+        is_valid, error = provider.validate_params('search_patents', {'query': 'AI'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params - missing required
+        is_valid, error = provider.validate_params('search_patents', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_patent
+        is_valid, error = provider.validate_params('get_patent', {'patent_id': '10881042'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for get_patent
+        is_valid, error = provider.validate_params('get_patent', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for search_by_inventor
+        is_valid, error = provider.validate_params('search_by_inventor', {'inventor_name': 'John Doe'})
+        assert is_valid is True
+        assert error is None
+
+        # Valid params for search_by_assignee
+        is_valid, error = provider.validate_params('search_by_assignee', {'assignee_name': 'IBM'})
+        assert is_valid is True
+        assert error is None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, uspto_config, debug_output):
+        """Test USPTO operation schema"""
+        print("\n=== Testing USPTO Operation Schema ===")
+
+        provider = USPTOProvider(uspto_config)
+
+        # Test search_patents schema
+        schema = provider.get_operation_schema('search_patents')
+        assert schema is not None
+        assert 'type' in schema
+        assert 'properties' in schema
+        assert 'query' in schema['properties']
+
+        debug_output("USPTO search_patents Schema", schema)
+
+        # Test get_patent schema
+        schema = provider.get_operation_schema('get_patent')
+        assert schema is not None
+        assert 'patent_id' in schema['properties']
+
+        # Test search_by_inventor schema
+        schema = provider.get_operation_schema('search_by_inventor')
+        assert schema is not None
+        assert 'inventor_name' in schema['properties']
+
+        # Test search_by_assignee schema
+        schema = provider.get_operation_schema('search_by_assignee')
+        assert schema is not None
+        assert 'assignee_name' in schema['properties']
 
         print("✓ Operation schemas retrieved successfully")
 
