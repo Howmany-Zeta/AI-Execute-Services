@@ -323,6 +323,16 @@ def stackexchange_config() -> Dict[str, Any]:
 
 
 @pytest.fixture
+def hackernews_config() -> Dict[str, Any]:
+    """Configuration for Hacker News provider (no API key needed)"""
+    return {
+        'timeout': int(os.getenv('HACKERNEWS_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('HACKERNEWS_RATE_LIMIT', '10')),
+        'max_burst': int(os.getenv('HACKERNEWS_MAX_BURST', '20')),
+    }
+
+
+@pytest.fixture
 def skip_if_no_api_key():
     """Skip test if required API keys are not available"""
     def _skip_if_no_key(provider: str):
