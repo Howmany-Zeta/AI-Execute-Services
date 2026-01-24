@@ -42,6 +42,7 @@ from aiecs.tools.apisource.providers.crossref import CrossRefProvider
 from aiecs.tools.apisource.providers.semanticscholar import SemanticScholarProvider
 from aiecs.tools.apisource.providers.core import COREProvider
 from aiecs.tools.apisource.providers.uspto import USPTOProvider
+from aiecs.tools.apisource.providers.secedgar import SECEdgarProvider
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto']
+        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -4195,6 +4196,194 @@ class TestUSPTOProvider:
         schema = provider.get_operation_schema('search_by_assignee')
         assert schema is not None
         assert 'assignee_name' in schema['properties']
+
+        print("✓ Operation schemas retrieved successfully")
+
+
+class TestSECEdgarProvider:
+    """Test SEC EDGAR API provider"""
+
+    def test_provider_metadata(self, secedgar_config, debug_output):
+        """Test SEC EDGAR provider metadata"""
+        print("\n=== Testing SEC EDGAR Provider Metadata ===")
+
+        provider = SECEdgarProvider(secedgar_config)
+
+        assert provider.name == 'secedgar'
+        assert provider.description
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+
+        debug_output("SEC EDGAR Metadata", {
+            'name': metadata['name'],
+            'description': metadata['description'],
+            'operations_count': len(metadata['operations']),
+            'operations': metadata['operations'],
+            'health': metadata['health'],
+        })
+
+        print("✓ SEC EDGAR metadata retrieved successfully")
+
+    @pytest.mark.network
+    def test_get_company_submissions(self, secedgar_config, debug_output, measure_performance):
+        """Test SEC EDGAR get_company_submissions operation"""
+        print("\n=== Testing SEC EDGAR get_company_submissions ===")
+
+        provider = SECEdgarProvider(secedgar_config)
+
+        # Apple Inc. CIK: 0000320193
+        measure_performance.start()
+        result = provider.execute('get_company_submissions', {'cik': '0000320193'})
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'secedgar'
+        assert result['operation'] == 'get_company_submissions'
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+
+        # Check for expected fields
+        data = result['data']
+        assert 'cik' in data
+        assert 'name' in data
+        assert 'filings' in data
+
+        debug_output("SEC EDGAR Company Submissions", {
+            'cik': data.get('cik'),
+            'name': data.get('name'),
+            'entity_type': data.get('entityType'),
+            'sic': data.get('sic'),
+            'sic_description': data.get('sicDescription'),
+            'tickers': data.get('tickers'),
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("SEC EDGAR get_company_submissions")
+        print(f"✓ Retrieved submissions for {data.get('name')}")
+
+    @pytest.mark.network
+    def test_get_company_facts(self, secedgar_config, debug_output, measure_performance):
+        """Test SEC EDGAR get_company_facts operation"""
+        print("\n=== Testing SEC EDGAR get_company_facts ===")
+
+        provider = SECEdgarProvider(secedgar_config)
+
+        # Apple Inc. CIK: 0000320193
+        measure_performance.start()
+        result = provider.execute('get_company_facts', {'cik': '0000320193'})
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'secedgar'
+        assert result['operation'] == 'get_company_facts'
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+
+        debug_output("SEC EDGAR Company Facts", {
+            'data_keys': list(result['data'].keys()) if isinstance(result['data'], dict) else 'N/A',
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("SEC EDGAR get_company_facts")
+        print("✓ Retrieved company facts successfully")
+
+    @pytest.mark.network
+    def test_get_company_concept(self, secedgar_config, debug_output, measure_performance):
+        """Test SEC EDGAR get_company_concept operation"""
+        print("\n=== Testing SEC EDGAR get_company_concept ===")
+
+        provider = SECEdgarProvider(secedgar_config)
+
+        # Apple Inc. CIK: 0000320193, get Assets data
+        measure_performance.start()
+        result = provider.execute('get_company_concept', {
+            'cik': '0000320193',
+            'taxonomy': 'us-gaap',
+            'tag': 'Assets'
+        })
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'secedgar'
+        assert result['operation'] == 'get_company_concept'
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+
+        debug_output("SEC EDGAR Company Concept", {
+            'cik': '0000320193',
+            'taxonomy': 'us-gaap',
+            'tag': 'Assets',
+            'data_keys': list(result['data'].keys()) if isinstance(result['data'], dict) else 'N/A',
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("SEC EDGAR get_company_concept")
+        print("✓ Retrieved company concept data successfully")
+
+    def test_validate_params(self, secedgar_config):
+        """Test SEC EDGAR parameter validation"""
+        print("\n=== Testing SEC EDGAR Parameter Validation ===")
+
+        provider = SECEdgarProvider(secedgar_config)
+
+        # Valid params for get_company_submissions
+        is_valid, error = provider.validate_params('get_company_submissions', {'cik': '0000320193'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params - missing required
+        is_valid, error = provider.validate_params('get_company_submissions', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_company_concept
+        is_valid, error = provider.validate_params('get_company_concept', {
+            'cik': '0000320193',
+            'taxonomy': 'us-gaap',
+            'tag': 'Assets'
+        })
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for get_company_concept - missing taxonomy
+        is_valid, error = provider.validate_params('get_company_concept', {
+            'cik': '0000320193',
+            'tag': 'Assets'
+        })
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_company_facts
+        is_valid, error = provider.validate_params('get_company_facts', {'cik': '0000320193'})
+        assert is_valid is True
+        assert error is None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, secedgar_config, debug_output):
+        """Test SEC EDGAR operation schema"""
+        print("\n=== Testing SEC EDGAR Operation Schema ===")
+
+        provider = SECEdgarProvider(secedgar_config)
+
+        # Test get_company_submissions schema
+        schema = provider.get_operation_schema('get_company_submissions')
+        assert schema is not None
+        assert 'description' in schema
+        assert 'parameters' in schema
+        assert 'cik' in schema['parameters']
+
+        debug_output("SEC EDGAR get_company_submissions Schema", schema)
+
+        # Test get_company_concept schema
+        schema = provider.get_operation_schema('get_company_concept')
+        assert schema is not None
+        assert 'cik' in schema['parameters']
+        assert 'taxonomy' in schema['parameters']
+        assert 'tag' in schema['parameters']
+
+        # Test get_company_facts schema
+        schema = provider.get_operation_schema('get_company_facts')
+        assert schema is not None
+        assert 'cik' in schema['parameters']
 
         print("✓ Operation schemas retrieved successfully")
 
