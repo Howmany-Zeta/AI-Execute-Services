@@ -40,6 +40,7 @@ from aiecs.tools.apisource.providers.arxiv import ArxivProvider
 from aiecs.tools.apisource.providers.pubmed import PubMedProvider
 from aiecs.tools.apisource.providers.crossref import CrossRefProvider
 from aiecs.tools.apisource.providers.semanticscholar import SemanticScholarProvider
+from aiecs.tools.apisource.providers.core import COREProvider
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar']
+        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -3821,6 +3822,172 @@ class TestSemanticScholarProvider:
         schema = provider.get_operation_schema('get_author')
         assert schema is not None
         assert 'author_id' in schema['properties']
+
+        print("✓ Operation schemas retrieved successfully")
+
+
+class TestCOREProvider:
+    """Test CORE API provider"""
+
+    def test_provider_metadata(self, core_config, debug_output):
+        """Test CORE provider metadata"""
+        print("\n=== Testing CORE Provider Metadata ===")
+
+        provider = COREProvider(core_config)
+
+        assert provider.name == 'core'
+        assert provider.description is not None
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+
+        debug_output("CORE Metadata", {
+            'name': metadata['name'],
+            'description': metadata['description'],
+            'operations': metadata['operations'],
+        })
+
+        print("✓ CORE metadata retrieved successfully")
+
+    @pytest.mark.network
+    def test_search_works(self, core_config, skip_if_no_api_key, debug_output, measure_performance):
+        """Test CORE search_works operation"""
+        skip_if_no_api_key('core')
+        print("\n=== Testing CORE search_works ===")
+
+        provider = COREProvider(core_config)
+
+        measure_performance.start()
+        result = provider.search_works(
+            query='machine learning',
+            limit=5
+        )
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        debug_output("CORE Search Results", {
+            'query': 'machine learning',
+            'results_count': len(result['data']),
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("CORE search_works")
+        print(f"✓ Found {len(result['data'])} papers")
+
+    @pytest.mark.network
+    def test_search_by_doi(self, core_config, skip_if_no_api_key, debug_output, measure_performance):
+        """Test CORE search_by_doi operation"""
+        skip_if_no_api_key('core')
+        print("\n=== Testing CORE search_by_doi ===")
+
+        provider = COREProvider(core_config)
+
+        # Use a known DOI
+        measure_performance.start()
+        result = provider.search_by_doi(doi='10.1038/nature12373')
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+
+        debug_output("CORE DOI Search", {
+            'doi': '10.1038/nature12373',
+            'data_type': type(result['data']).__name__,
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("CORE search_by_doi")
+        print("✓ DOI search executed successfully")
+
+    @pytest.mark.network
+    def test_search_by_title(self, core_config, skip_if_no_api_key, debug_output, measure_performance):
+        """Test CORE search_by_title operation"""
+        skip_if_no_api_key('core')
+        print("\n=== Testing CORE search_by_title ===")
+
+        provider = COREProvider(core_config)
+
+        measure_performance.start()
+        result = provider.search_by_title(
+            title='Deep Learning',
+            limit=5
+        )
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+
+        debug_output("CORE Title Search", {
+            'title': 'Deep Learning',
+            'results_count': len(result['data']) if isinstance(result['data'], list) else 'N/A',
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("CORE search_by_title")
+        print("✓ Title search executed successfully")
+
+    def test_validate_params(self, core_config):
+        """Test CORE parameter validation"""
+        print("\n=== Testing CORE Parameter Validation ===")
+
+        provider = COREProvider(core_config)
+
+        # Valid params for search_works
+        is_valid, error = provider.validate_params('search_works', {'query': 'AI'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params - missing required
+        is_valid, error = provider.validate_params('search_works', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_work
+        is_valid, error = provider.validate_params('get_work', {'work_id': '123456'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for get_work
+        is_valid, error = provider.validate_params('get_work', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for search_by_doi
+        is_valid, error = provider.validate_params('search_by_doi', {'doi': '10.1000/xyz'})
+        assert is_valid is True
+        assert error is None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, core_config, debug_output):
+        """Test CORE operation schema"""
+        print("\n=== Testing CORE Operation Schema ===")
+
+        provider = COREProvider(core_config)
+
+        # Test search_works schema
+        schema = provider.get_operation_schema('search_works')
+        assert schema is not None
+        assert 'type' in schema
+        assert 'properties' in schema
+        assert 'query' in schema['properties']
+
+        debug_output("CORE search_works Schema", schema)
+
+        # Test get_work schema
+        schema = provider.get_operation_schema('get_work')
+        assert schema is not None
+        assert 'work_id' in schema['properties']
+
+        # Test search_by_doi schema
+        schema = provider.get_operation_schema('search_by_doi')
+        assert schema is not None
+        assert 'doi' in schema['properties']
 
         print("✓ Operation schemas retrieved successfully")
 
