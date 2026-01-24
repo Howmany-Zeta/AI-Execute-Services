@@ -1660,6 +1660,117 @@ result = tool.query(
 - Throttling: https://api.stackexchange.com/docs/throttle
 - Register App: https://stackapps.com/apps/oauth/register
 
+### 6.21 Hacker News Provider
+
+```python
+config = {
+    'hackernews_config': {
+        'base_url': 'http://hn.algolia.com/api/v1',
+        'timeout': 30,
+        'rate_limit': 10,    # Requests per second
+        'max_burst': 20,     # Maximum burst size
+        'user_agent': 'AIECS-APISource/2.0 (https://github.com/your-org/aiecs; your-email@example.com)'
+    }
+}
+```
+
+**Features**:
+- Search Hacker News stories by keywords
+- Search comments by keywords
+- Search items sorted by date (most recent first)
+- Get item details by ID (story, comment, poll, etc.)
+- Get user information by username
+- Full metadata including title, author, points, comments, URL
+- Pagination support for large result sets
+
+**Supported Operations**:
+- `search_stories` - Search for stories by keywords (sorted by relevance)
+- `search_comments` - Search for comments by keywords
+- `search_by_date` - Search for items sorted by date (most recent first)
+- `get_item` - Get item details by ID (story, comment, poll, etc.)
+- `get_user` - Get user information by username
+
+**Important Configuration Notes**:
+- **No API Key Required**: Hacker News Algolia API is completely free and open
+- **Rate Limiting**: Be respectful - implement reasonable delays between requests
+- **Max Results**: Limited to 1000 results per query (pagination available)
+- **User-Agent**: Set a descriptive User-Agent header for API etiquette
+- **Caching**: Strongly recommended to cache responses to reduce server load
+
+**Example Usage**:
+```python
+# 1. Search for Python-related stories
+result = tool.query(
+    provider='hackernews',
+    operation='search_stories',
+    params={
+        'query': 'python',
+        'hits_per_page': 20
+    }
+)
+
+# 2. Search for stories with minimum comments
+result = tool.query(
+    provider='hackernews',
+    operation='search_stories',
+    params={
+        'query': 'AI',
+        'num_comments': 50,  # Minimum 50 comments
+        'hits_per_page': 10
+    }
+)
+
+# 3. Search comments about machine learning
+result = tool.query(
+    provider='hackernews',
+    operation='search_comments',
+    params={
+        'query': 'machine learning',
+        'hits_per_page': 20
+    }
+)
+
+# 4. Get recent AI stories sorted by date
+result = tool.query(
+    provider='hackernews',
+    operation='search_by_date',
+    params={
+        'query': 'AI',
+        'tags': 'story',
+        'hits_per_page': 20
+    }
+)
+
+# 5. Get specific item details
+result = tool.query(
+    provider='hackernews',
+    operation='get_item',
+    params={'item_id': 1}  # The first HN story ever posted
+)
+
+# 6. Get user information
+result = tool.query(
+    provider='hackernews',
+    operation='get_user',
+    params={'username': 'pg'}  # Paul Graham
+)
+```
+
+**Common Tags**:
+- `story` - Filter for stories only
+- `comment` - Filter for comments only
+- `poll` - Filter for polls only
+- `author_pg` - Filter by author (e.g., Paul Graham)
+- Combine tags: `story,author_pg` - Stories by Paul Graham
+
+**Obtaining Access**:
+- No API key required - completely free and open access
+
+**API Documentation**:
+- API Documentation: https://hn.algolia.com/api
+- Hacker News Official: https://news.ycombinator.com/
+- Search Interface: https://hn.algolia.com/
+
 ---
 
 ## 7. Environment Variables
@@ -1698,6 +1809,11 @@ export SECEDGAR_TIMEOUT=30
 export SECEDGAR_RATE_LIMIT=10
 export SECEDGAR_MAX_BURST=20
 export STACKEXCHANGE_TIMEOUT=30
+export STACKEXCHANGE_RATE_LIMIT=10
+export STACKEXCHANGE_MAX_BURST=20
+export HACKERNEWS_TIMEOUT=30
+export HACKERNEWS_RATE_LIMIT=10
+export HACKERNEWS_MAX_BURST=20
 export STACKEXCHANGE_RATE_LIMIT=10
 export STACKEXCHANGE_MAX_BURST=20
 
