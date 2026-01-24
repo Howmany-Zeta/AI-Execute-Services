@@ -79,6 +79,7 @@ def load_env_config():
     logger.info(f"  - GITHUB_API_KEY: {'✓ Set' if os.getenv('GITHUB_API_KEY') else '✗ Not set'}")
     logger.info(f"  - CORE_API_KEY: {'✓ Set' if os.getenv('CORE_API_KEY') else '✗ Not set'}")
     logger.info(f"  - USPTO_API_KEY: {'✓ Set' if os.getenv('USPTO_API_KEY') else '✗ Not set'}")
+    logger.info(f"  - SECEDGAR_USER_AGENT: {'✓ Set' if os.getenv('SECEDGAR_USER_AGENT') else '✗ Not set'}")
     logger.info(f"  - DEBUG_MODE: {os.getenv('DEBUG_MODE', 'false')}")
     logger.info(f"  - VERBOSE_API_CALLS: {os.getenv('VERBOSE_API_CALLS', 'false')}")
 
@@ -296,6 +297,17 @@ def uspto_config() -> Dict[str, Any]:
         'timeout': int(os.getenv('USPTO_TIMEOUT', '30')),
         'rate_limit': int(os.getenv('USPTO_RATE_LIMIT', '10')),
         'max_burst': int(os.getenv('USPTO_MAX_BURST', '20')),
+    }
+
+
+@pytest.fixture
+def secedgar_config() -> Dict[str, Any]:
+    """Configuration for SEC EDGAR provider (no API key needed, but User-Agent required)"""
+    return {
+        'user_agent': os.getenv('SECEDGAR_USER_AGENT', 'APISourceTool test@example.com'),
+        'timeout': int(os.getenv('SECEDGAR_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('SECEDGAR_RATE_LIMIT', '10')),
+        'max_burst': int(os.getenv('SECEDGAR_MAX_BURST', '20')),
     }
 
 
