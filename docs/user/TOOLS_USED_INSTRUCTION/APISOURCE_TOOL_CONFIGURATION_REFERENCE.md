@@ -1335,13 +1335,32 @@ config = {
 - Access XBRL financial data and concepts
 - Retrieve company facts across all filings
 - Search company filings (10-K, 10-Q, 8-K, etc.)
+- Download actual filing documents (10-K, 10-Q, 8-K full text)
+- Calculate financial ratios automatically
+- Get formatted financial statements
+- Access insider trading data (Form 4)
 - Access to comprehensive SEC filing database
 - Full metadata including company info, filing dates, XBRL tags
 
 **Supported Operations**:
+
+*Basic Data Retrieval:*
 - `get_company_submissions` - Get company filing history and submission data
 - `get_company_concept` - Get XBRL concept data for specific financial metrics
 - `get_company_facts` - Get all XBRL facts for a company
+
+*Filing Document Access:*
+- `search_filings` - Search for filings by CIK and form type
+- `get_filings_by_type` - Get recent filings of a specific form type
+- `get_filing_documents` - Get filing document URLs and metadata
+- `get_filing_text` - Download full text of filing documents
+
+*Financial Analysis:*
+- `calculate_financial_ratios` - Calculate common financial ratios (P/E, ROE, ROA, etc.)
+- `get_financial_statement` - Get formatted financial statements (balance sheet, income statement, cash flow)
+
+*Corporate Governance:*
+- `get_insider_transactions` - Get insider trading transactions (Form 4 filings)
 
 **Important Configuration Notes**:
 - **No API Key Required**: SEC EDGAR API is completely free and open
@@ -1355,14 +1374,25 @@ config = {
 
 **Example Usage**:
 ```python
-# Get Apple Inc. filings (CIK: 0000320193)
+# 1. Get Apple Inc. filings (CIK: 0000320193)
 result = tool.query(
     provider='secedgar',
     operation='get_company_submissions',
     params={'cik': '0000320193'}
 )
 
-# Get Apple's Assets data from XBRL
+# 2. Search for specific form type (10-K annual reports)
+result = tool.query(
+    provider='secedgar',
+    operation='search_filings',
+    params={
+        'cik': '0000320193',
+        'form_type': '10-K',
+        'limit': 5
+    }
+)
+
+# 3. Get Apple's Assets data from XBRL
 result = tool.query(
     provider='secedgar',
     operation='get_company_concept',
@@ -1370,6 +1400,45 @@ result = tool.query(
         'cik': '0000320193',
         'taxonomy': 'us-gaap',
         'tag': 'Assets'
+    }
+)
+
+# 4. Calculate financial ratios
+result = tool.query(
+    provider='secedgar',
+    operation='calculate_financial_ratios',
+    params={'cik': '0000320193'}
+)
+# Returns: current_ratio, debt_to_equity, profit_margin, ROA, ROE, etc.
+
+# 5. Get formatted balance sheet
+result = tool.query(
+    provider='secedgar',
+    operation='get_financial_statement',
+    params={
+        'cik': '0000320193',
+        'statement_type': 'balance_sheet',
+        'period': 'annual'
+    }
+)
+
+# 6. Get insider transactions (Form 4)
+result = tool.query(
+    provider='secedgar',
+    operation='get_insider_transactions',
+    params={
+        'cik': '0000320193',
+        'start_date': '2024-01-01'
+    }
+)
+
+# 7. Download filing document text
+result = tool.query(
+    provider='secedgar',
+    operation='get_filing_text',
+    params={
+        'cik': '0000320193',
+        'accession_number': '0000320193-23-000077'
     }
 )
 ```

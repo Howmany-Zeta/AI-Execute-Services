@@ -4387,3 +4387,215 @@ class TestSECEdgarProvider:
 
         print("✓ Operation schemas retrieved successfully")
 
+    @pytest.mark.network
+    def test_search_filings(self, secedgar_config, debug_output, measure_performance):
+        """Test SEC EDGAR search_filings operation"""
+        print("\n=== Testing SEC EDGAR search_filings ===")
+
+        provider = SECEdgarProvider(secedgar_config)
+
+        # Search for Apple's 10-K filings
+        measure_performance.start()
+        result = provider.execute('search_filings', {
+            'cik': '0000320193',
+            'form_type': '10-K',
+            'limit': 5
+        })
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'secedgar'
+        assert result['operation'] == 'search_filings'
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+
+        data = result['data']
+        assert 'filings' in data
+        assert 'count' in data
+        assert isinstance(data['filings'], list)
+
+        debug_output("SEC EDGAR Search Filings", {
+            'count': data.get('count'),
+            'form_type_filter': data.get('form_type_filter'),
+            'sample_filing': data['filings'][0] if data['filings'] else None,
+            'duration_ms': duration,
+        })
+
+        print(f"✓ Found {data.get('count', 0)} filings in {duration:.2f}ms")
+
+    @pytest.mark.network
+    def test_get_filings_by_type(self, secedgar_config, debug_output, measure_performance):
+        """Test SEC EDGAR get_filings_by_type operation"""
+        print("\n=== Testing SEC EDGAR get_filings_by_type ===")
+
+        provider = SECEdgarProvider(secedgar_config)
+
+        # Get Apple's recent 10-Q filings
+        measure_performance.start()
+        result = provider.execute('get_filings_by_type', {
+            'cik': '0000320193',
+            'form_type': '10-Q',
+            'count': 3
+        })
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'secedgar'
+        assert result['operation'] == 'get_filings_by_type'
+        assert 'data' in result
+
+        data = result['data']
+        assert 'filings' in data
+        assert 'count' in data
+
+        debug_output("SEC EDGAR Filings by Type", {
+            'form_type': '10-Q',
+            'count': data.get('count'),
+            'filings': data.get('filings', [])[:2],  # Show first 2
+            'duration_ms': duration,
+        })
+
+        print(f"✓ Retrieved {data.get('count', 0)} 10-Q filings in {duration:.2f}ms")
+
+    @pytest.mark.network
+    def test_get_filing_documents(self, secedgar_config, debug_output, measure_performance):
+        """Test SEC EDGAR get_filing_documents operation"""
+        print("\n=== Testing SEC EDGAR get_filing_documents ===")
+
+        provider = SECEdgarProvider(secedgar_config)
+
+        # First get a recent filing to get accession number
+        submissions = provider.execute('get_company_submissions', {'cik': '0000320193'})
+        filings = submissions['data'].get('filings', {}).get('recent', {})
+        accession_numbers = filings.get('accessionNumber', [])
+
+        if not accession_numbers:
+            pytest.skip("No filings found to test")
+
+        accession_number = accession_numbers[0]
+
+        # Get filing documents
+        measure_performance.start()
+        result = provider.execute('get_filing_documents', {
+            'cik': '0000320193',
+            'accession_number': accession_number
+        })
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'secedgar'
+        assert result['operation'] == 'get_filing_documents'
+        assert 'data' in result
+
+        data = result['data']
+        if 'error' not in data:
+            assert 'accessionNumber' in data
+            assert 'primaryDocument' in data or 'primaryDocumentUrl' in data
+
+        debug_output("SEC EDGAR Filing Documents", {
+            'accession_number': accession_number,
+            'data': data,
+            'duration_ms': duration,
+        })
+
+        print(f"✓ Retrieved filing documents in {duration:.2f}ms")
+
+    @pytest.mark.network
+    def test_calculate_financial_ratios(self, secedgar_config, debug_output, measure_performance):
+        """Test SEC EDGAR calculate_financial_ratios operation"""
+        print("\n=== Testing SEC EDGAR calculate_financial_ratios ===")
+
+        provider = SECEdgarProvider(secedgar_config)
+
+        # Calculate ratios for Apple
+        measure_performance.start()
+        result = provider.execute('calculate_financial_ratios', {
+            'cik': '0000320193'
+        })
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'secedgar'
+        assert result['operation'] == 'calculate_financial_ratios'
+        assert 'data' in result
+
+        data = result['data']
+        assert 'cik' in data
+        assert 'ratios' in data
+        assert isinstance(data['ratios'], dict)
+
+        debug_output("SEC EDGAR Financial Ratios", {
+            'cik': data.get('cik'),
+            'ratios': data.get('ratios'),
+            'raw_values': data.get('raw_values'),
+            'duration_ms': duration,
+        })
+
+        print(f"✓ Calculated {len(data.get('ratios', {}))} financial ratios in {duration:.2f}ms")
+
+    @pytest.mark.network
+    def test_get_financial_statement(self, secedgar_config, debug_output, measure_performance):
+        """Test SEC EDGAR get_financial_statement operation"""
+        print("\n=== Testing SEC EDGAR get_financial_statement ===")
+
+        provider = SECEdgarProvider(secedgar_config)
+
+        # Get balance sheet for Apple
+        measure_performance.start()
+        result = provider.execute('get_financial_statement', {
+            'cik': '0000320193',
+            'statement_type': 'balance_sheet',
+            'period': 'annual'
+        })
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'secedgar'
+        assert result['operation'] == 'get_financial_statement'
+        assert 'data' in result
+
+        data = result['data']
+        assert 'cik' in data
+        assert 'statement_type' in data
+        assert 'line_items' in data
+        assert isinstance(data['line_items'], dict)
+
+        debug_output("SEC EDGAR Financial Statement", {
+            'cik': data.get('cik'),
+            'statement_type': data.get('statement_type'),
+            'period': data.get('period'),
+            'line_items_count': len(data.get('line_items', {})),
+            'sample_items': list(data.get('line_items', {}).keys())[:5],
+            'duration_ms': duration,
+        })
+
+        print(f"✓ Retrieved financial statement with {len(data.get('line_items', {}))} line items in {duration:.2f}ms")
+
+    @pytest.mark.network
+    def test_get_insider_transactions(self, secedgar_config, debug_output, measure_performance):
+        """Test SEC EDGAR get_insider_transactions operation"""
+        print("\n=== Testing SEC EDGAR get_insider_transactions ===")
+
+        provider = SECEdgarProvider(secedgar_config)
+
+        # Get insider transactions for Apple
+        measure_performance.start()
+        result = provider.execute('get_insider_transactions', {
+            'cik': '0000320193'
+        })
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'secedgar'
+        assert result['operation'] == 'get_insider_transactions'
+        assert 'data' in result
+
+        data = result['data']
+        assert 'cik' in data
+        assert 'insider_transactions' in data
+        assert 'count' in data
+        assert isinstance(data['insider_transactions'], list)
+
+        debug_output("SEC EDGAR Insider Transactions", {
+            'cik': data.get('cik'),
+            'count': data.get('count'),
+            'sample_transactions': data.get('insider_transactions', [])[:3],
+            'duration_ms': duration,
+        })
+
+        print(f"✓ Retrieved {data.get('count', 0)} insider transactions in {duration:.2f}ms")
+

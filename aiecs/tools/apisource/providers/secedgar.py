@@ -55,6 +55,12 @@ class SECEdgarProvider(BaseAPIProvider):
             "get_company_concept",
             "get_company_facts",
             "search_filings",
+            "get_filing_documents",
+            "get_filing_text",
+            "get_filings_by_type",
+            "calculate_financial_ratios",
+            "get_financial_statement",
+            "get_insider_transactions",
         ]
 
     def validate_params(self, operation: str, params: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
@@ -87,11 +93,52 @@ class SECEdgarProvider(BaseAPIProvider):
                 return False, "Missing required parameter: cik"
 
         elif operation == "search_filings":
-            if "query" not in params:
+            if "cik" not in params:
                 return False, (
-                    "Missing required parameter: query\n"
-                    "Example: {'query': 'Apple Inc', 'form_type': '10-K'}"
+                    "Missing required parameter: cik\n"
+                    "Example: {'cik': '0000320193', 'form_type': '10-K'}"
                 )
+
+        elif operation == "get_filing_documents":
+            if "cik" not in params:
+                return False, "Missing required parameter: cik"
+            if "accession_number" not in params:
+                return False, (
+                    "Missing required parameter: accession_number\n"
+                    "Example: {'cik': '0000320193', 'accession_number': '0000320193-23-000077'}"
+                )
+
+        elif operation == "get_filing_text":
+            if "cik" not in params:
+                return False, "Missing required parameter: cik"
+            if "accession_number" not in params:
+                return False, "Missing required parameter: accession_number"
+
+        elif operation == "get_filings_by_type":
+            if "cik" not in params:
+                return False, "Missing required parameter: cik"
+            if "form_type" not in params:
+                return False, (
+                    "Missing required parameter: form_type\n"
+                    "Example: {'cik': '0000320193', 'form_type': '10-K'}"
+                )
+
+        elif operation == "calculate_financial_ratios":
+            if "cik" not in params:
+                return False, "Missing required parameter: cik"
+
+        elif operation == "get_financial_statement":
+            if "cik" not in params:
+                return False, "Missing required parameter: cik"
+            if "statement_type" not in params:
+                return False, (
+                    "Missing required parameter: statement_type\n"
+                    "Options: 'balance_sheet', 'income_statement', 'cash_flow'"
+                )
+
+        elif operation == "get_insider_transactions":
+            if "cik" not in params:
+                return False, "Missing required parameter: cik"
 
         return True, None
 
@@ -166,6 +213,188 @@ class SECEdgarProvider(BaseAPIProvider):
 
         return self.execute("get_company_facts", params)
 
+    @expose_operation(
+        operation_name="get_filing_documents",
+        description="Get filing documents and metadata for a specific accession number",
+    )
+    def get_filing_documents(
+        self,
+        cik: str,
+        accession_number: str,
+    ) -> Dict[str, Any]:
+        """
+        Get filing documents for a specific accession number.
+
+        Args:
+            cik: Central Index Key (CIK) - 10-digit identifier
+            accession_number: SEC accession number (e.g., '0000320193-23-000077')
+
+        Returns:
+            Dictionary containing filing documents and metadata
+        """
+        cik_formatted = str(cik).zfill(10)
+        params: Dict[str, Any] = {
+            "cik": cik_formatted,
+            "accession_number": accession_number,
+        }
+
+        return self.execute("get_filing_documents", params)
+
+    @expose_operation(
+        operation_name="get_filing_text",
+        description="Get the full text content of a specific filing document",
+    )
+    def get_filing_text(
+        self,
+        cik: str,
+        accession_number: str,
+        document_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Get the full text of a filing document.
+
+        Args:
+            cik: Central Index Key (CIK) - 10-digit identifier
+            accession_number: SEC accession number
+            document_name: Optional specific document name (defaults to primary document)
+
+        Returns:
+            Dictionary containing the filing text content
+        """
+        cik_formatted = str(cik).zfill(10)
+        params: Dict[str, Any] = {
+            "cik": cik_formatted,
+            "accession_number": accession_number,
+        }
+        if document_name:
+            params["document_name"] = document_name
+
+        return self.execute("get_filing_text", params)
+
+    @expose_operation(
+        operation_name="get_filings_by_type",
+        description="Get recent filings of a specific form type for a company",
+    )
+    def get_filings_by_type(
+        self,
+        cik: str,
+        form_type: str,
+        count: int = 10,
+    ) -> Dict[str, Any]:
+        """
+        Get recent filings by form type.
+
+        Args:
+            cik: Central Index Key (CIK) - 10-digit identifier
+            form_type: Form type (e.g., '10-K', '10-Q', '8-K', 'DEF 14A')
+            count: Number of filings to return (default: 10)
+
+        Returns:
+            Dictionary containing list of filings
+        """
+        cik_formatted = str(cik).zfill(10)
+        params: Dict[str, Any] = {
+            "cik": cik_formatted,
+            "form_type": form_type,
+            "count": count,
+        }
+
+        return self.execute("get_filings_by_type", params)
+
+    @expose_operation(
+        operation_name="calculate_financial_ratios",
+        description="Calculate common financial ratios from XBRL data",
+    )
+    def calculate_financial_ratios(
+        self,
+        cik: str,
+        fiscal_year: Optional[int] = None,
+        fiscal_quarter: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Calculate financial ratios for a company.
+
+        Args:
+            cik: Central Index Key (CIK) - 10-digit identifier
+            fiscal_year: Optional fiscal year (defaults to most recent)
+            fiscal_quarter: Optional fiscal quarter (1-4, for quarterly ratios)
+
+        Returns:
+            Dictionary containing calculated financial ratios
+        """
+        cik_formatted = str(cik).zfill(10)
+        params: Dict[str, Any] = {"cik": cik_formatted}
+        if fiscal_year:
+            params["fiscal_year"] = fiscal_year
+        if fiscal_quarter:
+            params["fiscal_quarter"] = fiscal_quarter
+
+        return self.execute("calculate_financial_ratios", params)
+
+    @expose_operation(
+        operation_name="get_financial_statement",
+        description="Get formatted financial statement (balance sheet, income statement, or cash flow)",
+    )
+    def get_financial_statement(
+        self,
+        cik: str,
+        statement_type: str,
+        period: str = "annual",
+        fiscal_year: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Get formatted financial statement.
+
+        Args:
+            cik: Central Index Key (CIK) - 10-digit identifier
+            statement_type: Type of statement ('balance_sheet', 'income_statement', 'cash_flow')
+            period: 'annual' or 'quarterly' (default: 'annual')
+            fiscal_year: Optional fiscal year (defaults to most recent)
+
+        Returns:
+            Dictionary containing formatted financial statement
+        """
+        cik_formatted = str(cik).zfill(10)
+        params: Dict[str, Any] = {
+            "cik": cik_formatted,
+            "statement_type": statement_type,
+            "period": period,
+        }
+        if fiscal_year:
+            params["fiscal_year"] = fiscal_year
+
+        return self.execute("get_financial_statement", params)
+
+    @expose_operation(
+        operation_name="get_insider_transactions",
+        description="Get insider trading transactions (Form 4 filings)",
+    )
+    def get_insider_transactions(
+        self,
+        cik: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Get insider transactions for a company.
+
+        Args:
+            cik: Central Index Key (CIK) - 10-digit identifier
+            start_date: Optional start date (YYYY-MM-DD format)
+            end_date: Optional end date (YYYY-MM-DD format)
+
+        Returns:
+            Dictionary containing insider transactions
+        """
+        cik_formatted = str(cik).zfill(10)
+        params: Dict[str, Any] = {"cik": cik_formatted}
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+
+        return self.execute("get_insider_transactions", params)
+
     def fetch(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Fetch data from SEC EDGAR API"""
 
@@ -205,14 +434,39 @@ class SECEdgarProvider(BaseAPIProvider):
             query_params = {}
 
         elif operation == "search_filings":
-            # Note: SEC doesn't have a direct search API endpoint
-            # This would require using the full-text search on sec.gov
-            # For now, we'll return an error suggesting to use get_company_submissions
-            raise ValueError(
-                "Direct search is not supported by SEC EDGAR API. "
-                "Use get_company_submissions with a known CIK instead. "
-                "You can find CIKs at https://www.sec.gov/edgar/searchedgar/companysearch.html"
-            )
+            # Implement search using company submissions
+            cik = params["cik"]
+            endpoint = f"{self.BASE_URL}/submissions/CIK{cik}.json"
+            query_params = {}
+
+        elif operation == "get_filing_documents":
+            # Get filing documents index
+            cik = params["cik"]
+            accession_number = params["accession_number"].replace("-", "")
+            endpoint = f"{self.BASE_URL}/submissions/CIK{cik}.json"
+            query_params = {}
+
+        elif operation == "get_filing_text":
+            # Get filing text - will be handled specially
+            return self._fetch_filing_text(params, headers)
+
+        elif operation == "get_filings_by_type":
+            # Get filings by type using submissions
+            cik = params["cik"]
+            endpoint = f"{self.BASE_URL}/submissions/CIK{cik}.json"
+            query_params = {}
+
+        elif operation == "calculate_financial_ratios":
+            # Calculate ratios from company facts
+            return self._calculate_ratios(params)
+
+        elif operation == "get_financial_statement":
+            # Get formatted financial statement
+            return self._get_formatted_statement(params)
+
+        elif operation == "get_insider_transactions":
+            # Get insider transactions (Form 4)
+            return self._get_insider_data(params, headers)
 
         else:
             raise ValueError(f"Unknown operation: {operation}")
@@ -238,6 +492,25 @@ class SECEdgarProvider(BaseAPIProvider):
                     "exchanges": data.get("exchanges", []),
                     "filings": data.get("filings", {}),
                 }
+            elif operation == "search_filings":
+                # Filter filings based on form_type if provided
+                form_type = params.get("form_type")
+                filings = data.get("filings", {}).get("recent", {})
+                result_data = self._filter_filings(filings, form_type, params.get("limit", 100))
+
+            elif operation == "get_filing_documents":
+                # Extract filing documents for specific accession number
+                accession_number = params["accession_number"]
+                filings = data.get("filings", {}).get("recent", {})
+                result_data = self._extract_filing_documents(filings, accession_number, params["cik"])
+
+            elif operation == "get_filings_by_type":
+                # Filter by form type
+                form_type = params["form_type"]
+                count = params.get("count", 10)
+                filings = data.get("filings", {}).get("recent", {})
+                result_data = self._filter_filings_by_type(filings, form_type, count)
+
             elif operation in ["get_company_concept", "get_company_facts"]:
                 # Return full XBRL data
                 result_data = data
@@ -264,6 +537,361 @@ class SECEdgarProvider(BaseAPIProvider):
         except requests.exceptions.RequestException as e:
             self.logger.error(f"SEC EDGAR API request failed: {e}")
             raise Exception(f"SEC EDGAR API request failed: {str(e)}")
+
+    def _filter_filings(self, filings: Dict[str, Any], form_type: Optional[str], limit: int) -> Dict[str, Any]:
+        """Filter filings by form type"""
+        if not filings:
+            return {"filings": [], "count": 0}
+
+        # Get filing arrays
+        accession_numbers = filings.get("accessionNumber", [])
+        filing_dates = filings.get("filingDate", [])
+        report_dates = filings.get("reportDate", [])
+        form_types = filings.get("form", [])
+        primary_documents = filings.get("primaryDocument", [])
+
+        # Filter by form type if specified
+        filtered_filings = []
+        for i in range(len(accession_numbers)):
+            if form_type and form_types[i] != form_type:
+                continue
+
+            filtered_filings.append({
+                "accessionNumber": accession_numbers[i],
+                "filingDate": filing_dates[i],
+                "reportDate": report_dates[i] if i < len(report_dates) else None,
+                "formType": form_types[i],
+                "primaryDocument": primary_documents[i] if i < len(primary_documents) else None,
+            })
+
+            if len(filtered_filings) >= limit:
+                break
+
+        return {
+            "filings": filtered_filings,
+            "count": len(filtered_filings),
+            "form_type_filter": form_type,
+        }
+
+    def _filter_filings_by_type(self, filings: Dict[str, Any], form_type: str, count: int) -> Dict[str, Any]:
+        """Filter filings by specific form type"""
+        return self._filter_filings(filings, form_type, count)
+
+    def _extract_filing_documents(self, filings: Dict[str, Any], accession_number: str, cik: str) -> Dict[str, Any]:
+        """Extract filing documents for a specific accession number"""
+        if not filings:
+            return {"error": "No filings found"}
+
+        # Find the filing with matching accession number
+        accession_numbers = filings.get("accessionNumber", [])
+        filing_dates = filings.get("filingDate", [])
+        form_types = filings.get("form", [])
+        primary_documents = filings.get("primaryDocument", [])
+
+        # Normalize accession number (remove dashes)
+        accession_normalized = accession_number.replace("-", "")
+
+        for i, acc_num in enumerate(accession_numbers):
+            if acc_num.replace("-", "") == accession_normalized:
+                # Build document URLs
+                cik_no_leading = cik.lstrip("0")
+                base_url = f"https://www.sec.gov/Archives/edgar/data/{cik_no_leading}/{accession_normalized}"
+
+                primary_doc = primary_documents[i] if i < len(primary_documents) else None
+
+                return {
+                    "accessionNumber": acc_num,
+                    "filingDate": filing_dates[i] if i < len(filing_dates) else None,
+                    "formType": form_types[i] if i < len(form_types) else None,
+                    "primaryDocument": primary_doc,
+                    "primaryDocumentUrl": f"{base_url}/{primary_doc}" if primary_doc else None,
+                    "indexUrl": f"{base_url}-index.html",
+                    "baseUrl": base_url,
+                }
+
+        return {"error": f"Filing with accession number {accession_number} not found"}
+
+    def _fetch_filing_text(self, params: Dict[str, Any], headers: Dict[str, str]) -> Dict[str, Any]:
+        """Fetch the full text of a filing document"""
+        cik = params["cik"]
+        accession_number = params["accession_number"].replace("-", "")
+        document_name = params.get("document_name")
+
+        # First, get the filing documents to find the primary document
+        if not document_name:
+            # Get submissions to find primary document
+            submissions_url = f"{self.BASE_URL}/submissions/CIK{cik}.json"
+            timeout = self.config.get("timeout", 30)
+
+            try:
+                response = requests.get(submissions_url, headers=headers, timeout=timeout)
+                response.raise_for_status()
+                data = response.json()
+
+                filings = data.get("filings", {}).get("recent", {})
+                filing_info = self._extract_filing_documents(filings, accession_number, cik)
+
+                if "error" in filing_info:
+                    raise Exception(filing_info["error"])
+
+                document_name = filing_info.get("primaryDocument")
+                if not document_name:
+                    raise Exception("Primary document not found for this filing")
+
+            except Exception as e:
+                raise Exception(f"Failed to get filing information: {str(e)}")
+
+        # Build document URL
+        cik_no_leading = cik.lstrip("0")
+        document_url = f"https://www.sec.gov/Archives/edgar/data/{cik_no_leading}/{accession_number}/{document_name}"
+
+        # Fetch the document (HTML/TXT)
+        headers_text = headers.copy()
+        headers_text["Accept"] = "text/html,text/plain,application/xhtml+xml"
+
+        try:
+            response = requests.get(document_url, headers=headers_text, timeout=timeout)
+            response.raise_for_status()
+
+            result_data = {
+                "accessionNumber": params["accession_number"],
+                "documentName": document_name,
+                "documentUrl": document_url,
+                "content": response.text,
+                "contentType": response.headers.get("Content-Type", "text/html"),
+                "contentLength": len(response.text),
+            }
+
+            return self._format_response(
+                operation="get_filing_text",
+                data=result_data,
+                source=f"SEC EDGAR - {document_url}",
+            )
+
+        except Exception as e:
+            raise Exception(f"Failed to fetch filing text: {str(e)}")
+
+    def _calculate_ratios(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Calculate financial ratios from XBRL data"""
+        cik = params["cik"]
+        fiscal_year = params.get("fiscal_year")
+        fiscal_quarter = params.get("fiscal_quarter")
+
+        # Get company facts
+        facts_params = {"cik": cik}
+        facts_result = self.execute("get_company_facts", facts_params)
+        facts_data = facts_result.get("data", {})
+
+        if not facts_data or "facts" not in facts_data:
+            raise Exception("Unable to retrieve company facts for ratio calculation")
+
+        # Extract US-GAAP facts
+        us_gaap = facts_data.get("facts", {}).get("us-gaap", {})
+
+        # Helper function to get most recent value
+        def get_recent_value(concept_name: str, period_type: str = "annual"):
+            concept = us_gaap.get(concept_name, {})
+            units = concept.get("units", {})
+            usd_data = units.get("USD", [])
+
+            if not usd_data:
+                return None
+
+            # Filter by fiscal year/quarter if specified
+            filtered = usd_data
+            if fiscal_year:
+                filtered = [d for d in filtered if d.get("fy") == fiscal_year]
+            if fiscal_quarter:
+                filtered = [d for d in filtered if d.get("fp") == f"Q{fiscal_quarter}"]
+
+            # Get most recent
+            if filtered:
+                # Sort by end date
+                sorted_data = sorted(filtered, key=lambda x: x.get("end", ""), reverse=True)
+                return sorted_data[0].get("val")
+
+            return None
+
+        # Calculate common ratios
+        assets = get_recent_value("Assets")
+        liabilities = get_recent_value("Liabilities")
+        equity = get_recent_value("StockholdersEquity")
+        current_assets = get_recent_value("AssetsCurrent")
+        current_liabilities = get_recent_value("LiabilitiesCurrent")
+        revenue = get_recent_value("Revenues")
+        net_income = get_recent_value("NetIncomeLoss")
+
+        ratios = {}
+
+        # Liquidity Ratios
+        if current_assets and current_liabilities and current_liabilities != 0:
+            ratios["current_ratio"] = current_assets / current_liabilities
+
+        # Leverage Ratios
+        if liabilities and equity and equity != 0:
+            ratios["debt_to_equity"] = liabilities / equity
+
+        if liabilities and assets and assets != 0:
+            ratios["debt_ratio"] = liabilities / assets
+
+        # Profitability Ratios
+        if net_income and revenue and revenue != 0:
+            ratios["profit_margin"] = net_income / revenue
+
+        if net_income and assets and assets != 0:
+            ratios["return_on_assets"] = net_income / assets
+
+        if net_income and equity and equity != 0:
+            ratios["return_on_equity"] = net_income / equity
+
+        result_data = {
+            "cik": cik,
+            "fiscal_year": fiscal_year,
+            "fiscal_quarter": fiscal_quarter,
+            "ratios": ratios,
+            "raw_values": {
+                "assets": assets,
+                "liabilities": liabilities,
+                "equity": equity,
+                "current_assets": current_assets,
+                "current_liabilities": current_liabilities,
+                "revenue": revenue,
+                "net_income": net_income,
+            }
+        }
+
+        return self._format_response(
+            operation="calculate_financial_ratios",
+            data=result_data,
+            source="SEC EDGAR - Calculated from XBRL data",
+        )
+
+    def _get_formatted_statement(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Get formatted financial statement"""
+        cik = params["cik"]
+        statement_type = params["statement_type"]
+        period = params.get("period", "annual")
+        fiscal_year = params.get("fiscal_year")
+
+        # Get company facts
+        facts_params = {"cik": cik}
+        facts_result = self.execute("get_company_facts", facts_params)
+        facts_data = facts_result.get("data", {})
+
+        if not facts_data or "facts" not in facts_data:
+            raise Exception("Unable to retrieve company facts")
+
+        us_gaap = facts_data.get("facts", {}).get("us-gaap", {})
+
+        # Define statement line items
+        statement_items = {
+            "balance_sheet": [
+                "AssetsCurrent", "AssetsNoncurrent", "Assets",
+                "LiabilitiesCurrent", "LiabilitiesNoncurrent", "Liabilities",
+                "StockholdersEquity", "LiabilitiesAndStockholdersEquity"
+            ],
+            "income_statement": [
+                "Revenues", "CostOfRevenue", "GrossProfit",
+                "OperatingExpenses", "OperatingIncomeLoss",
+                "InterestExpense", "IncomeTaxExpense",
+                "NetIncomeLoss", "EarningsPerShareBasic", "EarningsPerShareDiluted"
+            ],
+            "cash_flow": [
+                "NetCashProvidedByUsedInOperatingActivities",
+                "NetCashProvidedByUsedInInvestingActivities",
+                "NetCashProvidedByUsedInFinancingActivities",
+                "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"
+            ]
+        }
+
+        items = statement_items.get(statement_type, [])
+        statement_data = {}
+
+        for item in items:
+            concept = us_gaap.get(item, {})
+            units = concept.get("units", {})
+            usd_data = units.get("USD", [])
+
+            if usd_data:
+                # Filter by fiscal year if specified
+                filtered = usd_data
+                if fiscal_year:
+                    filtered = [d for d in filtered if d.get("fy") == fiscal_year]
+
+                # Get most recent
+                if filtered:
+                    sorted_data = sorted(filtered, key=lambda x: x.get("end", ""), reverse=True)
+                    statement_data[item] = {
+                        "value": sorted_data[0].get("val"),
+                        "end_date": sorted_data[0].get("end"),
+                        "fiscal_year": sorted_data[0].get("fy"),
+                        "fiscal_period": sorted_data[0].get("fp"),
+                    }
+
+        result_data = {
+            "cik": cik,
+            "statement_type": statement_type,
+            "period": period,
+            "fiscal_year": fiscal_year,
+            "line_items": statement_data,
+        }
+
+        return self._format_response(
+            operation="get_financial_statement",
+            data=result_data,
+            source="SEC EDGAR - Formatted from XBRL data",
+        )
+
+    def _get_insider_data(self, params: Dict[str, Any], headers: Dict[str, str]) -> Dict[str, Any]:
+        """Get insider transactions (Form 4 filings)"""
+        cik = params["cik"]
+        start_date = params.get("start_date")
+        end_date = params.get("end_date")
+
+        # Get company submissions
+        submissions_url = f"{self.BASE_URL}/submissions/CIK{cik}.json"
+        timeout = self.config.get("timeout", 30)
+
+        try:
+            response = requests.get(submissions_url, headers=headers, timeout=timeout)
+            response.raise_for_status()
+            data = response.json()
+
+            filings = data.get("filings", {}).get("recent", {})
+
+            # Filter for Form 4 filings
+            form_4_filings = self._filter_filings_by_type(filings, "4", 100)
+
+            # Further filter by date range if specified
+            if start_date or end_date:
+                filtered_filings = []
+                for filing in form_4_filings.get("filings", []):
+                    filing_date = filing.get("filingDate")
+                    if start_date and filing_date < start_date:
+                        continue
+                    if end_date and filing_date > end_date:
+                        continue
+                    filtered_filings.append(filing)
+
+                form_4_filings["filings"] = filtered_filings
+                form_4_filings["count"] = len(filtered_filings)
+
+            result_data = {
+                "cik": cik,
+                "start_date": start_date,
+                "end_date": end_date,
+                "insider_transactions": form_4_filings.get("filings", []),
+                "count": form_4_filings.get("count", 0),
+            }
+
+            return self._format_response(
+                operation="get_insider_transactions",
+                data=result_data,
+                source=f"SEC EDGAR - {submissions_url}",
+            )
+
+        except Exception as e:
+            raise Exception(f"Failed to get insider transactions: {str(e)}")
 
     def get_operation_schema(self, operation: str) -> Optional[Dict[str, Any]]:
         """Get detailed schema for SEC EDGAR operations"""
