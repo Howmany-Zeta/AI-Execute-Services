@@ -23,6 +23,7 @@ from aiecs.tools.apisource.providers.crossref import CrossRefProvider
 from aiecs.tools.apisource.providers.semanticscholar import SemanticScholarProvider
 from aiecs.tools.apisource.providers.core import COREProvider
 from aiecs.tools.apisource.providers.uspto import USPTOProvider
+from aiecs.tools.apisource.providers.secedgar import SECEdgarProvider
 
 import logging
 from typing import Dict, List, Optional, Type, Any
@@ -124,6 +125,7 @@ register_provider(CrossRefProvider)
 register_provider(SemanticScholarProvider)
 register_provider(COREProvider)
 register_provider(USPTOProvider)
+register_provider(SECEdgarProvider)
 
 
 __all__ = [
@@ -147,6 +149,7 @@ __all__ = [
     "SemanticScholarProvider",
     "COREProvider",
     "USPTOProvider",
+    "SECEdgarProvider",
     "register_provider",
     "get_provider",
     "list_providers",

@@ -634,6 +634,73 @@ export USPTO_API_KEY="YOUR_USPTO_KEY"
 - Access to comprehensive US patent database
 - Full metadata including inventors, assignees, classifications, citations
 
+### 3.19 SEC EDGAR API
+
+**No API Key Required**:
+```python
+# SEC EDGAR API is publicly accessible
+# User-Agent header is REQUIRED
+config = {
+    'secedgar_config': {
+        'user_agent': 'YourCompanyName contact@example.com'
+    }
+}
+tool = APISourceTool(config)
+```
+
+**Environment Variable**:
+```bash
+export SECEDGAR_USER_AGENT="YourCompanyName contact@example.com"
+```
+
+**Configuration with User-Agent (REQUIRED)**:
+```python
+config = {
+    'secedgar_config': {
+        'user_agent': 'AIECS-APISource contact@example.com',
+        'timeout': 30,
+        'rate_limit': 10,
+        'max_burst': 20
+    }
+}
+tool = APISourceTool(config)
+```
+
+**Rate Limits**:
+- Maximum: 10 requests per second
+- SEC may block access if rules are not followed
+- Be respectful of the free service
+
+**API Rules** (https://www.sec.gov/os/accessing-edgar-data):
+1. **User-Agent Header REQUIRED**: Must include:
+   - Company or individual name
+   - Contact email address
+   - Format: `"CompanyName contact@email.com"`
+2. **Rate Limiting**: Limit to 10 requests per second maximum
+3. **Caching**: Cache responses when possible to reduce load
+4. **Fair Access**: SEC monitors usage and may block non-compliant access
+
+**API Documentation**:
+- API Overview: https://www.sec.gov/search-filings/edgar-application-programming-interfaces
+- Accessing EDGAR Data: https://www.sec.gov/os/accessing-edgar-data
+- Data Sets: https://www.sec.gov/data-research/sec-markets-data
+
+**Features**:
+- Company submissions and filing history
+- XBRL financial data and concepts
+- Company facts across all filings
+- No API key required - completely free
+
+**Supported Operations**:
+- `get_company_submissions` - Get company filing history by CIK
+- `get_company_concept` - Get XBRL concept data for specific metrics
+- `get_company_facts` - Get all XBRL facts for a company
+
+**Example CIKs**:
+- Apple Inc.: 0000320193
+- Tesla Inc.: 0001318605
+- Microsoft Corp.: 0000789019
+
 ---
 
 ## 4. Performance Settings
@@ -1249,6 +1316,82 @@ config = {
 - Patent Search API: https://developer.uspto.gov/api-catalog/patent-search-api
 - Developer Portal: https://developer.uspto.gov/
 
+### 6.19 SEC EDGAR Provider
+
+```python
+config = {
+    'secedgar_config': {
+        'base_url': 'https://data.sec.gov',
+        'user_agent': 'YourCompanyName contact@example.com',  # REQUIRED
+        'timeout': 30,
+        'rate_limit': 10,    # Requests per second (max allowed by SEC)
+        'max_burst': 20,     # Maximum burst size
+    }
+}
+```
+
+**Features**:
+- Get company submissions and filing history by CIK
+- Access XBRL financial data and concepts
+- Retrieve company facts across all filings
+- Search company filings (10-K, 10-Q, 8-K, etc.)
+- Access to comprehensive SEC filing database
+- Full metadata including company info, filing dates, XBRL tags
+
+**Supported Operations**:
+- `get_company_submissions` - Get company filing history and submission data
+- `get_company_concept` - Get XBRL concept data for specific financial metrics
+- `get_company_facts` - Get all XBRL facts for a company
+
+**Important Configuration Notes**:
+- **No API Key Required**: SEC EDGAR API is completely free and open
+- **User-Agent REQUIRED**: Must include company/individual name and contact email
+  - Format: `"CompanyName contact@email.com"`
+  - SEC will block access if User-Agent is missing or generic
+- **Rate Limit**: Maximum 10 requests per second (enforced by SEC)
+- **CIK Format**: Central Index Key must be 10 digits with leading zeros (e.g., "0000320193")
+- **Caching**: Strongly recommended to cache responses to reduce server load
+- **Fair Access**: SEC monitors usage and may block non-compliant access
+
+**Example Usage**:
+```python
+# Get Apple Inc. filings (CIK: 0000320193)
+result = tool.query(
+    provider='secedgar',
+    operation='get_company_submissions',
+    params={'cik': '0000320193'}
+)
+
+# Get Apple's Assets data from XBRL
+result = tool.query(
+    provider='secedgar',
+    operation='get_company_concept',
+    params={
+        'cik': '0000320193',
+        'taxonomy': 'us-gaap',
+        'tag': 'Assets'
+    }
+)
+```
+
+**Common CIKs**:
+- Apple Inc.: 0000320193
+- Tesla Inc.: 0001318605
+- Microsoft Corp.: 0000789019
+- Amazon.com Inc.: 0001018724
+- Alphabet Inc.: 0001652044
+
+**Finding CIKs**:
+- Company Search: https://www.sec.gov/edgar/searchedgar/companysearch.html
+- CIK Lookup Tool: https://www.sec.gov/cgi-bin/browse-edgar
+
+**API Documentation**:
+- API Overview: https://www.sec.gov/search-filings/edgar-application-programming-interfaces
+- Accessing EDGAR Data: https://www.sec.gov/os/accessing-edgar-data
+- XBRL Data Sets: https://www.sec.gov/dera/data/financial-statement-data-sets.html
+- Company Submissions: https://data.sec.gov/submissions/
+- XBRL API: https://data.sec.gov/api/xbrl/
+
 ---
 
 ## 7. Environment Variables
@@ -1270,6 +1413,7 @@ export APISOURCE_PUBMED_API_KEY="your_ncbi_api_key"  # Optional but recommended
 export CROSSREF_MAILTO="your-email@example.com"  # Optional but recommended for polite pool
 export APISOURCE_CORE_API_KEY="your_core_api_key"  # Required
 export APISOURCE_USPTO_API_KEY="your_uspto_api_key"  # Required
+export SECEDGAR_USER_AGENT="YourCompanyName contact@example.com"  # REQUIRED for SEC EDGAR
 
 # Provider-specific Configuration
 export SEMANTICSCHOLAR_TIMEOUT=30
@@ -1281,6 +1425,9 @@ export CORE_MAX_BURST=20
 export USPTO_TIMEOUT=30
 export USPTO_RATE_LIMIT=10
 export USPTO_MAX_BURST=20
+export SECEDGAR_TIMEOUT=30
+export SECEDGAR_RATE_LIMIT=10
+export SECEDGAR_MAX_BURST=20
 
 # Performance
 export APISOURCE_CACHE_TTL="300"
