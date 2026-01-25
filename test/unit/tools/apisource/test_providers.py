@@ -45,6 +45,7 @@ from aiecs.tools.apisource.providers.uspto import USPTOProvider
 from aiecs.tools.apisource.providers.secedgar import SECEdgarProvider
 from aiecs.tools.apisource.providers.stackexchange import StackExchangeProvider
 from aiecs.tools.apisource.providers.hackernews import HackerNewsProvider
+from aiecs.tools.apisource.providers.opencorporates import OpenCorporatesProvider
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange', 'hackernews']
+        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange', 'hackernews', 'opencorporates']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -5285,6 +5286,180 @@ class TestHackerNewsProvider:
         assert 'parameters' in schema
 
         debug_output("Hacker News search_stories Schema", schema)
+
+        print("✓ Operation schema retrieved successfully")
+
+
+class TestOpenCorporatesProvider:
+    """Test OpenCorporates API provider"""
+
+    def test_provider_metadata(self, opencorporates_config, debug_output):
+        """Test OpenCorporates provider metadata"""
+        print("\n=== Testing OpenCorporates Provider Metadata ===")
+
+        provider = OpenCorporatesProvider(opencorporates_config)
+
+        assert provider.name == 'opencorporates'
+        assert provider.description
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+
+        debug_output("OpenCorporates Metadata", {
+            'name': metadata['name'],
+            'description': metadata['description'],
+            'operations': metadata['operations'],
+        })
+
+        print("✓ OpenCorporates metadata retrieved successfully")
+
+    @pytest.mark.network
+    def test_search_companies(self, opencorporates_config, skip_if_no_api_key, debug_output,
+                              measure_performance):
+        """Test OpenCorporates search_companies operation"""
+        skip_if_no_api_key('opencorporates')
+        print("\n=== Testing OpenCorporates search_companies ===")
+
+        provider = OpenCorporatesProvider(opencorporates_config)
+
+        measure_performance.start()
+        result = provider.execute('search_companies', {
+            'q': 'Apple Inc',
+            'per_page': 5
+        })
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'opencorporates'
+        assert result['operation'] == 'search_companies'
+        assert 'data' in result
+
+        debug_output("OpenCorporates Search Results", {
+            'query': 'Apple Inc',
+            'data_type': type(result['data']).__name__,
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("OpenCorporates search_companies")
+        print("✓ Company search executed successfully")
+
+    @pytest.mark.network
+    def test_get_company(self, opencorporates_config, skip_if_no_api_key, debug_output,
+                        measure_performance):
+        """Test OpenCorporates get_company operation"""
+        skip_if_no_api_key('opencorporates')
+        print("\n=== Testing OpenCorporates get_company ===")
+
+        provider = OpenCorporatesProvider(opencorporates_config)
+
+        measure_performance.start()
+        result = provider.execute('get_company', {
+            'jurisdiction_code': 'us_ca',
+            'company_number': 'C0806592'
+        })
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'opencorporates'
+        assert result['operation'] == 'get_company'
+        assert 'data' in result
+
+        debug_output("OpenCorporates Company Data", {
+            'jurisdiction': 'us_ca',
+            'company_number': 'C0806592',
+            'data_type': type(result['data']).__name__,
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("OpenCorporates get_company")
+        print("✓ Retrieved company data successfully")
+
+    @pytest.mark.network
+    def test_search_officers(self, opencorporates_config, skip_if_no_api_key, debug_output):
+        """Test OpenCorporates search_officers operation"""
+        skip_if_no_api_key('opencorporates')
+        print("\n=== Testing OpenCorporates search_officers ===")
+
+        provider = OpenCorporatesProvider(opencorporates_config)
+
+        result = provider.execute('search_officers', {
+            'q': 'John Smith',
+            'per_page': 5
+        })
+
+        assert result['provider'] == 'opencorporates'
+        assert result['operation'] == 'search_officers'
+        assert 'data' in result
+
+        debug_output("OpenCorporates Officer Search", {
+            'query': 'John Smith',
+            'data_type': type(result['data']).__name__,
+        })
+
+        print("✓ Officer search executed successfully")
+
+    @pytest.mark.network
+    def test_list_jurisdictions(self, opencorporates_config, skip_if_no_api_key, debug_output):
+        """Test OpenCorporates list_jurisdictions operation"""
+        skip_if_no_api_key('opencorporates')
+        print("\n=== Testing OpenCorporates list_jurisdictions ===")
+
+        provider = OpenCorporatesProvider(opencorporates_config)
+
+        result = provider.execute('list_jurisdictions', {})
+
+        assert result['provider'] == 'opencorporates'
+        assert result['operation'] == 'list_jurisdictions'
+        assert 'data' in result
+
+        debug_output("OpenCorporates Jurisdictions", {
+            'data_type': type(result['data']).__name__,
+        })
+
+        print("✓ Listed jurisdictions successfully")
+
+    def test_validate_params(self, opencorporates_config):
+        """Test OpenCorporates parameter validation"""
+        print("\n=== Testing OpenCorporates Parameter Validation ===")
+
+        provider = OpenCorporatesProvider(opencorporates_config)
+
+        # Valid params for search_companies
+        is_valid, error = provider.validate_params('search_companies', {'q': 'Apple'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params - missing required
+        is_valid, error = provider.validate_params('search_companies', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_company
+        is_valid, error = provider.validate_params('get_company', {
+            'jurisdiction_code': 'us_ca',
+            'company_number': 'C0806592'
+        })
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for get_company - missing company_number
+        is_valid, error = provider.validate_params('get_company', {'jurisdiction_code': 'us_ca'})
+        assert is_valid is False
+        assert error is not None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, opencorporates_config, debug_output):
+        """Test OpenCorporates operation schema"""
+        print("\n=== Testing OpenCorporates Operation Schema ===")
+
+        provider = OpenCorporatesProvider(opencorporates_config)
+
+        schema = provider.get_operation_schema('search_companies')
+
+        assert schema is not None
+        assert 'description' in schema
+        assert 'parameters' in schema
+
+        debug_output("OpenCorporates search_companies Schema", schema)
 
         print("✓ Operation schema retrieved successfully")
 

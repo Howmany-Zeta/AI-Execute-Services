@@ -778,6 +778,45 @@ tool = APISourceTool(config)
 - Ask Ubuntu: `askubuntu`
 - Mathematics: `math`
 
+### 3.21 OpenCorporates API
+
+**API Key Required**:
+```python
+config = {
+    'opencorporates_api_key': 'YOUR_OPENCORPORATES_API_KEY'
+}
+tool = APISourceTool(config)
+```
+
+**Environment Variable**:
+```bash
+export OPENCORPORATES_API_KEY="your_opencorporates_api_key"
+```
+
+**Rate Limits**:
+- Free tier: 200 requests per month, 50 requests per day
+- Open data projects: Free with share-alike attribution
+- Paid plans: Available for commercial use without restrictions
+
+**Obtaining an API Key**:
+1. Visit https://opencorporates.com/api_accounts/new
+2. Register for a free account
+3. Choose your plan (free for open data projects)
+4. Get your API key from the dashboard
+
+**Features**:
+- Search for companies by name across 140+ jurisdictions
+- Get detailed company information by jurisdiction and company number
+- Search for company officers (directors, agents)
+- Access company filings and statutory documents
+- Get jurisdiction information
+- Access to 200+ million companies worldwide
+
+**API Documentation**:
+- API Reference: https://api.opencorporates.com/documentation/API-Reference
+- API Accounts: https://opencorporates.com/api_accounts/new
+- About OpenCorporates: https://opencorporates.com/info/about
+
 ---
 
 ## 4. Performance Settings
@@ -1771,6 +1810,131 @@ result = tool.query(
 - Hacker News Official: https://news.ycombinator.com/
 - Search Interface: https://hn.algolia.com/
 
+### 6.22 OpenCorporates Provider
+
+```python
+config = {
+    'opencorporates_api_key': 'YOUR_OPENCORPORATES_API_KEY',  # Required
+    'opencorporates_config': {
+        'base_url': 'https://api.opencorporates.com/v0.4',
+        'timeout': 30,
+        'rate_limit': 10,    # Requests per second
+        'max_burst': 20,     # Maximum burst size
+    }
+}
+```
+
+**Features**:
+- Search for companies by name across 140+ jurisdictions worldwide
+- Get detailed company information by jurisdiction code and company number
+- Search for company officers (directors, agents, secretaries)
+- Get officer details and their company affiliations
+- Access company filings and statutory documents
+- Get jurisdiction information and codes
+- Access to 200+ million companies from official registers
+- Full metadata including company status, address, incorporation date, officers
+
+**Supported Operations**:
+
+*Company Operations:*
+- `search_companies` - Search for companies by name or other criteria
+- `get_company` - Get detailed information about a specific company by jurisdiction and company number
+- `get_company_filings` - Get statutory filings for a specific company
+
+*Officer Operations:*
+- `search_officers` - Search for company officers (directors, agents) by name
+- `get_officer` - Get detailed information about a specific officer by ID
+
+*Jurisdiction Operations:*
+- `list_jurisdictions` - Get list of all available jurisdictions
+
+**Important Configuration Notes**:
+- **API Key Required**: OpenCorporates API requires an API key for all requests
+- **Rate Limits**: Free tier allows 200 requests/month, 50 requests/day
+- **Open Data**: Free for open data projects with share-alike attribution
+- **Paid Plans**: Available for commercial use without share-alike restrictions
+- **Jurisdiction Codes**: Use standard codes like 'us_ca' (California), 'gb' (UK), 'de' (Germany)
+- **Caching**: Strongly recommended to cache responses to reduce API usage
+
+**Example Usage**:
+```python
+# 1. Search for companies by name
+result = tool.query(
+    provider='opencorporates',
+    operation='search_companies',
+    params={
+        'q': 'Apple Inc',
+        'jurisdiction_code': 'us_ca',  # Optional: filter by jurisdiction
+        'per_page': 10
+    }
+)
+
+# 2. Get specific company details
+result = tool.query(
+    provider='opencorporates',
+    operation='get_company',
+    params={
+        'jurisdiction_code': 'us_ca',
+        'company_number': 'C0806592'  # Apple Inc.
+    }
+)
+
+# 3. Search for officers
+result = tool.query(
+    provider='opencorporates',
+    operation='search_officers',
+    params={
+        'q': 'John Smith',
+        'jurisdiction_code': 'gb',  # Optional: filter by jurisdiction
+        'per_page': 10
+    }
+)
+
+# 4. Get company filings
+result = tool.query(
+    provider='opencorporates',
+    operation='get_company_filings',
+    params={
+        'jurisdiction_code': 'us_ca',
+        'company_number': 'C0806592',
+        'per_page': 20
+    }
+)
+
+# 5. List all jurisdictions
+result = tool.query(
+    provider='opencorporates',
+    operation='list_jurisdictions',
+    params={}
+)
+```
+
+**Common Jurisdiction Codes**:
+- United States (California): `us_ca`
+- United States (Delaware): `us_de`
+- United Kingdom: `gb`
+- Germany: `de`
+- France: `fr`
+- Canada (Ontario): `ca_on`
+- Australia: `au`
+
+**Example Companies**:
+- Apple Inc. (US-CA): jurisdiction_code='us_ca', company_number='C0806592'
+- Google LLC (US-DE): jurisdiction_code='us_de', company_number='5908224'
+- Microsoft Corporation (US-WA): jurisdiction_code='us_wa', company_number='600413485'
+
+**Obtaining the Key**:
+1. Visit https://opencorporates.com/api_accounts/new
+2. Register for a free account
+3. Choose your plan (free for open data projects)
+4. Get your API key from the dashboard
+
+**API Documentation**:
+- API Reference: https://api.opencorporates.com/documentation/API-Reference
+- API Accounts: https://opencorporates.com/api_accounts/new
+- About OpenCorporates: https://opencorporates.com/info/about
+- Jurisdiction Codes: https://api.opencorporates.com/documentation/Open-Data-Licence
+
 ---
 
 ## 7. Environment Variables
@@ -1794,6 +1958,7 @@ export APISOURCE_CORE_API_KEY="your_core_api_key"  # Required
 export APISOURCE_USPTO_API_KEY="your_uspto_api_key"  # Required
 export SECEDGAR_USER_AGENT="YourCompanyName contact@example.com"  # REQUIRED for SEC EDGAR
 export STACKEXCHANGE_API_KEY="your_stackexchange_api_key"  # Optional but recommended
+export OPENCORPORATES_API_KEY="your_opencorporates_api_key"  # Required
 
 # Provider-specific Configuration
 export SEMANTICSCHOLAR_TIMEOUT=30
@@ -1811,6 +1976,9 @@ export SECEDGAR_MAX_BURST=20
 export STACKEXCHANGE_TIMEOUT=30
 export STACKEXCHANGE_RATE_LIMIT=10
 export STACKEXCHANGE_MAX_BURST=20
+export OPENCORPORATES_TIMEOUT=30
+export OPENCORPORATES_RATE_LIMIT=10
+export OPENCORPORATES_MAX_BURST=20
 export HACKERNEWS_TIMEOUT=30
 export HACKERNEWS_RATE_LIMIT=10
 export HACKERNEWS_MAX_BURST=20
