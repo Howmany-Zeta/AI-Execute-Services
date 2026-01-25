@@ -26,6 +26,7 @@ from aiecs.tools.apisource.providers.uspto import USPTOProvider
 from aiecs.tools.apisource.providers.secedgar import SECEdgarProvider
 from aiecs.tools.apisource.providers.stackexchange import StackExchangeProvider
 from aiecs.tools.apisource.providers.hackernews import HackerNewsProvider
+from aiecs.tools.apisource.providers.opencorporates import OpenCorporatesProvider
 
 import logging
 from typing import Dict, List, Optional, Type, Any
@@ -130,6 +131,7 @@ register_provider(USPTOProvider)
 register_provider(SECEdgarProvider)
 register_provider(StackExchangeProvider)
 register_provider(HackerNewsProvider)
+register_provider(OpenCorporatesProvider)
 
 
 __all__ = [
@@ -156,6 +158,7 @@ __all__ = [
     "SECEdgarProvider",
     "StackExchangeProvider",
     "HackerNewsProvider",
+    "OpenCorporatesProvider",
     "register_provider",
     "get_provider",
     "list_providers",
