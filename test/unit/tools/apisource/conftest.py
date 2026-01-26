@@ -83,6 +83,7 @@ def load_env_config():
     logger.info(f"  - USPTO_API_KEY: {'✓ Set' if os.getenv('USPTO_API_KEY') else '✗ Not set'}")
     logger.info(f"  - SECEDGAR_USER_AGENT: {'✓ Set' if os.getenv('SECEDGAR_USER_AGENT') else '✗ Not set'}")
     logger.info(f"  - OPENCORPORATES_API_KEY: {'✓ Set' if os.getenv('OPENCORPORATES_API_KEY') else '✗ Not set'}")
+    logger.info(f"  - COURTLISTENER_API_KEY: {'✓ Set' if os.getenv('COURTLISTENER_API_KEY') else '✗ Not set'}")
     logger.info(f"  - DEBUG_MODE: {os.getenv('DEBUG_MODE', 'false')}")
     logger.info(f"  - VERBOSE_API_CALLS: {os.getenv('VERBOSE_API_CALLS', 'false')}")
 
@@ -370,6 +371,17 @@ def opencorporates_config() -> Dict[str, Any]:
 
 
 @pytest.fixture
+def courtlistener_config() -> Dict[str, Any]:
+    """Configuration for CourtListener provider"""
+    return {
+        'api_key': os.getenv('COURTLISTENER_API_KEY'),
+        'timeout': int(os.getenv('COURTLISTENER_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('COURTLISTENER_RATE_LIMIT', '10')),
+        'max_burst': int(os.getenv('COURTLISTENER_MAX_BURST', '20')),
+    }
+
+
+@pytest.fixture
 def skip_if_no_api_key():
     """Skip test if required API keys are not available"""
     def _skip_if_no_key(provider: str):
@@ -384,6 +396,7 @@ def skip_if_no_api_key():
             'core': 'CORE_API_KEY',
             'uspto': 'USPTO_API_KEY',
             'opencorporates': 'OPENCORPORATES_API_KEY',
+            'courtlistener': 'COURTLISTENER_API_KEY',
         }
 
         env_var = key_map.get(provider.lower())
