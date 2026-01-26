@@ -29,6 +29,7 @@ from aiecs.tools.apisource.providers.newsapi import NewsAPIProvider
 from aiecs.tools.apisource.providers.worldbank import WorldBankProvider
 from aiecs.tools.apisource.providers.census import CensusProvider
 from aiecs.tools.apisource.providers.congress import CongressProvider
+from aiecs.tools.apisource.providers.govtrack import GovTrackProvider
 from aiecs.tools.apisource.providers.alphavantage import AlphaVantageProvider
 from aiecs.tools.apisource.providers.restcountries import RESTCountriesProvider
 from aiecs.tools.apisource.providers.exchangerate import ExchangeRateProvider
@@ -71,7 +72,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census', 'congress', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange', 'hackernews', 'opencorporates']
+        expected = ['fred', 'newsapi', 'worldbank', 'census', 'congress', 'govtrack', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange', 'hackernews', 'opencorporates']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -770,6 +771,420 @@ class TestCongressProvider:
         assert 'parameters' in schema
 
         debug_output("Congress search_bills Schema", schema)
+
+        print("✓ Operation schema retrieved successfully")
+
+
+class TestGovTrackProvider:
+    """Test GovTrack API provider"""
+
+    def test_provider_metadata(self, govtrack_config, debug_output):
+        """Test GovTrack provider metadata"""
+        print("\n=== Testing GovTrack Provider Metadata ===")
+
+        provider = GovTrackProvider(govtrack_config)
+
+        assert provider.name == "govtrack"
+        assert provider.description is not None
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+        assert metadata['name'] == 'govtrack'
+        assert 'operations' in metadata
+
+        debug_output("GovTrack Provider Metadata", {
+            'name': provider.name,
+            'description': provider.description,
+            'operations': provider.supported_operations,
+            'operations_count': len(provider.supported_operations),
+        })
+
+        print("✓ GovTrack provider metadata validated")
+
+    @pytest.mark.network
+    def test_search_bills(self, govtrack_config, debug_output, measure_performance):
+        """Test GovTrack search_bills operation"""
+        print("\n=== Testing GovTrack search_bills ===")
+
+        provider = GovTrackProvider(govtrack_config)
+
+        measure_performance.start()
+        result = provider.search_bills(congress=118, limit=10)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert result['provider'] == 'govtrack'
+        assert result['operation'] == 'search_bills'
+
+        debug_output("GovTrack Bills Search Results", {
+            'congress': 118,
+            'results_count': len(result['data']) if isinstance(result['data'], list) else 'N/A',
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("GovTrack search_bills")
+        print("✓ Retrieved bills successfully")
+
+    @pytest.mark.network
+    def test_search_bills_with_filters(self, govtrack_config, debug_output):
+        """Test GovTrack search_bills with advanced filters"""
+        print("\n=== Testing GovTrack search_bills with filters ===")
+
+        provider = GovTrackProvider(govtrack_config)
+
+        result = provider.search_bills(
+            congress=118,
+            current_status="enacted",
+            limit=5
+        )
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+
+        debug_output("GovTrack Enacted Bills", {
+            'congress': 118,
+            'status': 'enacted',
+            'results_count': len(result['data']),
+        })
+
+        print("✓ Retrieved filtered bills successfully")
+
+    @pytest.mark.network
+    def test_get_bill(self, govtrack_config, debug_output, measure_performance):
+        """Test GovTrack get_bill operation"""
+        print("\n=== Testing GovTrack get_bill ===")
+
+        provider = GovTrackProvider(govtrack_config)
+
+        # First search for a bill to get a valid ID
+        search_result = provider.search_bills(congress=118, limit=1)
+
+        if search_result['data'] and len(search_result['data']) > 0:
+            bill_id = search_result['data'][0].get('id')
+
+            if bill_id:
+                measure_performance.start()
+                result = provider.get_bill(bill_id=bill_id)
+                duration = measure_performance.stop()
+
+                assert result is not None
+                assert 'data' in result
+                assert isinstance(result['data'], dict)
+
+                debug_output("GovTrack Bill Details", {
+                    'bill_id': bill_id,
+                    'data_type': type(result['data']).__name__,
+                    'duration_seconds': duration,
+                })
+
+                measure_performance.print_result("GovTrack get_bill")
+                print("✓ Retrieved bill details successfully")
+            else:
+                print("⚠ Skipping: No bill ID found in search results")
+        else:
+            print("⚠ Skipping: No bills found in search")
+
+    @pytest.mark.network
+    def test_search_legislators(self, govtrack_config, debug_output, measure_performance):
+        """Test GovTrack search_legislators operation"""
+        print("\n=== Testing GovTrack search_legislators ===")
+
+        provider = GovTrackProvider(govtrack_config)
+
+        measure_performance.start()
+        result = provider.search_legislators(current=True, limit=10)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+
+        debug_output("GovTrack Legislators Search", {
+            'current': True,
+            'results_count': len(result['data']),
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("GovTrack search_legislators")
+        print("✓ Retrieved legislators successfully")
+
+    @pytest.mark.network
+    def test_search_legislators_by_state(self, govtrack_config, debug_output):
+        """Test GovTrack search_legislators by state"""
+        print("\n=== Testing GovTrack search_legislators by state ===")
+
+        provider = GovTrackProvider(govtrack_config)
+
+        result = provider.search_legislators(state="CA", current=True, limit=10)
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+
+        debug_output("GovTrack California Legislators", {
+            'state': 'CA',
+            'current': True,
+            'results_count': len(result['data']),
+        })
+
+        print("✓ Retrieved legislators by state successfully")
+
+    @pytest.mark.network
+    def test_get_legislator(self, govtrack_config, debug_output):
+        """Test GovTrack get_legislator operation"""
+        print("\n=== Testing GovTrack get_legislator ===")
+
+        provider = GovTrackProvider(govtrack_config)
+
+        # First search for a legislator to get a valid ID
+        search_result = provider.search_legislators(current=True, limit=1)
+
+        if search_result['data'] and len(search_result['data']) > 0:
+            legislator_id = search_result['data'][0].get('id')
+
+            if legislator_id:
+                result = provider.get_legislator(legislator_id=legislator_id)
+
+                assert result is not None
+                assert 'data' in result
+                assert isinstance(result['data'], dict)
+
+                debug_output("GovTrack Legislator Details", {
+                    'legislator_id': legislator_id,
+                    'data_type': type(result['data']).__name__,
+                })
+
+                print("✓ Retrieved legislator details successfully")
+            else:
+                print("⚠ Skipping: No legislator ID found in search results")
+        else:
+            print("⚠ Skipping: No legislators found in search")
+
+    @pytest.mark.network
+    def test_get_current_legislators(self, govtrack_config, debug_output):
+        """Test GovTrack get_current_legislators operation"""
+        print("\n=== Testing GovTrack get_current_legislators ===")
+
+        provider = GovTrackProvider(govtrack_config)
+
+        result = provider.get_current_legislators(limit=20)
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        debug_output("GovTrack Current Legislators", {
+            'results_count': len(result['data']),
+        })
+
+        print("✓ Retrieved current legislators successfully")
+
+    @pytest.mark.network
+    def test_search_votes(self, govtrack_config, debug_output, measure_performance):
+        """Test GovTrack search_votes operation"""
+        print("\n=== Testing GovTrack search_votes ===")
+
+        provider = GovTrackProvider(govtrack_config)
+
+        measure_performance.start()
+        result = provider.search_votes(congress=118, limit=10)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+
+        debug_output("GovTrack Votes Search", {
+            'congress': 118,
+            'results_count': len(result['data']),
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("GovTrack search_votes")
+        print("✓ Retrieved votes successfully")
+
+    @pytest.mark.network
+    def test_search_votes_by_chamber(self, govtrack_config, debug_output):
+        """Test GovTrack search_votes by chamber"""
+        print("\n=== Testing GovTrack search_votes by chamber ===")
+
+        provider = GovTrackProvider(govtrack_config)
+
+        result = provider.search_votes(congress=118, chamber="house", limit=5)
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+
+        debug_output("GovTrack House Votes", {
+            'congress': 118,
+            'chamber': 'house',
+            'results_count': len(result['data']),
+        })
+
+        print("✓ Retrieved votes by chamber successfully")
+
+    @pytest.mark.network
+    def test_get_vote(self, govtrack_config, debug_output):
+        """Test GovTrack get_vote operation"""
+        print("\n=== Testing GovTrack get_vote ===")
+
+        provider = GovTrackProvider(govtrack_config)
+
+        # First search for a vote to get a valid ID
+        search_result = provider.search_votes(congress=118, limit=1)
+
+        if search_result['data'] and len(search_result['data']) > 0:
+            vote_id = search_result['data'][0].get('id')
+
+            if vote_id:
+                result = provider.get_vote(vote_id=vote_id)
+
+                assert result is not None
+                assert 'data' in result
+                assert isinstance(result['data'], dict)
+
+                debug_output("GovTrack Vote Details", {
+                    'vote_id': vote_id,
+                    'data_type': type(result['data']).__name__,
+                })
+
+                print("✓ Retrieved vote details successfully")
+            else:
+                print("⚠ Skipping: No vote ID found in search results")
+        else:
+            print("⚠ Skipping: No votes found in search")
+
+    @pytest.mark.network
+    def test_list_committees(self, govtrack_config, debug_output):
+        """Test GovTrack list_committees operation"""
+        print("\n=== Testing GovTrack list_committees ===")
+
+        provider = GovTrackProvider(govtrack_config)
+
+        result = provider.list_committees(limit=10)
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+
+        debug_output("GovTrack Committees", {
+            'results_count': len(result['data']),
+        })
+
+        print("✓ Retrieved committees successfully")
+
+    @pytest.mark.network
+    def test_get_legislator_votes(self, govtrack_config, debug_output):
+        """Test GovTrack get_legislator_votes operation"""
+        print("\n=== Testing GovTrack get_legislator_votes ===")
+
+        provider = GovTrackProvider(govtrack_config)
+
+        # First get a legislator ID
+        search_result = provider.search_legislators(current=True, limit=1)
+
+        if search_result['data'] and len(search_result['data']) > 0:
+            legislator_id = search_result['data'][0].get('id')
+
+            if legislator_id:
+                result = provider.get_legislator_votes(legislator_id=legislator_id, limit=10)
+
+                assert result is not None
+                assert 'data' in result
+                assert isinstance(result['data'], list)
+
+                debug_output("GovTrack Legislator Votes", {
+                    'legislator_id': legislator_id,
+                    'results_count': len(result['data']),
+                })
+
+                print("✓ Retrieved legislator votes successfully")
+            else:
+                print("⚠ Skipping: No legislator ID found")
+        else:
+            print("⚠ Skipping: No legislators found")
+
+    @pytest.mark.network
+    def test_get_legislator_bills_sponsored(self, govtrack_config, debug_output):
+        """Test GovTrack get_legislator_bills_sponsored operation"""
+        print("\n=== Testing GovTrack get_legislator_bills_sponsored ===")
+
+        provider = GovTrackProvider(govtrack_config)
+
+        # First get a legislator ID
+        search_result = provider.search_legislators(current=True, limit=1)
+
+        if search_result['data'] and len(search_result['data']) > 0:
+            legislator_id = search_result['data'][0].get('id')
+
+            if legislator_id:
+                result = provider.get_legislator_bills_sponsored(legislator_id=legislator_id, limit=10)
+
+                assert result is not None
+                assert 'data' in result
+                assert isinstance(result['data'], list)
+
+                debug_output("GovTrack Legislator Sponsored Bills", {
+                    'legislator_id': legislator_id,
+                    'results_count': len(result['data']),
+                })
+
+                print("✓ Retrieved legislator sponsored bills successfully")
+            else:
+                print("⚠ Skipping: No legislator ID found")
+        else:
+            print("⚠ Skipping: No legislators found")
+
+    def test_validate_params(self, govtrack_config):
+        """Test GovTrack parameter validation"""
+        print("\n=== Testing GovTrack Parameter Validation ===")
+
+        provider = GovTrackProvider(govtrack_config)
+
+        # Valid params for search_bills
+        is_valid, error = provider.validate_params('search_bills', {})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for get_bill - missing required
+        is_valid, error = provider.validate_params('get_bill', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_bill
+        is_valid, error = provider.validate_params('get_bill', {'bill_id': 123456})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for get_legislator
+        is_valid, error = provider.validate_params('get_legislator', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_legislator
+        is_valid, error = provider.validate_params('get_legislator', {'legislator_id': 400357})
+        assert is_valid is True
+        assert error is None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, govtrack_config, debug_output):
+        """Test GovTrack operation schema"""
+        print("\n=== Testing GovTrack Operation Schema ===")
+
+        provider = GovTrackProvider(govtrack_config)
+
+        schema = provider.get_operation_schema('search_bills')
+
+        assert schema is not None
+        assert 'description' in schema
+        assert 'parameters' in schema
+
+        debug_output("GovTrack search_bills Schema", schema)
 
         print("✓ Operation schema retrieved successfully")
 
