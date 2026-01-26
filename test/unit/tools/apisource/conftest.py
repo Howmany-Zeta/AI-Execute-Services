@@ -72,6 +72,7 @@ def load_env_config():
     logger.info("Environment Configuration:")
     logger.info(f"  - FRED_API_KEY: {'✓ Set' if os.getenv('FRED_API_KEY') else '✗ Not set'}")
     logger.info(f"  - NEWSAPI_API_KEY: {'✓ Set' if os.getenv('NEWSAPI_API_KEY') else '✗ Not set'}")
+    logger.info(f"  - GUARDIAN_API_KEY: {'✓ Set' if os.getenv('GUARDIAN_API_KEY') else '✗ Not set'}")
     logger.info(f"  - CENSUS_API_KEY: {'✓ Set' if os.getenv('CENSUS_API_KEY') else '✗ Not set'}")
     logger.info(f"  - CONGRESS_API_KEY: {'✓ Set' if os.getenv('CONGRESS_API_KEY') else '✗ Not set'}")
     logger.info(f"  - OPENSTATES_API_KEY: {'✓ Set' if os.getenv('OPENSTATES_API_KEY') else '✗ Not set'}")
@@ -94,6 +95,7 @@ def api_keys() -> Dict[str, str]:
     return {
         'fred_api_key': os.getenv('FRED_API_KEY'),
         'newsapi_api_key': os.getenv('NEWSAPI_API_KEY'),
+        'guardian_api_key': os.getenv('GUARDIAN_API_KEY'),
         'census_api_key': os.getenv('CENSUS_API_KEY'),
         'congress_api_key': os.getenv('CONGRESS_API_KEY'),
         'alphavantage_api_key': os.getenv('ALPHAVANTAGE_API_KEY'),
@@ -133,6 +135,17 @@ def newsapi_config(api_keys) -> Dict[str, Any]:
         'timeout': int(os.getenv('NEWSAPI_TIMEOUT', '30')),
         'rate_limit': int(os.getenv('NEWSAPI_RATE_LIMIT', '5')),
         'max_burst': int(os.getenv('NEWSAPI_MAX_BURST', '10')),
+    }
+
+
+@pytest.fixture
+def guardian_config(api_keys) -> Dict[str, Any]:
+    """Configuration for Guardian API provider"""
+    return {
+        'api_key': api_keys['guardian_api_key'],
+        'timeout': int(os.getenv('GUARDIAN_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('GUARDIAN_RATE_LIMIT', '5')),
+        'max_burst': int(os.getenv('GUARDIAN_MAX_BURST', '10')),
     }
 
 
@@ -388,6 +401,7 @@ def skip_if_no_api_key():
         key_map = {
             'fred': 'FRED_API_KEY',
             'newsapi': 'NEWSAPI_API_KEY',
+            'guardian': 'GUARDIAN_API_KEY',
             'census': 'CENSUS_API_KEY',
             'congress': 'CONGRESS_API_KEY',
             'alphavantage': 'ALPHAVANTAGE_API_KEY',

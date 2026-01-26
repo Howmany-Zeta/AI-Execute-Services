@@ -81,6 +81,7 @@ When multiple configuration sources are present, the priority is:
 |-----------|------|---------|-------------|
 | `fred_api_key` | str | None | FRED API key |
 | `newsapi_api_key` | str | None | News API key |
+| `guardian_api_key` | str | None | The Guardian API key |
 | `census_api_key` | str | None | Census Bureau API key |
 | `congress_api_key` | str | None | Congress.gov API key |
 | `cache_ttl` | int | 300 | Cache TTL in seconds |
@@ -203,7 +204,90 @@ tool = APISourceTool({'newsapi_api_key': 'YOUR_NEWS_KEY'})
 - Developer tier: 250 requests per day
 - Business tier: 250,000 requests per day
 
-### 3.3 Census Bureau API Key
+### 3.3 The Guardian API Key
+
+**Obtaining the Key**:
+1. Visit https://open-platform.theguardian.com/access/
+2. Register for a free account
+3. Request an API key
+
+**Configuration**:
+```python
+# Method 1: Direct configuration
+tool = APISourceTool({'guardian_api_key': 'YOUR_GUARDIAN_KEY'})
+
+# Method 2: Environment variable
+export GUARDIAN_API_KEY="YOUR_GUARDIAN_KEY"
+
+# Method 3: Configuration file
+{
+    "guardian_api_key": "YOUR_GUARDIAN_KEY"
+}
+```
+
+**Rate Limits**:
+- Free tier: 5,000 requests per day
+- Developer tier: 15,000 requests per day
+- Higher tiers available for commercial use
+
+**Important API Rules**:
+1. **API Key Required**: All API requests require an API key
+2. **Rate Limiting**: Free tier allows 5,000 requests per day
+3. **Attribution**: Must acknowledge The Guardian when displaying content
+4. **Data Freshness**: Content is updated in real-time
+5. **Commercial Use**: Contact The Guardian for commercial licensing
+
+**API Documentation**:
+- API Documentation: https://open-platform.theguardian.com/documentation/
+- Content API: https://open-platform.theguardian.com/documentation/search
+- Tags API: https://open-platform.theguardian.com/documentation/tag
+- Sections API: https://open-platform.theguardian.com/documentation/section
+
+**Available Operations**:
+- `search_content`: Search all Guardian content with advanced filtering
+- `get_item`: Get a specific content item by ID
+- `get_tags`: Get all tags or filter by type
+- `search_tags`: Search for tags by query
+- `get_sections`: Get all Guardian sections
+- `get_edition`: Get content for a specific edition (UK, US, AU, International)
+
+**Example Usage**:
+```python
+# Search for articles about climate change
+result = tool.query(
+    provider='guardian',
+    operation='search_content',
+    params={
+        'q': 'climate change',
+        'section': 'environment',
+        'page_size': 10,
+        'show_fields': 'headline,body,thumbnail'
+    }
+)
+
+# Get all sections
+result = tool.query(
+    provider='guardian',
+    operation='get_sections',
+    params={}
+)
+
+# Search for tags
+result = tool.query(
+    provider='guardian',
+    operation='search_tags',
+    params={'q': 'technology', 'page_size': 10}
+)
+
+# Get US edition content
+result = tool.query(
+    provider='guardian',
+    operation='get_edition',
+    params={'edition': 'us', 'page_size': 20}
+)
+```
+
+### 3.4 Census Bureau API Key
 
 **Obtaining the Key**:
 1. Visit https://api.census.gov/data/key_signup.html
@@ -1230,7 +1314,89 @@ config = {
 }
 ```
 
-### 6.4 Census Provider
+### 6.4 The Guardian Provider
+
+```python
+config = {
+    'guardian_api_key': 'YOUR_KEY',
+    'guardian_config': {
+        'base_url': 'https://content.guardianapis.com',
+        'timeout': 30,
+        'rate_limit': 5,
+        'max_burst': 10
+    }
+}
+```
+
+**Features**:
+- Search all Guardian content with advanced filtering
+- Get specific content items by ID
+- Browse and search tags (keywords, contributors, series, etc.)
+- Get all sections
+- Filter by section, tag, date range
+- Support for multiple editions (UK, US, AU, International)
+- Rich metadata including headlines, body text, thumbnails, tags
+
+**Supported Operations**:
+- `search_content` - Search all Guardian content with advanced filtering options
+- `get_item` - Get a specific content item by ID
+- `get_tags` - Get all tags or filter by type
+- `search_tags` - Search for tags by query
+- `get_sections` - Get all Guardian sections
+- `get_edition` - Get content for a specific edition
+
+**Important Configuration Notes**:
+- **API Key Required**: Must register for a free API key
+- **Rate Limits**: Free tier allows 5,000 requests per day
+- **Attribution**: Must acknowledge The Guardian when displaying content
+- **Content Fields**: Use `show_fields` parameter to request specific fields (headline, body, thumbnail, etc.)
+- **Tags**: Use `show_tags` parameter to include tag metadata (keyword, contributor, etc.)
+
+**Example Usage**:
+```python
+# Search for articles about technology
+result = tool.query(
+    provider='guardian',
+    operation='search_content',
+    params={
+        'q': 'artificial intelligence',
+        'section': 'technology',
+        'from_date': '2024-01-01',
+        'page_size': 10,
+        'show_fields': 'headline,body,thumbnail',
+        'show_tags': 'keyword,contributor'
+    }
+)
+
+# Get all sections
+result = tool.query(
+    provider='guardian',
+    operation='get_sections',
+    params={}
+)
+
+# Search for tags related to climate
+result = tool.query(
+    provider='guardian',
+    operation='search_tags',
+    params={'q': 'climate', 'page_size': 10}
+)
+
+# Get US edition content
+result = tool.query(
+    provider='guardian',
+    operation='get_edition',
+    params={'edition': 'us', 'page_size': 20}
+)
+```
+
+**API Documentation**:
+- API Overview: https://open-platform.theguardian.com/documentation/
+- Content Search: https://open-platform.theguardian.com/documentation/search
+- Tags API: https://open-platform.theguardian.com/documentation/tag
+- Sections API: https://open-platform.theguardian.com/documentation/section
+
+### 6.5 Census Provider
 
 ```python
 config = {

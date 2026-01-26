@@ -26,6 +26,7 @@ from aiecs.tools.apisource.providers import (
 )
 from aiecs.tools.apisource.providers.fred import FREDProvider
 from aiecs.tools.apisource.providers.newsapi import NewsAPIProvider
+from aiecs.tools.apisource.providers.guardian import GuardianProvider
 from aiecs.tools.apisource.providers.worldbank import WorldBankProvider
 from aiecs.tools.apisource.providers.census import CensusProvider
 from aiecs.tools.apisource.providers.congress import CongressProvider
@@ -73,7 +74,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census', 'congress', 'openstates', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange', 'hackernews', 'opencorporates', 'courtlistener', 'gdelt']
+        expected = ['fred', 'newsapi', 'guardian', 'worldbank', 'census', 'congress', 'openstates', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange', 'hackernews', 'opencorporates', 'courtlistener', 'gdelt']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -348,6 +349,180 @@ class TestNewsAPIProvider:
         })
 
         print("✓ Retrieved news sources successfully")
+
+
+class TestGuardianProvider:
+    """Test The Guardian API provider"""
+
+    def test_provider_metadata(self, guardian_config, debug_output):
+        """Test Guardian API provider metadata"""
+        print("\n=== Testing Guardian API Provider Metadata ===")
+
+        provider = GuardianProvider(guardian_config)
+
+        assert provider.name == 'guardian'
+        assert provider.description
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+
+        debug_output("Guardian API Metadata", {
+            'name': metadata['name'],
+            'description': metadata['description'],
+            'operations': metadata['operations'],
+        })
+
+        print("✓ Guardian API metadata retrieved successfully")
+
+    @pytest.mark.network
+    def test_search_content(self, guardian_config, skip_if_no_api_key, debug_output,
+                           measure_performance):
+        """Test Guardian API search_content operation"""
+        skip_if_no_api_key('guardian')
+        print("\n=== Testing Guardian API search_content ===")
+
+        provider = GuardianProvider(guardian_config)
+
+        measure_performance.start()
+        result = provider.execute('search_content', {
+            'q': 'climate change',
+            'page_size': 5,
+            'order_by': 'newest'
+        })
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'guardian'
+        assert result['operation'] == 'search_content'
+        assert 'data' in result
+
+        debug_output("Guardian API Search Results", {
+            'query': 'climate change',
+            'data_type': type(result['data']).__name__,
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("Guardian API search_content")
+        print("✓ Search executed successfully")
+
+    @pytest.mark.network
+    def test_search_content_with_filters(self, guardian_config, skip_if_no_api_key, debug_output):
+        """Test Guardian API search_content with advanced filters"""
+        skip_if_no_api_key('guardian')
+        print("\n=== Testing Guardian API search_content with filters ===")
+
+        provider = GuardianProvider(guardian_config)
+
+        result = provider.execute('search_content', {
+            'q': 'technology',
+            'section': 'technology',
+            'page_size': 5,
+            'show_fields': 'headline,body,thumbnail',
+            'show_tags': 'keyword'
+        })
+
+        assert result['provider'] == 'guardian'
+        assert result['operation'] == 'search_content'
+        assert 'data' in result
+
+        debug_output("Guardian API Filtered Search", {
+            'query': 'technology',
+            'section': 'technology',
+            'data_type': type(result['data']).__name__,
+        })
+
+        print("✓ Filtered search executed successfully")
+
+    @pytest.mark.network
+    def test_get_sections(self, guardian_config, skip_if_no_api_key, debug_output):
+        """Test Guardian API get_sections operation"""
+        skip_if_no_api_key('guardian')
+        print("\n=== Testing Guardian API get_sections ===")
+
+        provider = GuardianProvider(guardian_config)
+
+        result = provider.execute('get_sections', {})
+
+        assert result['provider'] == 'guardian'
+        assert result['operation'] == 'get_sections'
+        assert 'data' in result
+
+        debug_output("Guardian API Sections", {
+            'data_type': type(result['data']).__name__,
+            'sections_count': len(result['data']) if isinstance(result['data'], list) else 'N/A',
+        })
+
+        print("✓ Retrieved sections successfully")
+
+    @pytest.mark.network
+    def test_get_tags(self, guardian_config, skip_if_no_api_key, debug_output):
+        """Test Guardian API get_tags operation"""
+        skip_if_no_api_key('guardian')
+        print("\n=== Testing Guardian API get_tags ===")
+
+        provider = GuardianProvider(guardian_config)
+
+        result = provider.execute('get_tags', {
+            'page_size': 10
+        })
+
+        assert result['provider'] == 'guardian'
+        assert result['operation'] == 'get_tags'
+        assert 'data' in result
+
+        debug_output("Guardian API Tags", {
+            'data_type': type(result['data']).__name__,
+            'tags_count': len(result['data']) if isinstance(result['data'], list) else 'N/A',
+        })
+
+        print("✓ Retrieved tags successfully")
+
+    @pytest.mark.network
+    def test_search_tags(self, guardian_config, skip_if_no_api_key, debug_output):
+        """Test Guardian API search_tags operation"""
+        skip_if_no_api_key('guardian')
+        print("\n=== Testing Guardian API search_tags ===")
+
+        provider = GuardianProvider(guardian_config)
+
+        result = provider.execute('search_tags', {
+            'q': 'climate',
+            'page_size': 5
+        })
+
+        assert result['provider'] == 'guardian'
+        assert result['operation'] == 'search_tags'
+        assert 'data' in result
+
+        debug_output("Guardian API Tag Search", {
+            'query': 'climate',
+            'data_type': type(result['data']).__name__,
+        })
+
+        print("✓ Tag search executed successfully")
+
+    @pytest.mark.network
+    def test_get_edition(self, guardian_config, skip_if_no_api_key, debug_output):
+        """Test Guardian API get_edition operation"""
+        skip_if_no_api_key('guardian')
+        print("\n=== Testing Guardian API get_edition ===")
+
+        provider = GuardianProvider(guardian_config)
+
+        result = provider.execute('get_edition', {
+            'edition': 'us',
+            'page_size': 5
+        })
+
+        assert result['provider'] == 'guardian'
+        assert result['operation'] == 'get_edition'
+        assert 'data' in result
+
+        debug_output("Guardian API Edition Content", {
+            'edition': 'us',
+            'data_type': type(result['data']).__name__,
+        })
+
+        print("✓ Retrieved edition content successfully")
 
 
 class TestWorldBankProvider:
