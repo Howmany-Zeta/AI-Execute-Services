@@ -245,7 +245,92 @@ tool = APISourceTool({'congress_api_key': 'YOUR_CONGRESS_KEY'})
 - `search_amendments`: Search for amendments
 - `get_amendment`: Get amendment details
 
-### 3.5 World Bank API
+### 3.5 OpenStates API
+
+**API Key Required**:
+```python
+config = {
+    'openstates_api_key': 'YOUR_API_KEY'
+}
+tool = APISourceTool(config)
+```
+
+**Configuration**:
+```python
+config = {
+    'openstates_api_key': 'YOUR_API_KEY',
+    'openstates_config': {
+        'timeout': 30,
+        'rate_limit': 10,
+        'max_burst': 20
+    }
+}
+tool = APISourceTool(config)
+```
+
+**Environment Variables**:
+```bash
+export OPENSTATES_API_KEY="your_api_key_here"
+export OPENSTATES_TIMEOUT=30
+export OPENSTATES_RATE_LIMIT=10
+export OPENSTATES_MAX_BURST=20
+```
+
+**Obtaining an API Key**:
+1. Visit https://openstates.org/accounts/profile/
+2. Register for a free account
+3. Generate an API key from your profile
+4. Copy the API key to your configuration
+
+**Rate Limits**:
+- Free tier: Reasonable usage limits
+- Be respectful of the free service
+- Recommended: Max 10 requests per second
+
+**Important API Rules**:
+1. **API Key Required**: Must register for a free API key
+2. **Rate Limiting**: Be respectful - implement reasonable delays between requests
+3. **Attribution**: Acknowledge OpenStates.org when using the data
+4. **Data Freshness**: Data is updated regularly from official state sources
+
+**API Documentation**:
+- API v3 Documentation: https://docs.openstates.org/api-v3/
+- Interactive API Docs: https://v3.openstates.org/docs/
+- About OpenStates: https://openstates.org/about/
+
+**Available Operations**:
+- `search_bills`: Search for state bills and resolutions with advanced filtering
+- `get_bill`: Get detailed information about a specific bill by ID
+- `search_people`: Search for state legislators with filtering options
+- `get_person`: Get detailed information about a specific legislator
+- `list_jurisdictions`: List all available state jurisdictions
+- `get_jurisdiction`: Get detailed information about a specific jurisdiction
+
+**Example Usage**:
+```python
+# Search for bills in California
+result = tool.query(
+    provider='openstates',
+    operation='search_bills',
+    params={'jurisdiction': 'CA', 'session': '2023', 'per_page': 10}
+)
+
+# Get current legislators from Texas
+result = tool.query(
+    provider='openstates',
+    operation='search_people',
+    params={'jurisdiction': 'TX', 'current': True, 'per_page': 10}
+)
+
+# List all available jurisdictions
+result = tool.query(
+    provider='openstates',
+    operation='list_jurisdictions',
+    params={'per_page': 52}
+)
+```
+
+### 3.6 World Bank API
 
 **No API Key Required**:
 ```python
@@ -257,7 +342,7 @@ tool = APISourceTool()  # No key needed for World Bank
 - No official rate limit
 - Recommended: Max 10 requests per second
 
-### 3.5 Alpha Vantage API Key
+### 3.7 Alpha Vantage API Key
 
 **Obtaining the Key**:
 1. Visit https://www.alphavantage.co/support/#api-key
@@ -273,7 +358,7 @@ tool = APISourceTool({'alphavantage_api_key': 'YOUR_ALPHAVANTAGE_KEY'})
 - Free tier: 5 API requests per minute, 500 per day
 - Premium tiers available with higher limits
 
-### 3.6 REST Countries API
+### 3.8 REST Countries API
 
 **No API Key Required**:
 ```python
@@ -285,7 +370,7 @@ tool = APISourceTool()  # No key needed for REST Countries
 - No official rate limit
 - Recommended: Max 10 requests per second
 
-### 3.7 ExchangeRate-API
+### 3.9 ExchangeRate-API
 
 **No API Key Required (Free Tier)**:
 ```python
@@ -302,7 +387,7 @@ tool = APISourceTool({'exchangerate_api_key': 'YOUR_EXCHANGERATE_KEY'})
 - Free tier: 1,500 requests per month
 - Standard tier: Higher limits with API key
 
-### 3.8 Open Library API
+### 3.10 Open Library API
 
 **No API Key Required**:
 ```python
@@ -315,7 +400,7 @@ tool = APISourceTool()  # No key needed for Open Library
 - Recommended: Max 10 requests per second
 - Be respectful of the free service
 
-### 3.9 CoinGecko API
+### 3.11 CoinGecko API
 
 **No API Key Required**:
 ```python
@@ -327,7 +412,7 @@ tool = APISourceTool()  # No key needed for free tier
 - Free tier: 10-50 calls/minute (varies by endpoint)
 - Pro tier available with API key for higher limits
 
-### 3.10 OpenWeatherMap API
+### 3.12 OpenWeatherMap API
 
 **Obtaining the Key**:
 1. Visit https://openweathermap.org/api
@@ -343,7 +428,7 @@ tool = APISourceTool({'openweathermap_api_key': 'YOUR_OPENWEATHERMAP_KEY'})
 - Free tier: 60 calls/minute, 1,000,000 calls/month
 - Various paid tiers available
 
-### 3.11 Wikipedia API
+### 3.13 Wikipedia API
 
 **No API Key Required**:
 ```python
@@ -379,7 +464,7 @@ tool = APISourceTool(config)
 - REST API: https://en.wikipedia.org/api/rest_v1/
 - API Etiquette: https://www.mediawiki.org/wiki/API:Etiquette
 
-### 3.12 GitHub API
+### 3.14 GitHub API
 
 **API Key Recommended**:
 ```python
@@ -1084,7 +1169,83 @@ result = tool.execute('list_members', {
 })
 ```
 
-### 6.6 Alpha Vantage Provider
+### 6.6 OpenStates Provider
+
+```python
+config = {
+    'openstates_api_key': 'YOUR_API_KEY',  # REQUIRED
+    'openstates_config': {
+        'base_url': 'https://v3.openstates.org',
+        'timeout': 30,
+        'rate_limit': 10,
+        'max_burst': 20
+    }
+}
+```
+
+**Available Operations**:
+- `search_bills`: Search for state bills and resolutions with advanced filtering
+- `get_bill`: Get detailed information about a specific bill by ID
+- `search_people`: Search for state legislators with filtering options
+- `get_person`: Get detailed information about a specific legislator
+- `list_jurisdictions`: List all available state jurisdictions
+- `get_jurisdiction`: Get detailed information about a specific jurisdiction
+
+**Example Usage**:
+```python
+# Search for bills in California
+result = tool.query(
+    provider='openstates',
+    operation='search_bills',
+    params={'jurisdiction': 'CA', 'session': '2023', 'per_page': 10}
+)
+
+# Search for bills by subject
+result = tool.query(
+    provider='openstates',
+    operation='search_bills',
+    params={
+        'jurisdiction': 'NY',
+        'subject': 'Education',
+        'per_page': 5
+    }
+)
+
+# Get current legislators from Texas
+result = tool.query(
+    provider='openstates',
+    operation='search_people',
+    params={'jurisdiction': 'TX', 'current': True, 'per_page': 10}
+)
+
+# List all available jurisdictions
+result = tool.query(
+    provider='openstates',
+    operation='list_jurisdictions',
+    params={'per_page': 52}
+)
+
+# Get specific bill details
+result = tool.query(
+    provider='openstates',
+    operation='get_bill',
+    params={'bill_id': 'ocd-bill/...'}
+)
+```
+
+**Important Configuration Notes**:
+- **API Key Required**: Must register for a free API key at https://openstates.org/accounts/profile/
+- **Rate Limit**: Free tier with reasonable usage limits (default: 10 req/s)
+- **Attribution**: Acknowledge OpenStates.org when using the data
+- **Data Freshness**: Data is updated regularly from official state sources
+- **Coverage**: All 50 U.S. states plus DC and Puerto Rico
+
+**API Documentation**:
+- API v3 Documentation: https://docs.openstates.org/api-v3/
+- Interactive API Docs: https://v3.openstates.org/docs/
+- About OpenStates: https://openstates.org/about/
+
+### 6.7 Alpha Vantage Provider
 
 ```python
 config = {
