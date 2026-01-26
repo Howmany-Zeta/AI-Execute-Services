@@ -8,6 +8,7 @@ from aiecs.tools.apisource.providers.base import BaseAPIProvider, RateLimiter
 from aiecs.tools.apisource.providers.fred import FREDProvider
 from aiecs.tools.apisource.providers.worldbank import WorldBankProvider
 from aiecs.tools.apisource.providers.newsapi import NewsAPIProvider
+from aiecs.tools.apisource.providers.guardian import GuardianProvider
 from aiecs.tools.apisource.providers.census import CensusProvider
 from aiecs.tools.apisource.providers.congress import CongressProvider
 from aiecs.tools.apisource.providers.openstates import OpenStatesProvider
@@ -117,6 +118,7 @@ def list_providers() -> List[Dict[str, Any]]:
 register_provider(FREDProvider)
 register_provider(WorldBankProvider)
 register_provider(NewsAPIProvider)
+register_provider(GuardianProvider)
 register_provider(CensusProvider)
 register_provider(CongressProvider)
 register_provider(OpenStatesProvider)
@@ -148,6 +150,7 @@ __all__ = [
     "FREDProvider",
     "WorldBankProvider",
     "NewsAPIProvider",
+    "GuardianProvider",
     "CensusProvider",
     "CongressProvider",
     "OpenStatesProvider",

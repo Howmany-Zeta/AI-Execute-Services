@@ -723,6 +723,11 @@ class APISourceTool(BaseTool):
                         "search_everything",
                         {"q": enhanced_query, "page_size": limit},
                     )
+                elif provider_name == "guardian":
+                    result = provider_instance.execute(
+                        "search_content",
+                        {"q": enhanced_query, "page_size": limit},
+                    )
                 else:
                     # Skip providers without search capability
                     continue
