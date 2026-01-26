@@ -82,6 +82,7 @@ When multiple configuration sources are present, the priority is:
 | `fred_api_key` | str | None | FRED API key |
 | `newsapi_api_key` | str | None | News API key |
 | `census_api_key` | str | None | Census Bureau API key |
+| `congress_api_key` | str | None | Congress.gov API key |
 | `cache_ttl` | int | 300 | Cache TTL in seconds |
 | `default_timeout` | int | 30 | Request timeout in seconds |
 | `max_retries` | int | 3 | Maximum retry attempts |
@@ -218,7 +219,33 @@ tool = APISourceTool({'census_api_key': 'YOUR_CENSUS_KEY'})
 - 500 requests per IP per day (without key)
 - Higher limits with API key
 
-### 3.4 World Bank API
+### 3.4 Congress.gov API
+
+**API Key Required**:
+1. Visit https://api.congress.gov/sign-up/
+2. Fill out the registration form
+3. Receive key via email
+
+**Configuration**:
+```python
+tool = APISourceTool({'congress_api_key': 'YOUR_CONGRESS_KEY'})
+```
+
+**Rate Limits**:
+- Reasonable usage limits with API key
+- Data updated regularly from official sources
+
+**Available Operations**:
+- `search_bills`: Search for bills and resolutions
+- `get_bill`: Get detailed bill information
+- `list_members`: List members of Congress
+- `get_member`: Get member details
+- `list_committees`: List congressional committees
+- `get_committee`: Get committee details
+- `search_amendments`: Search for amendments
+- `get_amendment`: Get amendment details
+
+### 3.5 World Bank API
 
 **No API Key Required**:
 ```python
@@ -1009,7 +1036,55 @@ config = {
 }
 ```
 
-### 6.5 Alpha Vantage Provider
+### 6.5 Congress Provider
+
+```python
+config = {
+    'congress_api_key': 'YOUR_KEY',
+    'congress_config': {
+        'base_url': 'https://api.congress.gov/v3',
+        'timeout': 30,
+        'rate_limit': 10,
+        'max_burst': 20
+    }
+}
+```
+
+**Available Operations**:
+- `search_bills`: Search for bills and resolutions by congress number and type
+- `get_bill`: Get detailed information about a specific bill
+- `list_members`: List members of Congress by congress number and chamber
+- `get_member`: Get detailed information about a specific member
+- `list_committees`: List congressional committees
+- `get_committee`: Get detailed information about a specific committee
+- `search_amendments`: Search for amendments to bills
+- `get_amendment`: Get detailed information about a specific amendment
+
+**Example Usage**:
+```python
+# Search for bills in the 118th Congress
+result = tool.execute('search_bills', {
+    'congress': 118,
+    'bill_type': 'hr',
+    'limit': 10
+})
+
+# Get specific bill details
+result = tool.execute('get_bill', {
+    'congress': 118,
+    'bill_type': 'hr',
+    'bill_number': 1
+})
+
+# List House members in 118th Congress
+result = tool.execute('list_members', {
+    'congress': 118,
+    'chamber': 'house',
+    'limit': 20
+})
+```
+
+### 6.6 Alpha Vantage Provider
 
 ```python
 config = {
@@ -1948,6 +2023,7 @@ All configuration parameters can be set via environment variables with the `APIS
 export APISOURCE_FRED_API_KEY="your_fred_key"
 export APISOURCE_NEWSAPI_API_KEY="your_news_key"
 export APISOURCE_CENSUS_API_KEY="your_census_key"
+export APISOURCE_CONGRESS_API_KEY="your_congress_key"
 export APISOURCE_ALPHAVANTAGE_API_KEY="your_alphavantage_key"
 export APISOURCE_EXCHANGERATE_API_KEY="your_exchangerate_key"  # Optional
 export APISOURCE_OPENWEATHERMAP_API_KEY="your_openweathermap_key"
@@ -2049,6 +2125,7 @@ tool = APISourceTool()
     "fred_api_key": "${FRED_API_KEY}",
     "newsapi_api_key": "${NEWSAPI_API_KEY}",
     "census_api_key": "${CENSUS_API_KEY}",
+    "congress_api_key": "${CONGRESS_API_KEY}",
     "cache_ttl": 600,
     "default_timeout": 30,
     "max_retries": 5,
