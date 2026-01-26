@@ -73,6 +73,7 @@ def load_env_config():
     logger.info(f"  - FRED_API_KEY: {'✓ Set' if os.getenv('FRED_API_KEY') else '✗ Not set'}")
     logger.info(f"  - NEWSAPI_API_KEY: {'✓ Set' if os.getenv('NEWSAPI_API_KEY') else '✗ Not set'}")
     logger.info(f"  - CENSUS_API_KEY: {'✓ Set' if os.getenv('CENSUS_API_KEY') else '✗ Not set'}")
+    logger.info(f"  - CONGRESS_API_KEY: {'✓ Set' if os.getenv('CONGRESS_API_KEY') else '✗ Not set'}")
     logger.info(f"  - ALPHAVANTAGE_API_KEY: {'✓ Set' if os.getenv('ALPHAVANTAGE_API_KEY') else '✗ Not set'}")
     logger.info(f"  - EXCHANGERATE_API_KEY: {'✓ Set' if os.getenv('EXCHANGERATE_API_KEY') else '✗ Not set'}")
     logger.info(f"  - OPENWEATHERMAP_API_KEY: {'✓ Set' if os.getenv('OPENWEATHERMAP_API_KEY') else '✗ Not set'}")
@@ -92,6 +93,7 @@ def api_keys() -> Dict[str, str]:
         'fred_api_key': os.getenv('FRED_API_KEY'),
         'newsapi_api_key': os.getenv('NEWSAPI_API_KEY'),
         'census_api_key': os.getenv('CENSUS_API_KEY'),
+        'congress_api_key': os.getenv('CONGRESS_API_KEY'),
         'alphavantage_api_key': os.getenv('ALPHAVANTAGE_API_KEY'),
         'github_api_key': os.getenv('GITHUB_API_KEY'),
     }
@@ -140,6 +142,17 @@ def census_config(api_keys) -> Dict[str, Any]:
         'timeout': int(os.getenv('CENSUS_TIMEOUT', '30')),
         'rate_limit': int(os.getenv('CENSUS_RATE_LIMIT', '10')),
         'max_burst': int(os.getenv('CENSUS_MAX_BURST', '20')),
+    }
+
+
+@pytest.fixture
+def congress_config(api_keys) -> Dict[str, Any]:
+    """Configuration for Congress provider"""
+    return {
+        'api_key': api_keys['congress_api_key'],
+        'timeout': int(os.getenv('CONGRESS_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('CONGRESS_RATE_LIMIT', '10')),
+        'max_burst': int(os.getenv('CONGRESS_MAX_BURST', '20')),
     }
 
 
@@ -352,6 +365,7 @@ def skip_if_no_api_key():
             'fred': 'FRED_API_KEY',
             'newsapi': 'NEWSAPI_API_KEY',
             'census': 'CENSUS_API_KEY',
+            'congress': 'CONGRESS_API_KEY',
             'alphavantage': 'ALPHAVANTAGE_API_KEY',
             'openweathermap': 'OPENWEATHERMAP_API_KEY',
             'github': 'GITHUB_API_KEY',
