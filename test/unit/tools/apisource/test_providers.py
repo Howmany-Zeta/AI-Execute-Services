@@ -28,6 +28,7 @@ from aiecs.tools.apisource.providers.fred import FREDProvider
 from aiecs.tools.apisource.providers.newsapi import NewsAPIProvider
 from aiecs.tools.apisource.providers.worldbank import WorldBankProvider
 from aiecs.tools.apisource.providers.census import CensusProvider
+from aiecs.tools.apisource.providers.congress import CongressProvider
 from aiecs.tools.apisource.providers.alphavantage import AlphaVantageProvider
 from aiecs.tools.apisource.providers.restcountries import RESTCountriesProvider
 from aiecs.tools.apisource.providers.exchangerate import ExchangeRateProvider
@@ -70,7 +71,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange', 'hackernews', 'opencorporates']
+        expected = ['fred', 'newsapi', 'worldbank', 'census', 'congress', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange', 'hackernews', 'opencorporates']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -564,6 +565,213 @@ class TestCensusProvider:
         })
 
         print("✓ Listed datasets successfully")
+
+
+class TestCongressProvider:
+    """Test Congress.gov API provider"""
+
+    def test_provider_metadata(self, congress_config, debug_output):
+        """Test Congress provider metadata"""
+        print("\n=== Testing Congress Provider Metadata ===")
+
+        provider = CongressProvider(congress_config)
+
+        assert provider.name == 'congress'
+        assert provider.description
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+
+        debug_output("Congress Metadata", {
+            'name': metadata['name'],
+            'description': metadata['description'],
+            'operations': metadata['operations'],
+        })
+
+        print("✓ Congress metadata retrieved successfully")
+
+    @pytest.mark.network
+    def test_search_bills(self, congress_config, skip_if_no_api_key, debug_output,
+                         measure_performance):
+        """Test Congress search_bills operation"""
+        skip_if_no_api_key('congress')
+        print("\n=== Testing Congress search_bills ===")
+
+        provider = CongressProvider(congress_config)
+
+        measure_performance.start()
+        result = provider.execute('search_bills', {
+            'congress': 118,
+            'limit': 5
+        })
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'congress'
+        assert result['operation'] == 'search_bills'
+        assert 'data' in result
+
+        debug_output("Congress Bills Search", {
+            'congress': 118,
+            'data_type': type(result['data']).__name__,
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("Congress search_bills")
+        print("✓ Retrieved bills successfully")
+
+    @pytest.mark.network
+    def test_get_bill(self, congress_config, skip_if_no_api_key, debug_output,
+                     measure_performance):
+        """Test Congress get_bill operation"""
+        skip_if_no_api_key('congress')
+        print("\n=== Testing Congress get_bill ===")
+
+        provider = CongressProvider(congress_config)
+
+        measure_performance.start()
+        result = provider.execute('get_bill', {
+            'congress': 118,
+            'bill_type': 'hr',
+            'bill_number': 1
+        })
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'congress'
+        assert result['operation'] == 'get_bill'
+        assert 'data' in result
+
+        debug_output("Congress Bill Details", {
+            'congress': 118,
+            'bill_type': 'hr',
+            'bill_number': 1,
+            'data_type': type(result['data']).__name__,
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("Congress get_bill")
+        print("✓ Retrieved bill details successfully")
+
+    @pytest.mark.network
+    def test_list_members(self, congress_config, skip_if_no_api_key, debug_output):
+        """Test Congress list_members operation"""
+        skip_if_no_api_key('congress')
+        print("\n=== Testing Congress list_members ===")
+
+        provider = CongressProvider(congress_config)
+
+        # Note: list_members doesn't support congress/chamber filtering in the API
+        # It returns all members and filtering must be done client-side
+        result = provider.execute('list_members', {
+            'limit': 10
+        })
+
+        assert result['provider'] == 'congress'
+        assert result['operation'] == 'list_members'
+        assert 'data' in result
+
+        debug_output("Congress Members", {
+            'limit': 10,
+            'data_type': type(result['data']).__name__,
+        })
+
+        print("✓ Listed members successfully")
+
+    @pytest.mark.network
+    def test_get_member(self, congress_config, skip_if_no_api_key, debug_output):
+        """Test Congress get_member operation"""
+        skip_if_no_api_key('congress')
+        print("\n=== Testing Congress get_member ===")
+
+        provider = CongressProvider(congress_config)
+
+        # Using a well-known bioguide ID (e.g., Nancy Pelosi)
+        result = provider.execute('get_member', {
+            'bioguide_id': 'P000197'
+        })
+
+        assert result['provider'] == 'congress'
+        assert result['operation'] == 'get_member'
+        assert 'data' in result
+
+        debug_output("Congress Member Details", {
+            'bioguide_id': 'P000197',
+            'data': result['data'],
+        })
+
+        print("✓ Retrieved member details successfully")
+
+    @pytest.mark.network
+    def test_list_committees(self, congress_config, skip_if_no_api_key, debug_output):
+        """Test Congress list_committees operation"""
+        skip_if_no_api_key('congress')
+        print("\n=== Testing Congress list_committees ===")
+
+        provider = CongressProvider(congress_config)
+
+        # Test with congress parameter (committees endpoint supports this)
+        result = provider.execute('list_committees', {
+            'congress': 118,
+            'limit': 10
+        })
+
+        assert result['provider'] == 'congress'
+        assert result['operation'] == 'list_committees'
+        assert 'data' in result
+
+        debug_output("Congress Committees", {
+            'congress': 118,
+            'data_type': type(result['data']).__name__,
+        })
+
+        print("✓ Listed committees successfully")
+
+    def test_validate_params(self, congress_config):
+        """Test Congress parameter validation"""
+        print("\n=== Testing Congress Parameter Validation ===")
+
+        provider = CongressProvider(congress_config)
+
+        # Valid params for search_bills
+        is_valid, error = provider.validate_params('search_bills', {'congress': 118})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for get_bill - missing required
+        is_valid, error = provider.validate_params('get_bill', {'congress': 118})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_bill
+        is_valid, error = provider.validate_params('get_bill', {
+            'congress': 118,
+            'bill_type': 'hr',
+            'bill_number': 1
+        })
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for get_member
+        is_valid, error = provider.validate_params('get_member', {})
+        assert is_valid is False
+        assert error is not None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, congress_config, debug_output):
+        """Test Congress operation schema"""
+        print("\n=== Testing Congress Operation Schema ===")
+
+        provider = CongressProvider(congress_config)
+
+        schema = provider.get_operation_schema('search_bills')
+
+        assert schema is not None
+        assert 'description' in schema
+        assert 'parameters' in schema
+
+        debug_output("Congress search_bills Schema", schema)
+
+        print("✓ Operation schema retrieved successfully")
 
 
 class TestAlphaVantageProvider:
