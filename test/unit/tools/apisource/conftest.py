@@ -74,6 +74,7 @@ def load_env_config():
     logger.info(f"  - NEWSAPI_API_KEY: {'✓ Set' if os.getenv('NEWSAPI_API_KEY') else '✗ Not set'}")
     logger.info(f"  - CENSUS_API_KEY: {'✓ Set' if os.getenv('CENSUS_API_KEY') else '✗ Not set'}")
     logger.info(f"  - CONGRESS_API_KEY: {'✓ Set' if os.getenv('CONGRESS_API_KEY') else '✗ Not set'}")
+    logger.info(f"  - OPENSTATES_API_KEY: {'✓ Set' if os.getenv('OPENSTATES_API_KEY') else '✗ Not set'}")
     logger.info(f"  - ALPHAVANTAGE_API_KEY: {'✓ Set' if os.getenv('ALPHAVANTAGE_API_KEY') else '✗ Not set'}")
     logger.info(f"  - EXCHANGERATE_API_KEY: {'✓ Set' if os.getenv('EXCHANGERATE_API_KEY') else '✗ Not set'}")
     logger.info(f"  - OPENWEATHERMAP_API_KEY: {'✓ Set' if os.getenv('OPENWEATHERMAP_API_KEY') else '✗ Not set'}")
@@ -153,6 +154,17 @@ def congress_config(api_keys) -> Dict[str, Any]:
         'timeout': int(os.getenv('CONGRESS_TIMEOUT', '30')),
         'rate_limit': int(os.getenv('CONGRESS_RATE_LIMIT', '10')),
         'max_burst': int(os.getenv('CONGRESS_MAX_BURST', '20')),
+    }
+
+
+@pytest.fixture
+def openstates_config() -> Dict[str, Any]:
+    """Configuration for OpenStates provider"""
+    return {
+        'api_key': os.getenv('OPENSTATES_API_KEY'),
+        'timeout': int(os.getenv('OPENSTATES_TIMEOUT', '30')),
+        'rate_limit': int(os.getenv('OPENSTATES_RATE_LIMIT', '10')),
+        'max_burst': int(os.getenv('OPENSTATES_MAX_BURST', '20')),
     }
 
 

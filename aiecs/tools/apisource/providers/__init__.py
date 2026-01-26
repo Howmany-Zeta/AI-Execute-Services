@@ -10,6 +10,7 @@ from aiecs.tools.apisource.providers.worldbank import WorldBankProvider
 from aiecs.tools.apisource.providers.newsapi import NewsAPIProvider
 from aiecs.tools.apisource.providers.census import CensusProvider
 from aiecs.tools.apisource.providers.congress import CongressProvider
+from aiecs.tools.apisource.providers.openstates import OpenStatesProvider
 from aiecs.tools.apisource.providers.alphavantage import AlphaVantageProvider
 from aiecs.tools.apisource.providers.restcountries import RESTCountriesProvider
 from aiecs.tools.apisource.providers.exchangerate import ExchangeRateProvider
@@ -116,6 +117,7 @@ register_provider(WorldBankProvider)
 register_provider(NewsAPIProvider)
 register_provider(CensusProvider)
 register_provider(CongressProvider)
+register_provider(OpenStatesProvider)
 register_provider(AlphaVantageProvider)
 register_provider(RESTCountriesProvider)
 register_provider(ExchangeRateProvider)
@@ -144,6 +146,7 @@ __all__ = [
     "NewsAPIProvider",
     "CensusProvider",
     "CongressProvider",
+    "OpenStatesProvider",
     "AlphaVantageProvider",
     "RESTCountriesProvider",
     "ExchangeRateProvider",

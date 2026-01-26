@@ -121,6 +121,13 @@ class APISourceTool(BaseTool):
         )
         newsapi_api_key: Optional[str] = Field(default=None, description="API key for News API")
         census_api_key: Optional[str] = Field(default=None, description="API key for US Census Bureau")
+        openstates_api_key: Optional[str] = Field(default=None, description="API key for OpenStates")
+
+        # Provider-specific configurations
+        openstates_config: Optional[Dict[str, Any]] = Field(
+            default=None,
+            description="OpenStates provider configuration (rate_limit, max_burst, timeout, etc.)"
+        )
 
     def __init__(self, config: Optional[Dict[str, Any]] = None, **kwargs):
         """
@@ -176,6 +183,16 @@ class APISourceTool(BaseTool):
                     api_key = getattr(self.config, api_key_attr)
                     if api_key:
                         provider_config["api_key"] = api_key
+
+                # Add provider-specific config if available (e.g., rate_limit, max_burst)
+                provider_config_attr = f"{provider_name}_config"
+                if hasattr(self.config, provider_config_attr):
+                    provider_specific_config = getattr(self.config, provider_config_attr)
+                    if provider_specific_config and isinstance(provider_specific_config, dict):
+                        # Merge provider-specific config, but don't override api_key
+                        for key, value in provider_specific_config.items():
+                            if key != "api_key" or "api_key" not in provider_config:
+                                provider_config[key] = value
 
                 provider = get_provider(provider_name, provider_config)
                 self._providers[provider_name] = provider
