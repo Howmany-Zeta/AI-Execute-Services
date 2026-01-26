@@ -291,7 +291,7 @@ class OpenStatesProvider(BaseAPIProvider):
 
         # Build headers
         headers = {
-            "X-API-Key": api_key,
+            "X-API-KEY": api_key,
         }
 
         # Build endpoint based on operation
@@ -354,16 +354,10 @@ class OpenStatesProvider(BaseAPIProvider):
 
             # OpenStates API returns data in 'results' key for list endpoints
             # and direct object for detail endpoints
-            if operation in ["search_bills", "search_people", "list_jurisdictions"]:
-                # List endpoints return data in 'results' key
-                result_data = data.get("results", [])
-            else:
-                # Detail endpoints return data directly
-                result_data = data
-
+            # Return the full response including pagination metadata
             return self._format_response(
                 operation=operation,
-                data=result_data,
+                data=data,
                 source=f"OpenStates API - {endpoint}",
             )
 
