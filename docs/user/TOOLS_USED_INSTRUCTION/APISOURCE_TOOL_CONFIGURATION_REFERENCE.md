@@ -2294,6 +2294,188 @@ result = tool.query(
 - About OpenCorporates: https://opencorporates.com/info/about
 - Jurisdiction Codes: https://api.opencorporates.com/documentation/Open-Data-Licence
 
+### 6.23 GDELT Project Provider
+
+```python
+config = {
+    'gdelt_config': {
+        'doc_base_url': 'https://api.gdeltproject.org/api/v2/doc/doc',
+        'geo_base_url': 'https://api.gdeltproject.org/api/v2/geo/geo',
+        'timeout': 30,
+        'rate_limit': 10,    # Requests per second
+        'max_burst': 20,     # Maximum burst size
+    }
+}
+```
+
+**Features**:
+- Search global news articles across 100+ languages
+- Timeline analysis of news coverage volume and tone
+- Geographic mapping of news coverage
+- Image search with visual recognition
+- Theme-based search using Global Knowledge Graph
+- Emotional tone analysis of news coverage
+- Source country analysis
+- Real-time updates every 15 minutes
+
+**Supported Operations**:
+
+*Article Search Operations:*
+- `search_articles` - Search global news articles with advanced filtering
+- `get_article_list` - Get detailed list of articles with full metadata
+- `search_by_theme` - Search using GDELT's Global Knowledge Graph themes
+
+*Timeline Operations:*
+- `get_timeline` - Get timeline of news coverage volume
+- `get_timeline_volume` - Get volume timeline with raw counts or percentages
+- `get_timeline_tone` - Get timeline showing average emotional tone over time
+- `get_timeline_lang` - Get timeline broken down by language
+- `get_timeline_source_country` - Get timeline broken down by source country
+
+*Analysis Operations:*
+- `get_tone_chart` - Analyze emotional tone distribution of coverage
+- `get_top_themes` - Get top themes and topics from matching articles
+
+*Geographic Operations:*
+- `get_geo_map` - Get geographic map of locations mentioned in news
+- `get_source_country_map` - Map which countries are reporting on a topic
+
+*Image Operations:*
+- `search_images` - Search news images using visual recognition
+
+**Important Configuration Notes**:
+- **No API Key Required**: GDELT Project API is completely free and open
+- **Rate Limiting**: Be respectful - implement reasonable delays between requests
+- **Data Coverage**: Monitors news in 100+ languages from around the world
+- **Real-time Updates**: Data updated every 15 minutes
+- **Attribution**: Acknowledge GDELT Project when using the data
+- **Fair Use**: Do not abuse the free service with excessive requests
+- **Caching**: Strongly recommended to cache responses to reduce server load
+
+**Example Usage**:
+```python
+# 1. Search for climate change articles
+result = tool.query(
+    provider='gdelt',
+    operation='search_articles',
+    params={
+        'query': 'climate change',
+        'timespan': '7d',
+        'max_records': 50,
+        'source_lang': 'english'
+    }
+)
+
+# 2. Get timeline of AI coverage
+result = tool.query(
+    provider='gdelt',
+    operation='get_timeline',
+    params={
+        'query': 'artificial intelligence',
+        'timespan': '30d',
+        'mode': 'timelinevol'
+    }
+)
+
+# 3. Analyze tone of election coverage
+result = tool.query(
+    provider='gdelt',
+    operation='get_tone_chart',
+    params={
+        'query': 'election',
+        'timespan': '7d'
+    }
+)
+
+# 4. Search for protest images
+result = tool.query(
+    provider='gdelt',
+    operation='search_images',
+    params={
+        'query': 'protest',
+        'timespan': '7d',
+        'image_tag': 'protest',
+        'max_records': 20
+    }
+)
+
+# 5. Get geographic map of earthquake coverage
+result = tool.query(
+    provider='gdelt',
+    operation='get_geo_map',
+    params={
+        'query': 'earthquake',
+        'mode': 'country',
+        'timespan': '24h'
+    }
+)
+
+# 6. Search by theme (Global Knowledge Graph)
+result = tool.query(
+    provider='gdelt',
+    operation='search_by_theme',
+    params={
+        'theme': 'ENV_CLIMATECHANGE',
+        'timespan': '7d',
+        'max_records': 50
+    }
+)
+
+# 7. Get source country map
+result = tool.query(
+    provider='gdelt',
+    operation='get_source_country_map',
+    params={
+        'query': 'technology',
+        'timespan': '24h'
+    }
+)
+
+# 8. Get timeline with tone analysis
+result = tool.query(
+    provider='gdelt',
+    operation='get_timeline_tone',
+    params={
+        'query': 'economy',
+        'timespan': '30d',
+        'smoothing': 5
+    }
+)
+```
+
+**Common GKG Themes**:
+- `ENV_CLIMATECHANGE` - Climate change and global warming
+- `TERROR` - Terrorism and extremism
+- `HEALTH` - Health and medical topics
+- `ECON_INFLATION` - Economic inflation
+- `ECON_STOCKMARKET` - Stock market and finance
+- `TAX_FNCACT_STUDENT` - Student finance and education
+- `WB_*` - World Bank indicators (e.g., WB_1987_POVERTY_HEADCOUNT)
+
+**Timespan Formats**:
+- Hours: `1h`, `6h`, `12h`, `24h`
+- Days: `1d`, `3d`, `7d`
+- Weeks: `1week`, `2weeks`
+- Months: `1month`, `3months`, `6months`
+
+**Query Operators**:
+- Phrase search: `"exact phrase"`
+- Boolean AND: `term1 term2` or `term1 AND term2`
+- Boolean OR: `term1 OR term2`
+- Boolean NOT: `-term` or `NOT term`
+- Grouping: `(term1 OR term2) AND term3`
+- Theme search: `theme:TERROR`
+- Domain filter: `domain:nytimes.com`
+- Source language: `sourcelang:english`
+- Source country: `sourcecountry:us`
+
+**API Documentation**:
+- DOC API 2.0: https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/
+- GEO API 2.0: https://blog.gdeltproject.org/gdelt-geo-2-0-api-debuts/
+- Global Knowledge Graph: https://blog.gdeltproject.org/announcing-the-global-knowledge-graph/
+- GDELT Project: https://www.gdeltproject.org/
+- Query Guide: https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/
+
 ---
 
 ## 7. Environment Variables
@@ -2344,6 +2526,9 @@ export HACKERNEWS_RATE_LIMIT=10
 export HACKERNEWS_MAX_BURST=20
 export STACKEXCHANGE_RATE_LIMIT=10
 export STACKEXCHANGE_MAX_BURST=20
+export GDELT_TIMEOUT=30
+export GDELT_RATE_LIMIT=10
+export GDELT_MAX_BURST=20
 
 # Performance
 export APISOURCE_CACHE_TTL="300"
