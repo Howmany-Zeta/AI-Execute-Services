@@ -96,8 +96,8 @@ class SkillMatcher:
     # Weights for different match types
     EXACT_PHRASE_WEIGHT = 1.0
     FUZZY_PHRASE_WEIGHT = 0.7
-    KEYWORD_WEIGHT = 0.3
-    TAG_WEIGHT = 0.2
+    KEYWORD_WEIGHT = 0.5  # Increased from 0.3 to give description keywords more weight
+    TAG_WEIGHT = 0.4      # Increased from 0.2 to give tags more weight
 
     def __init__(
         self,
@@ -255,14 +255,20 @@ class SkillMatcher:
             trigger_score = min(best_trigger_score + bonus, 1.0)
 
         # Score keyword overlap (0.0 to KEYWORD_WEIGHT)
+        # Use the ratio of matched keywords relative to REQUEST keywords (not skill keywords)
+        # This way, if user's request keywords mostly match the skill, we get a high score
         keyword_score = 0.0
         common_keywords = request_keywords.intersection(skill_keywords)
-        if common_keywords and skill_keywords:
-            keyword_ratio = len(common_keywords) / len(skill_keywords)
-            keyword_score = keyword_ratio * self.KEYWORD_WEIGHT
+        if common_keywords and request_keywords:
+            # How much of the user's request is covered by this skill?
+            request_coverage = len(common_keywords) / len(request_keywords)
+            # Also consider absolute match count (bonus for more matches)
+            match_bonus = min(len(common_keywords) * 0.1, 0.3)  # Up to 0.3 bonus
+            keyword_score = min((request_coverage + match_bonus) * self.KEYWORD_WEIGHT, self.KEYWORD_WEIGHT)
             matched_keywords.extend(common_keywords)
 
         # Score tag matches (0.0 to TAG_WEIGHT)
+        # Tags are explicit markers, so matching ANY tag should give significant score
         tag_score = 0.0
         if skill.metadata.tags:
             tag_matches = [
@@ -270,27 +276,32 @@ class SkillMatcher:
                 if tag.lower() in request_lower
             ]
             if tag_matches:
-                tag_ratio = len(tag_matches) / len(skill.metadata.tags)
-                tag_score = tag_ratio * self.TAG_WEIGHT
+                # Any tag match gives at least 0.7 of TAG_WEIGHT
+                base_score = 0.7
+                # Bonus for matching multiple tags
+                bonus = min(len(tag_matches) * 0.1, 0.3)
+                tag_score = (base_score + bonus) * self.TAG_WEIGHT
                 matched_keywords.extend(tag_matches)
 
-        # === New final score calculation ===
-        # Use weighted combination where trigger match dominates
+        # === Final score calculation ===
+        # Use weighted combination where trigger match dominates, but keywords can also reach threshold
         if trigger_score > 0:
-            # Trigger matched: trigger dominates (70%), keywords (20%), tags (10%)
+            # Trigger matched: trigger dominates (60%), keywords (25%), tags (15%)
             final_score = (
-                trigger_score * 0.7 +
-                keyword_score * 0.2 +
-                tag_score * 0.1
+                trigger_score * 0.6 +
+                keyword_score * 0.25 +
+                tag_score * 0.15
             )
         elif keyword_score > 0 or tag_score > 0:
-            # No trigger match: rely on keywords (60%) and tags (40%)
-            final_score = keyword_score * 0.6 + tag_score * 0.4
+            # No trigger match: keywords and tags can still reach threshold
+            # keyword_score max = 0.5, tag_score max = 0.4
+            # With these weights, max possible = 0.5 * 0.7 + 0.4 * 0.5 = 0.55
+            final_score = keyword_score * 0.7 + tag_score * 0.5
         else:
             # No matches at all - use basic text similarity as fallback
             final_score = self._fuzzy_match_score(
                 skill.metadata.description, request
-            ) * 0.3
+            ) * 0.4  # Increased from 0.3
 
         # Ensure score is in valid range
         final_score = min(max(final_score, 0.0), 1.0)
