@@ -48,6 +48,7 @@ from aiecs.tools.apisource.providers.stackexchange import StackExchangeProvider
 from aiecs.tools.apisource.providers.hackernews import HackerNewsProvider
 from aiecs.tools.apisource.providers.opencorporates import OpenCorporatesProvider
 from aiecs.tools.apisource.providers.courtlistener import CourtListenerProvider
+from aiecs.tools.apisource.providers.gdelt import GDELTProvider
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census', 'congress', 'openstates', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange', 'hackernews', 'opencorporates', 'courtlistener']
+        expected = ['fred', 'newsapi', 'worldbank', 'census', 'congress', 'openstates', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange', 'hackernews', 'opencorporates', 'courtlistener', 'gdelt']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -6439,4 +6440,325 @@ class TestCourtListenerProvider:
         })
 
         print(f"✓ All {len(expected_operations)} expected operations are supported")
+
+
+class TestGDELTProvider:
+    """Test GDELT Project API provider"""
+
+    def test_provider_metadata(self, debug_output):
+        """Test GDELT provider metadata"""
+        print("\n=== Testing GDELT Provider Metadata ===")
+
+        provider = GDELTProvider({})
+
+        assert provider.name == 'gdelt'
+        assert provider.description
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+
+        debug_output("GDELT Metadata", {
+            'name': metadata['name'],
+            'description': metadata['description'],
+            'operations_count': len(metadata['operations']),
+            'operations': metadata['operations'],
+            'health': metadata['health'],
+        })
+
+        print("✓ GDELT metadata retrieved successfully")
+
+    @pytest.mark.network
+    def test_search_articles(self, debug_output, measure_performance):
+        """Test GDELT search_articles operation"""
+        print("\n=== Testing GDELT search_articles ===")
+
+        provider = GDELTProvider({})
+
+        measure_performance.start()
+        result = provider.execute('search_articles', {
+            'query': 'climate change',
+            'timespan': '7d',
+            'max_records': 10
+        })
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'gdelt'
+        assert result['operation'] == 'search_articles'
+        assert 'data' in result
+
+        debug_output("GDELT Search Results", {
+            'query': 'climate change',
+            'data_type': type(result['data']).__name__,
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("GDELT search_articles")
+        print("✓ Search executed successfully")
+
+    @pytest.mark.network
+    def test_get_timeline(self, debug_output, measure_performance):
+        """Test GDELT get_timeline operation"""
+        print("\n=== Testing GDELT get_timeline ===")
+
+        provider = GDELTProvider({})
+
+        measure_performance.start()
+        result = provider.execute('get_timeline', {
+            'query': 'artificial intelligence',
+            'timespan': '30d',
+            'mode': 'timelinevol'
+        })
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'gdelt'
+        assert result['operation'] == 'get_timeline'
+        assert 'data' in result
+
+        debug_output("GDELT Timeline", {
+            'query': 'artificial intelligence',
+            'data_type': type(result['data']).__name__,
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("GDELT get_timeline")
+        print("✓ Timeline retrieved successfully")
+
+    @pytest.mark.network
+    def test_get_tone_chart(self, debug_output):
+        """Test GDELT get_tone_chart operation"""
+        print("\n=== Testing GDELT get_tone_chart ===")
+
+        provider = GDELTProvider({})
+
+        result = provider.execute('get_tone_chart', {
+            'query': 'election',
+            'timespan': '7d'
+        })
+
+        assert result['provider'] == 'gdelt'
+        assert result['operation'] == 'get_tone_chart'
+        assert 'data' in result
+
+        debug_output("GDELT Tone Chart", {
+            'query': 'election',
+            'data_type': type(result['data']).__name__,
+        })
+
+        print("✓ Tone chart retrieved successfully")
+
+    @pytest.mark.network
+    def test_search_images(self, debug_output):
+        """Test GDELT search_images operation"""
+        print("\n=== Testing GDELT search_images ===")
+
+        provider = GDELTProvider({})
+
+        result = provider.execute('search_images', {
+            'query': 'protest',
+            'timespan': '7d',
+            'max_records': 10,
+            'image_tag': 'protest'
+        })
+
+        assert result['provider'] == 'gdelt'
+        assert result['operation'] == 'search_images'
+        assert 'data' in result
+
+        debug_output("GDELT Image Search", {
+            'query': 'protest',
+            'data_type': type(result['data']).__name__,
+        })
+
+        print("✓ Image search executed successfully")
+
+    @pytest.mark.network
+    def test_get_geo_map(self, debug_output):
+        """Test GDELT get_geo_map operation"""
+        print("\n=== Testing GDELT get_geo_map ===")
+
+        provider = GDELTProvider({})
+
+        result = provider.execute('get_geo_map', {
+            'query': 'earthquake',
+            'mode': 'country',
+            'timespan': '24h'
+        })
+
+        assert result['provider'] == 'gdelt'
+        assert result['operation'] == 'get_geo_map'
+        assert 'data' in result
+
+        debug_output("GDELT Geo Map", {
+            'query': 'earthquake',
+            'mode': 'country',
+            'data_type': type(result['data']).__name__,
+        })
+
+        print("✓ Geo map retrieved successfully")
+
+    def test_validate_params(self):
+        """Test GDELT parameter validation"""
+        print("\n=== Testing GDELT Parameter Validation ===")
+
+        provider = GDELTProvider({})
+
+        # Valid params
+        is_valid, error = provider.validate_params('search_articles', {'query': 'test'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params - missing required
+        is_valid, error = provider.validate_params('search_articles', {})
+        assert is_valid is False
+        assert error is not None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, debug_output):
+        """Test GDELT operation schema"""
+        print("\n=== Testing GDELT Operation Schema ===")
+
+        provider = GDELTProvider({})
+
+        schema = provider.get_operation_schema('search_articles')
+
+        assert schema is not None
+        assert 'description' in schema
+        assert 'parameters' in schema
+
+        debug_output("GDELT search_articles Schema", schema)
+
+        print("✓ Operation schema retrieved successfully")
+
+    def test_all_operations_supported(self, debug_output):
+        """Test that all expected operations are supported"""
+        print("\n=== Testing GDELT All Operations ===")
+
+        provider = GDELTProvider({})
+
+        expected_operations = [
+            'search_articles',
+            'get_timeline',
+            'get_tone_chart',
+            'search_images',
+            'get_geo_map',
+            'get_source_country_map',
+            'get_top_themes',
+            'search_by_theme',
+            'get_article_list',
+            'get_timeline_volume',
+            'get_timeline_tone',
+            'get_timeline_lang',
+            'get_timeline_source_country',
+        ]
+
+        supported = provider.supported_operations
+
+        for operation in expected_operations:
+            assert operation in supported, f"Operation {operation} not supported"
+
+        debug_output("GDELT Supported Operations", {
+            'expected_count': len(expected_operations),
+            'actual_count': len(supported),
+            'operations': supported,
+        })
+
+        print(f"✓ All {len(expected_operations)} expected operations are supported")
+
+    @pytest.mark.network
+    def test_search_by_theme(self, debug_output):
+        """Test GDELT search_by_theme operation"""
+        print("\n=== Testing GDELT search_by_theme ===")
+
+        provider = GDELTProvider({})
+
+        result = provider.execute('search_by_theme', {
+            'theme': 'ENV_CLIMATECHANGE',
+            'timespan': '7d',
+            'max_records': 10
+        })
+
+        assert result['provider'] == 'gdelt'
+        assert result['operation'] == 'search_by_theme'
+        assert 'data' in result
+
+        debug_output("GDELT Theme Search", {
+            'theme': 'ENV_CLIMATECHANGE',
+            'data_type': type(result['data']).__name__,
+        })
+
+        print("✓ Theme search executed successfully")
+
+    @pytest.mark.network
+    def test_get_source_country_map(self, debug_output):
+        """Test GDELT get_source_country_map operation"""
+        print("\n=== Testing GDELT get_source_country_map ===")
+
+        provider = GDELTProvider({})
+
+        result = provider.execute('get_source_country_map', {
+            'query': 'technology',
+            'timespan': '24h'
+        })
+
+        assert result['provider'] == 'gdelt'
+        assert result['operation'] == 'get_source_country_map'
+        assert 'data' in result
+
+        debug_output("GDELT Source Country Map", {
+            'query': 'technology',
+            'data_type': type(result['data']).__name__,
+        })
+
+        print("✓ Source country map retrieved successfully")
+
+    @pytest.mark.network
+    def test_get_timeline_tone(self, debug_output):
+        """Test GDELT get_timeline_tone operation"""
+        print("\n=== Testing GDELT get_timeline_tone ===")
+
+        provider = GDELTProvider({})
+
+        result = provider.execute('get_timeline_tone', {
+            'query': 'economy',
+            'timespan': '30d',
+            'smoothing': 5
+        })
+
+        assert result['provider'] == 'gdelt'
+        assert result['operation'] == 'get_timeline_tone'
+        assert 'data' in result
+
+        debug_output("GDELT Timeline Tone", {
+            'query': 'economy',
+            'data_type': type(result['data']).__name__,
+        })
+
+        print("✓ Timeline tone retrieved successfully")
+
+    def test_data_structure_validity(self, debug_output):
+        """Test that GDELT provider returns valid data structures"""
+        print("\n=== Testing GDELT Data Structure ===")
+
+        provider = GDELTProvider({})
+
+        metadata = provider.get_metadata()
+        health = metadata.get('health', {})
+
+        assert 'name' in metadata
+        assert 'description' in metadata
+        assert 'operations' in metadata
+        assert 'health' in metadata
+        assert 'score' in health
+        assert 'status' in health
+
+        debug_output("GDELT Data Structure", {
+            'has_name': 'name' in metadata,
+            'has_description': 'description' in metadata,
+            'operations_count': len(metadata.get('operations', [])),
+            'health_score': health.get('score'),
+            'health_status': health.get('status'),
+        })
+
+        print("✓ GDELT data structure is valid")
 
