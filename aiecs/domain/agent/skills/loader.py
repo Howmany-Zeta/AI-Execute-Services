@@ -165,7 +165,8 @@ class SkillLoader:
                 author=metadata_dict.get('author'),
                 tags=metadata_dict.get('tags'),
                 dependencies=metadata_dict.get('dependencies'),
-                recommended_tools=metadata_dict.get('recommended_tools')
+                recommended_tools=metadata_dict.get('recommended_tools'),
+                skill_type=metadata_dict.get('skill_type')  # None for auto-inference
             )
         except ValueError as e:
             raise SkillLoadError(f"Invalid metadata: {e}") from e

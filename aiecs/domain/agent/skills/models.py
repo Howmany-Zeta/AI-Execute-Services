@@ -11,6 +11,13 @@ from typing import Any, Dict, List, Optional
 import re
 
 
+# Valid skill types
+SKILL_TYPE_KNOWLEDGE = "knowledge"
+SKILL_TYPE_EXECUTABLE = "executable"
+SKILL_TYPE_HYBRID = "hybrid"
+VALID_SKILL_TYPES = {SKILL_TYPE_KNOWLEDGE, SKILL_TYPE_EXECUTABLE, SKILL_TYPE_HYBRID}
+
+
 @dataclass
 class SkillMetadata:
     """
@@ -24,6 +31,9 @@ class SkillMetadata:
         tags: Optional tags for categorization
         dependencies: Optional list of required skills
         recommended_tools: Optional list of tool names to recommend when skill is active
+        skill_type: Type of skill - 'knowledge' (pure documentation), 'executable'
+                    (has scripts/tools), or 'hybrid' (both). Defaults to None for
+                    auto-inference during loading.
     """
     name: str
     description: str
@@ -32,6 +42,7 @@ class SkillMetadata:
     tags: Optional[List[str]] = None
     dependencies: Optional[List[str]] = None
     recommended_tools: Optional[List[str]] = None
+    skill_type: Optional[str] = None  # 'knowledge', 'executable', 'hybrid', or None for auto
 
     def __post_init__(self):
         """Validate metadata fields."""
@@ -46,7 +57,13 @@ class SkillMetadata:
             raise ValueError(
                 f"Skill version must be semantic version (e.g., '1.0.0'): {self.version}"
             )
-        
+
+        # Validate skill_type if provided
+        if self.skill_type is not None and self.skill_type not in VALID_SKILL_TYPES:
+            raise ValueError(
+                f"Skill type must be one of {VALID_SKILL_TYPES}: {self.skill_type}"
+            )
+
         # Ensure lists are not None
         if self.tags is None:
             self.tags = []
@@ -131,19 +148,56 @@ class SkillDefinition:
     def recommended_tools(self) -> List[str]:
         """Get recommended tools from metadata."""
         return self.metadata.recommended_tools or []
-    
+
+    @property
+    def skill_type(self) -> str:
+        """
+        Get the effective skill type.
+
+        If skill_type is explicitly set in metadata, returns that value.
+        Otherwise, auto-infers based on whether scripts are present:
+        - 'executable' if scripts exist
+        - 'knowledge' if no scripts
+
+        Returns:
+            Skill type: 'knowledge', 'executable', or 'hybrid'
+        """
+        # If explicitly set in metadata, use that
+        if self.metadata.skill_type is not None:
+            return self.metadata.skill_type
+
+        # Auto-infer based on scripts presence
+        if self.scripts:
+            return SKILL_TYPE_EXECUTABLE
+        return SKILL_TYPE_KNOWLEDGE
+
+    @property
+    def is_knowledge_skill(self) -> bool:
+        """Check if this is a pure knowledge/documentation skill."""
+        return self.skill_type == SKILL_TYPE_KNOWLEDGE
+
+    @property
+    def is_executable_skill(self) -> bool:
+        """Check if this is an executable skill with scripts."""
+        return self.skill_type == SKILL_TYPE_EXECUTABLE
+
+    @property
+    def is_hybrid_skill(self) -> bool:
+        """Check if this is a hybrid skill (both knowledge and executable)."""
+        return self.skill_type == SKILL_TYPE_HYBRID
+
     def is_body_loaded(self) -> bool:
         """Check if body content is loaded."""
         return self.body is not None
-    
+
     def is_resource_loaded(self, resource_type: str, resource_name: str) -> bool:
         """
         Check if a specific resource is loaded.
-        
+
         Args:
             resource_type: Type of resource ('reference', 'example', 'script', 'asset')
             resource_name: Name of the resource
-            
+
         Returns:
             True if resource content is loaded, False otherwise
         """

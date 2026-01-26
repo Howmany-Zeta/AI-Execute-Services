@@ -205,6 +205,10 @@ class SkillMatcher:
         """
         Score how well a skill matches a request.
 
+        Uses a "best match" scoring strategy where matching any single trigger
+        phrase yields a high score. Multiple triggers increase matching
+        opportunities, not difficulty.
+
         Scoring considers:
         - Exact trigger phrase matches (weight: 1.0)
         - Fuzzy trigger phrase matches (weight: 0.7)
@@ -225,35 +229,41 @@ class SkillMatcher:
         matched_phrases: List[str] = []
         matched_keywords: List[str] = []
 
-        total_score = 0.0
-        max_possible = 0.0
-
-        # Score trigger phrase matches
+        # === New "best match" scoring logic ===
+        # Track the best trigger score (not cumulative)
+        best_trigger_score = 0.0
         request_lower = request.lower()
-        for trigger in triggers:
-            max_possible += self.EXACT_PHRASE_WEIGHT
 
+        for trigger in triggers:
             # Check exact match
             if trigger in request_lower:
-                total_score += self.EXACT_PHRASE_WEIGHT
+                best_trigger_score = max(best_trigger_score, self.EXACT_PHRASE_WEIGHT)
                 matched_phrases.append(trigger)
             else:
                 # Check fuzzy match
                 fuzzy_score = self._fuzzy_match_score(trigger, request_lower)
                 if fuzzy_score > 0.6:  # Threshold for fuzzy match consideration
                     score_contribution = fuzzy_score * self.FUZZY_PHRASE_WEIGHT
-                    total_score += score_contribution
+                    best_trigger_score = max(best_trigger_score, score_contribution)
                     matched_phrases.append(f"~{trigger}")
 
-        # Score keyword overlap
+        # Give a small bonus for matching multiple triggers (max 0.15 bonus)
+        trigger_score = best_trigger_score
+        if len(matched_phrases) > 1:
+            # Each additional match adds 0.05, capped at 0.15
+            bonus = min(0.05 * (len(matched_phrases) - 1), 0.15)
+            trigger_score = min(best_trigger_score + bonus, 1.0)
+
+        # Score keyword overlap (0.0 to KEYWORD_WEIGHT)
+        keyword_score = 0.0
         common_keywords = request_keywords.intersection(skill_keywords)
         if common_keywords and skill_keywords:
             keyword_ratio = len(common_keywords) / len(skill_keywords)
-            total_score += keyword_ratio * self.KEYWORD_WEIGHT
-            max_possible += self.KEYWORD_WEIGHT
+            keyword_score = keyword_ratio * self.KEYWORD_WEIGHT
             matched_keywords.extend(common_keywords)
 
-        # Score tag matches
+        # Score tag matches (0.0 to TAG_WEIGHT)
+        tag_score = 0.0
         if skill.metadata.tags:
             tag_matches = [
                 tag for tag in skill.metadata.tags
@@ -261,22 +271,42 @@ class SkillMatcher:
             ]
             if tag_matches:
                 tag_ratio = len(tag_matches) / len(skill.metadata.tags)
-                total_score += tag_ratio * self.TAG_WEIGHT
-                max_possible += self.TAG_WEIGHT
+                tag_score = tag_ratio * self.TAG_WEIGHT
                 matched_keywords.extend(tag_matches)
 
-        # Normalize score
-        if max_possible > 0:
-            normalized_score = min(total_score / max_possible, 1.0)
+        # === New final score calculation ===
+        # Use weighted combination where trigger match dominates
+        if trigger_score > 0:
+            # Trigger matched: trigger dominates (70%), keywords (20%), tags (10%)
+            final_score = (
+                trigger_score * 0.7 +
+                keyword_score * 0.2 +
+                tag_score * 0.1
+            )
+        elif keyword_score > 0 or tag_score > 0:
+            # No trigger match: rely on keywords (60%) and tags (40%)
+            final_score = keyword_score * 0.6 + tag_score * 0.4
         else:
-            # No triggers or keywords - use basic text similarity
-            normalized_score = self._fuzzy_match_score(
+            # No matches at all - use basic text similarity as fallback
+            final_score = self._fuzzy_match_score(
                 skill.metadata.description, request
-            ) * 0.5
+            ) * 0.3
+
+        # Ensure score is in valid range
+        final_score = min(max(final_score, 0.0), 1.0)
+
+        logger.debug(
+            f"Skill '{skill.metadata.name}' scoring: "
+            f"trigger_score={trigger_score:.3f}, "
+            f"keyword_score={keyword_score:.3f}, "
+            f"tag_score={tag_score:.3f}, "
+            f"final={final_score:.3f}, "
+            f"matched_phrases={matched_phrases}"
+        )
 
         return MatchResult(
             skill=skill,
-            score=normalized_score,
+            score=final_score,
             matched_phrases=matched_phrases,
             matched_keywords=list(set(matched_keywords))
         )

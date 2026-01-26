@@ -25,7 +25,13 @@ from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
 from .context import SkillContext, ContextOptions
 from .executor import ExecutionMode, ScriptExecutionResult, SkillScriptExecutor
-from .models import SkillDefinition, SkillResource
+from .models import (
+    SkillDefinition,
+    SkillResource,
+    SKILL_TYPE_KNOWLEDGE,
+    SKILL_TYPE_EXECUTABLE,
+    SKILL_TYPE_HYBRID,
+)
 from .registry import SkillRegistry
 
 if TYPE_CHECKING:
@@ -746,6 +752,12 @@ class SkillCapableMixin:
         if skill.metadata.description:
             parts.append(f"*{skill.metadata.description.strip()}*")
 
+        # Add skill type hint for LLM
+        type_hint = self._get_skill_type_hint(skill)
+        if type_hint:
+            parts.append("")
+            parts.append(type_hint)
+
         # Body content
         if skill.body:
             parts.append("")
@@ -760,6 +772,41 @@ class SkillCapableMixin:
             parts.append(self._format_tool_recommendations_section(skill))
 
         return "\n".join(parts)
+
+    def _get_skill_type_hint(self, skill: SkillDefinition) -> str:
+        """
+        Get a type hint message for the LLM based on skill type.
+
+        This helps the LLM understand whether to use the skill as knowledge
+        for generating responses directly, or to call it as a tool.
+
+        Args:
+            skill: The skill to get type hint for
+
+        Returns:
+            Type hint message string
+        """
+        skill_type = skill.skill_type
+
+        if skill_type == SKILL_TYPE_KNOWLEDGE:
+            return (
+                "📚 **This is a KNOWLEDGE skill** - Use the information below to "
+                "directly generate your response. Do NOT try to call it as a tool."
+            )
+        elif skill_type == SKILL_TYPE_EXECUTABLE:
+            return (
+                f"🔧 **This is an EXECUTABLE skill** - Call the corresponding tool "
+                f"'{skill.metadata.name}' to execute this skill's functionality."
+            )
+        elif skill_type == SKILL_TYPE_HYBRID:
+            return (
+                "🔄 **This is a HYBRID skill** - You can either use the information "
+                "directly to generate a response, or call the corresponding tool "
+                "if more complex processing is needed."
+            )
+        else:
+            # Fallback for unknown types
+            return ""
 
     def _format_scripts_section(self, skill: SkillDefinition) -> str:
         """Format the scripts section for a skill."""
