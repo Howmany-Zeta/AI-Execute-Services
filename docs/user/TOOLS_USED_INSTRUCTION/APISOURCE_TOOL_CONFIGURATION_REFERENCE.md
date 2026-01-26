@@ -929,6 +929,129 @@ export OPENCORPORATES_API_KEY="your_opencorporates_api_key"
 - API Accounts: https://opencorporates.com/api_accounts/new
 - About OpenCorporates: https://opencorporates.com/info/about
 
+### 3.22 CourtListener (Free Law Project) API
+
+**API Key Required**:
+```python
+config = {
+    'courtlistener_api_key': 'YOUR_COURTLISTENER_API_KEY'
+}
+tool = APISourceTool(config)
+```
+
+**Environment Variable**:
+```bash
+export COURTLISTENER_API_KEY="your_courtlistener_api_key"
+```
+
+**Configuration (Optional)**:
+```python
+config = {
+    'courtlistener_api_key': 'YOUR_API_KEY',
+    'courtlistener_config': {
+        'timeout': 30,
+        'rate_limit': 10,
+        'max_burst': 20
+    }
+}
+tool = APISourceTool(config)
+```
+
+**Rate Limits**:
+- Free tier: 5,000 requests per hour for authenticated users
+- Higher limits available upon request
+- Be respectful of the free service
+
+**Obtaining an API Key**:
+1. Visit https://www.courtlistener.com/sign-in/register/
+2. Register for a free account
+3. Go to your profile settings
+4. Generate an API key
+5. Copy and store the API key securely
+
+**Features**:
+- Search legal opinions and case law from federal and state courts
+- Access court dockets and case filings (RECAP archive)
+- Search judges and judicial information
+- Access oral argument audio recordings
+- Explore legal citations and citation networks
+- Search court information
+- Access to millions of legal opinions and PACER data
+- Full metadata including case names, judges, courts, dates, citations
+
+**Supported Operations**:
+- `search_opinions` - Search for legal opinions and case law with advanced filtering
+- `get_opinion` - Get detailed information about a specific legal opinion
+- `search_dockets` - Search for court dockets and case filings
+- `get_docket` - Get detailed information about a specific docket
+- `search_judges` - Search for judges and judicial information
+- `get_judge` - Get detailed information about a specific judge
+- `search_oral_arguments` - Search for oral argument audio recordings
+- `get_oral_argument` - Get detailed information about a specific oral argument
+- `search_citations` - Search for legal citations and citation networks
+- `get_citation` - Get detailed information about a specific citation
+- `search_courts` - Search for court information
+- `get_court` - Get detailed information about a specific court
+
+**Important API Rules**:
+1. **API Key Required**: Must register for a free API key
+2. **Rate Limiting**: Default is 5,000 requests per hour for authenticated users
+3. **Attribution**: Acknowledge Free Law Project when using the data
+4. **Data Freshness**: Data is updated regularly from court sources and PACER
+5. **Fair Use**: Follow the API terms of service
+
+**API Documentation**:
+- REST API Documentation: https://www.courtlistener.com/help/api/rest/
+- Interactive API Docs: https://www.courtlistener.com/api/rest-info/
+- About Free Law Project: https://free.law/
+- Coverage Information: https://www.courtlistener.com/coverage/
+
+**Example Usage**:
+```python
+# Search for opinions about constitutional law
+result = tool.query(
+    provider='courtlistener',
+    operation='search_opinions',
+    params={'q': 'first amendment', 'court': 'scotus', 'page_size': 10}
+)
+
+# Search for dockets in a specific court
+result = tool.query(
+    provider='courtlistener',
+    operation='search_dockets',
+    params={'court': 'dcd', 'docket_number': '20-cv', 'page_size': 5}
+)
+
+# Search for judges
+result = tool.query(
+    provider='courtlistener',
+    operation='search_judges',
+    params={'name': 'Sotomayor', 'court': 'scotus'}
+)
+
+# Search for oral arguments
+result = tool.query(
+    provider='courtlistener',
+    operation='search_oral_arguments',
+    params={'court': 'scotus', 'case_name': 'Brown', 'page_size': 5}
+)
+
+# Get court information
+result = tool.query(
+    provider='courtlistener',
+    operation='get_court',
+    params={'court_id': 'scotus'}
+)
+```
+
+**Popular Court IDs**:
+- Supreme Court: `scotus`
+- 9th Circuit Court of Appeals: `ca9`
+- 2nd Circuit Court of Appeals: `ca2`
+- D.C. District Court: `dcd`
+- Southern District of New York: `nysd`
+- Northern District of California: `cand`
+
 ---
 
 ## 4. Performance Settings

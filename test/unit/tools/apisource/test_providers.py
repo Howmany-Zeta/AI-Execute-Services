@@ -29,7 +29,6 @@ from aiecs.tools.apisource.providers.newsapi import NewsAPIProvider
 from aiecs.tools.apisource.providers.worldbank import WorldBankProvider
 from aiecs.tools.apisource.providers.census import CensusProvider
 from aiecs.tools.apisource.providers.congress import CongressProvider
-from aiecs.tools.apisource.providers.govtrack import GovTrackProvider
 from aiecs.tools.apisource.providers.alphavantage import AlphaVantageProvider
 from aiecs.tools.apisource.providers.restcountries import RESTCountriesProvider
 from aiecs.tools.apisource.providers.exchangerate import ExchangeRateProvider
@@ -48,6 +47,7 @@ from aiecs.tools.apisource.providers.secedgar import SECEdgarProvider
 from aiecs.tools.apisource.providers.stackexchange import StackExchangeProvider
 from aiecs.tools.apisource.providers.hackernews import HackerNewsProvider
 from aiecs.tools.apisource.providers.opencorporates import OpenCorporatesProvider
+from aiecs.tools.apisource.providers.courtlistener import CourtListenerProvider
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'worldbank', 'census', 'congress', 'govtrack', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange', 'hackernews', 'opencorporates']
+        expected = ['fred', 'newsapi', 'worldbank', 'census', 'congress', 'openstates', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange', 'hackernews', 'opencorporates', 'courtlistener']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -6085,4 +6085,358 @@ class TestOpenCorporatesProvider:
         debug_output("OpenCorporates search_companies Schema", schema)
 
         print("✓ Operation schema retrieved successfully")
+
+
+class TestCourtListenerProvider:
+    """Test CourtListener (Free Law Project) provider"""
+
+    def test_provider_metadata(self, courtlistener_config, debug_output):
+        """Test CourtListener provider metadata"""
+        print("\n=== Testing CourtListener Provider Metadata ===")
+
+        provider = CourtListenerProvider(courtlistener_config)
+
+        assert provider.name == 'courtlistener'
+        assert provider.description
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+
+        debug_output("CourtListener Metadata", {
+            'name': metadata['name'],
+            'description': metadata['description'],
+            'operations_count': len(metadata['operations']),
+            'operations': metadata['operations'],
+            'health': metadata['health'],
+        })
+
+        print("✓ CourtListener metadata retrieved successfully")
+
+    @pytest.mark.network
+    def test_search_opinions(self, courtlistener_config, skip_if_no_api_key, debug_output,
+                            measure_performance):
+        """Test CourtListener search_opinions operation"""
+        skip_if_no_api_key('courtlistener')
+        print("\n=== Testing CourtListener search_opinions ===")
+
+        provider = CourtListenerProvider(courtlistener_config)
+
+        measure_performance.start()
+        result = provider.search_opinions(q='first amendment', page_size=5)
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'courtlistener'
+        assert result['operation'] == 'search_opinions'
+        assert 'data' in result
+        assert 'metadata' in result
+
+        debug_output("CourtListener Search Opinions", {
+            'query': 'first amendment',
+            'results_count': len(result.get('data', {}).get('results', [])) if isinstance(result.get('data'), dict) else 'N/A',
+            'duration_seconds': duration,
+            'metadata': result.get('metadata', {}),
+        })
+
+        print(f"⏱  CourtListener search_opinions took {duration:.3f} seconds")
+        print("✓ Search opinions completed successfully")
+
+    @pytest.mark.network
+    def test_search_dockets(self, courtlistener_config, skip_if_no_api_key, debug_output,
+                           measure_performance):
+        """Test CourtListener search_dockets operation"""
+        skip_if_no_api_key('courtlistener')
+        print("\n=== Testing CourtListener search_dockets ===")
+
+        provider = CourtListenerProvider(courtlistener_config)
+
+        measure_performance.start()
+        result = provider.search_dockets(q='patent', court='dcd', page_size=5)
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'courtlistener'
+        assert result['operation'] == 'search_dockets'
+        assert 'data' in result
+
+        debug_output("CourtListener Search Dockets", {
+            'query': 'patent',
+            'court': 'dcd',
+            'results_count': len(result.get('data', {}).get('results', [])) if isinstance(result.get('data'), dict) else 'N/A',
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  CourtListener search_dockets took {duration:.3f} seconds")
+        print("✓ Search dockets completed successfully")
+
+    @pytest.mark.network
+    def test_search_judges(self, courtlistener_config, skip_if_no_api_key, debug_output,
+                          measure_performance):
+        """Test CourtListener search_judges operation"""
+        skip_if_no_api_key('courtlistener')
+        print("\n=== Testing CourtListener search_judges ===")
+
+        provider = CourtListenerProvider(courtlistener_config)
+
+        measure_performance.start()
+        result = provider.search_judges(name='Sotomayor', page_size=5)
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'courtlistener'
+        assert result['operation'] == 'search_judges'
+        assert 'data' in result
+
+        debug_output("CourtListener Search Judges", {
+            'name': 'Sotomayor',
+            'results_count': len(result.get('data', {}).get('results', [])) if isinstance(result.get('data'), dict) else 'N/A',
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  CourtListener search_judges took {duration:.3f} seconds")
+        print("✓ Search judges completed successfully")
+
+    @pytest.mark.network
+    def test_search_oral_arguments(self, courtlistener_config, skip_if_no_api_key, debug_output,
+                                   measure_performance):
+        """Test CourtListener search_oral_arguments operation"""
+        skip_if_no_api_key('courtlistener')
+        print("\n=== Testing CourtListener search_oral_arguments ===")
+
+        provider = CourtListenerProvider(courtlistener_config)
+
+        measure_performance.start()
+        result = provider.search_oral_arguments(court='scotus', page_size=5)
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'courtlistener'
+        assert result['operation'] == 'search_oral_arguments'
+        assert 'data' in result
+
+        debug_output("CourtListener Search Oral Arguments", {
+            'court': 'scotus',
+            'results_count': len(result.get('data', {}).get('results', [])) if isinstance(result.get('data'), dict) else 'N/A',
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  CourtListener search_oral_arguments took {duration:.3f} seconds")
+        print("✓ Search oral arguments completed successfully")
+
+    @pytest.mark.network
+    def test_search_courts(self, courtlistener_config, skip_if_no_api_key, debug_output,
+                          measure_performance):
+        """Test CourtListener search_courts operation"""
+        skip_if_no_api_key('courtlistener')
+        print("\n=== Testing CourtListener search_courts ===")
+
+        provider = CourtListenerProvider(courtlistener_config)
+
+        measure_performance.start()
+        result = provider.search_courts(jurisdiction='F', page_size=10)
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'courtlistener'
+        assert result['operation'] == 'search_courts'
+        assert 'data' in result
+
+        debug_output("CourtListener Search Courts", {
+            'jurisdiction': 'F',
+            'results_count': len(result.get('data', [])) if isinstance(result.get('data'), list) else 'N/A',
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  CourtListener search_courts took {duration:.3f} seconds")
+        print("✓ Search courts completed successfully")
+
+    def test_validate_params(self, courtlistener_config):
+        """Test CourtListener parameter validation"""
+        print("\n=== Testing CourtListener Parameter Validation ===")
+
+        provider = CourtListenerProvider(courtlistener_config)
+
+        # Invalid params for get_opinion (missing opinion_id)
+        is_valid, error = provider.validate_params('get_opinion', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_opinion
+        is_valid, error = provider.validate_params('get_opinion', {'opinion_id': 123456})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for search_opinions (no search parameters)
+        is_valid, error = provider.validate_params('search_opinions', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for search_opinions
+        is_valid, error = provider.validate_params('search_opinions', {'q': 'constitutional law'})
+        assert is_valid is True
+        assert error is None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, courtlistener_config, debug_output):
+        """Test CourtListener operation schema"""
+        print("\n=== Testing CourtListener Operation Schema ===")
+
+        provider = CourtListenerProvider(courtlistener_config)
+
+        schema = provider.get_operation_schema('search_opinions')
+
+        assert schema is not None
+        assert 'description' in schema
+        assert 'parameters' in schema
+
+        debug_output("CourtListener search_opinions Schema", schema)
+
+        print("✓ Operation schema retrieved successfully")
+
+    @pytest.mark.network
+    def test_search_opinions_with_filters(self, courtlistener_config, skip_if_no_api_key, debug_output,
+                                         measure_performance):
+        """Test CourtListener search_opinions with multiple filters"""
+        skip_if_no_api_key('courtlistener')
+        print("\n=== Testing CourtListener search_opinions with Filters ===")
+
+        provider = CourtListenerProvider(courtlistener_config)
+
+        measure_performance.start()
+        result = provider.search_opinions(
+            case_name='Brown',
+            court='scotus',
+            page_size=5
+        )
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert 'metadata' in result
+
+        debug_output("CourtListener Search Opinions with Filters", {
+            'case_name': 'Brown',
+            'court': 'scotus',
+            'results_count': len(result.get('data', {}).get('results', [])) if isinstance(result.get('data'), dict) else 'N/A',
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  CourtListener search_opinions with filters took {duration:.3f} seconds")
+        print("✓ Search opinions with filters completed successfully")
+
+    @pytest.mark.network
+    def test_search_dockets_by_number(self, courtlistener_config, skip_if_no_api_key, debug_output,
+                                     measure_performance):
+        """Test CourtListener search_dockets by docket number"""
+        skip_if_no_api_key('courtlistener')
+        print("\n=== Testing CourtListener search_dockets by Number ===")
+
+        provider = CourtListenerProvider(courtlistener_config)
+
+        measure_performance.start()
+        result = provider.search_dockets(
+            docket_number='20-cv',
+            page_size=5
+        )
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+
+        debug_output("CourtListener Search Dockets by Number", {
+            'docket_number': '20-cv',
+            'results_count': len(result.get('data', {}).get('results', [])) if isinstance(result.get('data'), dict) else 'N/A',
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  CourtListener search_dockets by number took {duration:.3f} seconds")
+        print("✓ Search dockets by number completed successfully")
+
+    @pytest.mark.network
+    def test_search_judges_by_court(self, courtlistener_config, skip_if_no_api_key, debug_output,
+                                   measure_performance):
+        """Test CourtListener search_judges by court"""
+        skip_if_no_api_key('courtlistener')
+        print("\n=== Testing CourtListener search_judges by Court ===")
+
+        provider = CourtListenerProvider(courtlistener_config)
+
+        measure_performance.start()
+        result = provider.search_judges(
+            court='scotus',
+            page_size=10
+        )
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+
+        debug_output("CourtListener Search Judges by Court", {
+            'court': 'scotus',
+            'results_count': len(result.get('data', {}).get('results', [])) if isinstance(result.get('data'), dict) else 'N/A',
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  CourtListener search_judges by court took {duration:.3f} seconds")
+        print("✓ Search judges by court completed successfully")
+
+    def test_data_structure(self, courtlistener_config, debug_output):
+        """Test the structure of CourtListener data returned"""
+        print("\n=== Testing CourtListener Data Structure ===")
+
+        provider = CourtListenerProvider(courtlistener_config)
+
+        # Test metadata structure
+        metadata = provider.get_metadata()
+
+        assert 'name' in metadata
+        assert 'description' in metadata
+        assert 'operations' in metadata
+        assert 'stats' in metadata
+        assert 'health' in metadata
+
+        # Check health metadata
+        health = metadata['health']
+        assert 'score' in health
+        assert 'status' in health
+
+        debug_output("CourtListener Data Structure", {
+            'has_name': 'name' in metadata,
+            'has_description': 'description' in metadata,
+            'operations_count': len(metadata.get('operations', [])),
+            'health_score': health.get('score'),
+            'health_status': health.get('status'),
+        })
+
+        print("✓ CourtListener data structure is valid")
+
+    def test_all_operations_supported(self, courtlistener_config, debug_output):
+        """Test that all expected operations are supported"""
+        print("\n=== Testing CourtListener All Operations ===")
+
+        provider = CourtListenerProvider(courtlistener_config)
+
+        expected_operations = [
+            'search_opinions',
+            'get_opinion',
+            'search_dockets',
+            'get_docket',
+            'search_judges',
+            'get_judge',
+            'search_oral_arguments',
+            'get_oral_argument',
+            'search_citations',
+            'get_citation',
+            'search_courts',
+            'get_court',
+        ]
+
+        supported = provider.supported_operations
+
+        for operation in expected_operations:
+            assert operation in supported, f"Operation {operation} not supported"
+
+        debug_output("CourtListener Supported Operations", {
+            'expected_count': len(expected_operations),
+            'actual_count': len(supported),
+            'operations': supported,
+        })
+
+        print(f"✓ All {len(expected_operations)} expected operations are supported")
 
