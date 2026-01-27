@@ -34,6 +34,7 @@ from aiecs.tools.apisource.providers.alphavantage import AlphaVantageProvider
 from aiecs.tools.apisource.providers.restcountries import RESTCountriesProvider
 from aiecs.tools.apisource.providers.exchangerate import ExchangeRateProvider
 from aiecs.tools.apisource.providers.openlibrary import OpenLibraryProvider
+from aiecs.tools.apisource.providers.metmuseum import MetMuseumProvider
 from aiecs.tools.apisource.providers.coingecko import CoinGeckoProvider
 from aiecs.tools.apisource.providers.openweathermap import OpenWeatherMapProvider
 from aiecs.tools.apisource.providers.wikipedia import WikipediaProvider
@@ -75,7 +76,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'guardian', 'worldbank', 'census', 'congress', 'openstates', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange', 'hackernews', 'opencorporates', 'courtlistener', 'gdelt', 'duckduckgo']
+        expected = ['fred', 'newsapi', 'guardian', 'worldbank', 'census', 'congress', 'openstates', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'metmuseum', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange', 'hackernews', 'opencorporates', 'courtlistener', 'gdelt', 'duckduckgo']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -2605,6 +2606,406 @@ class TestOpenLibraryProvider:
         debug_output("Open Library search_books Schema", schema)
 
         print("✓ Operation schema retrieved successfully")
+
+
+class TestMetMuseumProvider:
+    """Test Metropolitan Museum of Art API provider"""
+
+    def test_provider_metadata(self, debug_output):
+        """Test Met Museum provider metadata"""
+        print("\n=== Testing Met Museum Provider Metadata ===")
+
+        provider = MetMuseumProvider({})
+
+        assert provider.name == "metmuseum"
+        assert provider.description is not None
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+        assert metadata['name'] == 'metmuseum'
+        assert 'operations' in metadata
+
+        debug_output("Met Museum Provider Metadata", {
+            'name': provider.name,
+            'description': provider.description,
+            'operations': provider.supported_operations,
+        })
+
+        print("✓ Met Museum provider metadata validated")
+
+    @pytest.mark.network
+    def test_search_objects(self, debug_output, measure_performance):
+        """Test searching for art objects"""
+        print("\n=== Testing Met Museum search_objects ===")
+
+        provider = MetMuseumProvider({})
+
+        measure_performance.start()
+        result = provider.search_objects(q="sunflowers", has_images=True, limit=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'objectIDs' in result['data']
+        assert 'objects' in result['data']
+        assert len(result['data']['objects']) > 0
+
+        # Check first result structure
+        first_object = result['data']['objects'][0]
+        assert isinstance(first_object, dict)
+        assert 'objectID' in first_object
+
+        debug_output("Met Museum Search Results", {
+            'query': 'sunflowers',
+            'total_results': result['data'].get('total', 0),
+            'detailed_objects': len(result['data']['objects']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Met Museum search_objects took {duration:.3f} seconds")
+        print("✓ Retrieved art object search results successfully")
+
+    @pytest.mark.network
+    def test_get_object(self, debug_output, measure_performance):
+        """Test getting detailed object information"""
+        print("\n=== Testing Met Museum get_object ===")
+
+        provider = MetMuseumProvider({})
+
+        # Use a known object ID (The Met's famous "Wheat Field with Cypresses" by Van Gogh)
+        measure_performance.start()
+        result = provider.get_object(object_id=436535)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'objectID' in result['data']
+        assert result['data']['objectID'] == 436535
+
+        debug_output("Met Museum Object Details", {
+            'object_id': 436535,
+            'title': result['data'].get('title', 'N/A'),
+            'artist': result['data'].get('artistDisplayName', 'N/A'),
+            'department': result['data'].get('department', 'N/A'),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Met Museum get_object took {duration:.3f} seconds")
+        print("✓ Retrieved object details successfully")
+
+    @pytest.mark.network
+    def test_get_departments(self, debug_output, measure_performance):
+        """Test getting list of departments"""
+        print("\n=== Testing Met Museum get_departments ===")
+
+        provider = MetMuseumProvider({})
+
+        measure_performance.start()
+        result = provider.get_departments()
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+        assert len(result['data']) > 0
+
+        # Check first department structure
+        first_dept = result['data'][0]
+        assert isinstance(first_dept, dict)
+        assert 'departmentId' in first_dept
+        assert 'displayName' in first_dept
+
+        debug_output("Met Museum Departments", {
+            'departments_count': len(result['data']),
+            'sample_departments': [d.get('displayName') for d in result['data'][:5]],
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Met Museum get_departments took {duration:.3f} seconds")
+        print(f"✓ Retrieved {len(result['data'])} departments successfully")
+
+    @pytest.mark.network
+    def test_search_by_artist(self, debug_output, measure_performance):
+        """Test searching for artworks by artist"""
+        print("\n=== Testing Met Museum search_by_artist ===")
+
+        provider = MetMuseumProvider({})
+
+        measure_performance.start()
+        result = provider.search_by_artist(artist_name="Vincent van Gogh", has_images=True, limit=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'objects' in result['data']
+        assert len(result['data']['objects']) > 0
+
+        debug_output("Met Museum Artist Search", {
+            'artist': 'Vincent van Gogh',
+            'results_count': len(result['data']['objects']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Met Museum search_by_artist took {duration:.3f} seconds")
+        print("✓ Retrieved artworks by artist successfully")
+
+    @pytest.mark.network
+    def test_search_highlight_objects(self, debug_output, measure_performance):
+        """Test searching for highlighted/featured objects"""
+        print("\n=== Testing Met Museum search_highlight_objects ===")
+
+        provider = MetMuseumProvider({})
+
+        measure_performance.start()
+        result = provider.search_highlight_objects(limit=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'objects' in result['data']
+
+        debug_output("Met Museum Highlight Objects", {
+            'results_count': len(result['data']['objects']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Met Museum search_highlight_objects took {duration:.3f} seconds")
+        print("✓ Retrieved highlighted objects successfully")
+
+    @pytest.mark.network
+    def test_search_by_medium(self, debug_output, measure_performance):
+        """Test searching for artworks by medium"""
+        print("\n=== Testing Met Museum search_by_medium ===")
+
+        provider = MetMuseumProvider({})
+
+        measure_performance.start()
+        result = provider.search_by_medium(medium="Paintings", has_images=True, limit=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'objects' in result['data']
+
+        debug_output("Met Museum Medium Search", {
+            'medium': 'Paintings',
+            'results_count': len(result['data']['objects']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Met Museum search_by_medium took {duration:.3f} seconds")
+        print("✓ Retrieved artworks by medium successfully")
+
+    @pytest.mark.network
+    def test_search_by_culture(self, debug_output, measure_performance):
+        """Test searching for artworks by culture"""
+        print("\n=== Testing Met Museum search_by_culture ===")
+
+        provider = MetMuseumProvider({})
+
+        measure_performance.start()
+        result = provider.search_by_culture(culture="Egyptian", has_images=True, limit=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'objects' in result['data']
+
+        debug_output("Met Museum Culture Search", {
+            'culture': 'Egyptian',
+            'results_count': len(result['data']['objects']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Met Museum search_by_culture took {duration:.3f} seconds")
+        print("✓ Retrieved artworks by culture successfully")
+
+    @pytest.mark.network
+    def test_get_objects_by_department(self, debug_output, measure_performance):
+        """Test getting objects by department"""
+        print("\n=== Testing Met Museum get_objects_by_department ===")
+
+        provider = MetMuseumProvider({})
+
+        # Department ID 11 is typically "European Paintings"
+        measure_performance.start()
+        result = provider.get_objects_by_department(department_id=11, has_images=True, limit=5)
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'objects' in result['data']
+
+        debug_output("Met Museum Department Objects", {
+            'department_id': 11,
+            'results_count': len(result['data']['objects']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Met Museum get_objects_by_department took {duration:.3f} seconds")
+        print("✓ Retrieved objects by department successfully")
+
+    @pytest.mark.network
+    def test_search_with_date_range(self, debug_output, measure_performance):
+        """Test searching with date range filter"""
+        print("\n=== Testing Met Museum search with date range ===")
+
+        provider = MetMuseumProvider({})
+
+        measure_performance.start()
+        result = provider.search_objects(
+            q="painting",
+            has_images=True,
+            date_begin=1800,
+            date_end=1900,
+            limit=5
+        )
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert 'objects' in result['data']
+
+        debug_output("Met Museum Date Range Search", {
+            'query': 'painting',
+            'date_range': '1800-1900',
+            'results_count': len(result['data']['objects']),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  Met Museum date range search took {duration:.3f} seconds")
+        print("✓ Retrieved objects with date range filter successfully")
+
+    def test_validate_params(self):
+        """Test parameter validation"""
+        print("\n=== Testing Met Museum Parameter Validation ===")
+
+        provider = MetMuseumProvider({})
+
+        # Valid params for search_objects
+        is_valid, error = provider.validate_params("search_objects", {"q": "sunflowers"})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for search_objects (missing q)
+        is_valid, error = provider.validate_params("search_objects", {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_object
+        is_valid, error = provider.validate_params("get_object", {"object_id": 436535})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for get_object (missing object_id)
+        is_valid, error = provider.validate_params("get_object", {})
+        assert is_valid is False
+        assert error is not None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, debug_output):
+        """Test operation schema retrieval"""
+        print("\n=== Testing Met Museum Operation Schema ===")
+
+        provider = MetMuseumProvider({})
+
+        # Test search_objects schema
+        schema = provider.get_operation_schema("search_objects")
+        assert schema is not None
+        assert 'description' in schema
+        assert 'parameters' in schema
+        assert 'q' in schema['parameters']
+
+        # Test get_object schema
+        schema = provider.get_operation_schema("get_object")
+        assert schema is not None
+        assert 'description' in schema
+        assert 'parameters' in schema
+        assert 'object_id' in schema['parameters']
+
+        # Test get_departments schema
+        schema = provider.get_operation_schema("get_departments")
+        assert schema is not None
+        assert 'description' in schema
+        assert 'parameters' in schema
+
+        debug_output("Met Museum Operation Schema", {
+            'operations': provider.supported_operations,
+            'sample_schema': provider.get_operation_schema("search_objects"),
+        })
+
+        print("✓ Operation schemas retrieved successfully")
+
+    @pytest.mark.network
+    def test_response_structure(self, debug_output):
+        """Test response structure validation"""
+        print("\n=== Testing Met Museum Response Structure ===")
+
+        provider = MetMuseumProvider({})
+
+        result = provider.search_objects(q="impressionism", has_images=True, limit=3)
+
+        # Validate response structure
+        assert 'provider' in result
+        assert 'operation' in result
+        assert 'data' in result
+        assert 'metadata' in result
+
+        assert result['provider'] == 'metmuseum'
+        assert result['operation'] == 'search_objects'
+
+        metadata = result['metadata']
+        assert 'timestamp' in metadata
+        assert 'source' in metadata
+
+        debug_output("Met Museum Response Structure", {
+            'provider': result['provider'],
+            'operation': result['operation'],
+            'has_metadata': 'metadata' in result,
+            'has_data': 'data' in result,
+        })
+
+        print("✓ Response structure is valid")
+
+    @pytest.mark.network
+    def test_comprehensive_object_data(self, debug_output):
+        """Test comprehensive object data for frontend analysis"""
+        print("\n=== Testing Met Museum Comprehensive Object Data ===")
+
+        provider = MetMuseumProvider({})
+
+        result = provider.search_objects(q="monet", has_images=True, limit=3)
+
+        assert result is not None
+        assert 'data' in result
+        assert 'objects' in result['data']
+        assert len(result['data']['objects']) > 0
+
+        # Check that detailed object information is included
+        first_object = result['data']['objects'][0]
+
+        # These fields are important for frontend comprehensive analysis
+        expected_fields = ['objectID', 'title', 'primaryImage']
+        for field in expected_fields:
+            assert field in first_object, f"Expected field '{field}' in object data"
+
+        debug_output("Met Museum Comprehensive Object Data", {
+            'object_count': len(result['data']['objects']),
+            'sample_object_keys': list(first_object.keys())[:10],
+            'has_image': bool(first_object.get('primaryImage')),
+            'has_title': bool(first_object.get('title')),
+        })
+
+        print("✓ Comprehensive object data available for frontend analysis")
 
 
 class TestCoinGeckoProvider:
