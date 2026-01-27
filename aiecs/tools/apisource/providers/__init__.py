@@ -16,6 +16,7 @@ from aiecs.tools.apisource.providers.alphavantage import AlphaVantageProvider
 from aiecs.tools.apisource.providers.restcountries import RESTCountriesProvider
 from aiecs.tools.apisource.providers.exchangerate import ExchangeRateProvider
 from aiecs.tools.apisource.providers.openlibrary import OpenLibraryProvider
+from aiecs.tools.apisource.providers.metmuseum import MetMuseumProvider
 from aiecs.tools.apisource.providers.coingecko import CoinGeckoProvider
 from aiecs.tools.apisource.providers.openweathermap import OpenWeatherMapProvider
 from aiecs.tools.apisource.providers.wikipedia import WikipediaProvider
@@ -127,6 +128,7 @@ register_provider(AlphaVantageProvider)
 register_provider(RESTCountriesProvider)
 register_provider(ExchangeRateProvider)
 register_provider(OpenLibraryProvider)
+register_provider(MetMuseumProvider)
 register_provider(CoinGeckoProvider)
 register_provider(OpenWeatherMapProvider)
 register_provider(WikipediaProvider)
@@ -160,6 +162,7 @@ __all__ = [
     "RESTCountriesProvider",
     "ExchangeRateProvider",
     "OpenLibraryProvider",
+    "MetMuseumProvider",
     "CoinGeckoProvider",
     "OpenWeatherMapProvider",
     "WikipediaProvider",
