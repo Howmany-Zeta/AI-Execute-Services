@@ -278,30 +278,38 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             except Exception as e:
                 raise ProviderNotAvailableError(f"Failed to initialize Vertex AI: {str(e)}")
 
-    def _generate_content_hash(self, content: str) -> str:
-        """Generate a hash for content to use as cache key."""
-        return hashlib.md5(content.encode('utf-8')).hexdigest()
+    def _generate_content_hash(self, content: str, tools: Optional[List[Any]] = None) -> str:
+        """Generate a hash for content and tools to use as cache key."""
+        hash_input = content
+        if tools:
+            # Include tools in the hash so different tool configurations get different cached contents
+            import json
+            tools_str = json.dumps([str(t) for t in tools], sort_keys=True)
+            hash_input = f"{content}|tools:{tools_str}"
+        return hashlib.md5(hash_input.encode('utf-8')).hexdigest()
 
     async def _create_or_get_cached_content(
         self,
         content: str,
         model_name: str,
         ttl_seconds: Optional[int] = None,
+        tools: Optional[List[Any]] = None,
     ) -> Optional[str]:
         """
-        Create or get a CachedContent for the given content.
-        
+        Create or get a CachedContent for the given content and tools.
+
         This method implements Gemini's CachedContent API for prompt caching.
         It preserves the existing cache_control mechanism for developer convenience.
-        
+
         The method supports multiple Vertex AI SDK versions and gracefully falls back
         to regular system_instruction if CachedContent API is unavailable.
-        
+
         Args:
             content: Content to cache (typically system instruction)
             model_name: Model name to use for caching
             ttl_seconds: Time to live in seconds (optional, defaults to 3600)
-            
+            tools: Optional list of Google Tool objects to include in cached content
+
         Returns:
             CachedContent resource name (e.g., "projects/.../cachedContents/...") or None if caching unavailable
         """
@@ -322,18 +330,18 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
         if not content or not content.strip():
             return None
         
-        # Generate cache key
-        cache_key = self._generate_content_hash(content)
-        
+        # Generate cache key (includes tools for unique caching per tool configuration)
+        cache_key = self._generate_content_hash(content, tools)
+
         # Check if we already have this cached
         if cache_key in self._cached_content_cache:
             cached_content_id = self._cached_content_cache[cache_key]
             self.logger.debug(f"Using existing CachedContent: {cached_content_id}")
             return cached_content_id
-        
+
         try:
             self._init_vertex_ai()
-            
+
             # Build the content to cache (system instruction as Content)
             # For CachedContent, we typically cache the system instruction
             cached_content_obj = Content(
@@ -343,20 +351,29 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             
             # Try different API patterns based on SDK version
             cached_content_id = None
-            
+
             # Pattern 1: caching.CachedContent.create() (most common)
             if hasattr(caching, 'CachedContent'):
                 try:
                     # Convert ttl_seconds to timedelta as required by the API
                     ttl_delta = timedelta(seconds=ttl_seconds or 3600)  # Default 1 hour
 
+                    # Build create parameters
+                    create_params = {
+                        "model_name": model_name,
+                        "contents": [cached_content_obj],
+                        "ttl": ttl_delta,
+                    }
+
+                    # Include tools in cached content if provided
+                    # This allows function calling to work with cached content
+                    if tools:
+                        create_params["tools"] = tools
+                        self.logger.debug(f"Including {len(tools)} tools in cached content")
+
                     cached_content = await asyncio.get_event_loop().run_in_executor(
                         None,
-                        lambda: caching.CachedContent.create(
-                            model_name=model_name,  # Correct parameter name
-                            contents=[cached_content_obj],
-                            ttl=ttl_delta,  # Use timedelta, not ttl_seconds
-                        )
+                        lambda: caching.CachedContent.create(**create_params)
                     )
 
                     # Extract the resource name
@@ -598,16 +615,31 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             # Use explicit system_instruction parameter if provided, else use extracted system message
             final_system_instruction = system_instruction or system_msg
 
+            # Prepare tools for Function Calling BEFORE cached content creation
+            # so tools can be included in the cached content
+            tools_for_api = None
+            if tools or functions:
+                # Convert OpenAI format to Google format
+                tools_list = tools or []
+                if functions:
+                    # Convert legacy functions format to tools format
+                    tools_list = [{"type": "function", "function": func} for func in functions]
+
+                google_tools = self._convert_openai_to_google_format(tools_list)
+                if google_tools:
+                    tools_for_api = google_tools
+
             # Check if we should use CachedContent API for prompt caching
             cached_content_id = None
             if final_system_instruction and system_cache_control:
-                # Create or get CachedContent for the system instruction
+                # Create or get CachedContent for the system instruction (and tools if provided)
                 # Extract TTL from cache_control if available (defaults to 3600 seconds)
                 ttl_seconds = getattr(system_cache_control, 'ttl_seconds', None) or 3600
                 cached_content_id = await self._create_or_get_cached_content(
                     content=final_system_instruction,
                     model_name=model_name,
                     ttl_seconds=ttl_seconds,
+                    tools=tools_for_api,
                 )
 
             # Initialize model instance
@@ -670,19 +702,6 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                     ),
                 ]
 
-            # Prepare tools for Function Calling if provided
-            tools_for_api = None
-            if tools or functions:
-                # Convert OpenAI format to Google format
-                tools_list = tools or []
-                if functions:
-                    # Convert legacy functions format to tools format
-                    tools_list = [{"type": "function", "function": func} for func in functions]
-                
-                google_tools = self._convert_openai_to_google_format(tools_list)
-                if google_tools:
-                    tools_for_api = google_tools
-            
             # Build API call parameters
             # Note: When using cached_content, the model instance is already created
             # from the cached content, so we don't pass cached_content as a parameter
@@ -1019,16 +1038,31 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             # Use explicit system_instruction parameter if provided, else use extracted system message
             final_system_instruction = system_instruction or system_msg
 
+            # Prepare tools for Function Calling BEFORE cached content creation
+            # so tools can be included in the cached content
+            tools_for_api = None
+            if tools or functions:
+                # Convert OpenAI format to Google format
+                tools_list = tools or []
+                if functions:
+                    # Convert legacy functions format to tools format
+                    tools_list = [{"type": "function", "function": func} for func in functions]
+
+                google_tools = self._convert_openai_to_google_format(tools_list)
+                if google_tools:
+                    tools_for_api = google_tools
+
             # Check if we should use CachedContent API for prompt caching
             cached_content_id = None
             if final_system_instruction and system_cache_control:
-                # Create or get CachedContent for the system instruction
+                # Create or get CachedContent for the system instruction (and tools if provided)
                 # Extract TTL from cache_control if available (defaults to 3600 seconds)
                 ttl_seconds = getattr(system_cache_control, 'ttl_seconds', None) or 3600
                 cached_content_id = await self._create_or_get_cached_content(
                     content=final_system_instruction,
                     model_name=model_name,
                     ttl_seconds=ttl_seconds,
+                    tools=tools_for_api,
                 )
 
             # Initialize model instance
@@ -1088,26 +1122,12 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                     ),
                 ]
 
-            # Prepare tools for Function Calling if provided
-            tools_for_api = None
-            if tools or functions:
-                # Convert OpenAI format to Google format
-                tools_list = tools or []
-                if functions:
-                    # Convert legacy functions format to tools format
-                    tools_list = [{"type": "function", "function": func} for func in functions]
-                
-                google_tools = self._convert_openai_to_google_format(tools_list)
-                if google_tools:
-                    tools_for_api = google_tools
-            
             # Use mixin method for Function Calling support
             from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
 
             # Note: When using cached_content, the model instance is already created
             # from the cached content, so we don't pass cached_content as a parameter
-            # IMPORTANT: When using cached content, tools/tool_config/system_instruction must be None
-            # because they are already included in the cached content
+            # Tools are already included in the cached content, so we don't pass them again
             async for chunk in self._stream_text_with_function_calling(
                 model_instance=model_instance,
                 contents=contents,
