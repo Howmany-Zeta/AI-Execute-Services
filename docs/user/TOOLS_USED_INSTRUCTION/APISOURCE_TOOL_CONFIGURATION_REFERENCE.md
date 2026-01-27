@@ -484,7 +484,115 @@ tool = APISourceTool()  # No key needed for Open Library
 - Recommended: Max 10 requests per second
 - Be respectful of the free service
 
-### 3.11 CoinGecko API
+### 3.11 Metropolitan Museum of Art (The Met) API
+
+**No API Key Required**:
+```python
+# The Met Museum API is completely free and open
+tool = APISourceTool()  # No key needed for Met Museum
+```
+
+**Configuration (Optional)**:
+```python
+config = {
+    'metmuseum_config': {
+        'timeout': 30,
+        'rate_limit': 10,  # Requests per second
+        'max_burst': 20    # Maximum burst size
+    }
+}
+tool = APISourceTool(config)
+```
+
+**Environment Variables**:
+```bash
+export METMUSEUM_TIMEOUT=30
+export METMUSEUM_RATE_LIMIT=10
+export METMUSEUM_MAX_BURST=20
+```
+
+**Rate Limits**:
+- No official rate limit
+- Recommended: Max 10 requests per second
+- Be respectful of the free service
+
+**Important API Rules**:
+1. **No API Key Required**: Completely free and open access
+2. **Rate Limiting**: Be respectful - implement reasonable delays between requests
+3. **Data Coverage**: Access to 470,000+ artworks from The Met collection
+4. **Images**: Many objects include high-resolution images (check isPublicDomain flag)
+5. **Attribution**: Acknowledge The Metropolitan Museum of Art when using the data
+
+**API Documentation**:
+- API Documentation: https://metmuseum.github.io/
+- GitHub Repository: https://github.com/metmuseum/openaccess
+- Open Access Initiative: https://www.metmuseum.org/about-the-met/policies-and-documents/open-access
+
+**Supported Operations**:
+- `search_objects` - Search for art objects with advanced filtering (query, department, date range, etc.)
+- `get_object` - Get detailed information about a specific art object by ID
+- `get_departments` - Get list of all departments at The Met
+- `get_objects_by_department` - Get all objects in a specific department
+- `search_by_artist` - Search for artworks by artist name
+- `search_by_medium` - Search for artworks by medium (Paintings, Sculpture, etc.)
+- `search_by_culture` - Search for artworks by culture or civilization
+- `search_highlight_objects` - Search for highlighted/featured objects
+
+**Example Usage**:
+```python
+# Search for artworks by Van Gogh
+result = tool.query(
+    provider='metmuseum',
+    operation='search_by_artist',
+    params={'artist_name': 'Vincent van Gogh', 'has_images': True, 'limit': 10}
+)
+
+# Get detailed object information
+result = tool.query(
+    provider='metmuseum',
+    operation='get_object',
+    params={'object_id': 436535}  # Wheat Field with Cypresses
+)
+
+# Search for Egyptian art
+result = tool.query(
+    provider='metmuseum',
+    operation='search_by_culture',
+    params={'culture': 'Egyptian', 'has_images': True, 'limit': 20}
+)
+
+# Get all departments
+result = tool.query(
+    provider='metmuseum',
+    operation='get_departments',
+    params={}
+)
+
+# Search with date range filter
+result = tool.query(
+    provider='metmuseum',
+    operation='search_objects',
+    params={
+        'q': 'impressionism',
+        'has_images': True,
+        'date_begin': 1860,
+        'date_end': 1900,
+        'limit': 15
+    }
+)
+```
+
+**Data Fields Available**:
+- Object metadata: title, artist, date, medium, dimensions
+- Department and classification information
+- Geographic and cultural origin
+- High-resolution images (primaryImage, additionalImages)
+- Exhibition history and provenance
+- Related artworks and references
+- Public domain status (isPublicDomain)
+- Gallery information (isOnView, GalleryNumber)
+
+### 3.12 CoinGecko API
 
 **No API Key Required**:
 ```python
@@ -1583,7 +1691,87 @@ config = {
 }
 ```
 
-### 6.9 CoinGecko Provider
+### 6.9 Metropolitan Museum of Art (The Met) Provider
+
+```python
+config = {
+    'metmuseum_config': {
+        'base_url': 'https://collectionapi.metmuseum.org/public/collection/v1',
+        'timeout': 30,
+        'rate_limit': 10,  # Requests per second
+        'max_burst': 20    # Maximum burst size
+    }
+}
+```
+
+**Features**:
+- Search art objects with comprehensive filtering
+- Get detailed object information including high-resolution images
+- Browse by department, artist, medium, culture
+- Access to 470,000+ artworks from The Met collection
+- Rich metadata including provenance, exhibition history
+- Public domain images available for many works
+
+**Supported Operations**:
+- `search_objects` - Search for art objects with advanced filtering
+- `get_object` - Get detailed information about a specific art object
+- `get_departments` - Get list of all departments
+- `get_objects_by_department` - Get objects in a specific department
+- `search_by_artist` - Search for artworks by artist name
+- `search_by_medium` - Search for artworks by medium
+- `search_by_culture` - Search for artworks by culture
+- `search_highlight_objects` - Search for highlighted/featured objects
+
+**Important Configuration Notes**:
+- **No API Key Required**: Completely free and open access
+- **Rate Limit**: No official limit, recommended 10 req/s
+- **Attribution**: Acknowledge The Metropolitan Museum of Art when using the data
+- **Images**: Many objects include high-resolution images (check isPublicDomain flag)
+- **Data Quality**: Comprehensive metadata for frontend analysis needs
+
+**Example Usage**:
+```python
+# Search for impressionist paintings
+result = tool.query(
+    provider='metmuseum',
+    operation='search_objects',
+    params={
+        'q': 'impressionism',
+        'has_images': True,
+        'date_begin': 1860,
+        'date_end': 1900,
+        'limit': 20
+    }
+)
+
+# Get specific artwork details
+result = tool.query(
+    provider='metmuseum',
+    operation='get_object',
+    params={'object_id': 436535}
+)
+
+# Search by artist
+result = tool.query(
+    provider='metmuseum',
+    operation='search_by_artist',
+    params={'artist_name': 'Vincent van Gogh', 'has_images': True, 'limit': 10}
+)
+
+# Get all departments
+result = tool.query(
+    provider='metmuseum',
+    operation='get_departments',
+    params={}
+)
+```
+
+**API Documentation**:
+- API Documentation: https://metmuseum.github.io/
+- GitHub Repository: https://github.com/metmuseum/openaccess
+- Open Access Initiative: https://www.metmuseum.org/about-the-met/policies-and-documents/open-access
+
+### 6.10 CoinGecko Provider
 
 ```python
 config = {
