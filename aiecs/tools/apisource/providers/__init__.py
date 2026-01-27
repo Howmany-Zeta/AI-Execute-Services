@@ -32,6 +32,7 @@ from aiecs.tools.apisource.providers.hackernews import HackerNewsProvider
 from aiecs.tools.apisource.providers.opencorporates import OpenCorporatesProvider
 from aiecs.tools.apisource.providers.courtlistener import CourtListenerProvider
 from aiecs.tools.apisource.providers.gdelt import GDELTProvider
+from aiecs.tools.apisource.providers.duckduckgo import DuckDuckGoProvider
 
 import logging
 from typing import Dict, List, Optional, Type, Any
@@ -142,6 +143,7 @@ register_provider(HackerNewsProvider)
 register_provider(OpenCorporatesProvider)
 register_provider(CourtListenerProvider)
 register_provider(GDELTProvider)
+register_provider(DuckDuckGoProvider)
 
 
 __all__ = [
@@ -174,6 +176,7 @@ __all__ = [
     "OpenCorporatesProvider",
     "CourtListenerProvider",
     "GDELTProvider",
+    "DuckDuckGoProvider",
     "register_provider",
     "get_provider",
     "list_providers",

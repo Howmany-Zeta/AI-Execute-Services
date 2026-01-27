@@ -2644,6 +2644,144 @@ result = tool.query(
 
 ---
 
+### 6.24 DuckDuckGo Zero-Click Info Provider
+
+```python
+config = {
+    'duckduckgo_config': {
+        'base_url': 'https://api.duckduckgo.com/',
+        'timeout': 30,
+        'rate_limit': 10,    # Requests per second
+        'max_burst': 20,     # Maximum burst size
+        'user_agent': 'AIECS-APISource/2.0 (https://github.com/your-org/aiecs; contact@example.com)'
+    }
+}
+
+tool = APISourceTool(config)
+```
+
+**Environment Variable**:
+```bash
+export DUCKDUCKGO_TIMEOUT=30
+export DUCKDUCKGO_RATE_LIMIT=10
+export DUCKDUCKGO_MAX_BURST=20
+export DUCKDUCKGO_USER_AGENT="AIECS-APISource/2.0 (https://github.com/your-org/aiecs; contact@example.com)"
+```
+
+**Supported Operations**:
+
+*Instant Answer Operations:*
+- `get_instant_answer` - Get instant answer for a query with all available data
+- `get_abstract` - Get article abstract/summary from Wikipedia and other sources
+- `get_definition` - Get definition for a term
+- `get_related_topics` - Get related topics and disambiguation
+- `get_infobox` - Get structured infobox data for an entity
+
+**Important Configuration Notes**:
+- **No API Key Required**: DuckDuckGo Instant Answer API is completely free and open
+- **Rate Limiting**: Be respectful - implement reasonable delays between requests
+- **Caching**: Strongly recommended to cache responses to reduce server load
+- **User-Agent**: Set a descriptive User-Agent header for API etiquette
+- **No Scraping**: This is an Instant Answer API, not a full search results API
+- **Attribution**: Consider attributing results to DuckDuckGo when displaying them
+- **Data Sources**: Primarily Wikipedia, but also includes other curated sources
+
+**Example Usage**:
+```python
+# 1. Get instant answer for a query
+result = tool.query(
+    provider='duckduckgo',
+    operation='get_instant_answer',
+    params={
+        'query': 'Python programming language',
+        'no_html': True
+    }
+)
+
+# 2. Get abstract for an entity
+result = tool.query(
+    provider='duckduckgo',
+    operation='get_abstract',
+    params={'query': 'Albert Einstein'}
+)
+
+# 3. Get definition for a term
+result = tool.query(
+    provider='duckduckgo',
+    operation='get_definition',
+    params={'query': 'algorithm'}
+)
+
+# 4. Get related topics (disambiguation)
+result = tool.query(
+    provider='duckduckgo',
+    operation='get_related_topics',
+    params={'query': 'Python'}
+)
+
+# 5. Get infobox data for an entity
+result = tool.query(
+    provider='duckduckgo',
+    operation='get_infobox',
+    params={'query': 'Steve Jobs'}
+)
+```
+
+**Response Data Structure**:
+
+*Instant Answer Response:*
+```python
+{
+    'heading': 'Python (programming language)',
+    'abstract': 'Python is a high-level, general-purpose programming language...',
+    'abstract_source': 'Wikipedia',
+    'abstract_url': 'https://en.wikipedia.org/wiki/Python_(programming_language)',
+    'answer': '',  # Direct answer if available
+    'answer_type': '',
+    'definition': '',  # Definition if available
+    'image': 'https://duckduckgo.com/i/...',
+    'type': 'A',  # Answer type: A=Article, D=Disambiguation, etc.
+    'has_infobox': True,
+    'has_related_topics': True
+}
+```
+
+*Related Topics Response:*
+```python
+{
+    'heading': 'Python',
+    'related_topics': [
+        {
+            'type': 'topic',
+            'text': 'Python (programming language) A high-level...',
+            'url': 'https://duckduckgo.com/Python_(programming_language)',
+            'icon': '/i/7eec482b.png'
+        },
+        {
+            'type': 'category',
+            'name': 'Snakes',
+            'topics': [...]
+        }
+    ],
+    'total_topics': 15
+}
+```
+
+**Use Cases**:
+- Quick facts and information retrieval
+- Entity disambiguation (e.g., "Python" could be programming language, snake, etc.)
+- Topic exploration and related content discovery
+- Knowledge base enrichment
+- Instant answers for common queries
+- Structured data extraction from infoboxes
+
+**API Documentation**:
+- API Endpoint: https://api.duckduckgo.com/
+- API Format: https://api.duckduckgo.com/?q=query&format=json
+- DuckDuckGo: https://duckduckgo.com/
+
+---
+
 ## 7. Environment Variables
 
 ### 7.1 Variable Reference
@@ -2695,6 +2833,10 @@ export STACKEXCHANGE_MAX_BURST=20
 export GDELT_TIMEOUT=30
 export GDELT_RATE_LIMIT=10
 export GDELT_MAX_BURST=20
+export DUCKDUCKGO_TIMEOUT=30
+export DUCKDUCKGO_RATE_LIMIT=10
+export DUCKDUCKGO_MAX_BURST=20
+export DUCKDUCKGO_USER_AGENT="AIECS-APISource/2.0 (https://github.com/your-org/aiecs; contact@example.com)"
 
 # Performance
 export APISOURCE_CACHE_TTL="300"
