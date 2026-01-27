@@ -370,14 +370,52 @@ class DocumentWriterTool(BaseTool):
         format_options: Optional[Dict[str, Any]] = Field(default=None, description="Additional format options")
 
     class Find_replaceSchema(BaseModel):
-        """Schema for find_replace operation"""
+        """Schema for find_replace operation with precise control"""
 
         target_path: str = Field(description="Target file path")
         find_text: str = Field(description="Text to find")
         replace_text: str = Field(description="Text to replace with")
-        replace_all: bool = Field(default=False, description="Replace all occurrences")
+        replace_all: bool = Field(
+            default=False,
+            description="Replace all occurrences (ignored if occurrence is set)"
+        )
+        occurrence: Optional[int] = Field(
+            default=None,
+            description="Replace only the nth occurrence (1-based index). If None, uses replace_all. Example: occurrence=3 replaces only the 3rd match",
+            ge=1
+        )
+        start_line: Optional[int] = Field(
+            default=None,
+            description="Start line number (1-based, inclusive) to limit search range. Example: start_line=10 begins search at line 10",
+            ge=1
+        )
+        end_line: Optional[int] = Field(
+            default=None,
+            description="End line number (1-based, inclusive) to limit search range. Example: end_line=50 ends search at line 50",
+            ge=1
+        )
         case_sensitive: bool = Field(default=True, description="Case sensitive search")
         regex_mode: bool = Field(default=False, description="Use regex for find/replace")
+
+    class Search_replace_blocksSchema(BaseModel):
+        """Schema for search_replace_blocks operation (Cline/Claude Code format)"""
+
+        target_path: str = Field(description="Target file path")
+        blocks: str = Field(
+            description="""String containing one or more SEARCH/REPLACE blocks in the format:
+
+<<<<<<< SEARCH
+old text to find
+=======
+new text to replace with
+>>>>>>> REPLACE
+
+Multiple blocks can be provided sequentially. Each block will be executed in order."""
+        )
+        case_sensitive: bool = Field(
+            default=True,
+            description="Case sensitive search for all blocks"
+        )
 
     def write_document(
         self,
@@ -1525,32 +1563,64 @@ class DocumentWriterTool(BaseTool):
         find_text: str,
         replace_text: str,
         replace_all: bool = False,
+        occurrence: Optional[int] = None,
+        start_line: Optional[int] = None,
+        end_line: Optional[int] = None,
         case_sensitive: bool = True,
         regex_mode: bool = False,
     ) -> Dict[str, Any]:
         """
-        Find and replace text in a document
+        Find and replace text in a document with precise control
 
         Args:
             target_path: Target file path
             find_text: Text to find
             replace_text: Text to replace with
-            replace_all: Replace all occurrences
+            replace_all: Replace all occurrences (ignored if occurrence is set)
+            occurrence: Replace only the nth occurrence (1-based index). If None, uses replace_all
+            start_line: Start line number (1-based, inclusive) to limit search range
+            end_line: End line number (1-based, inclusive) to limit search range
             case_sensitive: Case sensitive search
             regex_mode: Use regex for find/replace
 
         Returns:
-            Dict containing find/replace results
+            Dict containing find/replace results including:
+                - target_path: Path to the file
+                - find_text: Text that was searched for
+                - replace_text: Replacement text
+                - replacements_made: Number of replacements made
+                - occurrence_replaced: Which occurrence was replaced (if occurrence was specified)
+                - line_range: Line range used (if specified)
+                - write_result: Result of the write operation
+
+        Examples:
+            # Replace first occurrence
+            find_replace(path, "old", "new", replace_all=False)
+
+            # Replace all occurrences
+            find_replace(path, "old", "new", replace_all=True)
+
+            # Replace 3rd occurrence only
+            find_replace(path, "old", "new", occurrence=3)
+
+            # Replace all occurrences in lines 10-50
+            find_replace(path, "old", "new", replace_all=True, start_line=10, end_line=50)
+
+            # Replace 2nd occurrence in lines 10-50
+            find_replace(path, "old", "new", occurrence=2, start_line=10, end_line=50)
         """
         try:
             current_content = self._read_document_content(target_path)
 
             # Perform find and replace
-            new_content, replacements = self._perform_find_replace(
+            new_content, replacements, occurrence_info = self._perform_find_replace(
                 current_content,
                 find_text,
                 replace_text,
                 replace_all,
+                occurrence,
+                start_line,
+                end_line,
                 case_sensitive,
                 regex_mode,
             )
@@ -1559,23 +1629,44 @@ class DocumentWriterTool(BaseTool):
                 # Write back to file
                 file_format_str = self._detect_file_format(target_path)
                 file_format = DocumentFormat(file_format_str) if file_format_str in [f.value for f in DocumentFormat] else DocumentFormat.TXT
+
+                # Build backup comment
+                comment_parts = [f"Find/Replace: '{find_text}' -> '{replace_text}'"]
+                if occurrence:
+                    comment_parts.append(f"occurrence={occurrence}")
+                if start_line or end_line:
+                    comment_parts.append(f"lines {start_line or 1}-{end_line or 'end'}")
+
                 write_result = self.write_document(
                     target_path=target_path,
                     content=new_content,
                     format=file_format,
                     mode=WriteMode.BACKUP_WRITE,
-                    backup_comment=f"Find/Replace: '{find_text}' -> '{replace_text}'",
+                    backup_comment=", ".join(comment_parts),
                 )
 
-                return {
+                result = {
                     "target_path": target_path,
                     "find_text": find_text,
                     "replace_text": replace_text,
                     "replacements_made": replacements,
                     "write_result": write_result,
                 }
+
+                # Add occurrence info if available
+                if occurrence_info:
+                    result.update(occurrence_info)
+
+                # Add line range info if specified
+                if start_line or end_line:
+                    result["line_range"] = {
+                        "start": start_line,
+                        "end": end_line
+                    }
+
+                return result
             else:
-                return {
+                result = {
                     "target_path": target_path,
                     "find_text": find_text,
                     "replace_text": replace_text,
@@ -1583,8 +1674,159 @@ class DocumentWriterTool(BaseTool):
                     "message": "No matches found",
                 }
 
+                if start_line or end_line:
+                    result["line_range"] = {
+                        "start": start_line,
+                        "end": end_line
+                    }
+
+                return result
+
         except Exception as e:
             raise DocumentWriterError(f"Find/replace operation failed: {str(e)}")
+
+    def search_replace_blocks(
+        self,
+        target_path: str,
+        blocks: str,
+        case_sensitive: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Parse and execute SEARCH/REPLACE blocks (Cline/Claude Code format)
+
+        This method accepts a string containing one or more SEARCH/REPLACE blocks
+        and executes them sequentially. This format is commonly used by AI coding
+        assistants like Cline and Claude Code.
+
+        Args:
+            target_path: Target file path
+            blocks: String containing SEARCH/REPLACE blocks
+            case_sensitive: Case sensitive search (default: True)
+
+        Returns:
+            Dict containing results of all replacements
+
+        Format:
+            <<<<<<< SEARCH
+            old text to find
+            =======
+            new text to replace with
+            >>>>>>> REPLACE
+
+        Multiple blocks can be provided in sequence.
+
+        Example:
+            blocks = '''
+            <<<<<<< SEARCH
+            def old_function():
+                pass
+            =======
+            def new_function():
+                return True
+            >>>>>>> REPLACE
+
+            <<<<<<< SEARCH
+            OLD_CONSTANT = 1
+            =======
+            NEW_CONSTANT = 2
+            >>>>>>> REPLACE
+            '''
+
+            result = tool.search_replace_blocks("file.py", blocks)
+        """
+        try:
+            # Parse the blocks
+            parsed_blocks = self._parse_search_replace_blocks(blocks)
+
+            if not parsed_blocks:
+                return {
+                    "target_path": target_path,
+                    "blocks_processed": 0,
+                    "blocks_successful": 0,
+                    "total_replacements": 0,
+                    "message": "No valid SEARCH/REPLACE blocks found",
+                    "errors": ["No blocks could be parsed from input"]
+                }
+
+            # Execute each block sequentially
+            results = []
+            total_replacements = 0
+            errors = []
+
+            for i, block in enumerate(parsed_blocks, 1):
+                search_text = block["search"]
+                replace_text = block["replace"]
+
+                try:
+                    # Execute find_replace for this block
+                    result = self.find_replace(
+                        target_path=target_path,
+                        find_text=search_text,
+                        replace_text=replace_text,
+                        replace_all=False,  # Replace first occurrence only
+                        case_sensitive=case_sensitive,
+                        regex_mode=False,
+                    )
+
+                    results.append({
+                        "block_number": i,
+                        "search": search_text[:100] + "..." if len(search_text) > 100 else search_text,
+                        "replace": replace_text[:100] + "..." if len(replace_text) > 100 else replace_text,
+                        "replacements": result.get("replacements_made", 0),
+                        "success": result.get("replacements_made", 0) > 0
+                    })
+
+                    total_replacements += result.get("replacements_made", 0)
+
+                    if result.get("replacements_made", 0) == 0:
+                        errors.append(f"Block {i}: No match found for search text")
+
+                except Exception as e:
+                    errors.append(f"Block {i}: {str(e)}")
+                    results.append({
+                        "block_number": i,
+                        "error": str(e),
+                        "success": False
+                    })
+
+            return {
+                "target_path": target_path,
+                "blocks_processed": len(parsed_blocks),
+                "blocks_successful": sum(1 for r in results if r.get("success", False)),
+                "total_replacements": total_replacements,
+                "results": results,
+                "errors": errors if errors else None
+            }
+
+        except Exception as e:
+            raise DocumentWriterError(f"SEARCH/REPLACE blocks operation failed: {str(e)}")
+
+    def _parse_search_replace_blocks(self, blocks_text: str) -> List[Dict[str, str]]:
+        """
+        Parse SEARCH/REPLACE blocks from text
+
+        Args:
+            blocks_text: Text containing SEARCH/REPLACE blocks
+
+        Returns:
+            List of dicts with 'search' and 'replace' keys
+        """
+        import re
+
+        # Pattern to match SEARCH/REPLACE blocks
+        # Supports both <<<<<<< and <<<<<< (6 or 7 angle brackets)
+        pattern = r'<{6,7}\s*SEARCH\s*\n(.*?)\n={7}\s*\n(.*?)\n>{6,7}\s*REPLACE'
+
+        matches = re.findall(pattern, blocks_text, re.DOTALL)
+
+        parsed_blocks = []
+        for search_text, replace_text in matches:
+            parsed_blocks.append({
+                "search": search_text,
+                "replace": replace_text
+            })
+
+        return parsed_blocks
 
     # Helper methods for editing operations
     def _read_document_content(self, file_path: str) -> str:
@@ -1965,44 +2207,187 @@ class DocumentWriterTool(BaseTool):
         find_text: str,
         replace_text: str,
         replace_all: bool,
-        case_sensitive: bool,
-        regex_mode: bool,
-    ) -> Tuple[str, int]:
-        """Perform find and replace operation"""
+        occurrence: Optional[int] = None,
+        start_line: Optional[int] = None,
+        end_line: Optional[int] = None,
+        case_sensitive: bool = True,
+        regex_mode: bool = False,
+    ) -> Tuple[str, int, Dict[str, Any]]:
+        """
+        Perform find and replace operation with precise control
+
+        Args:
+            content: Content to search in
+            find_text: Text to find
+            replace_text: Text to replace with
+            replace_all: Replace all occurrences (ignored if occurrence is set)
+            occurrence: Replace only the nth occurrence (1-based)
+            start_line: Start line number (1-based, inclusive)
+            end_line: End line number (1-based, inclusive)
+            case_sensitive: Case sensitive search
+            regex_mode: Use regex for find/replace
+
+        Returns:
+            Tuple of (new_content, replacements_count, occurrence_info)
+        """
         import re
 
         replacements = 0
+        occurrence_info = {}
 
-        if regex_mode:
-            flags = 0 if case_sensitive else re.IGNORECASE
-            if replace_all:
-                new_content, replacements = re.subn(find_text, replace_text, content, flags=flags)
-            else:
-                new_content = re.sub(find_text, replace_text, content, count=1, flags=flags)
-                replacements = 1 if new_content != content else 0
+        # If line range is specified, extract that portion
+        if start_line is not None or end_line is not None:
+            lines = content.split('\n')
+            total_lines = len(lines)
+
+            # Convert to 0-based indices
+            start_idx = (start_line - 1) if start_line else 0
+            end_idx = (end_line) if end_line else total_lines
+
+            # Validate line range
+            if start_idx < 0 or start_idx >= total_lines:
+                return content, 0, {"error": f"start_line {start_line} out of range (1-{total_lines})"}
+            if end_idx > total_lines:
+                end_idx = total_lines
+
+            # Extract the target range
+            before_lines = lines[:start_idx]
+            target_lines = lines[start_idx:end_idx]
+            after_lines = lines[end_idx:]
+
+            target_content = '\n'.join(target_lines)
+
+            # Perform replacement on target content
+            new_target_content, replacements, occ_info = self._perform_find_replace_core(
+                target_content,
+                find_text,
+                replace_text,
+                replace_all,
+                occurrence,
+                case_sensitive,
+                regex_mode,
+            )
+
+            # Reconstruct full content
+            new_content = '\n'.join(before_lines + [new_target_content] + after_lines)
+            occurrence_info = occ_info
+
         else:
-            if case_sensitive:
-                if replace_all:
-                    replacements = content.count(find_text)
-                    new_content = content.replace(find_text, replace_text)
+            # No line range, process entire content
+            new_content, replacements, occurrence_info = self._perform_find_replace_core(
+                content,
+                find_text,
+                replace_text,
+                replace_all,
+                occurrence,
+                case_sensitive,
+                regex_mode,
+            )
+
+        return new_content, replacements, occurrence_info
+
+    def _perform_find_replace_core(
+        self,
+        content: str,
+        find_text: str,
+        replace_text: str,
+        replace_all: bool,
+        occurrence: Optional[int] = None,
+        case_sensitive: bool = True,
+        regex_mode: bool = False,
+    ) -> Tuple[str, int, Dict[str, Any]]:
+        """
+        Core find and replace logic without line range handling
+
+        Returns:
+            Tuple of (new_content, replacements_count, occurrence_info)
+        """
+        import re
+
+        replacements = 0
+        occurrence_info = {}
+
+        # If occurrence is specified, it takes precedence
+        if occurrence is not None:
+            if occurrence < 1:
+                return content, 0, {"error": "occurrence must be >= 1"}
+
+            # Find all matches first
+            if regex_mode:
+                flags = 0 if case_sensitive else re.IGNORECASE
+                matches = list(re.finditer(find_text, content, flags=flags))
+            else:
+                if case_sensitive:
+                    # Find all occurrences manually
+                    matches = []
+                    start = 0
+                    while True:
+                        pos = content.find(find_text, start)
+                        if pos == -1:
+                            break
+                        matches.append((pos, pos + len(find_text)))
+                        start = pos + 1
                 else:
-                    new_content = content.replace(find_text, replace_text, 1)
+                    # Case insensitive - use regex
+                    pattern = re.escape(find_text)
+                    matches = list(re.finditer(pattern, content, flags=re.IGNORECASE))
+
+            # Check if the requested occurrence exists
+            if occurrence > len(matches):
+                return content, 0, {
+                    "error": f"occurrence {occurrence} not found (only {len(matches)} matches)",
+                    "total_matches": len(matches)
+                }
+
+            # Replace only the specified occurrence (1-based to 0-based)
+            target_match = matches[occurrence - 1]
+
+            if regex_mode or not case_sensitive:
+                # Match object
+                start_pos = target_match.start()
+                end_pos = target_match.end()
+            else:
+                # Tuple
+                start_pos, end_pos = target_match
+
+            new_content = content[:start_pos] + replace_text + content[end_pos:]
+            replacements = 1
+            occurrence_info = {
+                "occurrence_replaced": occurrence,
+                "total_matches": len(matches),
+                "position": start_pos
+            }
+
+        else:
+            # Standard replace_all or replace_first logic
+            if regex_mode:
+                flags = 0 if case_sensitive else re.IGNORECASE
+                if replace_all:
+                    new_content, replacements = re.subn(find_text, replace_text, content, flags=flags)
+                else:
+                    new_content = re.sub(find_text, replace_text, content, count=1, flags=flags)
                     replacements = 1 if new_content != content else 0
             else:
-                # Case insensitive replacement
-                import re
-
-                pattern = re.escape(find_text)
-                if replace_all:
-                    new_content, replacements = re.subn(pattern, replace_text, content, flags=re.IGNORECASE)
+                if case_sensitive:
+                    if replace_all:
+                        replacements = content.count(find_text)
+                        new_content = content.replace(find_text, replace_text)
+                    else:
+                        new_content = content.replace(find_text, replace_text, 1)
+                        replacements = 1 if new_content != content else 0
                 else:
-                    new_content = re.sub(
-                        pattern,
-                        replace_text,
-                        content,
-                        count=1,
-                        flags=re.IGNORECASE,
-                    )
-                    replacements = 1 if new_content != content else 0
+                    # Case insensitive replacement
+                    pattern = re.escape(find_text)
+                    if replace_all:
+                        new_content, replacements = re.subn(pattern, replace_text, content, flags=re.IGNORECASE)
+                    else:
+                        new_content = re.sub(
+                            pattern,
+                            replace_text,
+                            content,
+                            count=1,
+                            flags=re.IGNORECASE,
+                        )
+                        replacements = 1 if new_content != content else 0
 
-        return new_content, replacements
+        return new_content, replacements, occurrence_info
