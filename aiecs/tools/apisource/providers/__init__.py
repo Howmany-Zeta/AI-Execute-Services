@@ -34,6 +34,7 @@ from aiecs.tools.apisource.providers.opencorporates import OpenCorporatesProvide
 from aiecs.tools.apisource.providers.courtlistener import CourtListenerProvider
 from aiecs.tools.apisource.providers.gdelt import GDELTProvider
 from aiecs.tools.apisource.providers.duckduckgo import DuckDuckGoProvider
+from aiecs.tools.apisource.providers.gbif import GBIFProvider
 
 import logging
 from typing import Dict, List, Optional, Type, Any
@@ -146,6 +147,7 @@ register_provider(OpenCorporatesProvider)
 register_provider(CourtListenerProvider)
 register_provider(GDELTProvider)
 register_provider(DuckDuckGoProvider)
+register_provider(GBIFProvider)
 
 
 __all__ = [
@@ -180,6 +182,7 @@ __all__ = [
     "CourtListenerProvider",
     "GDELTProvider",
     "DuckDuckGoProvider",
+    "GBIFProvider",
     "register_provider",
     "get_provider",
     "list_providers",
