@@ -537,6 +537,7 @@ export METMUSEUM_MAX_BURST=20
 - `search_by_medium` - Search for artworks by medium (Paintings, Sculpture, etc.)
 - `search_by_culture` - Search for artworks by culture or civilization
 - `search_highlight_objects` - Search for highlighted/featured objects
+- `download_image` - Download high-resolution images from The Met collection
 
 **Example Usage**:
 ```python
@@ -578,6 +579,24 @@ result = tool.query(
         'date_begin': 1860,
         'date_end': 1900,
         'limit': 15
+    }
+)
+
+# Download image by object ID
+result = tool.query(
+    provider='metmuseum',
+    operation='download_image',
+    params={'object_id': 436535}  # Downloads primary image
+)
+print(f"Image saved to: {result['data']['output_path']}")
+
+# Download image by direct URL
+result = tool.query(
+    provider='metmuseum',
+    operation='download_image',
+    params={
+        'image_url': 'https://images.metmuseum.org/CRDImages/ep/original/DP-42549-001.jpg',
+        'output_path': './artwork.jpg'  # Optional custom path
     }
 )
 ```
@@ -1721,6 +1740,7 @@ config = {
 - `search_by_medium` - Search for artworks by medium
 - `search_by_culture` - Search for artworks by culture
 - `search_highlight_objects` - Search for highlighted/featured objects
+- `download_image` - Download high-resolution images from The Met collection
 
 **Important Configuration Notes**:
 - **No API Key Required**: Completely free and open access
@@ -1764,6 +1784,54 @@ result = tool.query(
     operation='get_departments',
     params={}
 )
+
+# Download artwork images
+result = tool.query(
+    provider='metmuseum',
+    operation='download_image',
+    params={'object_id': 436535, 'output_path': './vangogh.jpg'}
+)
+```
+
+**Image Download Feature**:
+The Met Museum provider includes a powerful `download_image` operation that allows you to download high-resolution images:
+
+```python
+# Download by object ID (automatically fetches primary image)
+result = tool.query(
+    provider='metmuseum',
+    operation='download_image',
+    params={'object_id': 436535}
+)
+# Returns: {'success': True, 'output_path': '/tmp/...jpg', 'file_size': 1234567}
+
+# Download by direct URL with custom path
+result = tool.query(
+    provider='metmuseum',
+    operation='download_image',
+    params={
+        'image_url': 'https://images.metmuseum.org/CRDImages/ep/original/DP-42549-001.jpg',
+        'output_path': './my_artwork.jpg'
+    }
+)
+
+# Batch download from search results
+search_result = tool.query(
+    provider='metmuseum',
+    operation='search_objects',
+    params={'q': 'van gogh', 'has_images': True, 'limit': 5}
+)
+
+for obj in search_result['data']['objects']:
+    if obj.get('primaryImage'):
+        download_result = tool.query(
+            provider='metmuseum',
+            operation='download_image',
+            params={
+                'image_url': obj['primaryImage'],
+                'output_path': f"./images/{obj['objectID']}.jpg"
+            }
+        )
 ```
 
 **API Documentation**:

@@ -62,6 +62,7 @@ class MetMuseumProvider(BaseAPIProvider):
             "search_by_medium",
             "search_by_culture",
             "search_highlight_objects",
+            "download_image",
         ]
 
     def validate_params(self, operation: str, params: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
@@ -343,6 +344,33 @@ class MetMuseumProvider(BaseAPIProvider):
 
         return self.execute("search_highlight_objects", params)
 
+    def download_image(
+        self,
+        image_url: str,
+        output_path: Optional[str] = None,
+        object_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Download an image from The Met Museum.
+
+        Args:
+            image_url: Direct URL to the image (from primaryImage or additionalImages)
+            output_path: Optional path to save the image. If not provided, saves to temp directory
+            object_id: Optional object ID to fetch image URL automatically
+
+        Returns:
+            Dictionary containing download status and file path
+        """
+        params: Dict[str, Any] = {}
+        if image_url:
+            params["image_url"] = image_url
+        if output_path:
+            params["output_path"] = output_path
+        if object_id is not None:
+            params["object_id"] = object_id
+
+        return self.execute("download_image", params)
+
     def fetch(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Fetch data from The Met Museum API"""
 
@@ -418,6 +446,10 @@ class MetMuseumProvider(BaseAPIProvider):
                 query_params["departmentId"] = params["department_id"]
                 if "hasImages" in params:
                     query_params["hasImages"] = str(params["hasImages"]).lower()
+
+        elif operation == "download_image":
+            # Handle image download separately
+            return self._download_image_file(params, timeout)
 
         else:
             raise ValueError(f"Unknown operation: {operation}")
@@ -691,7 +723,102 @@ class MetMuseumProvider(BaseAPIProvider):
                     },
                 },
             },
+            "download_image": {
+                "description": "Download an image from The Met Museum",
+                "parameters": {
+                    "image_url": {
+                        "type": "string",
+                        "required": False,
+                        "description": "Direct URL to the image (from primaryImage or additionalImages)",
+                        "examples": ["https://images.metmuseum.org/CRDImages/ep/original/DP-42549-001.jpg"],
+                    },
+                    "object_id": {
+                        "type": "integer",
+                        "required": False,
+                        "description": "Object ID to fetch image URL automatically",
+                        "examples": [436535, 438817],
+                    },
+                    "output_path": {
+                        "type": "string",
+                        "required": False,
+                        "description": "Path to save the image (optional, defaults to temp directory)",
+                        "examples": ["/tmp/artwork.jpg", "./images/vangogh.jpg"],
+                    },
+                },
+            },
         }
 
         return schemas.get(operation)
+
+    def _download_image_file(self, params: Dict[str, Any], timeout: int) -> Dict[str, Any]:
+        """
+        Download an image file from The Met Museum.
+
+        Args:
+            params: Parameters containing image_url or object_id
+            timeout: Request timeout in seconds
+
+        Returns:
+            Dictionary with download status and file path
+        """
+        import os
+        import tempfile
+        from urllib.parse import urlparse
+
+        # Get image URL
+        image_url = params.get("image_url")
+        object_id = params.get("object_id")
+
+        # If object_id provided, fetch the object to get image URL
+        if not image_url and object_id:
+            obj_response = requests.get(
+                f"{self.BASE_URL}/objects/{object_id}",
+                timeout=timeout
+            )
+            obj_response.raise_for_status()
+            obj_data = obj_response.json()
+            image_url = obj_data.get("primaryImage")
+
+            if not image_url:
+                raise ValueError(f"Object {object_id} does not have a primary image")
+
+        if not image_url:
+            raise ValueError("Either image_url or object_id must be provided")
+
+        # Determine output path
+        output_path = params.get("output_path")
+        if not output_path:
+            # Create temp file with appropriate extension
+            parsed_url = urlparse(image_url)
+            ext = os.path.splitext(parsed_url.path)[1] or ".jpg"
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+            output_path = temp_file.name
+            temp_file.close()
+
+        # Download the image
+        response = requests.get(image_url, timeout=timeout, stream=True)
+        response.raise_for_status()
+
+        # Save to file
+        with open(output_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+
+        # Get file size
+        file_size = os.path.getsize(output_path)
+
+        result_data = {
+            "success": True,
+            "image_url": image_url,
+            "output_path": output_path,
+            "file_size": file_size,
+            "object_id": object_id,
+        }
+
+        return self._format_response(
+            operation="download_image",
+            data=result_data,
+            source=f"Met Museum Image - {image_url}",
+        )
 
