@@ -50,6 +50,7 @@ from aiecs.tools.apisource.providers.hackernews import HackerNewsProvider
 from aiecs.tools.apisource.providers.opencorporates import OpenCorporatesProvider
 from aiecs.tools.apisource.providers.courtlistener import CourtListenerProvider
 from aiecs.tools.apisource.providers.gdelt import GDELTProvider
+from aiecs.tools.apisource.providers.duckduckgo import DuckDuckGoProvider
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'guardian', 'worldbank', 'census', 'congress', 'openstates', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange', 'hackernews', 'opencorporates', 'courtlistener', 'gdelt']
+        expected = ['fred', 'newsapi', 'guardian', 'worldbank', 'census', 'congress', 'openstates', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange', 'hackernews', 'opencorporates', 'courtlistener', 'gdelt', 'duckduckgo']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -6936,4 +6937,358 @@ class TestGDELTProvider:
         })
 
         print("✓ GDELT data structure is valid")
+
+
+class TestDuckDuckGoProvider:
+    """Test DuckDuckGo Zero-Click Info API provider"""
+
+    def test_provider_metadata(self, debug_output):
+        """Test DuckDuckGo provider metadata"""
+        print("\n=== Testing DuckDuckGo Provider Metadata ===")
+
+        provider = DuckDuckGoProvider({})
+
+        assert provider.name == "duckduckgo"
+        assert provider.description is not None
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+        assert metadata['name'] == 'duckduckgo'
+        assert 'operations' in metadata
+
+        debug_output("DuckDuckGo Provider Metadata", {
+            'name': provider.name,
+            'description': provider.description,
+            'operations': provider.supported_operations,
+        })
+
+        print("✓ DuckDuckGo provider metadata validated")
+
+    @pytest.mark.network
+    def test_get_instant_answer(self, debug_output, measure_performance):
+        """Test DuckDuckGo get_instant_answer operation"""
+        print("\n=== Testing DuckDuckGo get_instant_answer ===")
+
+        provider = DuckDuckGoProvider({})
+
+        measure_performance.start()
+        result = provider.get_instant_answer(query="Python programming language")
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+        assert result['provider'] == 'duckduckgo'
+        assert result['operation'] == 'get_instant_answer'
+
+        data = result['data']
+        # Check for expected fields
+        assert 'heading' in data
+        assert 'abstract' in data or 'answer' in data or 'definition' in data
+
+        debug_output("DuckDuckGo Instant Answer", {
+            'query': 'Python programming language',
+            'heading': data.get('heading', ''),
+            'has_abstract': bool(data.get('abstract')),
+            'has_answer': bool(data.get('answer')),
+            'has_definition': bool(data.get('definition')),
+            'has_related_topics': data.get('has_related_topics', False),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  DuckDuckGo get_instant_answer took {duration:.3f} seconds")
+        print("✓ Retrieved instant answer successfully")
+
+    @pytest.mark.network
+    def test_get_abstract(self, debug_output, measure_performance):
+        """Test DuckDuckGo get_abstract operation"""
+        print("\n=== Testing DuckDuckGo get_abstract ===")
+
+        provider = DuckDuckGoProvider({})
+
+        measure_performance.start()
+        result = provider.get_abstract(query="Albert Einstein")
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+
+        data = result['data']
+        assert 'heading' in data
+        assert 'abstract' in data
+        assert 'source' in data
+        assert 'url' in data
+
+        debug_output("DuckDuckGo Abstract", {
+            'query': 'Albert Einstein',
+            'heading': data.get('heading', ''),
+            'abstract_length': len(data.get('abstract', '')),
+            'source': data.get('source', ''),
+            'has_url': bool(data.get('url')),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  DuckDuckGo get_abstract took {duration:.3f} seconds")
+        print("✓ Retrieved abstract successfully")
+
+    @pytest.mark.network
+    def test_get_definition(self, debug_output, measure_performance):
+        """Test DuckDuckGo get_definition operation"""
+        print("\n=== Testing DuckDuckGo get_definition ===")
+
+        provider = DuckDuckGoProvider({})
+
+        measure_performance.start()
+        result = provider.get_definition(query="algorithm")
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+
+        data = result['data']
+        assert 'heading' in data
+        assert 'definition' in data
+
+        debug_output("DuckDuckGo Definition", {
+            'query': 'algorithm',
+            'heading': data.get('heading', ''),
+            'has_definition': bool(data.get('definition')),
+            'source': data.get('source', ''),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  DuckDuckGo get_definition took {duration:.3f} seconds")
+        print("✓ Retrieved definition successfully")
+
+    @pytest.mark.network
+    def test_get_related_topics(self, debug_output, measure_performance):
+        """Test DuckDuckGo get_related_topics operation"""
+        print("\n=== Testing DuckDuckGo get_related_topics ===")
+
+        provider = DuckDuckGoProvider({})
+
+        measure_performance.start()
+        result = provider.get_related_topics(query="Python")
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+
+        data = result['data']
+        assert 'heading' in data
+        assert 'related_topics' in data
+        assert isinstance(data['related_topics'], list)
+
+        debug_output("DuckDuckGo Related Topics", {
+            'query': 'Python',
+            'heading': data.get('heading', ''),
+            'total_topics': data.get('total_topics', 0),
+            'sample_topics': data['related_topics'][:3] if data['related_topics'] else [],
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  DuckDuckGo get_related_topics took {duration:.3f} seconds")
+        print(f"✓ Retrieved {data.get('total_topics', 0)} related topics")
+
+    @pytest.mark.network
+    def test_get_infobox(self, debug_output, measure_performance):
+        """Test DuckDuckGo get_infobox operation"""
+        print("\n=== Testing DuckDuckGo get_infobox ===")
+
+        provider = DuckDuckGoProvider({})
+
+        measure_performance.start()
+        result = provider.get_infobox(query="Steve Jobs")
+        duration = measure_performance.stop()
+
+        assert result is not None
+        assert 'data' in result
+        assert isinstance(result['data'], dict)
+
+        data = result['data']
+        assert 'heading' in data
+        assert 'infobox' in data
+
+        debug_output("DuckDuckGo Infobox", {
+            'query': 'Steve Jobs',
+            'heading': data.get('heading', ''),
+            'has_infobox': bool(data.get('infobox')),
+            'has_image': bool(data.get('image')),
+            'duration_seconds': duration,
+        })
+
+        print(f"⏱  DuckDuckGo get_infobox took {duration:.3f} seconds")
+        print("✓ Retrieved infobox successfully")
+
+    def test_validate_params(self):
+        """Test parameter validation"""
+        print("\n=== Testing DuckDuckGo Parameter Validation ===")
+
+        provider = DuckDuckGoProvider({})
+
+        # Valid params for get_instant_answer
+        is_valid, error = provider.validate_params("get_instant_answer", {"query": "test"})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params for get_instant_answer (missing query)
+        is_valid, error = provider.validate_params("get_instant_answer", {})
+        assert is_valid is False
+        assert error is not None
+        assert "query" in error.lower()
+
+        # Invalid params for get_instant_answer (empty query)
+        is_valid, error = provider.validate_params("get_instant_answer", {"query": ""})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for get_abstract
+        is_valid, error = provider.validate_params("get_abstract", {"query": "Einstein"})
+        assert is_valid is True
+        assert error is None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, debug_output):
+        """Test operation schema retrieval"""
+        print("\n=== Testing DuckDuckGo Operation Schema ===")
+
+        provider = DuckDuckGoProvider({})
+
+        schema = provider.get_operation_schema("get_instant_answer")
+        assert schema is not None
+        assert 'description' in schema
+        assert 'parameters' in schema
+        assert 'query' in schema['parameters']
+
+        debug_output("DuckDuckGo get_instant_answer Schema", schema)
+
+        print("✓ Operation schema retrieved successfully")
+
+    def test_all_operations_supported(self, debug_output):
+        """Test that all expected operations are supported"""
+        print("\n=== Testing DuckDuckGo All Operations ===")
+
+        provider = DuckDuckGoProvider({})
+
+        expected_operations = [
+            'get_instant_answer',
+            'get_abstract',
+            'get_definition',
+            'get_related_topics',
+            'get_infobox',
+        ]
+
+        supported = provider.supported_operations
+
+        for operation in expected_operations:
+            assert operation in supported, f"Operation {operation} not supported"
+
+        debug_output("DuckDuckGo Supported Operations", {
+            'expected_count': len(expected_operations),
+            'actual_count': len(supported),
+            'operations': supported,
+        })
+
+        print(f"✓ All {len(expected_operations)} expected operations are supported")
+
+    @pytest.mark.network
+    def test_multiple_queries(self, debug_output):
+        """Test multiple different queries to verify robustness"""
+        print("\n=== Testing DuckDuckGo Multiple Queries ===")
+
+        provider = DuckDuckGoProvider({})
+
+        test_queries = [
+            "machine learning",
+            "Eiffel Tower",
+            "photosynthesis",
+            "cryptocurrency",
+        ]
+
+        results = []
+        for query in test_queries:
+            try:
+                result = provider.get_instant_answer(query=query)
+                results.append({
+                    'query': query,
+                    'success': True,
+                    'has_data': 'data' in result,
+                })
+            except Exception as e:
+                results.append({
+                    'query': query,
+                    'success': False,
+                    'error': str(e),
+                })
+
+        successful_queries = sum(1 for r in results if r['success'])
+
+        debug_output("DuckDuckGo Multiple Queries", {
+            'total_queries': len(test_queries),
+            'successful': successful_queries,
+            'results': results,
+        })
+
+        # At least some queries should succeed
+        assert successful_queries > 0, "No queries succeeded"
+
+        print(f"✓ {successful_queries}/{len(test_queries)} queries succeeded")
+
+    def test_data_structure_validity(self, debug_output):
+        """Test that DuckDuckGo provider returns valid data structures"""
+        print("\n=== Testing DuckDuckGo Data Structure ===")
+
+        provider = DuckDuckGoProvider({})
+
+        metadata = provider.get_metadata()
+        health = metadata.get('health', {})
+
+        assert 'name' in metadata
+        assert 'description' in metadata
+        assert 'operations' in metadata
+        assert 'health' in metadata
+        assert 'score' in health
+        assert 'status' in health
+
+        debug_output("DuckDuckGo Data Structure", {
+            'has_name': 'name' in metadata,
+            'has_description': 'description' in metadata,
+            'operations_count': len(metadata.get('operations', [])),
+            'health_score': health.get('score'),
+            'health_status': health.get('status'),
+        })
+
+        print("✓ DuckDuckGo data structure is valid")
+
+    @pytest.mark.network
+    def test_response_metadata(self, debug_output):
+        """Test that responses include proper metadata"""
+        print("\n=== Testing DuckDuckGo Response Metadata ===")
+
+        provider = DuckDuckGoProvider({})
+
+        result = provider.get_instant_answer(query="quantum computing")
+
+        assert 'provider' in result
+        assert 'operation' in result
+        assert 'data' in result
+        assert 'metadata' in result
+
+        metadata = result['metadata']
+        assert 'timestamp' in metadata
+        assert 'source' in metadata
+        assert 'quality' in metadata
+
+        debug_output("DuckDuckGo Response Metadata", {
+            'provider': result['provider'],
+            'operation': result['operation'],
+            'has_timestamp': 'timestamp' in metadata,
+            'has_quality': 'quality' in metadata,
+        })
+
+        print("✓ Response metadata completeness verified")
 
