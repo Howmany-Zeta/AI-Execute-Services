@@ -52,6 +52,7 @@ from aiecs.tools.apisource.providers.opencorporates import OpenCorporatesProvide
 from aiecs.tools.apisource.providers.courtlistener import CourtListenerProvider
 from aiecs.tools.apisource.providers.gdelt import GDELTProvider
 from aiecs.tools.apisource.providers.duckduckgo import DuckDuckGoProvider
+from aiecs.tools.apisource.providers.gbif import GBIFProvider
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ class TestProviderRegistry:
         })
 
         # Verify expected providers are registered
-        expected = ['fred', 'newsapi', 'guardian', 'worldbank', 'census', 'congress', 'openstates', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'metmuseum', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange', 'hackernews', 'opencorporates', 'courtlistener', 'gdelt', 'duckduckgo']
+        expected = ['fred', 'newsapi', 'guardian', 'worldbank', 'census', 'congress', 'openstates', 'alphavantage', 'restcountries', 'exchangerate', 'openlibrary', 'metmuseum', 'coingecko', 'openweathermap', 'wikipedia', 'github', 'arxiv', 'pubmed', 'crossref', 'semanticscholar', 'core', 'uspto', 'secedgar', 'stackexchange', 'hackernews', 'opencorporates', 'courtlistener', 'gdelt', 'duckduckgo', 'gbif']
         for provider_name in expected:
             assert provider_name in provider_names
 
@@ -7692,4 +7693,276 @@ class TestDuckDuckGoProvider:
         })
 
         print("✓ Response metadata completeness verified")
+
+
+class TestGBIFProvider:
+    """Test GBIF (Global Biodiversity Information Facility) provider"""
+
+    def test_provider_metadata(self, debug_output):
+        """Test GBIF provider metadata"""
+        print("\n=== Testing GBIF Provider Metadata ===")
+
+        provider = GBIFProvider({})
+
+        assert provider.name == 'gbif'
+        assert provider.description
+        assert len(provider.supported_operations) > 0
+
+        metadata = provider.get_metadata()
+
+        debug_output("GBIF Metadata", {
+            'name': metadata['name'],
+            'description': metadata['description'],
+            'operations_count': len(metadata['operations']),
+            'operations': metadata['operations'],
+            'health': metadata['health'],
+        })
+
+        print("✓ GBIF metadata retrieved successfully")
+
+    @pytest.mark.network
+    def test_search_species(self, debug_output, measure_performance):
+        """Test GBIF search_species operation"""
+        print("\n=== Testing GBIF search_species ===")
+
+        provider = GBIFProvider({})
+
+        measure_performance.start()
+        result = provider.execute('search_species', {
+            'q': 'Panthera leo',
+            'limit': 10
+        })
+        duration = measure_performance.stop()
+
+        assert result['provider'] == 'gbif'
+        assert result['operation'] == 'search_species'
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+
+        debug_output("GBIF Species Search", {
+            'query': 'Panthera leo',
+            'results_count': len(result['data']),
+            'sample_result': result['data'][0] if len(result['data']) > 0 else None,
+            'duration_seconds': duration,
+        })
+
+        measure_performance.print_result("GBIF search_species")
+        print(f"✓ Found {len(result['data'])} species")
+
+    @pytest.mark.network
+    def test_match_species_name(self, debug_output):
+        """Test GBIF match_species_name operation"""
+        print("\n=== Testing GBIF match_species_name ===")
+
+        provider = GBIFProvider({})
+
+        result = provider.execute('match_species_name', {
+            'name': 'Panthera leo',
+            'kingdom': 'Animalia'
+        })
+
+        assert result['provider'] == 'gbif'
+        assert result['operation'] == 'match_species_name'
+        assert 'data' in result
+
+        debug_output("GBIF Species Match", {
+            'name': 'Panthera leo',
+            'matched_data': result['data'],
+        })
+
+        print("✓ Species name matched successfully")
+
+    @pytest.mark.network
+    def test_search_occurrences(self, debug_output, measure_performance):
+        """Test GBIF search_occurrences operation"""
+        print("\n=== Testing GBIF search_occurrences ===")
+
+        provider = GBIFProvider({})
+
+        # First get a taxon key for Panthera leo
+        match_result = provider.execute('match_species_name', {
+            'name': 'Panthera leo'
+        })
+
+        taxon_key = match_result['data'].get('usageKey')
+
+        if taxon_key:
+            measure_performance.start()
+            result = provider.execute('search_occurrences', {
+                'taxonKey': taxon_key,
+                'limit': 20
+            })
+            duration = measure_performance.stop()
+
+            assert result['provider'] == 'gbif'
+            assert result['operation'] == 'search_occurrences'
+            assert 'data' in result
+            assert isinstance(result['data'], list)
+
+            debug_output("GBIF Occurrence Search", {
+                'taxon_key': taxon_key,
+                'occurrences_count': len(result['data']),
+                'sample_occurrence': result['data'][0] if len(result['data']) > 0 else None,
+                'duration_seconds': duration,
+            })
+
+            measure_performance.print_result("GBIF search_occurrences")
+            print(f"✓ Found {len(result['data'])} occurrences")
+        else:
+            print("⚠ Could not get taxon key, skipping occurrence search")
+
+    @pytest.mark.network
+    def test_get_occurrence_count(self, debug_output):
+        """Test GBIF get_occurrence_count operation"""
+        print("\n=== Testing GBIF get_occurrence_count ===")
+
+        provider = GBIFProvider({})
+
+        result = provider.execute('get_occurrence_count', {
+            'country': 'US',
+            'year': '2020'
+        })
+
+        assert result['provider'] == 'gbif'
+        assert result['operation'] == 'get_occurrence_count'
+        assert 'data' in result
+        assert 'count' in result['data']
+
+        debug_output("GBIF Occurrence Count", {
+            'country': 'US',
+            'year': '2020',
+            'count': result['data']['count'],
+        })
+
+        print(f"✓ Retrieved occurrence count: {result['data']['count']}")
+
+    @pytest.mark.network
+    def test_search_datasets(self, debug_output):
+        """Test GBIF search_datasets operation"""
+        print("\n=== Testing GBIF search_datasets ===")
+
+        provider = GBIFProvider({})
+
+        result = provider.execute('search_datasets', {
+            'q': 'birds',
+            'limit': 10
+        })
+
+        assert result['provider'] == 'gbif'
+        assert result['operation'] == 'search_datasets'
+        assert 'data' in result
+        assert isinstance(result['data'], list)
+
+        debug_output("GBIF Dataset Search", {
+            'query': 'birds',
+            'datasets_count': len(result['data']),
+            'sample_dataset': result['data'][0] if len(result['data']) > 0 else None,
+        })
+
+        print(f"✓ Found {len(result['data'])} datasets")
+
+    def test_validate_params(self):
+        """Test GBIF parameter validation"""
+        print("\n=== Testing GBIF Parameter Validation ===")
+
+        provider = GBIFProvider({})
+
+        # Valid params
+        is_valid, error = provider.validate_params('search_species', {'q': 'Panthera'})
+        assert is_valid is True
+        assert error is None
+
+        # Invalid params - missing required
+        is_valid, error = provider.validate_params('search_species', {})
+        assert is_valid is False
+        assert error is not None
+
+        # Valid params for match_species_name
+        is_valid, error = provider.validate_params('match_species_name', {'name': 'Panthera leo'})
+        assert is_valid is True
+        assert error is None
+
+        print("✓ Parameter validation working correctly")
+
+    def test_operation_schema(self, debug_output):
+        """Test GBIF operation schema"""
+        print("\n=== Testing GBIF Operation Schema ===")
+
+        provider = GBIFProvider({})
+
+        schema = provider.get_operation_schema('search_species')
+
+        assert schema is not None
+        assert 'description' in schema
+        assert 'parameters' in schema
+
+        debug_output("GBIF search_species Schema", schema)
+
+        print("✓ Operation schema retrieved successfully")
+
+    @pytest.mark.network
+    def test_get_species_vernacular_names(self, debug_output):
+        """Test GBIF get_species_vernacular_names operation"""
+        print("\n=== Testing GBIF get_species_vernacular_names ===")
+
+        provider = GBIFProvider({})
+
+        # Use a well-known species key (Panthera leo - Lion)
+        result = provider.execute('get_species_vernacular_names', {
+            'key': 5219404
+        })
+
+        assert result['provider'] == 'gbif'
+        assert result['operation'] == 'get_species_vernacular_names'
+        assert 'data' in result
+
+        debug_output("GBIF Vernacular Names", {
+            'species_key': 5219404,
+            'names_count': len(result['data']) if isinstance(result['data'], list) else 'N/A',
+            'sample_names': result['data'][:5] if isinstance(result['data'], list) and len(result['data']) > 0 else result['data'],
+        })
+
+        print("✓ Retrieved vernacular names successfully")
+
+    @pytest.mark.network
+    def test_comprehensive_workflow(self, debug_output):
+        """Test a comprehensive workflow: search -> match -> get details -> get occurrences"""
+        print("\n=== Testing GBIF Comprehensive Workflow ===")
+
+        provider = GBIFProvider({})
+
+        # Step 1: Search for species
+        search_result = provider.search_species(q='Panthera tigris', limit=5)
+        assert 'data' in search_result
+        print(f"  Step 1: Found {len(search_result['data'])} species in search")
+
+        # Step 2: Match exact name
+        match_result = provider.match_species_name(name='Panthera tigris', kingdom='Animalia')
+        assert 'data' in match_result
+        taxon_key = match_result['data'].get('usageKey')
+        print(f"  Step 2: Matched species with taxon key: {taxon_key}")
+
+        # Step 3: Get species details
+        if taxon_key:
+            species_result = provider.get_species_by_key(key=taxon_key)
+            assert 'data' in species_result
+            print(f"  Step 3: Retrieved species details")
+
+            # Step 4: Get occurrence count
+            count_result = provider.get_occurrence_count(taxon_key=taxon_key)
+            assert 'data' in count_result
+            print(f"  Step 4: Found {count_result['data'].get('count', 0)} total occurrences")
+
+            # Step 5: Get sample occurrences
+            occ_result = provider.search_occurrences(taxonKey=taxon_key, limit=10)
+            assert 'data' in occ_result
+            print(f"  Step 5: Retrieved {len(occ_result['data'])} sample occurrences")
+
+        debug_output("GBIF Comprehensive Workflow", {
+            'search_count': len(search_result['data']),
+            'matched_taxon_key': taxon_key,
+            'workflow_completed': True,
+        })
+
+        print("✓ Comprehensive workflow completed successfully")
 

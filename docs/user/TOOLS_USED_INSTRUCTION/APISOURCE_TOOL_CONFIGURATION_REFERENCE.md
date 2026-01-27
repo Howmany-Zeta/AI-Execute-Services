@@ -1263,6 +1263,189 @@ result = tool.query(
 - Southern District of New York: `nysd`
 - Northern District of California: `cand`
 
+### 3.23 GBIF (Global Biodiversity Information Facility) API
+
+**No API Key Required**:
+```python
+# GBIF API is completely free and open
+tool = APISourceTool()  # No key needed for GBIF
+```
+
+**Configuration (Optional)**:
+```python
+config = {
+    'gbif_config': {
+        'timeout': 30,
+        'rate_limit': 10,  # Requests per second
+        'max_burst': 20,   # Maximum burst size
+        'user_agent': 'AIECS-APISource/2.0 (https://github.com/your-org/aiecs; contact@example.com)'
+    }
+}
+tool = APISourceTool(config)
+```
+
+**Environment Variables**:
+```bash
+export GBIF_TIMEOUT=30
+export GBIF_RATE_LIMIT=10
+export GBIF_MAX_BURST=20
+export GBIF_USER_AGENT="AIECS-APISource/2.0 (https://github.com/your-org/aiecs; contact@example.com)"
+```
+
+**Rate Limits**:
+- No official rate limit
+- Recommended: Max 10 requests per second
+- Be respectful of the free service
+
+**Important API Rules**:
+1. **No API Key Required**: Completely free and open access
+2. **Rate Limiting**: Be respectful - implement reasonable delays between requests
+3. **Data Coverage**: Access to 2+ billion species occurrence records
+4. **Attribution**: Acknowledge GBIF when using the data
+5. **Fair Use**: Do not abuse the free service with excessive requests
+
+**API Documentation**:
+- API Reference: https://techdocs.gbif.org/en/openapi/
+- Species API: https://techdocs.gbif.org/en/openapi/v1/species
+- Occurrence API: https://techdocs.gbif.org/en/openapi/v1/occurrence
+- Dataset API: https://techdocs.gbif.org/en/openapi/v1/dataset
+- About GBIF: https://www.gbif.org/what-is-gbif
+
+**Features**:
+- Search for species by name or taxonomic criteria
+- Match scientific names to GBIF's taxonomic backbone
+- Search occurrence records with geographic and temporal filters
+- Access dataset metadata and publishing information
+- Get vernacular (common) names in multiple languages
+- Explore taxonomic hierarchies and relationships
+- Access to 2+ billion biodiversity occurrence records
+- Rich metadata including coordinates, dates, basis of record
+
+**Supported Operations**:
+- `search_species` - Search for species by name or other criteria
+- `get_species_by_key` - Get detailed species information by GBIF key
+- `match_species_name` - Match a scientific name to GBIF taxonomy
+- `search_occurrences` - Search for species occurrence records
+- `get_occurrence_by_key` - Get detailed occurrence record by key
+- `search_datasets` - Search for datasets in GBIF
+- `get_dataset_by_key` - Get detailed dataset information by key
+- `get_species_vernacular_names` - Get common/vernacular names for a species
+- `get_species_children` - Get direct children taxa of a species
+- `get_species_parents` - Get parent taxa hierarchy for a species
+- `get_occurrence_count` - Get count of occurrence records matching criteria
+- `search_organizations` - Search for publishing organizations
+
+**Example Usage**:
+```python
+# Search for species
+result = tool.query(
+    provider='gbif',
+    operation='search_species',
+    params={'q': 'Panthera leo', 'rank': 'SPECIES', 'limit': 10}
+)
+
+# Match a scientific name
+result = tool.query(
+    provider='gbif',
+    operation='match_species_name',
+    params={'name': 'Panthera leo', 'kingdom': 'Animalia'}
+)
+
+# Search for occurrence records
+result = tool.query(
+    provider='gbif',
+    operation='search_occurrences',
+    params={
+        'taxonKey': 5219404,  # Panthera leo
+        'country': 'KE',      # Kenya
+        'year': '2020',
+        'limit': 50
+    }
+)
+
+# Get occurrence count
+result = tool.query(
+    provider='gbif',
+    operation='get_occurrence_count',
+    params={'country': 'US', 'year': '2020'}
+)
+
+# Get vernacular names
+result = tool.query(
+    provider='gbif',
+    operation='get_species_vernacular_names',
+    params={'key': 5219404}  # Panthera leo
+)
+
+# Search datasets
+result = tool.query(
+    provider='gbif',
+    operation='search_datasets',
+    params={'q': 'birds', 'type': 'OCCURRENCE', 'limit': 10}
+)
+
+# Get species details
+result = tool.query(
+    provider='gbif',
+    operation='get_species_by_key',
+    params={'key': 5219404}  # Panthera leo
+)
+
+# Get taxonomic children
+result = tool.query(
+    provider='gbif',
+    operation='get_species_children',
+    params={'key': 5219404, 'limit': 20}
+)
+
+# Search organizations
+result = tool.query(
+    provider='gbif',
+    operation='search_organizations',
+    params={'country': 'US', 'limit': 10}
+)
+```
+
+**Data Fields Available**:
+- Species metadata: scientific name, rank, kingdom, phylum, class, order, family, genus
+- Occurrence data: coordinates, date, basis of record, dataset key
+- Dataset information: title, description, publishing organization, license
+- Vernacular names: common names in multiple languages
+- Taxonomic hierarchy: parent and child taxa
+- Geographic information: country, locality, coordinates
+- Temporal information: year, month, day, event date
+- Data quality: coordinate uncertainty, identification confidence
+
+**Common Taxonomic Ranks**:
+- KINGDOM
+- PHYLUM
+- CLASS
+- ORDER
+- FAMILY
+- GENUS
+- SPECIES
+- SUBSPECIES
+
+**Common Basis of Record Values**:
+- HUMAN_OBSERVATION
+- PRESERVED_SPECIMEN
+- FOSSIL_SPECIMEN
+- LIVING_SPECIMEN
+- MACHINE_OBSERVATION
+- MATERIAL_SAMPLE
+- OBSERVATION
+- OCCURRENCE
+
+**Use Cases**:
+- Biodiversity research and analysis
+- Species distribution mapping
+- Conservation planning
+- Environmental impact assessments
+- Citizen science data exploration
+- Taxonomic research and validation
+- Dataset discovery and metadata retrieval
+- Geographic occurrence analysis
+
 ---
 
 ## 4. Performance Settings
