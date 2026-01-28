@@ -803,6 +803,16 @@ class HybridAgent(BaseAIAgent):
             
             # Process tool_calls if received from stream
             if tool_calls_from_stream:
+                # Add assistant message with ALL tool_calls ONCE before processing
+                # This prevents duplicate assistant messages when processing parallel tool calls
+                messages.append(
+                    LLMMessage(
+                        role="assistant",
+                        content=None,
+                        tool_calls=tool_calls_from_stream,
+                    )
+                )
+
                 # Process each tool call
                 for tool_call in tool_calls_from_stream:
                     try:
@@ -869,17 +879,7 @@ class HybridAgent(BaseAIAgent):
                         }
 
                         # Add tool result to messages (for LLM consumption)
-                        observation_content = f"Tool '{tool_name}' returned: {tool_result}"
-                        observation = f"<OBSERVATION>\n{observation_content}\n</OBSERVATION>"
-
-                        # Add assistant message with tool call and tool result
-                        messages.append(
-                            LLMMessage(
-                                role="assistant",
-                                content=None,
-                                tool_calls=tool_calls_from_stream,
-                            )
-                        )
+                        # Only add the tool result message, assistant message already added above
                         messages.append(
                             LLMMessage(
                                 role="tool",
@@ -1149,6 +1149,16 @@ class HybridAgent(BaseAIAgent):
                         }
                     ]
 
+                # Add assistant message with ALL tool_calls ONCE before processing
+                # This prevents duplicate assistant messages when processing parallel tool calls
+                messages.append(
+                    LLMMessage(
+                        role="assistant",
+                        content=None,  # Content is None when using tool calls
+                        tool_calls=tool_calls_to_process if tool_calls else None,
+                    )
+                )
+
                 # Process each tool call
                 for tool_call in tool_calls_to_process:
                     try:
@@ -1198,17 +1208,7 @@ class HybridAgent(BaseAIAgent):
                         )
 
                         # Add tool result to messages (for LLM consumption)
-                        observation_content = f"Tool '{tool_name}' returned: {tool_result}"
-                        observation = f"<OBSERVATION>\n{observation_content}\n</OBSERVATION>"
-
-                        # Add assistant message with tool call and tool result
-                        messages.append(
-                            LLMMessage(
-                                role="assistant",
-                                content=None,  # Content is None when using tool calls
-                                tool_calls=tool_calls_to_process if tool_calls else None,
-                            )
-                        )
+                        # Only add the tool result message, assistant message already added above
                         messages.append(
                             LLMMessage(
                                 role="tool",
