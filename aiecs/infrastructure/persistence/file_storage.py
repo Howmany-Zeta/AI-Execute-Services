@@ -49,7 +49,8 @@ class FileStorageConfig:
 
     def __init__(self, config: Dict[str, Any]):
         # Google Cloud Storage settings
-        self.gcs_bucket_name = config.get("gcs_bucket_name", "multi-task-storage")
+        # gcs_bucket_name must be provided via config or environment variable, no hardcoded default
+        self.gcs_bucket_name = config.get("gcs_bucket_name")
         self.gcs_project_id = config.get("gcs_project_id")
         self.gcs_credentials_path = config.get("gcs_credentials_path")
         self.gcs_location = config.get("gcs_location", "US")
@@ -134,6 +135,15 @@ class FileStorage:
     async def _init_gcs(self):
         """Initialize Google Cloud Storage client."""
         try:
+            # Check if bucket name is provided
+            if not self.config.gcs_bucket_name:
+                logger.warning("GCS bucket name not provided. Cloud storage will be disabled.")
+                logger.warning("Please provide gcs_bucket_name via config or environment variable.")
+                logger.warning("Falling back to local storage only.")
+                self._gcs_client = None
+                self._gcs_bucket = None
+                return
+
             # Set credentials if provided
             if self.config.gcs_credentials_path:
                 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = self.config.gcs_credentials_path

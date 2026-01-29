@@ -138,9 +138,9 @@ class DocumentParserTool(BaseTool):
             default=True,
             description="Whether to enable cloud storage integration",
         )
-        gcs_bucket_name: str = Field(
-            default="aiecs-documents",
-            description="Google Cloud Storage bucket name",
+        gcs_bucket_name: Optional[str] = Field(
+            default=None,
+            description="Google Cloud Storage bucket name (must be provided via config or environment variable)",
         )
         gcs_project_id: Optional[str] = Field(default=None, description="Google Cloud Storage project ID")
 
@@ -207,6 +207,14 @@ class DocumentParserTool(BaseTool):
                 from aiecs.infrastructure.persistence.file_storage import (
                     FileStorage,
                 )
+
+                # Validate that gcs_bucket_name is provided if cloud storage is enabled
+                if not self.config.gcs_bucket_name:
+                    self.logger.warning(
+                        "Cloud storage is enabled but gcs_bucket_name is not provided. "
+                        "Please set DOC_PARSER_GCS_BUCKET_NAME environment variable or provide it in config. "
+                        "Falling back to local storage only."
+                    )
 
                 storage_config = {
                     "gcs_bucket_name": self.config.gcs_bucket_name,
