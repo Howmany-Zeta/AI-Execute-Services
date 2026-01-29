@@ -20,6 +20,7 @@ _AVAILABLE_DOC_TOOLS = [
     "document_creator_tool",
     "document_layout_tool",
     "content_insertion_tool",
+    "ppt_tool",
 ]
 
 # Track which tools have been loaded
@@ -63,6 +64,10 @@ def _lazy_load_doc_tool(tool_name: str):
             from . import content_insertion_tool
 
             globals()["content_insertion_tool"] = content_insertion_tool
+        elif tool_name == "ppt_tool":
+            from . import ppt_tool
+
+            globals()["ppt_tool"] = ppt_tool
 
     except ImportError as e:
         # Remove from loaded set if import failed
