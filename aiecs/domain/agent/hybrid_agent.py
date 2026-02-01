@@ -370,10 +370,11 @@ class HybridAgent(BaseAIAgent):
         """Build system prompt including tool descriptions.
 
         Uses the shared _build_base_system_prompt() from BaseAIAgent for the base
-        prompt, then appends ReAct instructions and tool info.
+        prompt, then conditionally appends ReAct instructions and tool info.
 
-        Note: ReAct instructions and tool info are always appended regardless
-        of whether system_prompt is used, as they're essential for agent operation.
+        Note: ReAct instructions are configurable via `config.react_format_enabled`.
+        When disabled or when using Function Calling mode exclusively, ReAct format
+        instructions are skipped for more flexibility.
 
         If skills are enabled and attached, skill context is also included to provide
         domain knowledge and guide tool selection.
@@ -393,32 +394,41 @@ class HybridAgent(BaseAIAgent):
             if skill_context:
                 parts.append(skill_context)
 
-        # Add ReAct instructions (always required for HybridAgent)
-        parts.append(
-            "Within the given identity framework, you are also a highly intelligent, responsive, and accurate reasoning agent. that can use tools to complete tasks. "
-            "Follow the ReAct (Reasoning + Acting) pattern to achieve best results:\n"
-            "1. THOUGHT: Analyze the task and decide what to do\n"
-            "2. ACTION: Use a tool if needed, or provide final answer\n"
-            "3. OBSERVATION: Review the tool result and continue reasoning\n\n"
-            "RESPONSE FORMAT REQUIREMENTS:\n"
-            "- Wrap your thinking process in <THOUGHT>...</THOUGHT> tags\n"
-            "- Wrap your insight about tool result in <OBSERVATION>...</OBSERVATION> tags\n"
-            "- Tool calls (TOOL:, OPERATION:, PARAMETERS:) MUST be OUTSIDE <THOUGHT> and <OBSERVATION> tags\n"
-            "- Final responses (FINAL RESPONSE:) MUST be OUTSIDE <THOUGHT> and <OBSERVATION> tags\n\n"
-            "THINKING GUIDANCE:\n"
-            "When writing <THOUGHT> sections, consider:\n"
-            "- What is the core thing to do?\n"
-            "- What information do I already have?\n"
-            "- What information do I need to gather?\n"
-            "- Which tools would be most helpful?\n"
-            "- What action should I take?\n\n"
-            "OBSERVATION GUIDANCE:\n"
-            "When writing <OBSERVATION> sections, consider:\n"
-            "- What did I learn from the tool results?\n"
-            "- How does this information inform my next work?\n"
-            "- Do I need additional information?\n"
-            "- Am I ready to provide a final response?"
-        )
+        # Add ReAct instructions (configurable - default True for backward compatibility)
+        # When disabled, developers can use custom formats or rely entirely on Function Calling
+        if self._config.react_format_enabled:
+            parts.append(
+                "Within the given identity framework, you are also a highly intelligent, responsive, and accurate reasoning agent. that can use tools to complete tasks. "
+                "Follow the ReAct (Reasoning + Acting) pattern to achieve best results:\n"
+                "1. THOUGHT: Analyze the task and decide what to do\n"
+                "2. ACTION: Use a tool if needed, or provide final answer\n"
+                "3. OBSERVATION: Review the tool result and continue reasoning\n\n"
+                "RESPONSE FORMAT REQUIREMENTS:\n"
+                "- Wrap your thinking process in <THOUGHT>...</THOUGHT> tags\n"
+                "- Wrap your insight about tool result in <OBSERVATION>...</OBSERVATION> tags\n"
+                "- Tool calls (TOOL:, OPERATION:, PARAMETERS:) MUST be OUTSIDE <THOUGHT> and <OBSERVATION> tags\n"
+                "- Final responses (FINAL RESPONSE:) MUST be OUTSIDE <THOUGHT> and <OBSERVATION> tags\n\n"
+                "THINKING GUIDANCE:\n"
+                "When writing <THOUGHT> sections, consider:\n"
+                "- What is the core thing to do?\n"
+                "- What information do I already have?\n"
+                "- What information do I need to gather?\n"
+                "- Which tools would be most helpful?\n"
+                "- What action should I take?\n\n"
+                "OBSERVATION GUIDANCE:\n"
+                "When writing <OBSERVATION> sections, consider:\n"
+                "- What did I learn from the tool results?\n"
+                "- How does this information inform my next work?\n"
+                "- Do I need additional information?\n"
+                "- Am I ready to provide a final response?"
+            )
+        else:
+            # ReAct format disabled - add minimal instructions for flexibility
+            # Developers can provide their own format instructions via system_prompt
+            parts.append(
+                "You are a highly intelligent, responsive, and accurate reasoning agent that can use tools to complete tasks. "
+                "Use the available tools when needed to accomplish the task."
+            )
 
         # Add available tools (always required for HybridAgent)
         if self._available_tools:
