@@ -216,6 +216,13 @@ class AgentConfiguration(BaseModel):
     max_iterations: int = Field(default=10, ge=1, description="Maximum iterations for ReAct loop")
     timeout_seconds: Optional[int] = Field(None, ge=0, description="Task execution timeout")
     verbose: bool = Field(default=False, description="Verbose logging")
+    react_format_enabled: bool = Field(
+        default=False,
+        description="Enable ReAct format instructions in system prompt. "
+        "When False, HybridAgent will not add ReAct format requirements. "
+        "Useful when using Function Calling mode exclusively or custom formats. "
+        "Set to True to enable ReAct format instructions.",
+    )
 
     # Retry policy
     retry_policy: RetryPolicy = Field(default_factory=RetryPolicy, description="Retry policy configuration")
