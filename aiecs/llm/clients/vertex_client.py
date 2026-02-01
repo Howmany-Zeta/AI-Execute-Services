@@ -38,8 +38,8 @@ except ImportError:
 
 # Try to import CachedContent for prompt caching support
 try:
-    from vertexai.preview import caching
-    if hasattr(caching, 'CachedContent'):
+    from vertexai.preview import caching as caching_module  # type: ignore
+    if hasattr(caching_module, 'CachedContent'):
         CACHED_CONTENT_AVAILABLE = True
         CACHED_CONTENT_IMPORT_PATH = 'vertexai.preview.caching'
     else:
@@ -48,8 +48,8 @@ try:
 except ImportError:
     try:
         # Alternative import path for different SDK versions
-        from vertexai import caching
-        if hasattr(caching, 'CachedContent'):
+        from vertexai import caching as caching_module  # type: ignore
+        if hasattr(caching_module, 'CachedContent'):
             CACHED_CONTENT_AVAILABLE = True
             CACHED_CONTENT_IMPORT_PATH = 'vertexai.caching'
         else:
@@ -82,59 +82,59 @@ logger = logging.getLogger(__name__)
 def _extract_safety_ratings(safety_ratings: Any) -> List[Dict[str, Any]]:
     """
     Extract safety ratings information from Vertex AI response.
-    
+
     Args:
         safety_ratings: Safety ratings object from Vertex AI response
-        
+
     Returns:
         List of dictionaries containing safety rating details
     """
-    ratings_list = []
+    ratings_list: List[Dict[str, Any]] = []
     if not safety_ratings:
         return ratings_list
-    
+
     # Handle both list and single object
     ratings_iter = safety_ratings if isinstance(safety_ratings, list) else [safety_ratings]
-    
+
     for rating in ratings_iter:
-        rating_dict = {}
-        
+        rating_dict: Dict[str, Any] = {}
+
         # Extract category
         if hasattr(rating, "category"):
             rating_dict["category"] = str(rating.category)
-        elif hasattr(rating, "get"):
+        elif isinstance(rating, dict):
             rating_dict["category"] = rating.get("category", "UNKNOWN")
-        
+
         # Extract blocked status
         if hasattr(rating, "blocked"):
             rating_dict["blocked"] = bool(rating.blocked)
-        elif hasattr(rating, "get"):
+        elif isinstance(rating, dict):
             rating_dict["blocked"] = rating.get("blocked", False)
-        
+
         # Extract severity (for HarmBlockMethod.SEVERITY)
         if hasattr(rating, "severity"):
             rating_dict["severity"] = str(rating.severity)
-        elif hasattr(rating, "get"):
+        elif isinstance(rating, dict):
             rating_dict["severity"] = rating.get("severity")
-        
+
         if hasattr(rating, "severity_score"):
             rating_dict["severity_score"] = float(rating.severity_score)
-        elif hasattr(rating, "get"):
+        elif isinstance(rating, dict):
             rating_dict["severity_score"] = rating.get("severity_score")
-        
+
         # Extract probability (for HarmBlockMethod.PROBABILITY)
         if hasattr(rating, "probability"):
             rating_dict["probability"] = str(rating.probability)
-        elif hasattr(rating, "get"):
+        elif isinstance(rating, dict):
             rating_dict["probability"] = rating.get("probability")
-        
+
         if hasattr(rating, "probability_score"):
             rating_dict["probability_score"] = float(rating.probability_score)
-        elif hasattr(rating, "get"):
+        elif isinstance(rating, dict):
             rating_dict["probability_score"] = rating.get("probability_score")
-        
+
         ratings_list.append(rating_dict)
-    
+
     return ratings_list
 
 
@@ -163,21 +163,21 @@ def _build_safety_block_error(
             pf = response.prompt_feedback
             if hasattr(pf, "block_reason"):
                 block_reason = str(pf.block_reason)
-            elif hasattr(pf, "get"):
+            elif isinstance(pf, dict):
                 block_reason = pf.get("block_reason")
-            
+
             if hasattr(pf, "safety_ratings"):
                 safety_ratings = _extract_safety_ratings(pf.safety_ratings)
-            elif hasattr(pf, "get"):
+            elif isinstance(pf, dict):
                 safety_ratings = _extract_safety_ratings(pf.get("safety_ratings", []))
-    
+
     elif block_type == "response":
         # Check candidates for response blocks
         if hasattr(response, "candidates") and response.candidates:
             candidate = response.candidates[0]
             if hasattr(candidate, "safety_ratings"):
                 safety_ratings = _extract_safety_ratings(candidate.safety_ratings)
-            elif hasattr(candidate, "get"):
+            elif isinstance(candidate, dict):
                 safety_ratings = _extract_safety_ratings(candidate.get("safety_ratings", []))
             
             # Check finish_reason
@@ -335,9 +335,9 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
 
         # Check if we already have this cached
         if cache_key in self._cached_content_cache:
-            cached_content_id = self._cached_content_cache[cache_key]
-            self.logger.debug(f"Using existing CachedContent: {cached_content_id}")
-            return cached_content_id
+            existing_cached_id = self._cached_content_cache[cache_key]
+            self.logger.debug(f"Using existing CachedContent: {existing_cached_id}")
+            return existing_cached_id
 
         try:
             self._init_vertex_ai()
@@ -348,12 +348,12 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 role="user",
                 parts=[Part.from_text(content)]
             )
-            
-            # Try different API patterns based on SDK version
-            cached_content_id = None
 
-            # Pattern 1: caching.CachedContent.create() (most common)
-            if hasattr(caching, 'CachedContent'):
+            # Try different API patterns based on SDK version
+            cached_content_id: Optional[str] = None
+
+            # Pattern 1: caching_module.CachedContent.create() (most common)
+            if hasattr(caching_module, 'CachedContent'):
                 try:
                     # Convert ttl_seconds to timedelta as required by the API
                     ttl_delta = timedelta(seconds=ttl_seconds or 3600)  # Default 1 hour
@@ -373,7 +373,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
 
                     cached_content = await asyncio.get_event_loop().run_in_executor(
                         None,
-                        lambda: caching.CachedContent.create(**create_params)
+                        lambda: caching_module.CachedContent.create(**create_params)  # type: ignore
                     )
 
                     # Extract the resource name
@@ -488,7 +488,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                         else:
                             base64_data = image_content.get_base64_data()
                             image_bytes = base64.b64decode(base64_data)
-                            parts.append(Part.from_bytes(
+                            parts.append(Part.from_bytes(  # type: ignore[attr-defined]
                                 data=image_bytes,
                                 mime_type=image_content.mime_type
                             ))
@@ -544,7 +544,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                             # Convert to bytes for inline_data
                             base64_data = image_content.get_base64_data()
                             image_bytes = base64.b64decode(base64_data)
-                            parts.append(Part.from_bytes(
+                            parts.append(Part.from_bytes(  # type: ignore[attr-defined]
                                 data=image_bytes,
                                 mime_type=image_content.mime_type
                             ))
@@ -659,8 +659,9 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 self.logger.debug(f"Initialized Vertex AI model: {model_name}")
 
             # Convert messages to Vertex AI format
+            contents: Union[str, List[Content]]
             if len(user_messages) == 1 and user_messages[0].role == "user":
-                contents = user_messages[0].content
+                contents = user_messages[0].content or ""
             else:
                 # For multi-turn conversations, use proper Content objects
                 contents = self._convert_messages_to_contents(user_messages)
@@ -724,7 +725,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             
             response = await asyncio.get_event_loop().run_in_executor(
                 None,
-                lambda: model_instance.generate_content(**api_params),
+                lambda: model_instance.generate_content(**api_params),  # type: ignore[call-overload]
             )
 
             # Check for prompt-level safety blocks first
@@ -740,9 +741,9 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                             block_type="prompt",
                             default_message="Prompt blocked by safety filters",
                         )
-                elif hasattr(pf, "get") and pf.get("block_reason"):
-                    block_reason = pf.get("block_reason")
-                    if block_reason not in ["BLOCKED_REASON_UNSPECIFIED", "OTHER"]:
+                elif isinstance(pf, dict) and pf.get("block_reason"):
+                    block_reason = str(pf.get("block_reason", ""))
+                    if block_reason not in ["BLOCKED_REASON_UNSPECIFIED", "OTHER", ""]:
                         raise _build_safety_block_error(
                             response,
                             block_type="prompt",
@@ -883,9 +884,9 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                                     block_type="prompt",
                                     default_message="No candidates found - prompt blocked by safety filters",
                                 )
-                        elif hasattr(pf, "get") and pf.get("block_reason"):
-                            block_reason = pf.get("block_reason")
-                            if block_reason not in ["BLOCKED_REASON_UNSPECIFIED", "OTHER"]:
+                        elif isinstance(pf, dict) and pf.get("block_reason"):
+                            block_reason = str(pf.get("block_reason", ""))
+                            if block_reason not in ["BLOCKED_REASON_UNSPECIFIED", "OTHER", ""]:
                                 raise _build_safety_block_error(
                                     response,
                                     block_type="prompt",
@@ -1082,11 +1083,12 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 self.logger.debug(f"Initialized Vertex AI model for streaming: {model_name}")
 
             # Convert messages to Vertex AI format
+            stream_contents: Union[str, List[Content]]
             if len(user_messages) == 1 and user_messages[0].role == "user":
-                contents = user_messages[0].content
+                stream_contents = user_messages[0].content or ""
             else:
                 # For multi-turn conversations, use proper Content objects
-                contents = self._convert_messages_to_contents(user_messages)
+                stream_contents = self._convert_messages_to_contents(user_messages)
 
             # Use modern GenerationConfig object
             generation_config = GenerationConfig(
@@ -1130,7 +1132,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             # Tools are already included in the cached content, so we don't pass them again
             async for chunk in self._stream_text_with_function_calling(
                 model_instance=model_instance,
-                contents=contents,
+                contents=stream_contents,
                 generation_config=generation_config,
                 safety_settings=safety_settings,
                 tools=None if cached_content_id else tools_for_api,
