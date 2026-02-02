@@ -14,7 +14,7 @@ Usage:
 
 import asyncio
 import logging
-from aiecs.tools.task_tools.scraper_tool import ScraperTool
+from aiecs.tools.scraper_tool import ScraperTool
 
 # Configure logging
 logging.basicConfig(
