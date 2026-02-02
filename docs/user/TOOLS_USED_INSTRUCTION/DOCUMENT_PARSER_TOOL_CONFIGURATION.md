@@ -879,7 +879,7 @@ except ImportError as e:
 
 # Test external tool availability
 try:
-    from aiecs.tools.task_tools.scraper_tool import ScraperTool
+    from aiecs.tools.scraper_tool import ScraperTool
     from aiecs.tools.task_tools.office_tool import OfficeTool
     from aiecs.tools.task_tools.image_tool import ImageTool
     print("External tools available")
