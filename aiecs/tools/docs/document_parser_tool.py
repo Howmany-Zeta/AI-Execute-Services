@@ -175,7 +175,7 @@ class DocumentParserTool(BaseTool):
     def _init_dependent_tools(self):
         """Initialize dependent tools for document processing"""
         try:
-            from aiecs.tools.task_tools.scraper_tool import ScraperTool
+            from aiecs.tools.scraper_tool import ScraperTool
 
             self.scraper_tool = ScraperTool()
         except ImportError:
@@ -509,10 +509,22 @@ class DocumentParserTool(BaseTool):
             if not self.scraper_tool:
                 return DocumentType.UNKNOWN, 0.0
 
-            # Get headers only
-            response = asyncio.run(self.scraper_tool.get_httpx(url, method="HEAD", verify_ssl=False))
+            # Use httpx directly for HEAD request to get headers
+            # The new ScraperTool doesn't support HEAD requests directly
+            try:
+                import httpx
 
-            content_type = response.get("headers", {}).get("content-type", "").lower()
+                with httpx.Client(timeout=self.config.timeout) as client:
+                    response = client.head(url, follow_redirects=True)
+                    content_type = response.headers.get("content-type", "").lower()
+            except Exception as e:
+                self.logger.debug(f"HEAD request failed, trying GET: {e}")
+                # Fallback: use scraper tool's fetch method
+                result = asyncio.run(self.scraper_tool.fetch(url))
+                if not result.get("success"):
+                    return DocumentType.UNKNOWN, 0.0
+                # Try to infer from content
+                content_type = ""
 
             mime_map = {
                 "application/pdf": DocumentType.PDF,
@@ -627,28 +639,41 @@ class DocumentParserTool(BaseTool):
             filename = os.path.basename(parsed_url.path) or "document"
             temp_path = os.path.join(self.config.temp_dir, f"download_{hash(url)}_{filename}")
 
-            # Download using scraper tool
-            result = asyncio.run(
-                self.scraper_tool.get_httpx(
-                    url,
-                    content_type="binary",
-                    output_path=temp_path,
-                    verify_ssl=False,
-                )
-            )
+            # Download using httpx directly for binary content
+            # The new ScraperTool's fetch() method is designed for HTML/text content
+            try:
+                import httpx
 
-            if isinstance(result, dict) and "saved_to" in result:
-                return result["saved_to"]
-            else:
-                # Fallback: save content manually
-                with open(temp_path, "wb") as f:
-                    if isinstance(result, dict) and "content" in result:
-                        f.write(result["content"])
-                    else:
-                        f.write(result)
+                with httpx.Client(timeout=self.config.timeout, follow_redirects=True) as client:
+                    response = client.get(url)
+                    response.raise_for_status()
+
+                    # Save binary content to file
+                    with open(temp_path, "wb") as f:
+                        f.write(response.content)
+
+                    return temp_path
+
+            except Exception as e:
+                self.logger.warning(f"httpx download failed, trying scraper tool: {e}")
+
+                # Fallback: try using scraper tool's fetch method
+                result = asyncio.run(self.scraper_tool.fetch(url))
+
+                if not result.get("success"):
+                    error_msg = result.get("error", {}).get("message", "Unknown error")
+                    raise DownloadError(f"ScraperTool fetch failed: {error_msg}")
+
+                # Save content to file
+                content = result.get("content", "")
+                with open(temp_path, "w", encoding="utf-8") as f:
+                    f.write(content)
+
                 return temp_path
 
         except Exception as e:
+            if isinstance(e, DownloadError):
+                raise
             raise DownloadError(f"Failed to download document from {url}: {str(e)}")
 
     async def _download_from_cloud_storage(self, source: str) -> str:
