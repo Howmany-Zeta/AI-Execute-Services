@@ -27,71 +27,66 @@ export SCRAPER_TOOL_USE_STEALTH=true
 ```
 
 ```python
-from aiecs.tools.task_tools.scraper_tool import ScraperTool
+from aiecs.tools.scraper_tool import ScraperTool
 
-scraper = ScraperTool()
-result = await scraper.render(url="https://example.com")
+scraper = ScraperTool(config={'enable_js_render': True})
+result = await scraper.fetch(url="https://example.com")
 # Stealth mode is automatically enabled
 ```
 
 ### Method 2: Enable via Configuration
 
 ```python
-from aiecs.tools.task_tools.scraper_tool import ScraperTool
+from aiecs.tools.scraper_tool import ScraperTool
 
-scraper = ScraperTool(config={'use_stealth': True})
-result = await scraper.render(url="https://example.com")
+scraper = ScraperTool(config={'use_stealth': True, 'enable_js_render': True})
+result = await scraper.fetch(url="https://example.com")
 ```
 
 ### Method 3: Enable Per Request
 
 ```python
-from aiecs.tools.task_tools.scraper_tool import ScraperTool
+from aiecs.tools.scraper_tool import ScraperTool
 
-scraper = ScraperTool()
+# Enable stealth globally
+scraper = ScraperTool(config={'use_stealth': True, 'enable_js_render': True})
 
-# Enable stealth for this request only
-result = await scraper.render(
-    url="https://example.com",
-    use_stealth=True
-)
+# Fetch with stealth enabled
+result = await scraper.fetch(url="https://example.com")
 
-# Disable stealth for this request
-result = await scraper.render(
-    url="https://another-site.com",
-    use_stealth=False
-)
+# Disable stealth for specific requests (configure separately)
+scraper_no_stealth = ScraperTool(config={'use_stealth': False, 'enable_js_render': True})
+result = await scraper_no_stealth.fetch(url="https://another-site.com")
 ```
 
 ## Complete Example
 
 ```python
 import asyncio
-from aiecs.tools.task_tools.scraper_tool import ScraperTool
+from aiecs.tools.scraper_tool import ScraperTool
 
 async def scrape_with_stealth():
     # Initialize scraper with stealth mode
     scraper = ScraperTool(config={
         'use_stealth': True,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'enable_js_render': True,
+        'timeout': 30
     })
-    
+
     try:
-        # Render a page with JavaScript
-        result = await scraper.render(
-            url="https://example.com",
-            wait_time=5,
-            screenshot=True,
-            screenshot_path="./screenshot.png"
-        )
-        
-        print(f"✓ Page rendered successfully")
-        print(f"  Title: {result['title']}")
-        print(f"  URL: {result['url']}")
-        print(f"  Screenshot: {result['screenshot']}")
-        
+        # Fetch a page with JavaScript rendering
+        result = await scraper.fetch(url="https://example.com")
+
+        if result.get('success'):
+            print(f"✓ Page fetched successfully")
+            print(f"  Title: {result.get('title', 'N/A')}")
+            print(f"  URL: {result.get('url')}")
+            print(f"  Content length: {len(result.get('content', ''))}")
+        else:
+            print(f"✗ Fetch failed: {result.get('error')}")
+
         return result
-        
+
     except Exception as e:
         print(f"✗ Error: {e}")
         return None

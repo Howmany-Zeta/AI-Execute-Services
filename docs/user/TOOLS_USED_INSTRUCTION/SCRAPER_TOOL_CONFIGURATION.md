@@ -64,7 +64,7 @@ elif env == 'staging':
 else:
     load_dotenv('.env.development')
 
-from aiecs.tools.task_tools.scraper_tool import ScraperTool
+from aiecs.tools.scraper_tool import ScraperTool
 scraper_tool = ScraperTool()
 ```
 
@@ -378,15 +378,17 @@ export SCRAPER_TOOL_BLOCKED_DOMAINS='[]'
 ### Example 4: Programmatic Configuration
 
 ```python
-from aiecs.tools.task_tools.scraper_tool import ScraperTool
+from aiecs.tools.scraper_tool import ScraperTool
 
 # Initialize with custom configuration
 scraper_tool = ScraperTool(config={
-    'user_agent': 'MyBot/1.0',
-    'max_content_length': 52428800,
-    'output_dir': '/app/scraper_outputs',
-    'allowed_domains': ['example.com', 'api.example.com'],
-    'blocked_domains': ['malicious.com'],
+    'timeout': 30,
+    'max_retries': 3,
+    'impersonate': 'chrome120',
+    'proxy': None,
+    'requests_per_minute': 30,
+    'enable_cache': True,
+    'enable_js_render': False,
     'use_stealth': True  # Enable stealth mode
 })
 ```
@@ -396,17 +398,16 @@ scraper_tool = ScraperTool(config={
 Using stealth mode to bypass bot detection:
 
 ```python
-from aiecs.tools.task_tools.scraper_tool import ScraperTool
+from aiecs.tools.scraper_tool import ScraperTool
 
 # Method 1: Enable stealth mode via configuration
-scraper_with_stealth = ScraperTool(config={'use_stealth': True})
+scraper_with_stealth = ScraperTool(config={
+    'use_stealth': True,
+    'enable_js_render': True  # Required for rendering
+})
 
-# Render a page with stealth mode (uses config setting)
-result = await scraper_with_stealth.render(
-    url="https://example.com",
-    wait_time=5,
-    screenshot=True
-)
+# Fetch a page with stealth mode enabled
+result = await scraper_with_stealth.fetch(url="https://example.com")
 
 # Method 2: Override stealth mode per request
 scraper_default = ScraperTool()
@@ -803,7 +804,7 @@ SCRAPER_TOOL_MAX_CONTENT_LENGTH=52428800
 Always wrap scraping operations in try-except blocks:
 
 ```python
-from aiecs.tools.task_tools.scraper_tool import ScraperTool, HttpError, TimeoutError, RateLimitError
+from aiecs.tools.scraper_tool import ScraperTool, HttpError, RateLimitError
 
 scraper_tool = ScraperTool()
 
