@@ -1434,15 +1434,15 @@ poetry add scrapy
 
 #### Basic HTTP Requests (No Browser Required)
 ```python
-from aiecs.tools.task_tools.scraper_tool import ScraperTool
+from aiecs.tools.scraper_tool import ScraperTool
 
 scraper = ScraperTool()
 
-# Use httpx for HTTP requests
-result = await scraper.get_httpx("https://example.com")
+# Use fetch method for HTTP requests
+result = await scraper.fetch("https://example.com")
 
-# Parse HTML content
-parsed = scraper.parse_html(html_content, "h1")
+# Access content
+html_content = result.get("content", "")
 ```
 
 #### JavaScript Rendering (Requires Playwright)

@@ -1460,15 +1460,15 @@ poetry add scrapy
 
 #### 基础 HTTP 请求 (无需浏览器)
 ```python
-from aiecs.tools.task_tools.scraper_tool import ScraperTool
+from aiecs.tools.scraper_tool import ScraperTool
 
 scraper = ScraperTool()
 
-# 使用 httpx 进行 HTTP 请求
-result = await scraper.get_httpx("https://example.com")
+# 使用 fetch 方法进行 HTTP 请求
+result = await scraper.fetch("https://example.com")
 
-# 解析 HTML 内容
-parsed = scraper.parse_html(html_content, "h1")
+# 访问内容
+html_content = result.get("content", "")
 ```
 
 #### JavaScript 渲染 (需要 Playwright)

@@ -40,7 +40,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Now import and use aiecs tools
-from aiecs.tools.task_tools.scraper_tool import ScraperTool
+from aiecs.tools.scraper_tool import ScraperTool
 
 # The tool will automatically use the environment variables
 scraper_tool = ScraperTool()
