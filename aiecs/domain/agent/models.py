@@ -5,7 +5,7 @@ Defines the core data models for the base AI agent system.
 """
 
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Union
 from enum import Enum
 from pydantic import BaseModel, Field, ConfigDict
 import uuid
@@ -237,14 +237,25 @@ class AgentConfiguration(BaseModel):
     system_prompt: Optional[str] = Field(
         None,
         description="Custom system prompt that takes precedence over assembled prompt from goal/backstory/etc. "
-        "If provided, goal, backstory, domain_knowledge, and reasoning_guidance are ignored for system prompt construction.",
+        "If provided, goal, backstory, domain_knowledge, and reasoning_guidance are ignored for system prompt construction. "
+        "Deprecated: Use system_prompts for multiple system messages with individual cache control.",
+    )
+    
+    system_prompts: Optional[List[Union[str, Dict[str, Any]]]] = Field(
+        None,
+        description="Multiple system prompts for better development experience. "
+        "Each prompt can be a string or a dict with 'content' and optional 'cache_control' (bool). "
+        "Example: [\"Fixed instructions...\", {\"content\": \"Dynamic context\", \"cache_control\": False}]. "
+        "If provided, system_prompt is ignored. "
+        "Allows separate caching control for each system message (e.g., cache long fixed instructions, don't cache dynamic context).",
     )
 
     # Prompt caching configuration
     enable_prompt_caching: bool = Field(
         default=True,
         description="Enable provider-level prompt caching for system prompts and tool schemas. "
-        "Reduces cost and latency for repeated context.",
+        "Reduces cost and latency for repeated context. "
+        "When using system_prompts, individual cache_control settings override this global setting.",
     )
 
     # Context compression
