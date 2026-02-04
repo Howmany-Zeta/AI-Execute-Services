@@ -366,38 +366,26 @@ class HybridAgent(BaseAIAgent):
 
         logger.info(f"HybridAgent {self.agent_id} shut down")
 
-    def _build_system_prompt(self) -> str:
-        """Build system prompt including tool descriptions.
+    def _build_system_prompts(self) -> List[Dict[str, Any]]:
+        """Build multiple system prompts including tool descriptions and ReAct instructions.
 
-        Uses the shared _build_base_system_prompt() from BaseAIAgent for the base
-        prompt, then conditionally appends ReAct instructions and tool info.
+        Overrides base method to add ReAct instructions and tool info as separate system messages.
+        This allows better cache control: base prompts can be cached, while ReAct instructions
+        and tool info are always included.
 
-        Note: ReAct instructions are configurable via `config.react_format_enabled`.
-        When disabled or when using Function Calling mode exclusively, ReAct format
-        instructions are skipped for more flexibility.
-
-        If skills are enabled and attached, skill context is also included to provide
-        domain knowledge and guide tool selection.
+        Returns:
+            List of system prompt dictionaries with content and cache_control
         """
-        parts = []
+        # Get base prompts from parent (supports multiple system prompts)
+        prompts = super()._build_system_prompts()
 
-        # Get base prompt from shared method
-        base_prompt = self._build_base_system_prompt()
-        # Only add if not the default fallback (we want ReAct to be the main instruction)
-        if base_prompt != "You are a helpful AI assistant.":
-            parts.append(base_prompt)
+        # Build ReAct instructions and tool info
+        react_parts = []
 
-        # Add skill context if skills are enabled and attached
-        # This provides domain knowledge and tool recommendations for the ReAct loop
-        if self._config.skills_enabled and self._attached_skills:
-            skill_context = self.get_skill_context(include_all_skills=True)
-            if skill_context:
-                parts.append(skill_context)
-
-        # Add ReAct instructions (configurable - default True for backward compatibility)
+        # Add ReAct instructions (configurable - default False)
         # When disabled, developers can use custom formats or rely entirely on Function Calling
         if self._config.react_format_enabled:
-            parts.append(
+            react_parts.append(
                 "Within the given identity framework, you are also a highly intelligent, responsive, and accurate reasoning agent. that can use tools to complete tasks. "
                 "Follow the ReAct (Reasoning + Acting) pattern to achieve best results:\n"
                 "1. THOUGHT: Analyze the task and decide what to do\n"
@@ -425,15 +413,36 @@ class HybridAgent(BaseAIAgent):
         else:
             # ReAct format disabled - add minimal instructions for flexibility
             # Developers can provide their own format instructions via system_prompt
-            parts.append(
+            react_parts.append(
                 "You are a highly intelligent, responsive, and accurate reasoning agent that can use tools to complete tasks. "
                 "Use the available tools when needed to accomplish the task."
             )
 
         # Add available tools (always required for HybridAgent)
         if self._available_tools:
-            parts.append(f"\nAvailable tools: {', '.join(self._available_tools)}")
+            react_parts.append(f"\nAvailable tools: {', '.join(self._available_tools)}")
 
+        # Add ReAct instructions and tool info as a separate system message (not cached, as it may change)
+        if react_parts:
+            react_content = "\n\n".join(react_parts)
+            prompts.append({
+                "content": react_content,
+                "cache_control": False  # Don't cache ReAct instructions and tool info
+            })
+
+        return prompts
+
+    def _build_system_prompt(self) -> str:
+        """Build system prompt including tool descriptions.
+
+        Legacy method for backward compatibility. Uses _build_system_prompts() and combines
+        all prompts into a single string.
+
+        Note: This method is kept for backward compatibility. New code should use
+        _build_system_prompts() for better cache control.
+        """
+        prompts = self._build_system_prompts()
+        parts = [p["content"] for p in prompts if p.get("content")]
         return "\n\n".join(parts)
 
     async def execute_task(self, task: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
@@ -1355,17 +1364,34 @@ class HybridAgent(BaseAIAgent):
         """Build initial messages for ReAct loop."""
         messages = []
 
-        # Add system prompt with cache control if caching is enabled
-        if self._system_prompt:
-            cache_control = (
-                CacheControl(type="ephemeral")
-                if self._config.enable_prompt_caching
-                else None
-            )
+        # Add system prompts (supports multiple system messages with individual cache control)
+        system_prompts = self._build_system_prompts()
+        for prompt_dict in system_prompts:
+            content = prompt_dict.get("content", "")
+            if not content:
+                continue
+            
+            # Determine cache control: use prompt-specific setting if provided, else use global setting
+            prompt_cache_control = prompt_dict.get("cache_control")
+            if prompt_cache_control is None:
+                # Use global setting
+                cache_control = (
+                    CacheControl(type="ephemeral")
+                    if self._config.enable_prompt_caching
+                    else None
+                )
+            else:
+                # Use prompt-specific setting
+                cache_control = (
+                    CacheControl(type="ephemeral")
+                    if prompt_cache_control
+                    else None
+                )
+            
             messages.append(
                 LLMMessage(
                     role="system",
-                    content=self._system_prompt,
+                    content=content,
                     cache_control=cache_control,
                 )
             )

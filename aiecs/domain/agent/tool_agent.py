@@ -268,28 +268,24 @@ class ToolAgent(BaseAIAgent):
 
         logger.info(f"ToolAgent {self.agent_id} shut down")
 
-    def _build_system_prompt(self) -> str:
-        """Build system prompt for tool selection.
+    def _build_system_prompts(self) -> List[Dict[str, Any]]:
+        """Build multiple system prompts for tool selection.
 
-        If skills are enabled and attached, skill context is included to provide
-        domain knowledge and guide tool selection.
+        Overrides base method to add tool agent instructions and tool info as separate system messages.
+        This allows better cache control: base prompts can be cached, while tool instructions
+        are always included.
+
+        Returns:
+            List of system prompt dictionaries with content and cache_control
         """
-        parts = []
+        # Get base prompts from parent (supports multiple system prompts)
+        prompts = super()._build_system_prompts()
 
-        # Get base prompt from shared method
-        base_prompt = self._build_base_system_prompt()
-        if base_prompt != "You are a helpful AI assistant.":
-            parts.append(base_prompt)
-
-        # Add skill context if skills are enabled and attached
-        # This provides domain knowledge and tool recommendations for tool selection
-        if self._config.skills_enabled and self._attached_skills:
-            skill_context = self.get_skill_context(include_all_skills=True)
-            if skill_context:
-                parts.append(skill_context)
+        # Build tool agent instructions
+        tool_parts = []
 
         # Add tool agent instructions
-        parts.append(
+        tool_parts.append(
             "You are a tool-executing agent. Your role is to select and use the "
             "appropriate tools to complete tasks. Use the provided function calling "
             "interface to invoke tools. Execute tools as needed and provide the results."
@@ -297,8 +293,29 @@ class ToolAgent(BaseAIAgent):
 
         # Add available tools description
         if self._available_tools:
-            parts.append(f"\nAvailable tools: {', '.join(self._available_tools)}")
+            tool_parts.append(f"\nAvailable tools: {', '.join(self._available_tools)}")
 
+        # Add tool instructions as a separate system message (not cached, as tools may change)
+        if tool_parts:
+            tool_content = "\n\n".join(tool_parts)
+            prompts.append({
+                "content": tool_content,
+                "cache_control": False  # Don't cache tool instructions
+            })
+
+        return prompts
+
+    def _build_system_prompt(self) -> str:
+        """Build system prompt for tool selection.
+
+        Legacy method for backward compatibility. Uses _build_system_prompts() and combines
+        all prompts into a single string.
+
+        Note: This method is kept for backward compatibility. New code should use
+        _build_system_prompts() for better cache control.
+        """
+        prompts = self._build_system_prompts()
+        parts = [p["content"] for p in prompts if p.get("content")]
         return "\n\n".join(parts)
 
     def _generate_tool_schemas(self) -> None:
@@ -590,15 +607,32 @@ class ToolAgent(BaseAIAgent):
         """
         messages = []
 
-        # Add system prompt
-        if self._system_prompt:
-            cache_control = (
-                CacheControl(type="ephemeral")
-                if self._config.enable_prompt_caching
-                else None
-            )
+        # Add system prompts (supports multiple system messages with individual cache control)
+        system_prompts = self._build_system_prompts()
+        for prompt_dict in system_prompts:
+            content = prompt_dict.get("content", "")
+            if not content:
+                continue
+            
+            # Determine cache control: use prompt-specific setting if provided, else use global setting
+            prompt_cache_control = prompt_dict.get("cache_control")
+            if prompt_cache_control is None:
+                # Use global setting
+                cache_control = (
+                    CacheControl(type="ephemeral")
+                    if self._config.enable_prompt_caching
+                    else None
+                )
+            else:
+                # Use prompt-specific setting
+                cache_control = (
+                    CacheControl(type="ephemeral")
+                    if prompt_cache_control
+                    else None
+                )
+            
             messages.append(
-                LLMMessage(role="system", content=self._system_prompt, cache_control=cache_control)
+                LLMMessage(role="system", content=content, cache_control=cache_control)
             )
 
         # Collect images from context to attach to user message

@@ -154,6 +154,38 @@ class TestAgentConfiguration:
         assert config.backstory == "Backstory text"
         assert config.domain_knowledge == "Domain knowledge"
 
+    def test_system_prompts_field(self):
+        """Test system_prompts field with list of strings."""
+        config = AgentConfiguration(
+            system_prompts=["First prompt", "Second prompt"]
+        )
+        assert config.system_prompts == ["First prompt", "Second prompt"]
+        assert config.system_prompt is None
+
+    def test_system_prompts_with_dict(self):
+        """Test system_prompts field with dict format."""
+        config = AgentConfiguration(
+            system_prompts=[
+                "Fixed instructions",
+                {"content": "Dynamic context", "cache_control": False}
+            ]
+        )
+        assert len(config.system_prompts) == 2
+        assert config.system_prompts[0] == "Fixed instructions"
+        assert isinstance(config.system_prompts[1], dict)
+        assert config.system_prompts[1]["content"] == "Dynamic context"
+        assert config.system_prompts[1]["cache_control"] is False
+
+    def test_system_prompts_takes_precedence_over_system_prompt(self):
+        """Test that system_prompts takes precedence over system_prompt."""
+        config = AgentConfiguration(
+            system_prompt="Old single prompt",
+            system_prompts=["New prompt 1", "New prompt 2"]
+        )
+        # system_prompts should be used, but system_prompt is still set
+        assert config.system_prompts == ["New prompt 1", "New prompt 2"]
+        assert config.system_prompt == "Old single prompt"  # Still accessible but ignored
+
 
 @pytest.mark.unit
 class TestAgentGoal:

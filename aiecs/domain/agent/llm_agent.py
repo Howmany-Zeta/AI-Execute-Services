@@ -597,17 +597,34 @@ class LLMAgent(BaseAIAgent):
         """
         messages = []
 
-        # Add system prompt with cache control if caching is enabled
-        if self._system_prompt:
-            cache_control = (
-                CacheControl(type="ephemeral")
-                if self._config.enable_prompt_caching
-                else None
-            )
+        # Add system prompts (supports multiple system messages with individual cache control)
+        system_prompts = self._build_system_prompts()
+        for prompt_dict in system_prompts:
+            content = prompt_dict.get("content", "")
+            if not content:
+                continue
+            
+            # Determine cache control: use prompt-specific setting if provided, else use global setting
+            prompt_cache_control = prompt_dict.get("cache_control")
+            if prompt_cache_control is None:
+                # Use global setting
+                cache_control = (
+                    CacheControl(type="ephemeral")
+                    if self._config.enable_prompt_caching
+                    else None
+                )
+            else:
+                # Use prompt-specific setting
+                cache_control = (
+                    CacheControl(type="ephemeral")
+                    if prompt_cache_control
+                    else None
+                )
+            
             messages.append(
                 LLMMessage(
                     role="system",
-                    content=self._system_prompt,
+                    content=content,
                     cache_control=cache_control,
                 )
             )

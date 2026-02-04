@@ -608,6 +608,134 @@ async def test_hybrid_agent_messages_no_cache_control_when_disabled():
     assert system_msg.cache_control is None
 
 
+# ==================== Test Multiple System Prompts ====================
+
+
+@pytest.mark.asyncio
+async def test_llm_agent_multiple_system_prompts():
+    """Test that LLMAgent supports multiple system prompts."""
+    config = AgentConfiguration(
+        system_prompts=[
+            "Fixed instructions and background knowledge...",
+            {"content": "Important Contextual Info:\n- Current Date: 2026-02-04\n- User Location: New York", "cache_control": False}
+        ],
+        enable_prompt_caching=True,
+        llm_model="mock-model",
+    )
+
+    agent = LLMAgent(
+        agent_id="test_multi_prompts_1",
+        name="Multi Prompts Test Agent",
+        llm_client=MockLLMClient(),
+        config=config,
+    )
+    await agent.initialize()
+
+    messages = agent._build_messages("Hello", {})
+
+    # Should have multiple system messages
+    system_messages = [msg for msg in messages if msg.role == "system"]
+    assert len(system_messages) >= 2
+    
+    # First system message should have cache control (global setting)
+    assert system_messages[0].cache_control is not None
+    assert "Fixed instructions" in system_messages[0].content
+    
+    # Second system message should NOT have cache control (explicitly disabled)
+    assert system_messages[1].cache_control is None
+    assert "Current Date: 2026-02-04" in system_messages[1].content
+
+
+@pytest.mark.asyncio
+async def test_hybrid_agent_multiple_system_prompts():
+    """Test that HybridAgent supports multiple system prompts."""
+    config = AgentConfiguration(
+        system_prompts=[
+            "Fixed instructions...",
+            {"content": "Dynamic context", "cache_control": False}
+        ],
+        enable_prompt_caching=True,
+        llm_model="mock-model",
+        react_format_enabled=True,
+    )
+
+    agent = HybridAgent(
+        agent_id="test_multi_prompts_2",
+        name="Multi Prompts Hybrid Agent",
+        llm_client=MockLLMClient(),
+        tools=[],
+        config=config,
+    )
+    await agent.initialize()
+
+    messages = agent._build_initial_messages("Do something", {})
+
+    # Should have multiple system messages (base prompts + ReAct instructions)
+    system_messages = [msg for msg in messages if msg.role == "system"]
+    assert len(system_messages) >= 2
+    
+    # Verify base prompts are present
+    assert any("Fixed instructions" in msg.content for msg in system_messages)
+    assert any("Dynamic context" in msg.content for msg in system_messages)
+
+
+@pytest.mark.asyncio
+async def test_tool_agent_multiple_system_prompts():
+    """Test that ToolAgent supports multiple system prompts."""
+    config = AgentConfiguration(
+        system_prompts=[
+            "Fixed instructions...",
+            {"content": "Dynamic context", "cache_control": False}
+        ],
+        enable_prompt_caching=True,
+        llm_model="mock-model",
+    )
+
+    agent = ToolAgent(
+        agent_id="test_multi_prompts_3",
+        name="Multi Prompts Tool Agent",
+        llm_client=MockLLMClient(),
+        tools=[],
+        config=config,
+    )
+    await agent.initialize()
+
+    messages = agent._build_messages("Do something", {})
+
+    # Should have multiple system messages
+    system_messages = [msg for msg in messages if msg.role == "system"]
+    assert len(system_messages) >= 2
+    
+    # Verify prompts are present
+    assert any("Fixed instructions" in msg.content for msg in system_messages)
+    assert any("Dynamic context" in msg.content for msg in system_messages)
+
+
+@pytest.mark.asyncio
+async def test_backward_compatibility_single_system_prompt():
+    """Test backward compatibility: single system_prompt still works."""
+    config = AgentConfiguration(
+        system_prompt="You are a helpful assistant.",
+        enable_prompt_caching=True,
+        llm_model="mock-model",
+    )
+
+    agent = LLMAgent(
+        agent_id="test_backward_compat",
+        name="Backward Compat Test Agent",
+        llm_client=MockLLMClient(),
+        config=config,
+    )
+    await agent.initialize()
+
+    messages = agent._build_messages("Hello", {})
+
+    # Should have at least one system message
+    system_messages = [msg for msg in messages if msg.role == "system"]
+    assert len(system_messages) >= 1
+    assert "You are a helpful assistant." in system_messages[0].content
+
+
 if __name__ == "__main__":
     # Run tests
     pytest.main([__file__, "-v"])
