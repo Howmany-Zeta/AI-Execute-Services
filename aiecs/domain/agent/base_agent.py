@@ -1145,6 +1145,84 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         # 3. Default fallback
         return "You are a helpful AI assistant."
 
+    def _build_system_prompts(self) -> List[Dict[str, Any]]:
+        """
+        Build multiple system prompts from configuration.
+        
+        Returns a list of system prompt dictionaries, each with:
+        - content: str - The prompt content
+        - cache_control: Optional[bool] - Whether to enable caching (None = use global setting)
+        
+        Precedence order:
+        1. config.system_prompts - Multiple prompts with individual cache control (highest priority)
+        2. config.system_prompt - Single prompt (backward compatibility)
+        3. Assembled from goal/backstory/domain_knowledge/reasoning_guidance
+        4. Default fallback: "You are a helpful AI assistant."
+        
+        Returns:
+            List of dictionaries with 'content' and optional 'cache_control' keys
+            
+        Example:
+            ```python
+            prompts = agent._build_system_prompts()
+            # [
+            #     {"content": "Fixed instructions...", "cache_control": True},
+            #     {"content": "Dynamic context", "cache_control": False}
+            # ]
+            ```
+        """
+        # 1. Multiple system prompts take precedence
+        if self._config.system_prompts:
+            result = []
+            for prompt in self._config.system_prompts:
+                if isinstance(prompt, str):
+                    # Simple string - use global cache setting
+                    result.append({
+                        "content": prompt,
+                        "cache_control": None  # None means use global enable_prompt_caching
+                    })
+                elif isinstance(prompt, dict):
+                    # Dict with content and optional cache_control
+                    content = prompt.get("content", "")
+                    cache_control = prompt.get("cache_control")
+                    if cache_control is None:
+                        cache_control = None  # Use global setting
+                    result.append({
+                        "content": content,
+                        "cache_control": cache_control
+                    })
+            return result
+        
+        # 2. Single system_prompt (backward compatibility)
+        if self._config.system_prompt:
+            return [{
+                "content": self._config.system_prompt,
+                "cache_control": None  # Use global setting
+            }]
+        
+        # 3. Assemble from individual fields
+        parts = []
+        if self._config.goal:
+            parts.append(f"Goal: {self._config.goal}")
+        if self._config.backstory:
+            parts.append(f"Background: {self._config.backstory}")
+        if self._config.domain_knowledge:
+            parts.append(f"Domain Knowledge: {self._config.domain_knowledge}")
+        if self._config.reasoning_guidance:
+            parts.append(f"Reasoning Approach: {self._config.reasoning_guidance}")
+        
+        if parts:
+            return [{
+                "content": "\n\n".join(parts),
+                "cache_control": None  # Use global setting
+            }]
+        
+        # 4. Default fallback
+        return [{
+            "content": "You are a helpful AI assistant.",
+            "cache_control": None  # Use global setting
+        }]
+
     def _initialize_tools_from_config(self) -> Dict[str, "BaseTool"]:
         """
         Initialize and return tool instances from configuration.
