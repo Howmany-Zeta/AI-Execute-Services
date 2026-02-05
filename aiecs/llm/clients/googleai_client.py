@@ -230,14 +230,34 @@ class GoogleAIClient(BaseLLMClient):
             max_tokens = model_config.default_params.max_tokens
 
         try:
-            # Extract system message from messages if not provided
-            system_msg = None
+            # Extract system messages from messages if present
+            # AIECS 1.9.8: Support multiple system messages with selective caching
+            # - Messages with cache_control=True → cached as system_instruction
+            # - Messages without cache_control or cache_control=False → prepended to user messages
+            cached_system_msgs = []
+            non_cached_system_msgs = []
             user_messages = []
+
             for msg in messages:
                 if msg.role == "system":
-                    system_msg = msg.content
+                    if msg.content:
+                        # Check if this message should be cached
+                        if msg.cache_control:
+                            cached_system_msgs.append(msg.content)
+                        else:
+                            non_cached_system_msgs.append(msg.content)
                 else:
                     user_messages.append(msg)
+
+            # Cached system messages become the system_instruction
+            system_msg = "\n\n".join(cached_system_msgs) if cached_system_msgs else None
+
+            # Non-cached system messages are prepended as a user message
+            if non_cached_system_msgs:
+                non_cached_content = "\n\n".join(non_cached_system_msgs)
+                # Create a new LLMMessage and prepend to user_messages
+                user_messages.insert(0, LLMMessage(role="user", content=f"[System Context]\n{non_cached_content}"))
+                self.logger.debug(f"[AIECS 1.9.8] Prepended {len(non_cached_system_msgs)} non-cached system message(s) to user messages")
 
             # Use provided system_instruction or extracted system message
             final_system_instruction = system_instruction or system_msg
@@ -353,14 +373,34 @@ class GoogleAIClient(BaseLLMClient):
             max_tokens = model_config.default_params.max_tokens
 
         try:
-            # Extract system message from messages if not provided
-            system_msg = None
+            # Extract system messages from messages if present
+            # AIECS 1.9.8: Support multiple system messages with selective caching
+            # - Messages with cache_control=True → cached as system_instruction
+            # - Messages without cache_control or cache_control=False → prepended to user messages
+            cached_system_msgs = []
+            non_cached_system_msgs = []
             user_messages = []
+
             for msg in messages:
                 if msg.role == "system":
-                    system_msg = msg.content
+                    if msg.content:
+                        # Check if this message should be cached
+                        if msg.cache_control:
+                            cached_system_msgs.append(msg.content)
+                        else:
+                            non_cached_system_msgs.append(msg.content)
                 else:
                     user_messages.append(msg)
+
+            # Cached system messages become the system_instruction
+            system_msg = "\n\n".join(cached_system_msgs) if cached_system_msgs else None
+
+            # Non-cached system messages are prepended as a user message
+            if non_cached_system_msgs:
+                non_cached_content = "\n\n".join(non_cached_system_msgs)
+                # Create a new LLMMessage and prepend to user_messages
+                user_messages.insert(0, LLMMessage(role="user", content=f"[System Context]\n{non_cached_content}"))
+                self.logger.debug(f"[AIECS 1.9.8] Prepended {len(non_cached_system_msgs)} non-cached system message(s) to user messages")
 
             # Use provided system_instruction or extracted system message
             final_system_instruction = system_instruction or system_msg
