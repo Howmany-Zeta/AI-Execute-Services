@@ -52,14 +52,48 @@ class OpenAICompatibleFunctionCallingMixin:
         """
         Convert LLMMessage list to OpenAI message format (support tool calls and vision).
         
+        AIECS 1.9.8: Handles multiple system messages by:
+        - Merging cached system messages into a single system message
+        - Converting non-cached system messages to user messages
+        
         Args:
             messages: List of LLMMessage objects
             
         Returns:
             List of OpenAI-format message dictionaries
         """
-        openai_messages = []
+        # AIECS 1.9.8: Handle multiple system messages for OpenAI-compatible APIs
+        # OpenAI API only supports one system message, so we need to merge them
+        cached_system_msgs = []
+        non_cached_system_msgs = []
+        other_messages = []
+        
         for msg in messages:
+            if msg.role == "system":
+                if msg.content:
+                    # Check if this message should be cached
+                    if msg.cache_control:
+                        cached_system_msgs.append(msg.content)
+                    else:
+                        non_cached_system_msgs.append(msg.content)
+            else:
+                other_messages.append(msg)
+        
+        # Build final message list
+        openai_messages = []
+        
+        # Add merged cached system messages as a single system message
+        if cached_system_msgs:
+            system_content = "\n\n".join(cached_system_msgs)
+            openai_messages.append({"role": "system", "content": system_content})
+        
+        # Add non-cached system messages as user messages (prepended)
+        if non_cached_system_msgs:
+            non_cached_content = "\n\n".join(non_cached_system_msgs)
+            openai_messages.append({"role": "user", "content": f"[System Context]\n{non_cached_content}"})
+        
+        # Convert other messages
+        for msg in other_messages:
             msg_dict: Dict[str, Any] = {"role": msg.role}
             
             # Handle multimodal content (text + images)
