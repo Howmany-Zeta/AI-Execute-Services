@@ -379,6 +379,14 @@ class HybridAgent(BaseAIAgent):
         # Get base prompts from parent (supports multiple system prompts)
         prompts = super()._build_system_prompts()
 
+        # Check if user provided custom system prompt(s)
+        # If user provided system_prompt or system_prompts, we should respect their choice
+        # and not add extra instructions when react_format_enabled=False
+        has_custom_system_prompt = (
+            self._config.system_prompt is not None or
+            self._config.system_prompts is not None
+        )
+
         # Build ReAct instructions and tool info
         react_parts = []
 
@@ -410,19 +418,28 @@ class HybridAgent(BaseAIAgent):
                 "- Do I need additional information?\n"
                 "- Am I ready to provide a final response?"
             )
-        else:
-            # ReAct format disabled - add minimal instructions for flexibility
-            # Developers can provide their own format instructions via system_prompt
+        elif not has_custom_system_prompt:
+            # ReAct format disabled AND no custom system prompt provided
+            # Add minimal instructions only when user hasn't provided their own prompt
             react_parts.append(
                 "You are a highly intelligent, responsive, and accurate reasoning agent that can use tools to complete tasks. "
                 "Use the available tools when needed to accomplish the task."
             )
 
         # Add available tools (always required for HybridAgent)
+        # Tools info should always be added when tools are available, even if user provided custom prompt
+        # This ensures the model knows what tools are available
         if self._available_tools:
-            react_parts.append(f"\nAvailable tools: {', '.join(self._available_tools)}")
+            if react_parts:
+                # Add tools info to existing react_parts
+                react_parts.append(f"\nAvailable tools: {', '.join(self._available_tools)}")
+            else:
+                # No react_parts (user provided custom prompt and react_format_enabled=False)
+                # Still add tools info as a separate message
+                react_parts.append(f"Available tools: {', '.join(self._available_tools)}")
 
         # Add ReAct instructions and tool info as a separate system message (not cached, as it may change)
+        # Only add if we have react_parts (instructions or tools info)
         if react_parts:
             react_content = "\n\n".join(react_parts)
             prompts.append({
