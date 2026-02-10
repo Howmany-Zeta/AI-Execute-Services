@@ -1,4 +1,4 @@
-# Content Engine Technical Documentation
+# ContextEngine Technical Documentation
 
 ## Overview
 
@@ -26,16 +26,17 @@ When building large-scale AI application systems, context and session management
 - Memory usage needs optimization to avoid resource exhaustion
 - Lack of effective caching and cleanup mechanisms
 
-**Content Engine's Solution**:
+**ContextEngine's Solution**:
 - **Unified Session Management**: Provides complete session lifecycle management
 - **Multi-Backend Storage Support**: Supports automatic switching between Redis and memory storage
+- **Dual-Write Architecture**: Optional ClickHouse for permanent cold storage (Redis hot + ClickHouse cold)
 - **Conversation History Optimization**: Intelligent conversation history management and compression
 - **Checkpoint Integration**: Deep integration with LangGraph checkpoint system
 - **Performance Monitoring**: Provides detailed performance metrics and health checks
 
 ### Component Positioning
 
-`content_engine.py` is a core domain service of the AIECS system, located in the Domain Layer, implementing storage interfaces and checkpoint backend interfaces. As the system's context management core, it provides advanced session management, conversation tracking, and persistent storage capabilities.
+`context_engine.py` is a core domain service of the AIECS system, located in the Domain Layer, implementing storage interfaces and checkpoint backend interfaces. As the system's context management core, it provides advanced session management, conversation tracking, and persistent storage capabilities.
 
 ## Component Type and Positioning
 
@@ -45,23 +46,23 @@ When building large-scale AI application systems, context and session management
 ### Architecture Layers
 ```
 ┌─────────────────────────────────────────┐
-│         Application Layer               │  ← Components using content engine
+│         Application Layer               │  ← Components using ContextEngine
 │  (BaseAIService, ServiceLayer)          │
 └─────────────────┬───────────────────────┘
                   │
 ┌─────────────────▼───────────────────────┐
-│         Domain Layer                    │  ← Content engine layer
+│         Domain Layer                    │  ← ContextEngine layer
 │  (ContextEngine, Business Logic)        │
 └─────────────────┬───────────────────────┘
                   │
 ┌─────────────────▼───────────────────────┐
-│       Infrastructure Layer              │  ← Components content engine depends on
-│  (Redis, Storage Interfaces)            │
+│       Infrastructure Layer              │  ← Components ContextEngine depends on
+│  (RedisClient, ClickHousePermanentBackend) │
 └─────────────────┬───────────────────────┘
                   │
 ┌─────────────────▼───────────────────────┐
 │         External Services               │  ← External storage systems
-│  (Redis, PostgreSQL, FileSystem)        │
+│  (Redis, ClickHouse, FileSystem)        │
 └─────────────────────────────────────────┘
 ```
 
@@ -90,7 +91,9 @@ When building large-scale AI application systems, context and session management
 
 ### 2. Infrastructure Layer
 - **RedisClient** (`infrastructure/persistence/redis_client.py`)
-- **Redis Connection Pool** (via Redis client)
+- **ClickHousePermanentBackend** (`infrastructure/persistence/clickhouse_permanent_backend.py`) - Optional dual-write for permanent storage
+- **ClickHouseClient** (`infrastructure/persistence/clickhouse_client.py`)
+- **ContextEngine Client** (`infrastructure/persistence/context_engine_client.py`) - Global singleton initialization
 
 ### 3. Domain Models
 - **TaskContext** (`domain/task/task_context.py`)
@@ -326,6 +329,59 @@ async def initialize(self) -> bool:
 - **Flexible Configuration**: Supports environment variable configuration for Redis connection
 - **Error Handling**: Comprehensive error handling and logging
 
+### 6. ClickHouse Dual-Write (Permanent Storage)
+
+When `CLICKHOUSE_ENABLED=true`, ContextEngine uses dual-write: Redis (hot cache) + ClickHouse (cold archive). Writes to ClickHouse are fire-and-forget; failures do not block the primary Redis path.
+
+#### Environment Configuration
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `CLICKHOUSE_ENABLED` | Enable dual-write to ClickHouse | `false` |
+| `CLICKHOUSE_HOST` | ClickHouse server host | `localhost` |
+| `CLICKHOUSE_PORT` | ClickHouse HTTP port | `8123` |
+| `CLICKHOUSE_USER` | ClickHouse username | `default` |
+| `CLICKHOUSE_PASSWORD` | ClickHouse password | (empty) |
+| `CLICKHOUSE_DATABASE` | Database name | `default` |
+| `REDIS_HOST` | Redis host | `localhost` |
+| `REDIS_PORT` | Redis port | `6379` |
+| `REDIS_DB` | Redis database index | `1` |
+| `REDIS_PASSWORD` | Redis password | (empty) |
+
+#### ClickHouse Tables (Auto-Created)
+
+- `context_sessions` - Session create/update/end events
+- `context_conversations` - Conversation messages
+- `context_task_contexts` - Task context snapshots
+- `context_checkpoints` - LangGraph checkpoints
+- `context_checkpoint_writes` - Checkpoint intermediate writes
+- `context_conversation_sessions` - Conversation session metadata
+
+### 7. Initialization via Infrastructure
+
+For application-wide singleton ContextEngine, use the infrastructure persistence module:
+
+```python
+from aiecs.infrastructure.persistence import (
+    initialize_redis_client,
+    initialize_context_engine,
+    close_context_engine,
+    get_context_engine,
+)
+
+# During application startup (e.g., FastAPI lifespan)
+await initialize_redis_client()
+await initialize_context_engine()
+
+# In any component
+engine = get_context_engine()
+if engine:
+    await engine.add_conversation_message(session_id, "assistant", content)
+
+# During shutdown
+await close_context_engine()
+```
+
 ## Data Model Details
 
 ### 1. SessionMetrics - Session Metrics Model
@@ -476,9 +532,9 @@ async def _store_conversation_message(self, session_id: str, message: Conversati
 ### 1. Basic Session Management
 
 ```python
-from aiecs.domain.context.content_engine import ContextEngine
+from aiecs.domain.context import ContextEngine
 
-# Initialize content engine
+# Initialize ContextEngine (creates own RedisClient per instance)
 engine = ContextEngine(use_existing_redis=True)
 await engine.initialize()
 
@@ -536,11 +592,7 @@ from aiecs.domain.task.task_context import TaskContext
 
 # Create task context
 context = TaskContext(
-    mode="execute",
-    service="data_analysis",
-    user_id="user_123",
-    metadata={"task_type": "analysis"},
-    data={"dataset": "sales_data.csv"}
+    {"user_id": "user_123", "chat_id": "session_001", "metadata": {"task_type": "analysis"}}
 )
 
 # Store context
@@ -585,11 +637,14 @@ if checkpoint:
 ### 5. Advanced Conversation Session Management
 
 ```python
-# Create conversation session
-conversation_session = await engine.create_conversation_session(
+from aiecs.domain.context.conversation_models import ConversationParticipant
+
+# Create conversation session (participants as dict list)
+session_key = await engine.create_conversation_session(
+    session_id="session_001",
     participants=[
-        ConversationParticipant("user_123", "user"),
-        ConversationParticipant("agent_001", "agent", "data_analyst")
+        {"id": "user_123", "type": "user", "role": "user"},
+        {"id": "agent_001", "type": "agent", "role": "assistant", "metadata": {}}
     ],
     session_type="user_to_agent",
     metadata={"project": "sales_analysis", "priority": "high"}
@@ -597,7 +652,7 @@ conversation_session = await engine.create_conversation_session(
 
 # Add agent communication message
 await engine.add_agent_communication_message(
-    conversation_session_id=conversation_session.session_id,
+    session_key=session_key,
     sender_id="agent_001",
     sender_type="agent",
     sender_role="data_analyst",
@@ -608,7 +663,7 @@ await engine.add_agent_communication_message(
 
 # Get agent conversation history
 agent_history = await engine.get_agent_conversation_history(
-    conversation_session_id=conversation_session.session_id,
+    session_key=session_key,
     limit=20
 )
 ```
@@ -940,6 +995,17 @@ class ContentEngineLogger:
 - **v1.4.0**: Added multi-backend storage support
 - **v1.5.0**: Added advanced conversation session management
 - **v1.6.0**: Added performance monitoring and logging
+- **v1.7.0**: Added ClickHouse dual-write for permanent storage; infrastructure persistence init
+
+## Integration Tests
+
+ContextEngine ClickHouse integration tests are in `test/integration/context/test_context_clickhouse.py`
+
+Prerequisites: Redis and ClickHouse running, configured in `.env.test`:
+- `CLICKHOUSE_ENABLED=true`
+- `REDIS_*`, `CLICKHOUSE_*` environment variables
+
+Run: `poetry run pytest test/integration/context/test_context_clickhouse.py -v`
 
 ## Related Documentation
 
@@ -947,3 +1013,4 @@ class ContentEngineLogger:
 - [Storage Interfaces Documentation](../CORE/STORAGE_INTERFACES.md)
 - [Execution Interfaces Documentation](../CORE/EXECUTION_INTERFACES.md)
 - [Configuration Management Documentation](../CONFIG/CONFIG_MANAGEMENT.md)
+- [Redis Client](../INFRASTRUCTURE_PERSISTENCE/REDIS_CLIENT.md)
