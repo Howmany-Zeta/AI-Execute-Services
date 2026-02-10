@@ -201,8 +201,10 @@ async def initialize_redis_client():
 
 async def close_redis_client():
     """Close global Redis client instance at application shutdown."""
+    global redis_client
     if redis_client:
         await redis_client.close()
+        redis_client = None
 
 
 # For backward compatibility, keep get_redis_client function

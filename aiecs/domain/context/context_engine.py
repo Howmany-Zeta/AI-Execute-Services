@@ -16,6 +16,7 @@ Key Features:
 from aiecs.core.interface.storage_interface import (
     IStorageBackend,
     ICheckpointerBackend,
+    IPermanentStorageBackend,
 )
 from aiecs.domain.task.task_context import TaskContext, ContextUpdate
 import json
@@ -495,6 +496,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         use_existing_redis: bool = True,
         compression_config: Optional[CompressionConfig] = None,
         llm_client: Optional[Any] = None,
+        permanent_backend: Optional[IPermanentStorageBackend] = None,
     ):
         """
         Initialize ContextEngine.
@@ -504,10 +506,13 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                               (已弃用: 现在总是创建独立的 RedisClient 实例以避免事件循环冲突)
             compression_config: Optional compression configuration for conversation compression
             llm_client: Optional LLM client for summarization and embeddings (must implement LLMClientProtocol)
+            permanent_backend: Optional backend for dual-write disk persistence (e.g. ClickHouse).
+                              Writes are fire-and-forget; failures do not block Redis path.
         """
         self.use_existing_redis = use_existing_redis
         self.redis_client: Optional[redis.Redis] = None
         self._redis_client_wrapper: Optional[Any] = None  # RedisClient 包装器实例
+        self._permanent_backend: Optional[IPermanentStorageBackend] = permanent_backend
 
         # Fallback to memory storage if Redis not available
         self._memory_sessions: Dict[str, SessionMetrics] = {}
@@ -568,6 +573,19 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             # Test connection
             await self.redis_client.ping()
             logger.info("ContextEngine connected to Redis successfully using RedisClient wrapper in current event loop")
+
+            # Initialize permanent backend for dual-write (ClickHouse, etc.)
+            if self._permanent_backend:
+                try:
+                    if await self._permanent_backend.initialize():
+                        logger.info("ContextEngine dual-write to permanent backend enabled")
+                    else:
+                        logger.warning("Permanent backend init failed, continuing without dual-write")
+                        self._permanent_backend = None
+                except Exception as e:
+                    logger.warning(f"Permanent backend init error: {e}, continuing without dual-write")
+                    self._permanent_backend = None
+
             return True
 
         except Exception as e:
@@ -578,7 +596,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             return False
 
     async def close(self):
-        """Close Redis connection."""
+        """Close Redis connection and permanent backend."""
         if hasattr(self, "_redis_client_wrapper") and self._redis_client_wrapper:
             # 使用 RedisClient 包装器的 close 方法
             await self._redis_client_wrapper.close()
@@ -588,6 +606,22 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             # 兼容性处理：直接关闭 redis 客户端
             await self.redis_client.close()
             self.redis_client = None
+
+        if hasattr(self, "_permanent_backend") and self._permanent_backend:
+            try:
+                await self._permanent_backend.close()
+            except Exception as e:
+                logger.warning(f"Error closing permanent backend: {e}")
+            self._permanent_backend = None
+
+    async def _fire_permanent(self, coro) -> None:
+        """Fire-and-forget call to permanent backend. Logs errors, never raises."""
+        if not self._permanent_backend:
+            return
+        try:
+            await coro
+        except Exception as e:
+            logger.debug(f"Permanent backend write failed (non-blocking): {e}")
 
     # ==================== Session Management ====================
 
@@ -603,6 +637,18 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         # Store session
         await self._store_session(session)
+
+        # Dual-write: append session create event to permanent backend
+        if self._permanent_backend:
+            await self._fire_permanent(
+                self._permanent_backend.append_session_event(
+                    session_id=session_id,
+                    user_id=user_id,
+                    event_type="create",
+                    payload=session.to_dict(),
+                    created_at=now.isoformat(),
+                )
+            )
 
         # Create associated TaskContext
         task_context = TaskContext(
@@ -675,6 +721,18 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         # Store updated session
         await self._store_session(session)
+
+        # Dual-write: append session update event
+        if self._permanent_backend:
+            await self._fire_permanent(
+                self._permanent_backend.append_session_event(
+                    session_id=session_id,
+                    user_id=session.user_id,
+                    event_type="update",
+                    payload=session.to_dict(),
+                    created_at=datetime.utcnow().isoformat(),
+                )
+            )
         return True
 
     async def end_session(self, session_id: str, status: str = "completed") -> bool:
@@ -690,6 +748,18 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         # Store final state
         await self._store_session(session)
+
+        # Dual-write: append session end event
+        if self._permanent_backend:
+            await self._fire_permanent(
+                self._permanent_backend.append_session_event(
+                    session_id=session_id,
+                    user_id=session.user_id,
+                    event_type="end",
+                    payload=session.to_dict(),
+                    created_at=datetime.utcnow().isoformat(),
+                )
+            )
 
         # Update global metrics
         self._global_metrics["active_sessions"] = max(0, self._global_metrics["active_sessions"] - 1)
@@ -772,6 +842,17 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 await self.redis_client.ltrim(f"conversation:{session_id}", -self.conversation_limit, -1)  # type: ignore[misc]
                 # Set TTL
                 await self.redis_client.expire(f"conversation:{session_id}", self.session_ttl)
+                # Dual-write: append to permanent backend
+                if self._permanent_backend:
+                    await self._fire_permanent(
+                        self._permanent_backend.append_conversation_message(
+                            session_id=session_id,
+                            role=message.role,
+                            content=message.content,
+                            metadata=message.metadata,
+                            created_at=message.timestamp.isoformat(),
+                        )
+                    )
                 return
             except Exception as e:
                 logger.error(f"Failed to store message to Redis: {e}")
@@ -785,6 +866,18 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         # Trim to limit
         if len(self._memory_conversations[session_id]) > self.conversation_limit:
             self._memory_conversations[session_id] = self._memory_conversations[session_id][-self.conversation_limit :]
+
+        # Dual-write when using memory fallback
+        if self._permanent_backend:
+            await self._fire_permanent(
+                self._permanent_backend.append_conversation_message(
+                    session_id=session_id,
+                    role=message.role,
+                    content=message.content,
+                    metadata=message.metadata,
+                    created_at=message.timestamp.isoformat(),
+                )
+            )
 
     # ==================== TaskContext Integration ====================
 
@@ -860,12 +953,32 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                     json.dumps(sanitized_dict, cls=DateTimeEncoder),
                 )
                 await self.redis_client.expire("task_contexts", self.session_ttl)  # type: ignore[misc]
+                # Dual-write: append task context snapshot
+                if self._permanent_backend:
+                    await self._fire_permanent(
+                        self._permanent_backend.append_task_context_snapshot(
+                            session_id=session_id,
+                            context_data=sanitized_dict,
+                            created_at=datetime.utcnow().isoformat(),
+                        )
+                    )
                 return
             except Exception as e:
                 logger.error(f"Failed to store TaskContext to Redis: {e}")
 
         # Fallback to memory
         self._memory_contexts[session_id] = context
+        # Dual-write when using memory fallback
+        if self._permanent_backend:
+            context_dict = context.to_dict()
+            sanitized_dict = self._sanitize_dataclasses(context_dict)
+            await self._fire_permanent(
+                self._permanent_backend.append_task_context_snapshot(
+                    session_id=session_id,
+                    context_data=sanitized_dict,
+                    created_at=datetime.utcnow().isoformat(),
+                )
+            )
 
     def _reconstruct_task_context(self, data: Dict[str, Any]) -> TaskContext:
         """Reconstruct TaskContext from stored data."""
@@ -924,6 +1037,18 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 # Set TTL
                 await self.redis_client.expire(f"checkpoints:{thread_id}", self.checkpoint_ttl)  # type: ignore[misc]
 
+                # Dual-write: append checkpoint to permanent backend
+                if self._permanent_backend:
+                    await self._fire_permanent(
+                        self._permanent_backend.append_checkpoint(
+                            thread_id=thread_id,
+                            checkpoint_id=checkpoint_id,
+                            checkpoint_data=sanitized_data,
+                            metadata=sanitized_metadata,
+                            created_at=checkpoint["created_at"],
+                        )
+                    )
+
                 # Update global metrics
                 self._global_metrics["total_checkpoints"] += 1
                 return True
@@ -934,6 +1059,17 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         # Fallback to memory
         key = f"{thread_id}:{checkpoint_id}"
         self._memory_checkpoints[key] = checkpoint
+        # Dual-write when using memory fallback
+        if self._permanent_backend:
+            await self._fire_permanent(
+                self._permanent_backend.append_checkpoint(
+                    thread_id=thread_id,
+                    checkpoint_id=checkpoint_id,
+                    checkpoint_data=sanitized_data,
+                    metadata=sanitized_metadata,
+                    created_at=checkpoint["created_at"],
+                )
+            )
         return True
 
     async def get_checkpoint(self, thread_id: str, checkpoint_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
@@ -1144,12 +1280,34 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                     json.dumps(writes_payload, cls=DateTimeEncoder),
                 )
                 await self.redis_client.expire(f"checkpoint_writes:{thread_id}", self.checkpoint_ttl)
+                # Dual-write: append checkpoint writes
+                if self._permanent_backend:
+                    await self._fire_permanent(
+                        self._permanent_backend.append_checkpoint_writes(
+                            thread_id=thread_id,
+                            checkpoint_id=checkpoint_id,
+                            task_id=task_id,
+                            writes_data=writes_data,
+                            created_at=writes_payload["created_at"],
+                        )
+                    )
                 return True
             except Exception as e:
                 logger.error(f"Failed to store writes to Redis: {e}")
 
         # Fallback to memory
         self._memory_checkpoints[writes_key] = writes_payload
+        # Dual-write when using memory fallback
+        if self._permanent_backend:
+            await self._fire_permanent(
+                self._permanent_backend.append_checkpoint_writes(
+                    thread_id=thread_id,
+                    checkpoint_id=checkpoint_id,
+                    task_id=task_id,
+                    writes_data=writes_data,
+                    created_at=writes_payload["created_at"],
+                )
+            )
         return True
 
     async def get_writes(self, thread_id: str, checkpoint_id: str) -> List[tuple]:
@@ -1369,6 +1527,15 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                     json.dumps(session_data, cls=DateTimeEncoder),
                 )
                 await self.redis_client.expire("conversation_sessions", self.session_ttl)  # type: ignore[misc]
+                # Dual-write: append conversation session
+                if self._permanent_backend:
+                    await self._fire_permanent(
+                        self._permanent_backend.append_conversation_session(
+                            session_key=session_key,
+                            session_data=session_data,
+                            created_at=session_data.get("created_at"),
+                        )
+                    )
                 return
             except Exception as e:
                 logger.error(f"Failed to store conversation session to Redis: {e}")
@@ -1377,6 +1544,15 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         if not hasattr(self, "_memory_conversation_sessions"):
             self._memory_conversation_sessions = {}
         self._memory_conversation_sessions[session_key] = session_data
+        # Dual-write when using memory fallback
+        if self._permanent_backend:
+            await self._fire_permanent(
+                self._permanent_backend.append_conversation_session(
+                    session_key=session_key,
+                    session_data=session_data,
+                    created_at=session_data.get("created_at"),
+                )
+            )
 
     async def _update_conversation_session_activity(self, session_key: str) -> None:
         """Update last activity timestamp for a conversation session."""

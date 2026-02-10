@@ -12,6 +12,8 @@ from .context_engine_client import (
     is_context_engine_initialized,
     reset_context_engine,
 )
+from .clickhouse_client import ClickHouseClient
+from .clickhouse_permanent_backend import ClickHousePermanentBackend
 
 __all__ = [
     "DatabaseManager",
@@ -22,4 +24,6 @@ __all__ = [
     "close_context_engine",
     "is_context_engine_initialized",
     "reset_context_engine",
+    "ClickHouseClient",
+    "ClickHousePermanentBackend",
 ]

@@ -15,6 +15,7 @@ from .storage_interface import (
     ITaskContextStorage,
     IStorageBackend,
     ICheckpointerBackend,
+    IPermanentStorageBackend,
 )
 
 __all__ = [
@@ -31,4 +32,5 @@ __all__ = [
     "ITaskContextStorage",
     "IStorageBackend",
     "ICheckpointerBackend",
+    "IPermanentStorageBackend",
 ]
