@@ -161,3 +161,56 @@ class ClickHouseClient:
     def is_available(self) -> bool:
         """Check if client is connected."""
         return self._client is not None
+
+
+# Global singleton for shared use (like Redis client)
+_clickhouse_client: Optional[ClickHouseClient] = None
+
+
+async def initialize_clickhouse_client(
+    host: Optional[str] = None,
+    port: Optional[int] = None,
+    username: Optional[str] = None,
+    password: Optional[str] = None,
+    database: Optional[str] = None,
+) -> bool:
+    """
+    Create and initialize global ClickHouse client at application startup.
+
+    Call from lifespan or startup. Uses env vars (CLICKHOUSE_HOST, etc.) if args not provided.
+    Returns True if connected, False if clickhouse-connect not installed or connection failed.
+    """
+    global _clickhouse_client
+    if _clickhouse_client is not None:
+        return _clickhouse_client.is_available
+    _clickhouse_client = ClickHouseClient(
+        host=host,
+        port=port,
+        username=username,
+        password=password,
+        database=database or "default",
+    )
+    return await _clickhouse_client.initialize()
+
+
+async def close_clickhouse_client() -> None:
+    """Close global ClickHouse client at application shutdown."""
+    global _clickhouse_client
+    if _clickhouse_client:
+        await _clickhouse_client.close()
+        _clickhouse_client = None
+        logger.info("ClickHouse client closed")
+
+
+async def get_clickhouse_client() -> ClickHouseClient:
+    """
+    Get global ClickHouse client instance.
+
+    Raises:
+        RuntimeError: If client not initialized. Call initialize_clickhouse_client() first.
+    """
+    if _clickhouse_client is None:
+        raise RuntimeError(
+            "ClickHouse client not initialized. Call initialize_clickhouse_client() first."
+        )
+    return _clickhouse_client
