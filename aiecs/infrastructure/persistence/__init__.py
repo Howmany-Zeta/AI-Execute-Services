@@ -12,7 +12,12 @@ from .context_engine_client import (
     is_context_engine_initialized,
     reset_context_engine,
 )
-from .clickhouse_client import ClickHouseClient
+from .clickhouse_client import (
+    ClickHouseClient,
+    get_clickhouse_client,
+    initialize_clickhouse_client,
+    close_clickhouse_client,
+)
 from .clickhouse_permanent_backend import ClickHousePermanentBackend
 
 __all__ = [
@@ -25,5 +30,8 @@ __all__ = [
     "is_context_engine_initialized",
     "reset_context_engine",
     "ClickHouseClient",
+    "get_clickhouse_client",
+    "initialize_clickhouse_client",
+    "close_clickhouse_client",
     "ClickHousePermanentBackend",
 ]
