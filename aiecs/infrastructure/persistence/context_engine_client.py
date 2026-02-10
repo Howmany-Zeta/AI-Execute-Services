@@ -5,6 +5,8 @@ This module provides a singleton ContextEngine instance that can be shared
 across all components in the application. It follows the same pattern as
 the Redis client initialization in aiecs.infrastructure.persistence.redis_client.
 
+When CLICKHOUSE_ENABLED=true, ContextEngine uses dual-write: Redis (hot) + ClickHouse (cold).
+
 Usage:
     # In main.py startup:
     await initialize_context_engine()
@@ -15,6 +17,7 @@ Usage:
 """
 
 import logging
+import os
 from typing import Optional, TYPE_CHECKING
 import asyncio
 
@@ -83,7 +86,22 @@ async def initialize_context_engine(
 
         try:
             logger.info("Initializing global ContextEngine...")
-            _global_context_engine = ContextEngine(use_existing_redis=use_existing_redis)
+
+            # Optional: dual-write to ClickHouse for permanent storage
+            permanent_backend = None
+            if os.getenv("CLICKHOUSE_ENABLED", "").lower() in ("true", "1", "yes"):
+                try:
+                    from .clickhouse_permanent_backend import ClickHousePermanentBackend
+
+                    permanent_backend = ClickHousePermanentBackend()
+                    logger.info("ClickHouse permanent backend configured for dual-write")
+                except ImportError as e:
+                    logger.warning(f"ClickHouse backend not available: {e}")
+
+            _global_context_engine = ContextEngine(
+                use_existing_redis=use_existing_redis,
+                permanent_backend=permanent_backend,
+            )
             await _global_context_engine.initialize()
             _initialized = True
             logger.info("✅ Global ContextEngine initialized successfully")

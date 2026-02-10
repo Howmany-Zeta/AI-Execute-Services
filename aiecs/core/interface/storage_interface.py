@@ -122,6 +122,89 @@ class IStorageBackend(
         """Clean up expired sessions and associated data."""
 
 
+class IPermanentStorageBackend(ABC):
+    """
+    Permanent storage backend interface for disk-based cold archive.
+
+    Used for dual-write alongside Redis (hot cache). Append-only semantics,
+    optimized for analytics and long-term retention. Typical implementation:
+    ClickHouse, PostgreSQL, etc.
+
+    All methods are fire-and-forget: failures should not block the primary
+    Redis write path. Implementations should handle errors internally.
+    """
+
+    @abstractmethod
+    async def append_session_event(
+        self,
+        session_id: str,
+        user_id: str,
+        event_type: str,
+        payload: Dict[str, Any],
+        created_at: Optional[str] = None,
+    ) -> bool:
+        """Append session create/update/end event for audit/analytics."""
+
+    @abstractmethod
+    async def append_conversation_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        created_at: Optional[str] = None,
+    ) -> bool:
+        """Append conversation message (append-only)."""
+
+    @abstractmethod
+    async def append_checkpoint(
+        self,
+        thread_id: str,
+        checkpoint_id: str,
+        checkpoint_data: Dict[str, Any],
+        metadata: Optional[Dict[str, Any]] = None,
+        created_at: Optional[str] = None,
+    ) -> bool:
+        """Append checkpoint data."""
+
+    @abstractmethod
+    async def append_checkpoint_writes(
+        self,
+        thread_id: str,
+        checkpoint_id: str,
+        task_id: str,
+        writes_data: List[tuple],
+        created_at: Optional[str] = None,
+    ) -> bool:
+        """Append checkpoint writes."""
+
+    @abstractmethod
+    async def append_conversation_session(
+        self,
+        session_key: str,
+        session_data: Dict[str, Any],
+        created_at: Optional[str] = None,
+    ) -> bool:
+        """Append conversation session metadata."""
+
+    @abstractmethod
+    async def append_task_context_snapshot(
+        self,
+        session_id: str,
+        context_data: Dict[str, Any],
+        created_at: Optional[str] = None,
+    ) -> bool:
+        """Append task context snapshot (versioned)."""
+
+    @abstractmethod
+    async def initialize(self) -> bool:
+        """Initialize the permanent storage backend."""
+
+    @abstractmethod
+    async def close(self) -> None:
+        """Close the permanent storage backend."""
+
+
 class ICheckpointerBackend(ABC):
     """
     Checkpointer backend interface for LangGraph integration.

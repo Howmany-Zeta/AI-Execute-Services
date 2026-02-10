@@ -149,6 +149,7 @@ dependencies = [
     # Database and Storage
     # =============================================================================
     "sqlalchemy (>=2.0.41,<3.0.0)",                 # SQL toolkit and ORM
+    "clickhouse-connect (>=0.8.0,<1.0.0)",         # ClickHouse client for permanent context storage (dual-write)
     "asyncpg (>=0.30.0,<1.0.0)",                    # PostgreSQL async driver
     "aiosqlite (>=0.20.0,<1.0.0)",                  # SQLite async driver for graph storage
     "networkx (>=3.0,<4.0.0)",                      # Graph data structures and algorithms for knowledge graphs
