@@ -68,7 +68,7 @@ When building large-scale AI application systems, data storage faces the followi
 ## Upstream Components (Consumers)
 
 ### 1. Domain Services
-- **ContextEngine** (`domain/context/content_engine.py`)
+- **ContextEngine** (`domain/context/context_engine.py`)
 - **SessionManager** (if exists)
 - **ConversationManager** (if exists)
 
