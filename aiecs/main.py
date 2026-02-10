@@ -23,6 +23,8 @@ from aiecs.infrastructure.persistence.database_manager import DatabaseManager
 from aiecs.infrastructure.persistence import (
     initialize_context_engine,
     close_context_engine,
+    initialize_clickhouse_client,
+    close_clickhouse_client,
 )
 from aiecs.infrastructure.messaging.celery_task_manager import (
     CeleryTaskManager,
@@ -104,6 +106,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"ContextEngine initialization failed (continuing without it): {e}")
 
+    # Initialize ClickHouse client when enabled (for business workflows via get_clickhouse_client)
+    if os.getenv("CLICKHOUSE_ENABLED", "").lower() in ("true", "1", "yes"):
+        try:
+            if await initialize_clickhouse_client():
+                logger.info("ClickHouse client initialized for get_clickhouse_client()")
+            else:
+                logger.warning("ClickHouse client init failed (continuing without it)")
+        except Exception as e:
+            logger.warning(f"ClickHouse client initialization failed: {e}")
+
     # Application startup complete
     logger.info("AIECS startup complete")
 
@@ -118,6 +130,13 @@ async def lifespan(app: FastAPI):
         logger.info("ContextEngine closed")
     except Exception as e:
         logger.warning(f"Error closing ContextEngine: {e}")
+
+    # Close ClickHouse client
+    try:
+        await close_clickhouse_client()
+        logger.info("ClickHouse client closed")
+    except Exception as e:
+        logger.warning(f"Error closing ClickHouse client: {e}")
 
     # Close database connection
     if db_manager:
