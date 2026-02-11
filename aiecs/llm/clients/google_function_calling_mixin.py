@@ -14,7 +14,6 @@ from vertexai.generative_models import (
     Tool,
 )
 from .base_client import LLMMessage, LLMResponse
-from .schemas import OpenAIToolSchema
 
 logger = logging.getLogger(__name__)
 
@@ -93,22 +92,16 @@ class GoogleFunctionCallingMixin:
             List of Google Tool objects containing FunctionDeclaration
         """
         function_declarations = []
+        sanitized_tools = self._sanitize_tools(tools)
 
-        for raw_tool in tools:
-            tool = OpenAIToolSchema.model_validate_safe(raw_tool)
-            if tool is None or not tool.function:
-                if raw_tool is not None:
-                    logger.warning(
-                        f"Skipping invalid tool (type={type(raw_tool).__name__})"
-                    )
-                continue
-            func = tool.function
+        for tool_dict in sanitized_tools:
+            func = tool_dict.get("function") or {}
             func_name = func.get("name", "")
             func_description = func.get("description", "")
             func_parameters = func.get("parameters", {})
 
             if not func_name:
-                logger.warning(f"Skipping tool without name: {tool}")
+                logger.warning(f"Skipping tool without name: {tool_dict}")
                 continue
 
             # Create FunctionDeclaration with raw dict parameters
