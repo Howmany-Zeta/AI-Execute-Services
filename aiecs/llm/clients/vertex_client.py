@@ -66,6 +66,7 @@ from aiecs.llm.clients.base_client import (
     SafetyBlockError,
 )
 from aiecs.llm.clients.google_function_calling_mixin import GoogleFunctionCallingMixin
+from aiecs.llm.clients.schemas import ToolCallFunction, ToolCallItem
 from aiecs.config.config import get_settings
 
 # Suppress Vertex AI SDK deprecation warnings (deprecated June 2025, removal June 2026)
@@ -97,6 +98,11 @@ def _extract_safety_ratings(safety_ratings: Any) -> List[Dict[str, Any]]:
     ratings_iter = safety_ratings if isinstance(safety_ratings, list) else [safety_ratings]
 
     for rating in ratings_iter:
+        if not isinstance(rating, dict) and not hasattr(rating, "category"):
+            logger.debug(
+                f"Skipping non-dict/non-object rating element: type={type(rating).__name__}"
+            )
+            continue
         rating_dict: Dict[str, Any] = {}
 
         # Extract category
@@ -493,10 +499,25 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                                 mime_type=image_content.mime_type
                             ))
 
-                for tool_call in msg.tool_calls:
-                    func = tool_call.get("function", {})
-                    func_name = func.get("name", "")
-                    func_args = func.get("arguments", "{}")
+                for raw_tool_call in msg.tool_calls or []:
+                    tool_call = ToolCallItem.model_validate_safe(raw_tool_call)
+                    if tool_call is None:
+                        self.logger.warning(
+                            f"Invalid tool_call shape, skipping: "
+                            f"{type(raw_tool_call).__name__}"
+                        )
+                        continue
+                    func = tool_call.function
+                    func_name = (
+                        func.name
+                        if isinstance(func, ToolCallFunction)
+                        else (func.get("name", "") if isinstance(func, dict) else "")
+                    )
+                    func_args = (
+                        func.arguments
+                        if isinstance(func, ToolCallFunction)
+                        else (func.get("arguments", "{}") if isinstance(func, dict) else "{}")
+                    )
 
                     # Parse arguments
                     try:
