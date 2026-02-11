@@ -14,6 +14,7 @@ from vertexai.generative_models import (
     Tool,
 )
 from .base_client import LLMMessage, LLMResponse
+from .schemas import OpenAIToolSchema
 
 logger = logging.getLogger(__name__)
 
@@ -92,29 +93,33 @@ class GoogleFunctionCallingMixin:
             List of Google Tool objects containing FunctionDeclaration
         """
         function_declarations = []
-        
-        for tool in tools:
-            if tool.get("type") == "function":
-                func = tool.get("function", {})
-                func_name = func.get("name", "")
-                func_description = func.get("description", "")
-                func_parameters = func.get("parameters", {})
-                
-                if not func_name:
-                    logger.warning(f"Skipping tool without name: {tool}")
-                    continue
 
-                # Create FunctionDeclaration with raw dict parameters
-                # Let Vertex SDK handle the schema conversion internally
-                function_declaration = FunctionDeclaration(
-                    name=func_name,
-                    description=func_description,
-                    parameters=func_parameters,
-                )
-                
-                function_declarations.append(function_declaration)
-            else:
-                logger.warning(f"Unsupported tool type: {tool.get('type')}")
+        for raw_tool in tools:
+            tool = OpenAIToolSchema.model_validate_safe(raw_tool)
+            if tool is None or not tool.function:
+                if raw_tool is not None:
+                    logger.warning(
+                        f"Skipping invalid tool (type={type(raw_tool).__name__})"
+                    )
+                continue
+            func = tool.function
+            func_name = func.get("name", "")
+            func_description = func.get("description", "")
+            func_parameters = func.get("parameters", {})
+
+            if not func_name:
+                logger.warning(f"Skipping tool without name: {tool}")
+                continue
+
+            # Create FunctionDeclaration with raw dict parameters
+            # Let Vertex SDK handle the schema conversion internally
+            function_declaration = FunctionDeclaration(
+                name=func_name,
+                description=func_description,
+                parameters=func_parameters,
+            )
+
+            function_declarations.append(function_declaration)
         
         # Wrap in Tool objects (Google format requires tools to be wrapped)
         if function_declarations:
@@ -380,23 +385,42 @@ class GoogleFunctionCallingMixin:
                 function_calls = self._extract_function_calls_from_google_chunk(chunk)
                 if function_calls:
                     for func_call in function_calls:
-                        call_id = func_call["id"]
-                        
+                        if not isinstance(func_call, dict):
+                            logger.warning(
+                                f"Skipping non-dict func_call (type={type(func_call).__name__})"
+                            )
+                            continue
+                        call_id = func_call.get("id")
+                        if call_id is None:
+                            continue
+                        func_data = (
+                            func_call.get("function")
+                            if isinstance(func_call.get("function"), dict)
+                            else {}
+                        )
                         # Initialize accumulator if needed
                         if call_id not in tool_calls_accumulator:
-                            tool_calls_accumulator[call_id] = func_call.copy()
+                            tool_calls_accumulator[call_id] = {
+                                "id": call_id,
+                                "type": func_call.get("type", "function"),
+                                "function": func_data or {"name": "", "arguments": "{}"},
+                            }
                         else:
                             # Update accumulator (merge arguments if needed)
                             existing_call = tool_calls_accumulator[call_id]
-                            if func_call["function"]["name"]:
-                                existing_call["function"]["name"] = func_call["function"]["name"]
-                            if func_call["function"]["arguments"]:
-                                # Merge arguments (Google may send partial arguments)
-                                existing_args = existing_call["function"].get("arguments", "{}")
-                                new_args = func_call["function"]["arguments"]
-                                # Simple merge: append new args (may need JSON parsing for proper merge)
-                                if new_args and new_args != "{}":
-                                    existing_call["function"]["arguments"] = new_args
+                            existing_func = existing_call.get("function")
+                            if not isinstance(existing_func, dict):
+                                existing_call["function"] = func_data or {
+                                    "name": "",
+                                    "arguments": "{}",
+                                }
+                            else:
+                                if func_data.get("name"):
+                                    existing_call["function"]["name"] = func_data["name"]
+                                if func_data.get("arguments"):
+                                    new_args = func_data["arguments"]
+                                    if new_args and new_args != "{}":
+                                        existing_call["function"]["arguments"] = new_args
                         
                         # Yield tool call update if return_chunks=True
                         if return_chunks:
