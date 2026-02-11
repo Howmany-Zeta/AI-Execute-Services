@@ -121,25 +121,25 @@ class GoogleAIClient(BaseLLMClient):
                                 mime_type=image_content.mime_type
                             ))
 
-                for tool_call in msg.tool_calls:
-                    func = tool_call.get("function", {})
-                    func_name = func.get("name", "")
-                    func_args = func.get("arguments", "{}")
+                sanitized_tool_calls = self._sanitize_tool_calls(msg.tool_calls)
+                if sanitized_tool_calls:
+                    for tool_call in sanitized_tool_calls:
+                        func = tool_call.get("function") or {}
+                        func_name = func.get("name", "")
+                        func_args = func.get("arguments", "{}")
 
-                    # Parse arguments
-                    try:
-                        args_dict = json.loads(func_args) if isinstance(func_args, str) else func_args
-                    except json.JSONDecodeError:
-                        args_dict = {}
+                        # Parse arguments
+                        try:
+                            args_dict = json.loads(func_args) if isinstance(func_args, str) else func_args
+                        except json.JSONDecodeError:
+                            args_dict = {}
 
-                    # Create FunctionCall part using types.FunctionCall
-                    # Note: types.Part.from_function_call() may not exist in google.genai
-                    # Use FunctionCall type directly
-                    function_call = types.FunctionCall(
-                        name=func_name,
-                        args=args_dict
-                    )
-                    parts.append(types.Part(function_call=function_call))
+                        # Create FunctionCall part using types.FunctionCall
+                        function_call = types.FunctionCall(
+                            name=func_name,
+                            args=args_dict
+                        )
+                        parts.append(types.Part(function_call=function_call))
 
                 contents.append(types.Content(
                     role="model",

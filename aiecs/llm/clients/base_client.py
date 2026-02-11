@@ -6,6 +6,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Lazy import to avoid circular dependency
+from aiecs.llm.clients.schemas import sanitize_tool_calls, sanitize_tools_list
 
 
 def _get_config_loader():
@@ -157,6 +158,28 @@ class BaseLLMClient(ABC):
     def __init__(self, provider_name: str):
         self.provider_name = provider_name
         self.logger = logging.getLogger(f"{__name__}.{provider_name}")
+
+    def _sanitize_tool_calls(
+        self, tool_calls: Optional[List[Any]]
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        Validate and sanitize tool_calls using Pydantic schemas.
+
+        Returns list of valid OpenAI-format dicts, or None. Invalid entries are skipped.
+        All clients should use this when processing message tool_calls.
+        """
+        return sanitize_tool_calls(tool_calls)
+
+    def _sanitize_tools(
+        self, tools: Optional[List[Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Validate and sanitize tools list using Pydantic schemas.
+
+        Returns list of valid OpenAI-format tool dicts. Invalid entries are skipped.
+        All clients should use this when preparing tools for API calls.
+        """
+        return sanitize_tools_list(tools)
 
     @abstractmethod
     async def generate_text(

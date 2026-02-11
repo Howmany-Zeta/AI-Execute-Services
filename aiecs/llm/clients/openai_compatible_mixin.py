@@ -137,7 +137,9 @@ class OpenAICompatibleFunctionCallingMixin:
                 msg_dict["content"] = msg.content
             
             if msg.tool_calls:
-                msg_dict["tool_calls"] = msg.tool_calls
+                sanitized = self._sanitize_tool_calls(msg.tool_calls)
+                if sanitized:
+                    msg_dict["tool_calls"] = sanitized
             if msg.tool_call_id:
                 msg_dict["tool_call_id"] = msg.tool_call_id
             openai_messages.append(msg_dict)
@@ -161,16 +163,18 @@ class OpenAICompatibleFunctionCallingMixin:
             Dictionary with function calling parameters
         """
         params: Dict[str, Any] = {}
-        
+
         # Prefer 'tools' parameter (new format) over 'functions' (legacy)
         if tools:
-            params["tools"] = tools
-            if tool_choice is not None:
+            params["tools"] = self._sanitize_tools(tools)
+            if params["tools"] and tool_choice is not None:
                 params["tool_choice"] = tool_choice
         elif functions:
             # Legacy format - convert to tools format for consistency
-            params["tools"] = [{"type": "function", "function": func} for func in functions]
-            if tool_choice is not None:
+            params["tools"] = self._sanitize_tools(
+                [{"type": "function", "function": func} for func in functions]
+            )
+            if params["tools"] and tool_choice is not None:
                 params["tool_choice"] = tool_choice
         
         return params

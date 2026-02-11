@@ -66,7 +66,6 @@ from aiecs.llm.clients.base_client import (
     SafetyBlockError,
 )
 from aiecs.llm.clients.google_function_calling_mixin import GoogleFunctionCallingMixin
-from aiecs.llm.clients.schemas import ToolCallFunction, ToolCallItem
 from aiecs.config.config import get_settings
 
 # Suppress Vertex AI SDK deprecation warnings (deprecated June 2025, removal June 2026)
@@ -499,42 +498,27 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                                 mime_type=image_content.mime_type
                             ))
 
-                for raw_tool_call in msg.tool_calls or []:
-                    tool_call = ToolCallItem.model_validate_safe(raw_tool_call)
-                    if tool_call is None:
-                        self.logger.warning(
-                            f"Invalid tool_call shape, skipping: "
-                            f"{type(raw_tool_call).__name__}"
-                        )
-                        continue
-                    func = tool_call.function
-                    func_name = (
-                        func.name
-                        if isinstance(func, ToolCallFunction)
-                        else (func.get("name", "") if isinstance(func, dict) else "")
-                    )
-                    func_args = (
-                        func.arguments
-                        if isinstance(func, ToolCallFunction)
-                        else (func.get("arguments", "{}") if isinstance(func, dict) else "{}")
-                    )
+                sanitized_tool_calls = self._sanitize_tool_calls(msg.tool_calls)
+                if sanitized_tool_calls:
+                    for tool_call in sanitized_tool_calls:
+                        func = tool_call.get("function") or {}
+                        func_name = func.get("name", "")
+                        func_args = func.get("arguments", "{}")
 
-                    # Parse arguments
-                    try:
-                        args_dict = json.loads(func_args) if isinstance(func_args, str) else func_args
-                    except json.JSONDecodeError:
-                        args_dict = {}
+                        # Parse arguments
+                        try:
+                            args_dict = json.loads(func_args) if isinstance(func_args, str) else func_args
+                        except json.JSONDecodeError:
+                            args_dict = {}
 
-                    # Create FunctionCall part using Part.from_dict
-                    # Note: Part.from_function_call() does NOT exist in Vertex AI SDK
-                    # Must use from_dict with function_call structure
-                    function_call_part = Part.from_dict({
-                        "function_call": {
-                            "name": func_name,
-                            "args": args_dict
-                        }
-                    })
-                    parts.append(function_call_part)
+                        # Create FunctionCall part using Part.from_dict
+                        function_call_part = Part.from_dict({
+                            "function_call": {
+                                "name": func_name,
+                                "args": args_dict
+                            }
+                        })
+                        parts.append(function_call_part)
 
                 contents.append(Content(
                     role="model",

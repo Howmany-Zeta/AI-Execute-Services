@@ -7,7 +7,7 @@ may return unexpected structures (lists, protobuf, etc.).
 
 from __future__ import annotations
 
-from typing import Any, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -77,3 +77,48 @@ class OpenAIToolSchema(BaseModel):
             if isinstance(func, dict):
                 return cls(type="function", function=func)
         return None
+
+
+def sanitize_tool_calls(raw: Optional[List[Any]]) -> Optional[List[Dict[str, Any]]]:
+    """
+    Validate and sanitize tool_calls from messages.
+
+    Returns list of valid OpenAI-format dicts, or None if empty/invalid.
+    Used by all LLM clients when processing tool_calls.
+    """
+    if not raw:
+        return None
+    result: List[Dict[str, Any]] = []
+    for item in raw:
+        validated = ToolCallItem.model_validate_safe(item)
+        if validated:
+            func = validated.function
+            if isinstance(func, ToolCallFunction):
+                result.append({
+                    "id": validated.id,
+                    "type": validated.type,
+                    "function": {"name": func.name, "arguments": func.arguments},
+                })
+            else:
+                result.append({
+                    "id": validated.id,
+                    "type": validated.type,
+                    "function": func if isinstance(func, dict) else {},
+                })
+    return result if result else None
+
+
+def sanitize_tools_list(raw: Optional[List[Any]]) -> List[Dict[str, Any]]:
+    """
+    Validate and sanitize tools list for API calls.
+
+    Returns list of valid OpenAI-format tool dicts. Invalid entries are skipped.
+    """
+    if not raw:
+        return []
+    result: List[Dict[str, Any]] = []
+    for item in raw:
+        validated = OpenAIToolSchema.model_validate_safe(item)
+        if validated and validated.function:
+            result.append({"type": "function", "function": validated.function})
+    return result
