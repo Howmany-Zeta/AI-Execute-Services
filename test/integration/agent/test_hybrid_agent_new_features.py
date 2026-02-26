@@ -378,8 +378,9 @@ async def test_hybrid_agent_streaming(xai_client, calculator_tool):
 
     # Verify we got different event types
     event_types = {e["type"] for e in events}
-    assert "status" in event_types
+    assert "started" in event_types
     assert "result" in event_types
+    assert "completed" in event_types
 
     # Get final result
     final_result = [e for e in events if e["type"] == "result"][0]
