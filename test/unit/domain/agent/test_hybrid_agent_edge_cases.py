@@ -38,6 +38,7 @@ class MockLLMClientForEdgeCases(BaseLLMClient):
         max_tokens: int = None,
         tools: List[Dict] = None,
         tool_choice: str = None,
+        context: Dict = None,
     ) -> LLMResponse:
         """Generate mock response."""
         self.call_count += 1
@@ -66,6 +67,7 @@ class MockLLMClientForEdgeCases(BaseLLMClient):
         tools: List[Dict] = None,
         tool_choice: str = None,
         return_chunks: bool = False,
+        context: Dict = None,
     ):
         """Stream mock response preserving original formatting."""
         self.call_count += 1
@@ -706,9 +708,9 @@ async def test_max_iterations_reached_without_completion(create_agent):
         {}
     )
     
-    assert result["success"] is True
+    assert result["success"] is False
     assert "Max iterations reached" in result["output"]
-    assert result.get("max_iterations_reached") is True or mock_client.call_count == 3
+    assert result.get("reason") == "max_iterations_reached" or mock_client.call_count == 3
 
 
 # =============================================================================
