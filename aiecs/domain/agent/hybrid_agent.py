@@ -5,6 +5,7 @@ Agent implementation combining LLM reasoning with tool execution capabilities.
 Implements the ReAct (Reasoning + Acting) pattern.
 """
 
+import json
 import logging
 from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING, AsyncIterator
 from datetime import datetime
@@ -524,7 +525,8 @@ class HybridAgent(BaseAIAgent):
             self.last_active_at = datetime.utcnow()
 
             return {
-                "success": True,
+                "success": result.get("success", True),
+                "reason": result.get("reason"),
                 "output": result.get("final_response"),  # Changed from final_answer
                 "reasoning_steps": result.get("steps"),
                 "tool_calls_count": result.get("tool_calls_count"),
@@ -638,10 +640,9 @@ class HybridAgent(BaseAIAgent):
             self._transition_state(self.state.__class__.BUSY)
             self._current_task_id = task.get("task_id")
 
-            # Yield status
+            # Yield started lifecycle event
             yield {
-                "type": "status",
-                "status": "started",
+                "type": "started",
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
@@ -652,14 +653,15 @@ class HybridAgent(BaseAIAgent):
             # Get final result from last event
             if event.get("type") == "result":
                 result = event
+                task_success = result.get("success", True)
 
                 # Calculate execution time
                 execution_time = (datetime.utcnow() - start_time).total_seconds()
 
-                # Update metrics
+                # Update metrics (use actual success from result, e.g. False on max_iterations)
                 self.update_metrics(
                     execution_time=execution_time,
-                    success=True,
+                    success=task_success,
                     tokens_used=result.get("total_tokens"),
                     tool_calls=result.get("tool_calls_count", 0),
                 )
@@ -668,6 +670,14 @@ class HybridAgent(BaseAIAgent):
                 self._transition_state(self.state.__class__.ACTIVE)
                 self._current_task_id = None
                 self.last_active_at = datetime.utcnow()
+
+                # Yield completed lifecycle event (symmetric counterpart to "started")
+                yield {
+                    "type": "completed",
+                    "success": task_success,
+                    "execution_time": execution_time,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
 
         except Exception as e:
             logger.error(f"Streaming task execution failed for {self.agent_id}: {e}")
@@ -750,10 +760,9 @@ class HybridAgent(BaseAIAgent):
                 if messages and not messages[-1].content.startswith("[Iteration"):
                     messages.append(LLMMessage(role="user", content=iteration_info))
 
-            # Yield iteration status
+            # Yield iteration_start lifecycle event (fires before each LLM call)
             yield {
-                "type": "status",
-                "status": "thinking",
+                "type": "iteration_start",
                 "iteration": iteration + 1,
                 "max_iterations": self._max_iterations,
                 "remaining": self._max_iterations - iteration - 1,
@@ -803,17 +812,17 @@ class HybridAgent(BaseAIAgent):
                             "timestamp": datetime.utcnow().isoformat(),
                         }
                     elif chunk.type == "tool_call" and chunk.tool_call:
-                        # Yield tool call update event
+                        # Yield incremental tool call delta (streaming fragment)
                         yield {
-                            "type": "tool_call_update",
+                            "type": "tool_call_delta",
                             "tool_call": chunk.tool_call,
                             "timestamp": datetime.utcnow().isoformat(),
                         }
                     elif chunk.type == "tool_calls" and chunk.tool_calls:
-                        # Complete tool_calls received
+                        # Complete tool_calls batch received
                         tool_calls_from_stream = chunk.tool_calls
                         yield {
-                            "type": "tool_calls",
+                            "type": "tool_calls_ready",
                             "tool_calls": chunk.tool_calls,
                             "timestamp": datetime.utcnow().isoformat(),
                         }
@@ -875,7 +884,6 @@ class HybridAgent(BaseAIAgent):
                                 operation = None
 
                         # Parse arguments JSON
-                        import json
                         if isinstance(func_args, str):
                             parameters = json.loads(func_args)
                         else:
@@ -919,7 +927,7 @@ class HybridAgent(BaseAIAgent):
                         messages.append(
                             LLMMessage(
                                 role="tool",
-                                content=str(tool_result),
+                                content=json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result),
                                 tool_call_id=tool_call.get("id", "call_0"),
                             )
                         )
@@ -1013,7 +1021,8 @@ class HybridAgent(BaseAIAgent):
                     }
 
                     # OBSERVE: Add tool result to conversation (for LLM consumption)
-                    observation_content = f"Tool '{tool_info['tool']}' returned: {tool_result}"
+                    tool_result_str = json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result)
+                    observation_content = f"Tool '{tool_info['tool']}' returned: {tool_result_str}"
                     observation = f"<OBSERVATION>\n{observation_content}\n</OBSERVATION>"
 
                     # Add to messages for next iteration
@@ -1073,17 +1082,17 @@ class HybridAgent(BaseAIAgent):
                 # Continue to next iteration
                 continue
 
-        # Max iterations reached
+        # Max iterations reached - task did not complete successfully within the limit
         logger.warning(f"HybridAgent {self.agent_id} reached max iterations")
         yield {
             "type": "result",
-            "success": True,
+            "success": False,
+            "reason": "max_iterations_reached",
             "output": "Max iterations reached. Unable to complete task fully.",
             "reasoning_steps": steps,
             "tool_calls_count": tool_calls_count,
             "iterations": self._max_iterations,
             "total_tokens": total_tokens,
-            "max_iterations_reached": True,
             "timestamp": datetime.utcnow().isoformat(),
         }
 
@@ -1221,7 +1230,6 @@ class HybridAgent(BaseAIAgent):
                                 operation = None
 
                         # Parse arguments JSON
-                        import json
                         if isinstance(func_args, str):
                             parameters = json.loads(func_args)
                         else:
@@ -1248,7 +1256,7 @@ class HybridAgent(BaseAIAgent):
                         messages.append(
                             LLMMessage(
                                 role="tool",
-                                content=str(tool_result),
+                                content=json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result),
                                 tool_call_id=tool_call.get("id", "call_0"),
                             )
                         )
@@ -1315,7 +1323,8 @@ class HybridAgent(BaseAIAgent):
                     )
 
                     # OBSERVE: Add tool result to conversation (for LLM consumption)
-                    observation_content = f"Tool '{tool_info['tool']}' returned: {tool_result}"
+                    tool_result_str = json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result)
+                    observation_content = f"Tool '{tool_info['tool']}' returned: {tool_result_str}"
                     observation = f"<OBSERVATION>\n{observation_content}\n</OBSERVATION>"
 
                     # Add to messages for next iteration
@@ -1366,15 +1375,16 @@ class HybridAgent(BaseAIAgent):
                 # Continue to next iteration
                 continue
 
-        # Max iterations reached
+        # Max iterations reached - task did not complete successfully within the limit
         logger.warning(f"HybridAgent {self.agent_id} reached max iterations")
         return {
+            "success": False,
+            "reason": "max_iterations_reached",
             "final_response": "Max iterations reached. Unable to complete task fully.",
             "steps": steps,
             "iterations": self._max_iterations,
             "tool_calls_count": tool_calls_count,
             "total_tokens": total_tokens,
-            "max_iterations_reached": True,
         }
 
     def _build_initial_messages(self, task: str, context: Dict[str, Any]) -> List[LLMMessage]:
@@ -1661,7 +1671,6 @@ class HybridAgent(BaseAIAgent):
         Returns:
             Dictionary with 'tool', 'operation', 'parameters'
         """
-        import json
         import re
 
         result = {}

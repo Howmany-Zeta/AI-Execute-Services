@@ -46,14 +46,15 @@ class ToolAgent(BaseAIAgent):
     - Tool instances (Dict[str, BaseTool]): Pre-configured tools with preserved state
 
     **Streaming Events (for execute_task_streaming):**
-    - type='status': Agent status updates
+    - type='started': Task started lifecycle event
     - type='token': LLM response tokens (reasoning)
     - type='tool_call': Tool being called (name, operation, parameters)
-    - type='tool_call_update': Incremental tool call data during streaming
-    - type='tool_calls': Complete tool_calls list from LLM
+    - type='tool_call_delta': Incremental tool call fragment during streaming
+    - type='tool_calls_ready': Complete tool_calls batch received from LLM
     - type='tool_result': Tool execution result
     - type='tool_error': Tool execution error
     - type='result': Final result
+    - type='completed': Task completed lifecycle event (success or max_iterations)
 
     Examples:
         # Example 1: LLM-powered tool agent with function calling
@@ -774,14 +775,15 @@ class ToolAgent(BaseAIAgent):
             Dict[str, Any]: Event dictionaries with streaming tokens, tool calls, and results
 
         Event types:
-            - type='status': Agent status updates
+            - type='started': Task started lifecycle event
             - type='token': LLM response tokens
             - type='tool_call': Tool being called
-            - type='tool_call_update': Incremental tool call data
-            - type='tool_calls': Complete tool_calls list
+            - type='tool_call_delta': Incremental tool call fragment during streaming
+            - type='tool_calls_ready': Complete tool_calls batch received from LLM
             - type='tool_result': Tool execution result
             - type='tool_error': Tool execution error
             - type='result': Final result
+            - type='completed': Task completed lifecycle event
 
         Example:
             ```python
@@ -867,8 +869,7 @@ class ToolAgent(BaseAIAgent):
         self._current_task_id = task.get("task_id")
 
         yield {
-            "type": "status",
-            "status": "started",
+            "type": "started",
             "timestamp": datetime.utcnow().isoformat(),
         }
 
@@ -907,14 +908,14 @@ class ToolAgent(BaseAIAgent):
                     }
                 elif chunk.type == "tool_call" and chunk.tool_call:
                     yield {
-                        "type": "tool_call_update",
+                        "type": "tool_call_delta",
                         "tool_call": chunk.tool_call,
                         "timestamp": datetime.utcnow().isoformat(),
                     }
                 elif chunk.type == "tool_calls" and chunk.tool_calls:
                     tool_calls_from_stream = chunk.tool_calls
                     yield {
-                        "type": "tool_calls",
+                        "type": "tool_calls_ready",
                         "tool_calls": chunk.tool_calls,
                         "timestamp": datetime.utcnow().isoformat(),
                     }

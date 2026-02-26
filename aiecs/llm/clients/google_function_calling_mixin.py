@@ -9,13 +9,24 @@ import json
 import logging
 from typing import Dict, Any, Optional, List, Union, AsyncGenerator
 from dataclasses import dataclass
-from vertexai.generative_models import (
-    FunctionDeclaration,
-    Tool,
-)
+from google import genai
+from google.genai import types
 from .base_client import LLMMessage, LLMResponse
 
 logger = logging.getLogger(__name__)
+
+# Finish-reason values that indicate the response was blocked / filtered.
+# Mirrors the constant in vertex_client.py and covers all blocking values
+# introduced in the google-genai SDK beyond the original {SAFETY, RECITATION}.
+_SAFETY_BLOCKING_FINISH_REASONS: frozenset[str] = frozenset({
+    "SAFETY",
+    "RECITATION",
+    "BLOCKLIST",
+    "PROHIBITED_CONTENT",
+    "SPII",
+    "IMAGE_SAFETY",
+    "IMAGE_PROHIBITED_CONTENT",
+})
 
 # Import StreamChunk from OpenAI mixin for compatibility
 try:
@@ -81,13 +92,13 @@ class GoogleFunctionCallingMixin:
 
     def _convert_openai_to_google_format(
         self, tools: List[Dict[str, Any]]
-    ) -> List[Tool]:
+    ) -> List[types.Tool]:
         """
         Convert OpenAI tools format to Google FunctionDeclaration format.
-        
+
         Args:
             tools: List of OpenAI-format tool dictionaries
-            
+
         Returns:
             List of Google Tool objects containing FunctionDeclaration
         """
@@ -105,18 +116,18 @@ class GoogleFunctionCallingMixin:
                 continue
 
             # Create FunctionDeclaration with raw dict parameters
-            # Let Vertex SDK handle the schema conversion internally
-            function_declaration = FunctionDeclaration(
+            # The new SDK coerces dict → Schema via pydantic automatically
+            function_declaration = types.FunctionDeclaration(
                 name=func_name,
                 description=func_description,
                 parameters=func_parameters,
             )
 
             function_declarations.append(function_declaration)
-        
+
         # Wrap in Tool objects (Google format requires tools to be wrapped)
         if function_declarations:
-            return [Tool(function_declarations=function_declarations)]
+            return [types.Tool(function_declarations=function_declarations)]
         return []
 
     def _extract_function_calls_from_google_response(
@@ -134,30 +145,24 @@ class GoogleFunctionCallingMixin:
         """
         function_calls = []
         
-        # Check for function calls in response
-        # Google Vertex AI returns function calls in different places depending on API version
+        # In the google-genai SDK, Candidate no longer exposes a top-level
+        # function_call attribute.  Function calls are always inside
+        # candidate.content.parts as Part.function_call objects.
         if hasattr(response, "candidates") and response.candidates:
             candidate = response.candidates[0]
-            
-            # Check for function_call attribute (older API)
-            if hasattr(candidate, "function_call") and candidate.function_call:
-                func_call = candidate.function_call
-                function_calls.append({
-                    "id": f"call_{len(function_calls)}",
-                    "type": "function",
-                    "function": {
-                        "name": func_call.name,
-                        "arguments": _serialize_function_args(func_call.args) if hasattr(func_call, "args") else "{}",
-                    },
-                })
 
-            # Check for content.parts with function_call (newer API)
-            elif hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
+            if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
                 for part in candidate.content.parts:
                     if hasattr(part, "function_call") and part.function_call:
                         func_call = part.function_call
+                        # Prefer the SDK-assigned id; fall back to a synthetic one.
+                        call_id = (
+                            func_call.id
+                            if hasattr(func_call, "id") and func_call.id
+                            else f"call_{len(function_calls)}"
+                        )
                         function_calls.append({
-                            "id": f"call_{len(function_calls)}",
+                            "id": call_id,
                             "type": "function",
                             "function": {
                                 "name": func_call.name,
@@ -242,45 +247,39 @@ class GoogleFunctionCallingMixin:
         """
         function_calls = []
         
-        # Check for function calls in chunk
+        # In the google-genai SDK, Candidate no longer exposes a top-level
+        # function_call attribute.  Function calls are always inside
+        # candidate.content.parts as Part.function_call objects.
         if hasattr(chunk, "candidates") and chunk.candidates:
             candidate = chunk.candidates[0]
-            
-            # Check for content.parts with function_call
+
             if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
                 for part in candidate.content.parts:
                     if hasattr(part, "function_call") and part.function_call:
                         func_call = part.function_call
+                        # Prefer the SDK-assigned id; fall back to a synthetic one.
+                        call_id = (
+                            func_call.id
+                            if hasattr(func_call, "id") and func_call.id
+                            else f"call_{len(function_calls)}"
+                        )
                         function_calls.append({
-                            "id": f"call_{len(function_calls)}",
+                            "id": call_id,
                             "type": "function",
                             "function": {
                                 "name": func_call.name,
                                 "arguments": _serialize_function_args(func_call.args) if hasattr(func_call, "args") else "{}",
                             },
                         })
-
-            # Check for function_call attribute directly on candidate
-            elif hasattr(candidate, "function_call") and candidate.function_call:
-                func_call = candidate.function_call
-                function_calls.append({
-                    "id": f"call_{len(function_calls)}",
-                    "type": "function",
-                    "function": {
-                        "name": func_call.name,
-                        "arguments": _serialize_function_args(func_call.args) if hasattr(func_call, "args") else "{}",
-                    },
-                })
         
         return function_calls if function_calls else None
 
     async def _stream_text_with_function_calling(
         self,
-        model_instance: Any,
+        client: genai.Client,
+        model_name: str,
         contents: Any,
-        generation_config: Any,
-        safety_settings: List[Any],
-        tools: Optional[List[Tool]] = None,
+        config: types.GenerateContentConfig,
         return_chunks: bool = False,
         **kwargs,
     ) -> AsyncGenerator[Union[str, StreamChunk], None]:
@@ -288,46 +287,27 @@ class GoogleFunctionCallingMixin:
         Stream text with Function Calling support (Google Vertex AI format).
 
         Args:
-            model_instance: GenerativeModel instance (should include system_instruction)
+            client: genai.Client instance
+            model_name: Model name string
             contents: Input contents (string or list of Content objects)
-            generation_config: GenerationConfig object
-            safety_settings: List of SafetySetting objects
-            tools: List of Tool objects (Google format)
+            config: GenerateContentConfig with all settings (system_instruction,
+                    safety_settings, tools, cached_content, etc.) already merged in
             return_chunks: If True, returns StreamChunk objects; if False, returns str tokens only
-            **kwargs: Additional arguments
+            **kwargs: Additional arguments (currently unused)
 
         Yields:
             str or StreamChunk: Text tokens or StreamChunk objects
         """
-        # Build API call parameters
-        api_params = {
-            "contents": contents,
-            "generation_config": generation_config,
-            "safety_settings": safety_settings,
-            "stream": True,
-        }
-        
-        # Add tools if available
-        if tools:
-            api_params["tools"] = tools
-        
-        # Add any additional kwargs
-        api_params.update(kwargs)
-        
-        # Get streaming response
-        stream_response = model_instance.generate_content(**api_params)
-        
         # Accumulator for tool calls
         tool_calls_accumulator: Dict[str, Dict[str, Any]] = {}
-        
-        # Stream chunks
-        import asyncio
+
         first_chunk_checked = False
-        
-        for chunk in stream_response:
-            # Yield control to event loop
-            await asyncio.sleep(0)
-            
+
+        async for chunk in await client.aio.models.generate_content_stream(
+            model=model_name,
+            contents=contents,
+            config=config,
+        ):
             # Check for prompt-level safety blocks
             if not first_chunk_checked and hasattr(chunk, "prompt_feedback"):
                 pf = chunk.prompt_feedback
@@ -346,13 +326,17 @@ class GoogleFunctionCallingMixin:
             if hasattr(chunk, "candidates") and chunk.candidates:
                 candidate = chunk.candidates[0]
                 
-                # Check for safety blocks in response
-                if hasattr(candidate, "finish_reason"):
-                    finish_reason = candidate.finish_reason
-                    if finish_reason in ["SAFETY", "RECITATION"]:
+                # Check for safety/content-policy blocks in response.
+                # Uses the full set of blocking FinishReason values from the
+                # new google-genai SDK (SAFETY, RECITATION, BLOCKLIST,
+                # PROHIBITED_CONTENT, SPII, IMAGE_SAFETY, IMAGE_PROHIBITED_CONTENT).
+                if hasattr(candidate, "finish_reason") and candidate.finish_reason:
+                    finish_reason = str(candidate.finish_reason)
+                    if finish_reason in _SAFETY_BLOCKING_FINISH_REASONS:
                         from .base_client import SafetyBlockError
                         raise SafetyBlockError(
-                            "Response blocked by safety filters",
+                            f"Response blocked by safety filters ({finish_reason})",
+                            block_reason=finish_reason,
                             block_type="response",
                         )
                 
