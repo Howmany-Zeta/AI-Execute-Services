@@ -322,8 +322,8 @@ KNOWLEDGE GRAPH CAPABILITIES:
 You have access to an integrated knowledge graph that can help answer complex questions.
 
 REASONING WITH KNOWLEDGE:
-Your reasoning process now includes an automatic RETRIEVE phase:
-1. RETRIEVE: Relevant knowledge is automatically fetched from the graph before each reasoning step
+Your reasoning process includes an automatic RETRIEVE phase (single pre-loop retrieval):
+1. RETRIEVE: Relevant knowledge is fetched from the graph before the tool loop begins
 2. THOUGHT: You analyze the task considering retrieved knowledge
 3. ACTION: Use tools or provide final answer
 4. OBSERVATION: Review results and continue
@@ -581,7 +581,7 @@ Use graph reasoning proactively when questions involve:
         """
         Execute task with knowledge graph augmentation.
 
-        Uses knowledge-augmented ReAct loop that includes a RETRIEVE phase.
+        Uses knowledge-augmented tool loop (delegates to parent) that includes a RETRIEVE phase.
 
         Args:
             task: Task specification with 'description' or 'prompt'
@@ -626,8 +626,7 @@ Use graph reasoning proactively when questions involve:
                         "timestamp": datetime.utcnow().isoformat(),
                     }
 
-        # Fall back to standard hybrid agent execution
-        # This will use the overridden _react_loop with knowledge retrieval
+        # Fall back to standard hybrid agent execution (delegates to _tool_loop with knowledge injection)
         # Create modified task dict with augmented description
         augmented_task = task.copy()
         if "description" in task:
@@ -679,169 +678,49 @@ Use graph reasoning proactively when questions involve:
             # Then yield the main event
             yield event
 
-    async def _react_loop(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def _tool_loop(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Execute knowledge-augmented ReAct loop: Retrieve → Reason → Act → Observe.
+        Execute knowledge-augmented tool loop: RETRIEVE once, then delegate to parent.
 
-        Extends the standard ReAct loop with a RETRIEVE phase that fetches
-        relevant knowledge from the graph before each reasoning step.
-
-        Args:
-            task: Task description
-            context: Context dictionary
-
-        Returns:
-            Result dictionary with 'final_answer', 'steps', 'iterations'
+        Runs RETRIEVE logic to fetch relevant knowledge from the graph, augments the
+        task string with it, and delegates the main loop to HybridAgent._tool_loop.
         """
-        steps = []
-        tool_calls_count = 0
-        total_tokens = 0
-        knowledge_retrievals = 0
+        augmented_task = task
+        if self.graph_store is not None and self.enable_graph_reasoning:
+            try:
+                event_callback = context.get("_knowledge_event_callback")
+                retrieved_knowledge = await self._retrieve_relevant_knowledge(
+                    task, context, 0, event_callback
+                )
+                if retrieved_knowledge:
+                    knowledge_str = self._format_retrieved_knowledge(retrieved_knowledge)
+                    augmented_task = task + "\n\nRETRIEVED KNOWLEDGE:\n" + knowledge_str
+            except Exception as e:
+                logger.warning(f"Knowledge retrieval failed: {e}")
 
-        # Build initial messages
-        from aiecs.llm import LLMMessage
+        return await super()._tool_loop(augmented_task, context)
 
-        messages = self._build_initial_messages(task, context)
+    async def _tool_loop_streaming(
+        self, task: str, context: Dict[str, Any]
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """
+        Execute knowledge-augmented tool loop with streaming: RETRIEVE once, then delegate to parent.
+        """
+        augmented_task = task
+        if self.graph_store is not None and self.enable_graph_reasoning:
+            try:
+                event_callback = context.get("_knowledge_event_callback")
+                retrieved_knowledge = await self._retrieve_relevant_knowledge(
+                    task, context, 0, event_callback
+                )
+                if retrieved_knowledge:
+                    knowledge_str = self._format_retrieved_knowledge(retrieved_knowledge)
+                    augmented_task = task + "\n\nRETRIEVED KNOWLEDGE:\n" + knowledge_str
+            except Exception as e:
+                logger.warning(f"Knowledge retrieval failed: {e}")
 
-        for iteration in range(self._max_iterations):
-            logger.debug(f"KnowledgeAwareAgent {self.agent_id} - ReAct iteration {iteration + 1}")
-
-            # RETRIEVE: Get relevant knowledge from graph (if enabled)
-            retrieved_knowledge = []
-            if self.graph_store is not None and self.enable_graph_reasoning:
-                try:
-                    # Get event callback from context if available
-                    event_callback = context.get("_knowledge_event_callback")
-                    retrieved_knowledge = await self._retrieve_relevant_knowledge(
-                        task, context, iteration, event_callback
-                    )
-
-                    if retrieved_knowledge:
-                        knowledge_retrievals += 1
-                        knowledge_str = self._format_retrieved_knowledge(retrieved_knowledge)
-
-                        steps.append(
-                            {
-                                "type": "retrieve",
-                                "knowledge_count": len(retrieved_knowledge),
-                                "content": (knowledge_str[:200] + "..." if len(knowledge_str) > 200 else knowledge_str),
-                                "iteration": iteration + 1,
-                            }
-                        )
-
-                        # Add knowledge to messages
-                        messages.append(
-                            LLMMessage(
-                                role="system",
-                                content=f"RETRIEVED KNOWLEDGE:\n{knowledge_str}",
-                            )
-                        )
-                except Exception as e:
-                    logger.warning(f"Knowledge retrieval failed: {e}")
-
-            # THINK: LLM reasons about next action
-            response = await self.llm_client.generate_text(
-                messages=messages,
-                model=self._config.llm_model,
-                temperature=self._config.temperature,
-                max_tokens=self._config.max_tokens,
-                context=context,
-            )
-
-            thought = response.content
-            total_tokens += getattr(response, "total_tokens", 0)
-
-            steps.append(
-                {
-                    "type": "thought",
-                    "content": thought,
-                    "iteration": iteration + 1,
-                }
-            )
-
-            # Check if final answer
-            if "FINAL ANSWER:" in thought:
-                final_answer = self._extract_final_answer(thought)
-                return {
-                    "final_answer": final_answer,
-                    "steps": steps,
-                    "iterations": iteration + 1,
-                    "tool_calls_count": tool_calls_count,
-                    "knowledge_retrievals": knowledge_retrievals,
-                    "total_tokens": total_tokens,
-                }
-
-            # Check if tool call
-            if "TOOL:" in thought:
-                # ACT: Execute tool
-                try:
-                    tool_info = self._parse_tool_call(thought)
-                    tool_result = await self._execute_tool(
-                        tool_info["tool"],
-                        tool_info.get("operation"),
-                        tool_info.get("parameters", {}),
-                    )
-                    tool_calls_count += 1
-
-                    steps.append(
-                        {
-                            "type": "action",
-                            "tool": tool_info["tool"],
-                            "operation": tool_info.get("operation"),
-                            "parameters": tool_info.get("parameters"),
-                            "iteration": iteration + 1,
-                        }
-                    )
-
-                    # OBSERVE: Add tool result to conversation
-                    observation = f"OBSERVATION: Tool '{tool_info['tool']}' returned: {tool_result}"
-                    steps.append(
-                        {
-                            "type": "observation",
-                            "content": observation,
-                            "iteration": iteration + 1,
-                        }
-                    )
-
-                    # Add to messages for next iteration
-                    messages.append(LLMMessage(role="assistant", content=thought))
-                    messages.append(LLMMessage(role="user", content=observation))
-
-                except Exception as e:
-                    error_msg = f"OBSERVATION: Tool execution failed: {str(e)}"
-                    steps.append(
-                        {
-                            "type": "observation",
-                            "content": error_msg,
-                            "iteration": iteration + 1,
-                            "error": True,
-                        }
-                    )
-                    messages.append(LLMMessage(role="assistant", content=thought))
-                    messages.append(LLMMessage(role="user", content=error_msg))
-
-            else:
-                # LLM didn't provide clear action - treat as final answer
-                return {
-                    "final_answer": thought,
-                    "steps": steps,
-                    "iterations": iteration + 1,
-                    "tool_calls_count": tool_calls_count,
-                    "knowledge_retrievals": knowledge_retrievals,
-                    "total_tokens": total_tokens,
-                }
-
-        # Max iterations reached
-        logger.warning(f"KnowledgeAwareAgent {self.agent_id} reached max iterations")
-        return {
-            "final_answer": "Max iterations reached. Unable to complete task fully.",
-            "steps": steps,
-            "iterations": self._max_iterations,
-            "tool_calls_count": tool_calls_count,
-            "knowledge_retrievals": knowledge_retrievals,
-            "total_tokens": total_tokens,
-            "max_iterations_reached": True,
-        }
+        async for event in super()._tool_loop_streaming(augmented_task, context):
+            yield event
 
     async def _retrieve_relevant_knowledge(
         self,
