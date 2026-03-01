@@ -6,6 +6,17 @@ All notable changes to AIECS will be documented in this file.
 The format is based on `Keep a Changelog <https://keepachangelog.com/en/1.0.0/>`_,
 and this project adheres to `Semantic Versioning <https://semver.org/spec/v2.0.0.html>`_.
 
+[Unreleased]
+------------
+
+Changed
+~~~~~~~
+
+* **BREAKING**: HybridAgent no longer supports ReAct text format (TOOL:/OPERATION:/PARAMETERS:, FINAL RESPONSE: finish). Use OpenAI-compatible Function Calling only. See docs/developer/DOMAIN_AGENT/REACT_TO_FUNCTION_CALLING_MIGRATION.md.
+* **BREAKING**: Removed `react_format_enabled` from AgentConfiguration.
+* HybridAgent tool loop aligned with Claude BetaToolRunner: append-only messages, no iteration labels, first user message = raw task only.
+* Callers (e.g., MasterController) MUST NOT append initial_act_prompt or Step 1/2 to task; move to system prompt if needed.
+
 [1.5.3] - 2024-01-XX
 --------------------
 

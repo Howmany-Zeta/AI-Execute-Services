@@ -3,6 +3,9 @@ Example: Using HybridAgent for Continuous Long Text Generation
 
 This example demonstrates how to configure and use HybridAgent to generate
 long text across multiple rounds without abrupt truncation.
+
+Uses text-only mode (tools=[]). For tool use, see migration guide:
+docs/developer/DOMAIN_AGENT/REACT_TO_FUNCTION_CALLING_MIGRATION.md
 """
 
 import asyncio
@@ -26,15 +29,9 @@ async def example_basic_long_text_generation():
 
 When generating long text:
 1. Write naturally and continue seamlessly from previous content
-2. Use FINAL RESPONSE: <your_content> finish only when completely done
-3. If your response is cut off due to token limits, continue in the next iteration
-4. Maintain consistency in style and tone throughout
-5. End sentences and paragraphs naturally, even if continuing later
-
-Format your response as:
-FINAL RESPONSE: <your_long_text_content> finish
-
-Only add 'finish' when the entire text is complete."""
+2. If your response is cut off due to token limits, continue in the next iteration
+3. Maintain consistency in style and tone throughout
+4. End sentences and paragraphs naturally, even if continuing later"""
     )
     
     # Step 2: Initialize agent
@@ -91,7 +88,6 @@ async def example_streaming_long_text():
         max_tokens=3000,
         max_iterations=20,
         system_prompt="""You are a professional writer. Generate long-form content naturally.
-        Use FINAL RESPONSE: <content> finish only when completely done.
         Continue seamlessly if cut off."""
     )
     
@@ -150,8 +146,7 @@ CONTINUATION GUIDELINES:
 1. When continuing from previous output, start naturally without repetition
 2. Use transitional phrases to connect with previous content (e.g., "Building on this...", "Furthermore...", "In addition...")
 3. Maintain narrative flow and coherence across iterations
-4. Only use FINAL RESPONSE: <content> finish when 100% complete
-5. If your response is cut off, continue seamlessly in the next round
+4. If your response is cut off, continue seamlessly in the next round
 
 Example continuation:
 Previous: "The history of AI dates back to the 1950s..."
@@ -192,15 +187,7 @@ Write naturally and maintain consistency in style and tone."""
     if result.get("max_iterations_reached"):
         print("Warning: Reached max_iterations. Consider increasing it.")
     
-    # Extract final response (remove FINAL RESPONSE: prefix and finish suffix if present)
     final_text = result["output"]
-    if "FINAL RESPONSE:" in final_text:
-        # Extract content between FINAL RESPONSE: and finish
-        parts = final_text.split("FINAL RESPONSE:", 1)
-        if len(parts) > 1:
-            content = parts[1].rsplit("finish", 1)[0].strip()
-            final_text = content
-    
     print(f"\nGenerated {len(final_text)} characters in {result['iterations']} iterations")
     return final_text
 
@@ -213,7 +200,7 @@ async def example_monitoring_and_handling():
         temperature=0.7,
         max_tokens=3000,
         max_iterations=10,  # Start with lower limit
-        system_prompt="""Generate long-form content. Use FINAL RESPONSE: <content> finish when done."""
+        system_prompt="""Generate long-form content naturally."""
     )
     
     llm_client = OpenAIClient(api_key="your-api-key")
@@ -244,7 +231,7 @@ async def example_monitoring_and_handling():
         print("Consider:")
         print(f"  1. Increasing max_iterations (current: {config.max_iterations})")
         print(f"  2. Increasing max_tokens per iteration (current: {config.max_tokens})")
-        print(f"  3. Checking if LLM is outputting 'finish' prematurely")
+        print(f"  3. Checking if generation is completing naturally")
         
         # Optionally retry with higher limits
         config.max_iterations = 20
@@ -259,9 +246,9 @@ async def example_monitoring_and_handling():
         result = await agent.execute_task(task, {})
         print(f"\nRetry: Completed in {result['iterations']} iterations")
     
-    # Check if generation completed naturally
-    if "finish" not in result["output"].lower():
-        print("\n⚠️  Generation may be incomplete (no 'finish' marker found)")
+    # Check if generation completed
+    if not result.get("output"):
+        print("\n⚠️  Generation may be incomplete (empty output)")
     
     return result
 

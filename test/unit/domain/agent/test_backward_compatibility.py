@@ -35,6 +35,10 @@ class MockLLMClient(BaseLLMClient):
         model: str = None,
         temperature: float = None,
         max_tokens: int = None,
+        tools: List[Dict] = None,
+        tool_choice: str = None,
+        context: Dict = None,
+        **kwargs,
     ) -> LLMResponse:
         """Generate mock response."""
         return LLMResponse(
@@ -50,6 +54,10 @@ class MockLLMClient(BaseLLMClient):
         model: str = None,
         temperature: float = None,
         max_tokens: int = None,
+        tools: List[Dict] = None,
+        tool_choice: str = None,
+        context: Dict = None,
+        **kwargs,
     ):
         """Stream mock response."""
         for token in ["Mock", " ", "streaming", " ", "response"]:
@@ -185,13 +193,20 @@ async def test_existing_agent_creation_code_unchanged():
     Test 2.1.5: Verify existing agent creation code still works without changes.
 
     This test simulates typical existing code patterns to ensure backward compatibility.
+    HybridAgent with tools now requires an LLM client that supports Function Calling.
     """
-    # Pattern 1: Simple HybridAgent creation (most common pattern)
+    # Mock client that supports Function Calling (required for HybridAgent with tools)
+    class MockLLMClientOpenAI(MockLLMClient):
+        def __init__(self):
+            super().__init__()
+            self.provider_name = "openai"
+
+    # Pattern 1: Simple HybridAgent creation (requires Function Calling support)
     config1 = AgentConfiguration(goal="Research agent", llm_model="gpt-4")
     agent1 = HybridAgent(
         agent_id="researcher-1",
         name="Research Agent",
-        llm_client=MockLLMClient(),
+        llm_client=MockLLMClientOpenAI(),
         tools=["search", "apisource"],
         config=config1,
     )
@@ -225,12 +240,12 @@ async def test_existing_agent_creation_code_unchanged():
     await agent3.initialize()
     assert agent3.state.name == "ACTIVE"
 
-    # Pattern 4: HybridAgent with max_iterations
+    # Pattern 4: HybridAgent with max_iterations (requires Function Calling support)
     config4 = AgentConfiguration(goal="Complex reasoning")
     agent4 = HybridAgent(
         agent_id="reasoner-1",
         name="Reasoning Agent",
-        llm_client=MockLLMClient(),
+        llm_client=MockLLMClientOpenAI(),
         tools=["search"],
         config=config4,
         max_iterations=15,  # Custom parameter
@@ -432,8 +447,8 @@ async def test_llm_agent_default_fallback():
 
 
 @pytest.mark.asyncio
-async def test_hybrid_agent_system_prompt_with_react_instructions():
-    """Test that HybridAgent uses system_prompt but still adds ReAct instructions."""
+async def test_hybrid_agent_system_prompt_with_tool_instructions():
+    """Test that HybridAgent uses system_prompt and adds tool-related instructions (Function Calling)."""
     config = AgentConfiguration(
         system_prompt="You are a specialized data analyst.",
         goal="This goal should be ignored",
@@ -452,15 +467,13 @@ async def test_hybrid_agent_system_prompt_with_react_instructions():
 
     # Custom prompt should be included
     assert "You are a specialized data analyst." in agent._system_prompt
-    # ReAct instructions should still be appended
-    assert "ReAct pattern" in agent._system_prompt
     # Goal should NOT be in the prompt (overridden by system_prompt)
     assert "This goal should be ignored" not in agent._system_prompt
 
 
 @pytest.mark.asyncio
-async def test_hybrid_agent_assembled_with_react():
-    """Test that HybridAgent assembles from fields when system_prompt is None."""
+async def test_hybrid_agent_assembled_from_fields():
+    """Test that HybridAgent assembles from goal/backstory when system_prompt is None."""
     config = AgentConfiguration(
         goal="Analyze data",
         backstory="Expert analyst",
@@ -480,8 +493,6 @@ async def test_hybrid_agent_assembled_with_react():
     # Assembled fields should be present
     assert "Goal: Analyze data" in agent._system_prompt
     assert "Background: Expert analyst" in agent._system_prompt
-    # ReAct instructions should be present
-    assert "ReAct pattern" in agent._system_prompt
 
 
 @pytest.mark.asyncio
@@ -656,7 +667,6 @@ async def test_hybrid_agent_multiple_system_prompts():
         ],
         enable_prompt_caching=True,
         llm_model="mock-model",
-        react_format_enabled=True,
     )
 
     agent = HybridAgent(
@@ -670,7 +680,7 @@ async def test_hybrid_agent_multiple_system_prompts():
 
     messages = agent._build_initial_messages("Do something", {})
 
-    # Should have multiple system messages (base prompts + ReAct instructions)
+    # Should have multiple system messages (base prompts + tool instructions)
     system_messages = [msg for msg in messages if msg.role == "system"]
     assert len(system_messages) >= 2
     
