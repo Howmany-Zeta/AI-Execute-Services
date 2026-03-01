@@ -379,6 +379,95 @@ class TestKnowledgeContext:
         await agent.shutdown()
 
 
+class TestToolLoopDelegation:
+    """Test _tool_loop delegates to parent with knowledge injection"""
+
+    @pytest.mark.asyncio
+    async def test_tool_loop_augments_task_when_graph_store_enabled(
+        self, mock_llm_client, agent_config, graph_store
+    ):
+        """When graph_store enabled, _tool_loop augments task with RETRIEVED KNOWLEDGE before delegating"""
+        # Use tools={} to avoid auto-adding graph_reasoning (which requires Function Calling)
+        agent = KnowledgeAwareAgent(
+            agent_id="test_agent_tool_loop_1",
+            name="Test Agent",
+            llm_client=mock_llm_client,
+            tools={},
+            config=agent_config,
+            graph_store=graph_store,
+        )
+        await agent.initialize()
+
+        task = "How is Alice connected to Bob?"
+        context = {}
+
+        # Mock _retrieve_relevant_knowledge to return entities
+        alice = Entity(id="alice", entity_type="Person", properties={"name": "Alice"})
+        with patch.object(
+            agent, "_retrieve_relevant_knowledge", new_callable=AsyncMock
+        ) as mock_retrieve:
+            mock_retrieve.return_value = [alice]
+
+            with patch.object(
+                agent.__class__.__bases__[0],
+                "_tool_loop",
+                new_callable=AsyncMock,
+            ) as mock_parent_tool_loop:
+                mock_parent_tool_loop.return_value = {
+                    "final_response": "done",
+                    "steps": [],
+                    "iterations": 1,
+                }
+
+                result = await agent._tool_loop(task, context)
+
+                mock_retrieve.assert_called_once()
+                mock_parent_tool_loop.assert_called_once()
+                call_task = mock_parent_tool_loop.call_args[0][0]
+                assert "RETRIEVED KNOWLEDGE" in call_task
+                assert "- Person: alice" in call_task or "alice" in call_task
+
+        await agent.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_tool_loop_passes_unmodified_task_when_no_graph_store(
+        self, mock_llm_client, agent_config
+    ):
+        """When graph_store is None, _tool_loop passes unmodified task to parent"""
+        agent = KnowledgeAwareAgent(
+            agent_id="test_agent_tool_loop_2",
+            name="Test Agent",
+            llm_client=mock_llm_client,
+            tools=[],
+            config=agent_config,
+            graph_store=None,
+        )
+        await agent.initialize()
+
+        task = "What is 2 + 2?"
+        context = {}
+
+        with patch.object(
+            agent.__class__.__bases__[0],
+            "_tool_loop",
+            new_callable=AsyncMock,
+        ) as mock_parent_tool_loop:
+            mock_parent_tool_loop.return_value = {
+                "final_response": "4",
+                "steps": [],
+                "iterations": 1,
+            }
+
+            result = await agent._tool_loop(task, context)
+
+            mock_parent_tool_loop.assert_called_once()
+            call_task = mock_parent_tool_loop.call_args[0][0]
+            assert call_task == task
+            assert "RETRIEVED KNOWLEDGE" not in call_task
+
+        await agent.shutdown()
+
+
 class TestExecuteTask:
     """Test task execution with KG augmentation"""
     
