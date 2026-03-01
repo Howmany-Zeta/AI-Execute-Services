@@ -2,7 +2,9 @@
 
 ## Quick Start
 
-**✅ No migration required!** All changes are backward compatible. This checklist helps you adopt new features gradually.
+**⚠️ ReAct removal (breaking)**: HybridAgent no longer supports ReAct text format. If you use `react_format_enabled` or rely on TOOL:/FINAL RESPONSE parsing, see [ReAct to Function Calling Migration](REACT_TO_FUNCTION_CALLING_MIGRATION.md).
+
+**✅ Other changes**: Tool instances, custom LLM clients, and most features remain backward compatible.
 
 ---
 

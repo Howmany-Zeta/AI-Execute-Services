@@ -2,7 +2,12 @@
 Hybrid Agent
 
 Agent implementation combining LLM reasoning with tool execution capabilities.
-Implements the ReAct (Reasoning + Acting) pattern.
+Uses OpenAI Function Calling for tool use (BetaToolRunner-style loop).
+
+.. deprecated::
+    ReAct text format (TOOL:/OPERATION:/PARAMETERS:, FINAL RESPONSE: finish) is no longer
+    supported. Use OpenAI-compatible Function Calling with an LLM client that supports
+    tools (OpenAI, xAI, Anthropic, Vertex).
 """
 
 import json
@@ -32,78 +37,21 @@ class HybridAgent(BaseAIAgent):
     """
     Hybrid agent combining LLM reasoning with tool execution.
 
-    Implements ReAct pattern: Reason → Act → Observe loop.
-
-    This agent supports flexible tool and LLM client configurations:
+    Uses OpenAI Function Calling for tool use (BetaToolRunner-style loop).
+    ReAct text format is no longer supported; use Function Calling only.
 
     **Tool Configuration:**
     - Tool names (List[str]): Backward compatible, tools loaded by name
     - Tool instances (Dict[str, BaseTool]): Pre-configured tools with preserved state
 
     **LLM Client Configuration:**
-    - BaseLLMClient: Standard LLM clients (OpenAI, xAI, etc.)
+    - BaseLLMClient: Standard LLM clients (OpenAI, xAI, Anthropic, Vertex)
     - Custom clients: Any object implementing LLMClientProtocol (duck typing)
+    - **Required**: LLM must support Function Calling (tools parameter)
 
-    **ReAct Format Reference (for callers to include in their prompts):**
-    
-    The caller is responsible for ensuring the LLM follows the correct format.
-    Below are the standard formats that HybridAgent expects:
-
-    CORRECT FORMAT EXAMPLE::
-
-        <THOUGHT>
-        I need to search for information about the weather. Let me use the search tool.
-        </THOUGHT>
-
-        TOOL: search
-        OPERATION: query
-        PARAMETERS: {"q": "weather today"}
-
-        <OBSERVATION>
-        The search tool returned: Today's weather is sunny, 72°F.
-        </OBSERVATION>
-
-        <THOUGHT>
-        I have the weather information. Now I can provide the final response.
-        </THOUGHT>
-
-        FINAL RESPONSE: Today's weather is sunny, 72°F. finish
-
-    INCORRECT FORMAT (DO NOT DO THIS)::
-
-        <THOUGHT>
-        I need to search.
-        TOOL: search
-        OPERATION: query
-        </THOUGHT>
-        ❌ Tool calls must be OUTSIDE the <THOUGHT> and <OBSERVATION> tags
-
-        <THOUGHT>
-        I know the answer.
-        FINAL RESPONSE: The answer is... finish
-        </THOUGHT>
-        ❌ Final responses must be OUTSIDE the <THOUGHT> and <OBSERVATION> tags
-        ❌ FINAL RESPONSE must end with 'finish' suffix to indicate completion
-
-    TOOL CALL FORMAT::
-
-        TOOL: <tool_name>
-        OPERATION: <operation_name>
-        PARAMETERS: <json_parameters>
-
-    FINAL RESPONSE FORMAT::
-
-        FINAL RESPONSE: <your_response> finish
-
-    **Important Notes for Callers:**
-
-    - FINAL RESPONSE MUST end with 'finish' to indicate completion
-    - If no 'finish' suffix, the system assumes response is incomplete and will continue iteration
-    - LLM can output JSON or any text format - it will be passed through unchanged
-    - Each iteration will inform LLM of current iteration number and remaining iterations
-    - If LLM generation is incomplete, it will be asked to continue from where it left off
-    - Callers can customize max_iterations to control loop behavior
-    - Callers are responsible for parsing and handling LLM output format
+    **Deprecation Notice:**
+    ReAct text format (TOOL:/OPERATION:/PARAMETERS:, FINAL RESPONSE: finish) is no longer
+    supported. Use OpenAI-compatible Function Calling with supported providers.
 
     Examples:
         # Example 1: Basic usage with tool names (backward compatible)
@@ -350,8 +298,15 @@ class HybridAgent(BaseAIAgent):
         # Generate tool schemas for Function Calling
         self._generate_tool_schemas()
 
-        # Check if LLM client supports Function Calling
+        # Require Function Calling when tools are present
         self._use_function_calling = self._check_function_calling_support()
+        if self._tool_instances and not self._use_function_calling:
+            provider = getattr(self.llm_client, "provider_name", "unknown")
+            raise ValueError(
+                "HybridAgent requires an LLM client with Function Calling support when tools are configured. "
+                f"Current client ({provider}) does not support tools. "
+                "Use OpenAI-compatible clients: OpenAI, xAI, Anthropic, or Google Vertex."
+            )
 
         # Build system prompt
         self._system_prompt = self._build_system_prompt()
@@ -368,84 +323,34 @@ class HybridAgent(BaseAIAgent):
         logger.info(f"HybridAgent {self.agent_id} shut down")
 
     def _build_system_prompts(self) -> List[Dict[str, Any]]:
-        """Build multiple system prompts including tool descriptions and ReAct instructions.
+        """Build multiple system prompts including tool descriptions.
 
-        Overrides base method to add ReAct instructions and tool info as separate system messages.
-        This allows better cache control: base prompts can be cached, while ReAct instructions
-        and tool info are always included.
+        Overrides base method to add tool info as separate system message.
+        ReAct text format is no longer supported; use OpenAI Function Calling.
 
         Returns:
             List of system prompt dictionaries with content and cache_control
         """
-        # Get base prompts from parent (supports multiple system prompts)
         prompts = super()._build_system_prompts()
 
-        # Check if user provided custom system prompt(s)
-        # If user provided system_prompt or system_prompts, we should respect their choice
-        # and not add extra instructions when react_format_enabled=False
         has_custom_system_prompt = (
             self._config.system_prompt is not None or
             self._config.system_prompts is not None
         )
 
-        # Build ReAct instructions and tool info
-        react_parts = []
-
-        # Add ReAct instructions (configurable - default False)
-        # When disabled, developers can use custom formats or rely entirely on Function Calling
-        if self._config.react_format_enabled:
-            react_parts.append(
-                "Within the given identity framework, you are also a highly intelligent, responsive, and accurate reasoning agent. that can use tools to complete tasks. "
-                "Follow the ReAct (Reasoning + Acting) pattern to achieve best results:\n"
-                "1. THOUGHT: Analyze the task and decide what to do\n"
-                "2. ACTION: Use a tool if needed, or provide final answer\n"
-                "3. OBSERVATION: Review the tool result and continue reasoning\n\n"
-                "RESPONSE FORMAT REQUIREMENTS:\n"
-                "- Wrap your thinking process in <THOUGHT>...</THOUGHT> tags\n"
-                "- Wrap your insight about tool result in <OBSERVATION>...</OBSERVATION> tags\n"
-                "- Tool calls (TOOL:, OPERATION:, PARAMETERS:) MUST be OUTSIDE <THOUGHT> and <OBSERVATION> tags\n"
-                "- Final responses (FINAL RESPONSE:) MUST be OUTSIDE <THOUGHT> and <OBSERVATION> tags\n\n"
-                "THINKING GUIDANCE:\n"
-                "When writing <THOUGHT> sections, consider:\n"
-                "- What is the core thing to do?\n"
-                "- What information do I already have?\n"
-                "- What information do I need to gather?\n"
-                "- Which tools would be most helpful?\n"
-                "- What action should I take?\n\n"
-                "OBSERVATION GUIDANCE:\n"
-                "When writing <OBSERVATION> sections, consider:\n"
-                "- What did I learn from the tool results?\n"
-                "- How does this information inform my next work?\n"
-                "- Do I need additional information?\n"
-                "- Am I ready to provide a final response?"
-            )
-        elif not has_custom_system_prompt:
-            # ReAct format disabled AND no custom system prompt provided
-            # Add minimal instructions only when user hasn't provided their own prompt
-            react_parts.append(
+        parts = []
+        if not has_custom_system_prompt:
+            parts.append(
                 "You are a highly intelligent, responsive, and accurate reasoning agent that can use tools to complete tasks. "
                 "Use the available tools when needed to accomplish the task."
             )
-
-        # Add available tools (always required for HybridAgent)
-        # Tools info should always be added when tools are available, even if user provided custom prompt
-        # This ensures the model knows what tools are available
         if self._available_tools:
-            if react_parts:
-                # Add tools info to existing react_parts
-                react_parts.append(f"\nAvailable tools: {', '.join(self._available_tools)}")
-            else:
-                # No react_parts (user provided custom prompt and react_format_enabled=False)
-                # Still add tools info as a separate message
-                react_parts.append(f"Available tools: {', '.join(self._available_tools)}")
+            parts.append(f"Available tools: {', '.join(self._available_tools)}")
 
-        # Add ReAct instructions and tool info as a separate system message (not cached, as it may change)
-        # Only add if we have react_parts (instructions or tools info)
-        if react_parts:
-            react_content = "\n\n".join(react_parts)
+        if parts:
             prompts.append({
-                "content": react_content,
-                "cache_control": False  # Don't cache ReAct instructions and tool info
+                "content": "\n\n".join(parts),
+                "cache_control": False,
             })
 
         return prompts
@@ -505,8 +410,8 @@ class HybridAgent(BaseAIAgent):
             self._transition_state(self.state.__class__.BUSY)
             self._current_task_id = task.get("task_id")
 
-            # Execute ReAct loop
-            result = await self._react_loop(task_description, context)
+            # Execute tool loop (BetaToolRunner-style)
+            result = await self._tool_loop(task_description, context)
 
             # Calculate execution time
             execution_time = (datetime.utcnow() - start_time).total_seconds()
@@ -646,8 +551,8 @@ class HybridAgent(BaseAIAgent):
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
-            # Execute streaming ReAct loop
-            async for event in self._react_loop_streaming(task_description, context):
+            # Execute streaming tool loop (BetaToolRunner-style)
+            async for event in self._tool_loop_streaming(task_description, context):
                 yield event
 
             # Get final result from last event
@@ -729,9 +634,10 @@ class HybridAgent(BaseAIAgent):
             logger.error(f"Streaming message processing failed for {self.agent_id}: {e}")
             raise
 
-    async def _react_loop_streaming(self, task: str, context: Dict[str, Any]) -> AsyncIterator[Dict[str, Any]]:
+    async def _tool_loop_streaming(self, task: str, context: Dict[str, Any]) -> AsyncIterator[Dict[str, Any]]:
         """
-        Execute ReAct loop with streaming: Reason → Act → Observe.
+        Execute tool loop with streaming (BetaToolRunner-style).
+        Append-only messages; native tool_use/tool_result; no iteration labels.
 
         Args:
             task: Task description
@@ -748,17 +654,7 @@ class HybridAgent(BaseAIAgent):
         messages = self._build_initial_messages(task, context)
 
         for iteration in range(self._max_iterations):
-            logger.debug(f"HybridAgent {self.agent_id} - ReAct iteration {iteration + 1}")
-
-            # Add iteration info to messages (except first iteration which has task context)
-            if iteration > 0:
-                iteration_info = (
-                    f"[Iteration {iteration + 1}/{self._max_iterations}, "
-                    f"remaining: {self._max_iterations - iteration - 1}]"
-                )
-                # Only add if the last message is not already an iteration info
-                if messages and not messages[-1].content.startswith("[Iteration"):
-                    messages.append(LLMMessage(role="user", content=iteration_info))
+            logger.debug(f"HybridAgent {self.agent_id} - tool loop iteration {iteration + 1}")
 
             # Yield iteration_start lifecycle event (fires before each LLM call)
             yield {
@@ -773,30 +669,26 @@ class HybridAgent(BaseAIAgent):
             thought_tokens = []
             tool_calls_from_stream = None
             
-            # Use Function Calling if supported, otherwise use ReAct mode
-            if self._use_function_calling and self._tool_schemas:
-                # Convert schemas to tools format
-                tools = [{"type": "function", "function": schema} for schema in self._tool_schemas]
-                # Use return_chunks=True to get tool_calls information
-                stream_gen = self.llm_client.stream_text(  # type: ignore[attr-defined]
-                    messages=messages,
-                    model=self._config.llm_model,
-                    temperature=self._config.temperature,
-                    max_tokens=self._config.max_tokens,
-                    context=context,
-                    tools=tools,
-                    tool_choice="auto",
-                    return_chunks=True,  # Enable tool_calls accumulation
+            # Require Function Calling when tools are configured
+            if self._tool_schemas and not self._use_function_calling:
+                provider = getattr(self.llm_client, "provider_name", "unknown")
+                raise ValueError(
+                    "HybridAgent requires an LLM client with Function Calling support when tools are configured. "
+                    f"Current client ({provider}) does not support tools. "
+                    "Use OpenAI-compatible clients: OpenAI, xAI, Anthropic, or Google Vertex."
                 )
-            else:
-                # Fallback to ReAct mode
-                stream_gen = self.llm_client.stream_text(  # type: ignore[attr-defined]
-                    messages=messages,
-                    model=self._config.llm_model,
-                    temperature=self._config.temperature,
-                    max_tokens=self._config.max_tokens,
-                    context=context,
-                )
+            kwargs = dict(
+                messages=messages,
+                model=self._config.llm_model,
+                temperature=self._config.temperature,
+                max_tokens=self._config.max_tokens,
+                context=context,
+            )
+            if self._tool_schemas:
+                kwargs["tools"] = [{"type": "function", "function": s} for s in self._tool_schemas]
+                kwargs["tool_choice"] = "auto"
+                kwargs["return_chunks"] = True
+            stream_gen = self.llm_client.stream_text(**kwargs)  # type: ignore[attr-defined]
 
             # Stream tokens and collect tool calls
             from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
@@ -848,12 +740,11 @@ class HybridAgent(BaseAIAgent):
             
             # Process tool_calls if received from stream
             if tool_calls_from_stream:
-                # Add assistant message with ALL tool_calls ONCE before processing
-                # This prevents duplicate assistant messages when processing parallel tool calls
+                # Add assistant message with BOTH content and tool_calls (align with Claude)
                 messages.append(
                     LLMMessage(
                         role="assistant",
-                        content=None,
+                        content=thought_raw.strip() or None,
                         tool_calls=tool_calls_from_stream,
                     )
                 )
@@ -960,127 +851,18 @@ class HybridAgent(BaseAIAgent):
                 # Continue to next iteration
                 continue
 
-            # Check for final response (outside tags only)
-            if self._has_final_response(thought_raw):
-                final_response = self._extract_final_response(thought_raw)
-                yield {
-                    "type": "result",
-                    "success": True,
-                    "output": final_response,  # Return raw output without processing
-                    "reasoning_steps": steps,
-                    "tool_calls_count": tool_calls_count,
-                    "iterations": iteration + 1,
-                    "total_tokens": total_tokens,
-                    "timestamp": datetime.utcnow().isoformat(),
-                }
-                return
-
-            # Check if tool call (ReAct mode, outside tags only)
-            if self._has_tool_call(thought_raw):
-                # ACT: Execute tool
-                try:
-                    tool_info = self._parse_tool_call(thought_raw)  # Parse from raw text
-                    tool_name = tool_info.get("tool", "")
-                    if not tool_name:
-                        raise ValueError("Tool name not found in tool call")
-
-                    # Yield tool call event
-                    yield {
-                        "type": "tool_call",
-                        "tool_name": tool_name,
-                        "operation": tool_info.get("operation"),
-                        "parameters": tool_info.get("parameters", {}),
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-
-                    tool_result = await self._execute_tool(
-                        tool_name,
-                        tool_info.get("operation"),
-                        tool_info.get("parameters", {}),
-                    )
-                    tool_calls_count += 1
-
-                    # Wrap tool call and result in step
-                    steps.append(
-                        {
-                            "type": "action",
-                            "tool": tool_info["tool"],
-                            "operation": tool_info.get("operation"),
-                            "parameters": tool_info.get("parameters"),
-                            "result": str(tool_result),  # Include result in step
-                            "iteration": iteration + 1,
-                        }
-                    )
-
-                    # Yield tool result event (streaming)
-                    yield {
-                        "type": "tool_result",
-                        "tool_name": tool_name,
-                        "result": tool_result,
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-
-                    # OBSERVE: Add tool result to conversation (for LLM consumption)
-                    tool_result_str = json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result)
-                    observation_content = f"Tool '{tool_info['tool']}' returned: {tool_result_str}"
-                    observation = f"<OBSERVATION>\n{observation_content}\n</OBSERVATION>"
-
-                    # Add to messages for next iteration
-                    messages.append(LLMMessage(role="assistant", content=thought_raw))
-                    messages.append(LLMMessage(role="user", content=observation))
-
-                except Exception as e:
-                    error_content = f"Tool execution failed: {str(e)}"
-                    error_msg = f"<OBSERVATION>\n{error_content}\n</OBSERVATION>"
-                    steps.append(
-                        {
-                            "type": "action",
-                            "tool": tool_name if "tool_name" in locals() else "unknown",
-                            "error": str(e),
-                            "iteration": iteration + 1,
-                            "error": True,
-                        }
-                    )
-
-                    # Yield error event
-                    yield {
-                        "type": "tool_error",
-                        "tool_name": tool_name if "tool_name" in locals() else "unknown",
-                        "error": str(e),
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-
-                    messages.append(LLMMessage(role="assistant", content=thought_raw))
-                    messages.append(LLMMessage(role="user", content=error_msg))
-
-            else:
-                # Check if there's an incomplete final response (has FINAL RESPONSE but no finish)
-                if self._has_incomplete_final_response(thought_raw):
-                    # Incomplete final response - ask LLM to continue
-                    continue_message = (
-                        f"[Iteration {iteration + 1}/{self._max_iterations}, "
-                        f"remaining: {self._max_iterations - iteration - 1}]\n"
-                        "Your FINAL RESPONSE appears incomplete (missing 'finish' suffix). "
-                        "Please continue your response from where you left off and end with 'finish' "
-                        "to indicate completion. If no 'finish' suffix, the system will continue iteration."
-                    )
-                    messages.append(LLMMessage(role="assistant", content=thought_raw))
-                    messages.append(LLMMessage(role="user", content=continue_message))
-                else:
-                    # No tool call or final response detected - ask LLM to continue
-                    continue_message = (
-                        f"[Iteration {iteration + 1}/{self._max_iterations}, "
-                        f"remaining: {self._max_iterations - iteration - 1}]\n"
-                        "Continuing from your previous output. "
-                        "If your generation is incomplete, please continue from where you left off. "
-                        "If you decide to take action, ensure proper format:\n"
-                        "- Tool call: TOOL:, OPERATION:, PARAMETERS: (outside tags)\n"
-                        "- Final response: FINAL RESPONSE: <content> finish (outside tags)"
-                    )
-                    messages.append(LLMMessage(role="assistant", content=thought_raw))
-                    messages.append(LLMMessage(role="user", content=continue_message))
-                # Continue to next iteration
-                continue
+            # No tool_calls: treat as final response (Function Calling only; no ReAct parsing)
+            yield {
+                "type": "result",
+                "success": True,
+                "output": thought_raw.strip(),
+                "reasoning_steps": steps,
+                "tool_calls_count": tool_calls_count,
+                "iterations": iteration + 1,
+                "total_tokens": total_tokens,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+            return
 
         # Max iterations reached - task did not complete successfully within the limit
         logger.warning(f"HybridAgent {self.agent_id} reached max iterations")
@@ -1096,16 +878,17 @@ class HybridAgent(BaseAIAgent):
             "timestamp": datetime.utcnow().isoformat(),
         }
 
-    async def _react_loop(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def _tool_loop(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Execute ReAct loop: Reason → Act → Observe.
+        Execute tool loop (BetaToolRunner-style).
+        Append-only messages; native tool_use/tool_result; no iteration labels.
 
         Args:
             task: Task description
             context: Context dictionary
 
         Returns:
-            Result dictionary with 'final_answer', 'steps', 'iterations'
+            Result dictionary with 'final_response', 'steps', 'iterations'
         """
         steps = []
         tool_calls_count = 0
@@ -1115,41 +898,28 @@ class HybridAgent(BaseAIAgent):
         messages = self._build_initial_messages(task, context)
 
         for iteration in range(self._max_iterations):
-            logger.debug(f"HybridAgent {self.agent_id} - ReAct iteration {iteration + 1}")
-
-            # Add iteration info to messages (except first iteration which has task context)
-            if iteration > 0:
-                iteration_info = (
-                    f"[Iteration {iteration + 1}/{self._max_iterations}, "
-                    f"remaining: {self._max_iterations - iteration - 1}]"
-                )
-                # Only add if the last message is not already an iteration info
-                if messages and not messages[-1].content.startswith("[Iteration"):
-                    messages.append(LLMMessage(role="user", content=iteration_info))
+            logger.debug(f"HybridAgent {self.agent_id} - tool loop iteration {iteration + 1}")
 
             # THINK: LLM reasons about next action
-            # Use Function Calling if supported, otherwise use ReAct mode
-            if self._use_function_calling and self._tool_schemas:
-                # Convert schemas to tools format
-                tools = [{"type": "function", "function": schema} for schema in self._tool_schemas]
-                response = await self.llm_client.generate_text(
-                    messages=messages,
-                    model=self._config.llm_model,
-                    temperature=self._config.temperature,
-                    max_tokens=self._config.max_tokens,
-                    context=context,
-                    tools=tools,
-                    tool_choice="auto",
+            # Require Function Calling when tools are configured
+            if self._tool_schemas and not self._use_function_calling:
+                provider = getattr(self.llm_client, "provider_name", "unknown")
+                raise ValueError(
+                    "HybridAgent requires an LLM client with Function Calling support when tools are configured. "
+                    f"Current client ({provider}) does not support tools. "
+                    "Use OpenAI-compatible clients: OpenAI, xAI, Anthropic, or Google Vertex."
                 )
-            else:
-                # Fallback to ReAct mode
-                response = await self.llm_client.generate_text(
-                    messages=messages,
-                    model=self._config.llm_model,
-                    temperature=self._config.temperature,
-                    max_tokens=self._config.max_tokens,
-                    context=context,
-                )
+            kwargs = dict(
+                messages=messages,
+                model=self._config.llm_model,
+                temperature=self._config.temperature,
+                max_tokens=self._config.max_tokens,
+                context=context,
+            )
+            if self._tool_schemas:
+                kwargs["tools"] = [{"type": "function", "function": s} for s in self._tool_schemas]
+                kwargs["tool_choice"] = "auto"
+            response = await self.llm_client.generate_text(**kwargs)
 
             thought_raw = response.content or ""
             total_tokens += getattr(response, "total_tokens", 0)
@@ -1194,12 +964,11 @@ class HybridAgent(BaseAIAgent):
                         }
                     ]
 
-                # Add assistant message with ALL tool_calls ONCE before processing
-                # This prevents duplicate assistant messages when processing parallel tool calls
+                # Add assistant message with BOTH content and tool_calls (align with Claude)
                 messages.append(
                     LLMMessage(
                         role="assistant",
-                        content=None,  # Content is None when using tool calls
+                        content=(thought_raw or "").strip() or None,
                         tool_calls=tool_calls_to_process if tool_calls else None,
                     )
                 )
@@ -1284,96 +1053,14 @@ class HybridAgent(BaseAIAgent):
                 # Continue to next iteration
                 continue
 
-            # Check for final response (outside tags only)
-            if self._has_final_response(thought_raw):
-                final_response = self._extract_final_response(thought_raw)
-                return {
-                    "final_response": final_response,  # Return raw output without processing
-                    "steps": steps,
-                    "iterations": iteration + 1,
-                    "tool_calls_count": tool_calls_count,
-                    "total_tokens": total_tokens,
-                }
-
-            # Check if tool call (ReAct mode, outside tags only)
-            if self._has_tool_call(thought_raw):
-                # ACT: Execute tool
-                try:
-                    tool_info = self._parse_tool_call(thought_raw)  # Parse from raw text
-                    tool_name = tool_info.get("tool", "")
-                    if not tool_name:
-                        raise ValueError("Tool name not found in tool call")
-                    tool_result = await self._execute_tool(
-                        tool_name,
-                        tool_info.get("operation"),
-                        tool_info.get("parameters", {}),
-                    )
-                    tool_calls_count += 1
-
-                    # Wrap tool call and result in step
-                    steps.append(
-                        {
-                            "type": "action",
-                            "tool": tool_info["tool"],
-                            "operation": tool_info.get("operation"),
-                            "parameters": tool_info.get("parameters"),
-                            "result": str(tool_result),  # Include result in step
-                            "iteration": iteration + 1,
-                        }
-                    )
-
-                    # OBSERVE: Add tool result to conversation (for LLM consumption)
-                    tool_result_str = json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result)
-                    observation_content = f"Tool '{tool_info['tool']}' returned: {tool_result_str}"
-                    observation = f"<OBSERVATION>\n{observation_content}\n</OBSERVATION>"
-
-                    # Add to messages for next iteration
-                    messages.append(LLMMessage(role="assistant", content=thought_raw))
-                    messages.append(LLMMessage(role="user", content=observation))
-
-                except Exception as e:
-                    error_content = f"Tool execution failed: {str(e)}"
-                    error_msg = f"<OBSERVATION>\n{error_content}\n</OBSERVATION>"
-                    steps.append(
-                        {
-                            "type": "action",
-                            "tool": tool_name if "tool_name" in locals() else "unknown",
-                            "error": str(e),
-                            "iteration": iteration + 1,
-                            "has_error": True,
-                        }
-                    )
-                    messages.append(LLMMessage(role="assistant", content=thought_raw))
-                    messages.append(LLMMessage(role="user", content=error_msg))
-
-            else:
-                # Check if there's an incomplete final response (has FINAL RESPONSE but no finish)
-                if self._has_incomplete_final_response(thought_raw):
-                    # Incomplete final response - ask LLM to continue
-                    continue_message = (
-                        f"[Iteration {iteration + 1}/{self._max_iterations}, "
-                        f"remaining: {self._max_iterations - iteration - 1}]\n"
-                        "Your FINAL RESPONSE appears incomplete (missing 'finish' suffix). "
-                        "Please continue your response from where you left off and end with 'finish' "
-                        "to indicate completion. If no 'finish' suffix, the system will continue iteration."
-                    )
-                    messages.append(LLMMessage(role="assistant", content=thought_raw))
-                    messages.append(LLMMessage(role="user", content=continue_message))
-                else:
-                    # No tool call or final response detected - ask LLM to continue
-                    continue_message = (
-                        f"[Iteration {iteration + 1}/{self._max_iterations}, "
-                        f"remaining: {self._max_iterations - iteration - 1}]\n"
-                        "Continuing from your previous output. "
-                        "If your generation is incomplete, please continue from where you left off. "
-                        "If you decide to take action, ensure proper format:\n"
-                        "- Tool call: TOOL:, OPERATION:, PARAMETERS: (outside tags)\n"
-                        "- Final response: FINAL RESPONSE: <content> finish (outside tags)"
-                    )
-                    messages.append(LLMMessage(role="assistant", content=thought_raw))
-                    messages.append(LLMMessage(role="user", content=continue_message))
-                # Continue to next iteration
-                continue
+            # No tool_calls: treat as final response (Function Calling only; no ReAct parsing)
+            return {
+                "final_response": thought_raw.strip(),
+                "steps": steps,
+                "iterations": iteration + 1,
+                "tool_calls_count": tool_calls_count,
+                "total_tokens": total_tokens,
+            }
 
         # Max iterations reached - task did not complete successfully within the limit
         logger.warning(f"HybridAgent {self.agent_id} reached max iterations")
@@ -1388,7 +1075,7 @@ class HybridAgent(BaseAIAgent):
         }
 
     def _build_initial_messages(self, task: str, context: Dict[str, Any]) -> List[LLMMessage]:
-        """Build initial messages for ReAct loop."""
+        """Build initial messages for tool loop. First user message = raw task only."""
         messages = []
 
         # Add system prompts (supports multiple system messages with individual cache control)
@@ -1495,11 +1182,8 @@ class HybridAgent(BaseAIAgent):
                     )
                 )
 
-        # Add task with iteration info
-        task_message = (
-            f"Task: {task}\n\n"
-            f"[Iteration 1/{self._max_iterations}, remaining: {self._max_iterations - 1}]"
-        )
+        # Add task (first user message = raw request only; no iteration labels)
+        task_message = f"Task: {task}"
         messages.append(
             LLMMessage(
                 role="user",
@@ -1517,189 +1201,6 @@ class HybridAgent(BaseAIAgent):
             if not key.startswith("_") and value is not None:
                 relevant_fields.append(f"{key}: {value}")
         return "\n".join(relevant_fields) if relevant_fields else ""
-
-    def _extract_thought_content(self, text: str) -> str:
-        """
-        Extract content from <THOUGHT>...</THOUGHT> tags.
-        
-        DEPRECATED: This method is kept for backward compatibility but no longer
-        extracts content. Returns original text as-is per new design.
-        
-        Args:
-            text: Text that may contain THOUGHT tags
-            
-        Returns:
-            Original text (no extraction performed)
-        """
-        # Return original text without processing (new design)
-        return text.strip()
-    
-    def _extract_observation_content(self, text: str) -> str:
-        """
-        Extract content from <OBSERVATION>...</OBSERVATION> tags.
-        
-        DEPRECATED: This method is kept for backward compatibility but no longer
-        extracts content. Returns original text as-is per new design.
-        
-        Args:
-            text: Text that may contain OBSERVATION tags
-            
-        Returns:
-            Original text (no extraction performed)
-        """
-        # Return original text without processing (new design)
-        return text.strip()
-
-    def _has_final_response(self, text: str) -> bool:
-        """
-        Check if text contains complete FINAL RESPONSE with 'finish' suffix.
-        
-        The FINAL RESPONSE must end with 'finish' to be considered complete.
-        If FINAL RESPONSE is present but without 'finish', it's considered incomplete
-        and the loop will continue to let LLM complete the response.
-        
-        Args:
-            text: Text to check
-            
-        Returns:
-            True if complete FINAL RESPONSE (with finish suffix) found outside tags
-        """
-        import re
-        
-        # Remove content inside THOUGHT and OBSERVATION tags
-        text_without_tags = re.sub(r'<THOUGHT>.*?</THOUGHT>', '', text, flags=re.DOTALL)
-        text_without_tags = re.sub(r'<OBSERVATION>.*?</OBSERVATION>', '', text_without_tags, flags=re.DOTALL)
-        
-        # Check for FINAL RESPONSE marker with 'finish' suffix in remaining text
-        # The 'finish' must appear after FINAL RESPONSE: content
-        if "FINAL RESPONSE:" not in text_without_tags:
-            return False
-        
-        # Check if 'finish' appears after FINAL RESPONSE:
-        # Use case-insensitive search for 'finish' at the end
-        text_lower = text_without_tags.lower()
-        final_response_idx = text_lower.find("final response:")
-        if final_response_idx == -1:
-            return False
-        
-        # Check if 'finish' appears after the FINAL RESPONSE marker
-        remaining_text = text_without_tags[final_response_idx:]
-        return "finish" in remaining_text.lower()
-    
-    def _has_incomplete_final_response(self, text: str) -> bool:
-        """
-        Check if text contains FINAL RESPONSE marker but without 'finish' suffix.
-        
-        Args:
-            text: Text to check
-            
-        Returns:
-            True if FINAL RESPONSE marker found but without finish suffix
-        """
-        import re
-        
-        # Remove content inside THOUGHT and OBSERVATION tags
-        text_without_tags = re.sub(r'<THOUGHT>.*?</THOUGHT>', '', text, flags=re.DOTALL)
-        text_without_tags = re.sub(r'<OBSERVATION>.*?</OBSERVATION>', '', text_without_tags, flags=re.DOTALL)
-        
-        # Check for FINAL RESPONSE marker without 'finish' suffix
-        if "FINAL RESPONSE:" not in text_without_tags:
-            return False
-        
-        # Check if 'finish' is missing
-        text_lower = text_without_tags.lower()
-        final_response_idx = text_lower.find("final response:")
-        remaining_text = text_without_tags[final_response_idx:]
-        return "finish" not in remaining_text.lower()
-    
-    def _extract_final_response(self, text: str) -> str:
-        """
-        Extract final response from text, preserving original format.
-        Only extracts from outside THOUGHT/OBSERVATION tags.
-        
-        Args:
-            text: Text that may contain FINAL RESPONSE marker
-            
-        Returns:
-            Original text if FINAL RESPONSE found, otherwise empty string
-        """
-        import re
-        
-        # Remove content inside THOUGHT and OBSERVATION tags
-        text_without_tags = re.sub(r'<THOUGHT>.*?</THOUGHT>', '', text, flags=re.DOTALL)
-        text_without_tags = re.sub(r'<OBSERVATION>.*?</OBSERVATION>', '', text_without_tags, flags=re.DOTALL)
-        
-        # Check for FINAL RESPONSE marker
-        if "FINAL RESPONSE:" in text_without_tags:
-            # Return original text without any processing
-            return text.strip()
-        
-        return ""
-
-    def _has_tool_call(self, text: str) -> bool:
-        """
-        Check if text contains TOOL call marker outside of THOUGHT/OBSERVATION tags.
-        
-        Args:
-            text: Text to check
-            
-        Returns:
-            True if TOOL marker found outside tags
-        """
-        import re
-        
-        # Remove content inside THOUGHT and OBSERVATION tags
-        text_without_tags = re.sub(r'<THOUGHT>.*?</THOUGHT>', '', text, flags=re.DOTALL)
-        text_without_tags = re.sub(r'<OBSERVATION>.*?</OBSERVATION>', '', text_without_tags, flags=re.DOTALL)
-        
-        # Check for TOOL marker in remaining text
-        return "TOOL:" in text_without_tags
-    
-    def _parse_tool_call(self, text: str) -> Dict[str, Any]:
-        """
-        Parse tool call from LLM output.
-        Only parses from outside THOUGHT/OBSERVATION tags.
-
-        Expected format:
-        TOOL: <tool_name>
-        OPERATION: <operation_name>
-        PARAMETERS: <json_parameters>
-
-        Args:
-            text: LLM output that may contain tool call
-
-        Returns:
-            Dictionary with 'tool', 'operation', 'parameters'
-        """
-        import re
-
-        result = {}
-        
-        # Remove content inside THOUGHT and OBSERVATION tags
-        text_without_tags = re.sub(r'<THOUGHT>.*?</THOUGHT>', '', text, flags=re.DOTALL)
-        text_without_tags = re.sub(r'<OBSERVATION>.*?</OBSERVATION>', '', text_without_tags, flags=re.DOTALL)
-
-        # Extract tool from text outside tags
-        if "TOOL:" in text_without_tags:
-            tool_line = [line for line in text_without_tags.split("\n") if line.strip().startswith("TOOL:")][0]
-            result["tool"] = tool_line.split("TOOL:", 1)[1].strip()
-
-        # Extract operation (optional)
-        if "OPERATION:" in text_without_tags:
-            op_line = [line for line in text_without_tags.split("\n") if line.strip().startswith("OPERATION:")][0]
-            result["operation"] = op_line.split("OPERATION:", 1)[1].strip()
-
-        # Extract parameters (optional)
-        if "PARAMETERS:" in text_without_tags:
-            param_line = [line for line in text_without_tags.split("\n") if line.strip().startswith("PARAMETERS:")][0]
-            param_str = param_line.split("PARAMETERS:", 1)[1].strip()
-            try:
-                result["parameters"] = json.loads(param_str)
-            except json.JSONDecodeError:
-                logger.warning(f"Failed to parse parameters: {param_str}")
-                result["parameters"] = {}  # type: ignore[assignment]
-
-        return result
 
     async def _execute_tool(
         self,
@@ -1819,12 +1320,13 @@ class HybridAgent(BaseAIAgent):
             )
             logger.info(f"HybridAgent {self.agent_id} generated {len(self._tool_schemas)} tool schemas")
         except Exception as e:
-            logger.warning(f"Failed to generate tool schemas: {e}. Falling back to ReAct mode.")
+            logger.warning(f"Failed to generate tool schemas: {e}")
             self._tool_schemas = []
 
     def _check_function_calling_support(self) -> bool:
         """
         Check if LLM client supports Function Calling.
+        When False with tools configured, agent fails at init or first tool use.
 
         Returns:
             True if Function Calling is supported, False otherwise

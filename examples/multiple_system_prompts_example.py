@@ -82,7 +82,6 @@ async def example_hybrid_agent_multiple_prompts():
         ],
         enable_prompt_caching=True,
         llm_model="gpt-4",
-        react_format_enabled=True,
         tools=["search", "calculator"],  # Your tools here
     )
     
