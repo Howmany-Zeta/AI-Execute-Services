@@ -394,3 +394,205 @@ async def test_multiple_images():
     assert "https://example.com/image1.jpg" in task_msg.images
     assert "https://example.com/image2.jpg" in task_msg.images
     assert "/path/to/local/image.png" in task_msg.images
+
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_history_assistant_message_with_tool_calls_no_content():
+    """Test that assistant history messages carrying tool_calls (content=None) are injected correctly."""
+    config = AgentConfiguration(llm_model="mock-model")
+
+    agent = HybridAgent(
+        agent_id="test_history_tool_calls",
+        name="Test Agent",
+        llm_client=MockLLMClient(),
+        tools=[],
+        config=config,
+    )
+
+    await agent.initialize()
+
+    tool_calls = [
+        {
+            "id": "call_abc123",
+            "type": "function",
+            "function": {"name": "get_weather", "arguments": '{"city": "Beijing"}'},
+        }
+    ]
+
+    context = {
+        "history": [
+            {"role": "user", "content": "What's the weather in Beijing?"},
+            # assistant message: content is None, only tool_calls
+            {"role": "assistant", "content": None, "tool_calls": tool_calls},
+        ]
+    }
+
+    messages = agent._build_initial_messages("Follow up question", context)
+
+    assistant_msgs = [msg for msg in messages if msg.role == "assistant"]
+    assert len(assistant_msgs) >= 1
+
+    tool_call_msg = next(
+        (msg for msg in assistant_msgs if msg.tool_calls is not None), None
+    )
+    assert tool_call_msg is not None, "Expected an assistant message with tool_calls"
+    assert tool_call_msg.content is None
+    assert tool_call_msg.tool_calls == tool_calls
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_history_tool_result_message_with_tool_call_id():
+    """Test that tool-result history messages carrying tool_call_id are injected correctly."""
+    config = AgentConfiguration(llm_model="mock-model")
+
+    agent = HybridAgent(
+        agent_id="test_history_tool_call_id",
+        name="Test Agent",
+        llm_client=MockLLMClient(),
+        tools=[],
+        config=config,
+    )
+
+    await agent.initialize()
+
+    context = {
+        "history": [
+            {"role": "user", "content": "What's the weather in Beijing?"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_abc123",
+                        "type": "function",
+                        "function": {
+                            "name": "get_weather",
+                            "arguments": '{"city": "Beijing"}',
+                        },
+                    }
+                ],
+            },
+            # tool result message
+            {
+                "role": "tool",
+                "content": "Sunny, 28°C",
+                "tool_call_id": "call_abc123",
+            },
+        ]
+    }
+
+    messages = agent._build_initial_messages("Tell me more", context)
+
+    tool_result_msgs = [msg for msg in messages if msg.role == "tool"]
+    assert len(tool_result_msgs) >= 1
+
+    tool_result = tool_result_msgs[0]
+    assert tool_result.content == "Sunny, 28°C"
+    assert tool_result.tool_call_id == "call_abc123"
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_history_mixed_full_tool_use_sequence():
+    """Test a complete tool-use history sequence: user → assistant(tool_calls) → tool → assistant(text).
+
+    Verifies that all fields (tool_calls, tool_call_id, images, content) are preserved
+    faithfully on the resulting LLMMessage instances.
+    """
+    config = AgentConfiguration(llm_model="mock-model")
+
+    agent = HybridAgent(
+        agent_id="test_history_mixed_full",
+        name="Test Agent",
+        llm_client=MockLLMClient(),
+        tools=[],
+        config=config,
+    )
+
+    await agent.initialize()
+
+    tool_calls = [
+        {
+            "id": "call_xyz789",
+            "type": "function",
+            "function": {
+                "name": "search_image",
+                "arguments": '{"query": "cat"}',
+            },
+        }
+    ]
+
+    context = {
+        "history": [
+            # user message with an image attachment
+            {
+                "role": "user",
+                "content": "Find me a cat picture.",
+                "images": ["https://example.com/query.jpg"],
+            },
+            # assistant decides to call a tool (content is None)
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": tool_calls,
+            },
+            # tool returns the result
+            {
+                "role": "tool",
+                "content": '{"url": "https://example.com/cat.jpg"}',
+                "tool_call_id": "call_xyz789",
+            },
+            # assistant final text reply
+            {
+                "role": "assistant",
+                "content": "Here is a cat picture for you.",
+            },
+        ]
+    }
+
+    messages = agent._build_initial_messages("Now find a dog picture.", context)
+
+    # --- user message with image ---
+    user_with_image = next(
+        (
+            msg
+            for msg in messages
+            if msg.role == "user" and msg.content == "Find me a cat picture."
+        ),
+        None,
+    )
+    assert user_with_image is not None
+    assert "https://example.com/query.jpg" in user_with_image.images
+
+    # --- assistant message with tool_calls ---
+    assistant_tool_call_msg = next(
+        (msg for msg in messages if msg.role == "assistant" and msg.tool_calls is not None),
+        None,
+    )
+    assert assistant_tool_call_msg is not None
+    assert assistant_tool_call_msg.content is None
+    assert assistant_tool_call_msg.tool_calls == tool_calls
+
+    # --- tool result message ---
+    tool_result_msg = next(
+        (msg for msg in messages if msg.role == "tool"),
+        None,
+    )
+    assert tool_result_msg is not None
+    assert tool_result_msg.tool_call_id == "call_xyz789"
+    assert "cat.jpg" in (tool_result_msg.content or "")
+
+    # --- final assistant text reply ---
+    final_assistant_msg = next(
+        (
+            msg
+            for msg in messages
+            if msg.role == "assistant" and msg.content == "Here is a cat picture for you."
+        ),
+        None,
+    )
+    assert final_assistant_msg is not None
+    assert final_assistant_msg.tool_calls is None
