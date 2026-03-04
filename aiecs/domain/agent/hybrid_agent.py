@@ -1121,25 +1121,21 @@ class HybridAgent(BaseAIAgent):
             if isinstance(history, list) and len(history) > 0:
                 # Check if history contains message-like dictionaries
                 for msg in history:
-                    if isinstance(msg, dict) and "role" in msg and "content" in msg:
+                    if isinstance(msg, dict) and "role" in msg and ("content" in msg or "tool_calls" in msg):
                         # Valid message format - add as separate message
-                        # Extract images if present
+                        # Extract optional fields
                         msg_images = msg.get("images", [])
-                        if msg_images:
-                            messages.append(
-                                LLMMessage(
-                                    role=msg["role"],
-                                    content=msg["content"],
-                                    images=msg_images if isinstance(msg_images, list) else [msg_images],
-                                )
+                        msg_tool_calls = msg.get("tool_calls")
+                        msg_tool_call_id = msg.get("tool_call_id")
+                        messages.append(
+                            LLMMessage(
+                                role=msg["role"],
+                                content=msg.get("content"),
+                                images=msg_images if isinstance(msg_images, list) else [msg_images],
+                                tool_calls=msg_tool_calls,
+                                tool_call_id=msg_tool_call_id,
                             )
-                        else:
-                            messages.append(
-                                LLMMessage(
-                                    role=msg["role"],
-                                    content=msg["content"],
-                                )
-                            )
+                        )
                     elif isinstance(msg, LLMMessage):
                         # Already an LLMMessage instance (may already have images)
                         messages.append(msg)
