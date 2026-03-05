@@ -384,3 +384,92 @@ async def test_agent_without_tools_initializes_without_function_calling():
     await agent.initialize()
 
     assert agent._use_function_calling is False
+
+
+# =============================================================================
+# Tool result stop conditions
+# =============================================================================
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_tool_loop_stops_when_tool_result_matches_condition():
+    """When tool result matches tool_result_stop_conditions, loop ends early without further LLM calls."""
+    mock_tool = create_mock_tool()
+    mock_tool.run_async = AsyncMock(return_value="<html><body>Done</body></html>")
+
+    with patch("aiecs.tools.get_tool", return_value=mock_tool):
+        config = AgentConfiguration(
+            llm_model="mock-model",
+            system_prompt="You are a test agent.",
+            tool_result_stop_conditions=["</html>"],
+        )
+        client = MockLLMClientFunctionCalling(responses=[
+            {"content": "I'll fetch the page.", "tool_calls": [
+                {"id": "call_0", "type": "function", "function": {"name": "mock_tool", "arguments": '{"q": "test"}'}}
+            ]},
+        ])
+        agent = HybridAgent(
+            agent_id="test_stop",
+            name="Test",
+            llm_client=client,
+            tools=["mock_tool"],
+            config=config,
+            max_iterations=5,
+        )
+        await agent.initialize()
+
+    result = await agent._tool_loop("Fetch the page", {})
+
+    assert result["final_response"] == "<html><body>Done</body></html>"
+    assert result["stop_reason"] == "tool_result_matched"
+    assert result["iterations"] == 1
+    assert result["tool_calls_count"] == 1
+    assert client.call_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_tool_loop_streaming_stops_when_tool_result_matches_condition():
+    """Streaming: when tool result matches stop condition, yields result and returns early."""
+    from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
+
+    mock_tool = create_mock_tool()
+    mock_tool.run_async = AsyncMock(return_value="<html><body>Done</body></html>")
+
+    with patch("aiecs.tools.get_tool", return_value=mock_tool):
+        config = AgentConfiguration(
+            llm_model="mock-model",
+            system_prompt="You are a test agent.",
+            tool_result_stop_conditions=["</html>"],
+        )
+        client = MockLLMClientFunctionCalling()
+        agent = HybridAgent(
+            agent_id="test_stop_stream",
+            name="Test",
+            llm_client=client,
+            tools=["mock_tool"],
+            config=config,
+            max_iterations=5,
+        )
+        await agent.initialize()
+
+    async def mock_stream():
+        yield StreamChunk(type="token", content="Fetching. ")
+        yield StreamChunk(type="tool_calls", tool_calls=[
+            {"id": "call_0", "type": "function", "function": {"name": "mock_tool", "arguments": '{"q": "test"}'}}
+        ])
+
+    def get_stream(**kwargs):
+        return mock_stream()
+
+    with patch.object(agent.llm_client, "stream_text", new=get_stream):
+        events = []
+        async for event in agent._tool_loop_streaming("Fetch the page", {}):
+            events.append(event)
+
+    result_events = [e for e in events if e.get("type") == "result"]
+    assert len(result_events) == 1
+    assert result_events[0]["output"] == "<html><body>Done</body></html>"
+    assert result_events[0]["stop_reason"] == "tool_result_matched"
+    assert result_events[0]["success"] is True

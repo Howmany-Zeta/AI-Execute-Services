@@ -206,6 +206,12 @@ class AgentConfiguration(BaseModel):
         default="llm_based",
         description="Strategy for tool selection ('llm_based', 'rule_based')",
     )
+    tool_result_stop_conditions: Optional[List[Union[str, Dict[str, Any]]]] = Field(
+        default=None,
+        description="When tool result matches any condition, stop LLM loop and use result as final output. "
+        "Each item: string (substring match) or dict with 'type' ('substring'|'regex'|'html_tag') and 'pattern'/'value'. "
+        "Example: ['</html>', {'type': 'regex', 'pattern': r'<div[^>]*>.*</div>'}].",
+    )
 
     # Memory configuration
     memory_enabled: bool = Field(default=True, description="Whether memory is enabled")
