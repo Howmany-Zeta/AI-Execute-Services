@@ -22,6 +22,7 @@ from aiecs.domain.agent.tools.schema_generator import ToolSchemaGenerator
 from .base_agent import BaseAIAgent
 from .models import AgentType, AgentConfiguration, ToolObservation
 from .exceptions import TaskExecutionError, ToolAccessDeniedError
+from .tool_result_matcher import matches_stop_condition
 
 if TYPE_CHECKING:
     from aiecs.llm.protocols import LLMClientProtocol
@@ -813,6 +814,28 @@ class HybridAgent(BaseAIAgent):
                             "timestamp": datetime.utcnow().isoformat(),
                         }
 
+                        # Check tool result stop conditions: end loop if matched
+                        if self._config.tool_result_stop_conditions and matches_stop_condition(
+                            tool_result, self._config.tool_result_stop_conditions
+                        ):
+                            final_output = (
+                                json.dumps(tool_result, ensure_ascii=False)
+                                if isinstance(tool_result, dict)
+                                else str(tool_result)
+                            )
+                            yield {
+                                "type": "result",
+                                "success": True,
+                                "output": final_output,
+                                "reasoning_steps": steps,
+                                "tool_calls_count": tool_calls_count,
+                                "iterations": iteration + 1,
+                                "total_tokens": total_tokens,
+                                "stop_reason": "tool_result_matched",
+                                "timestamp": datetime.utcnow().isoformat(),
+                            }
+                            return
+
                         # Add tool result to messages (for LLM consumption)
                         # Only add the tool result message, assistant message already added above
                         messages.append(
@@ -1019,6 +1042,24 @@ class HybridAgent(BaseAIAgent):
                                 "iteration": iteration + 1,
                             }
                         )
+
+                        # Check tool result stop conditions: end loop if matched
+                        if self._config.tool_result_stop_conditions and matches_stop_condition(
+                            tool_result, self._config.tool_result_stop_conditions
+                        ):
+                            final_output = (
+                                json.dumps(tool_result, ensure_ascii=False)
+                                if isinstance(tool_result, dict)
+                                else str(tool_result)
+                            )
+                            return {
+                                "final_response": final_output,
+                                "steps": steps,
+                                "iterations": iteration + 1,
+                                "tool_calls_count": tool_calls_count,
+                                "total_tokens": total_tokens,
+                                "stop_reason": "tool_result_matched",
+                            }
 
                         # Add tool result to messages (for LLM consumption)
                         # Only add the tool result message, assistant message already added above
