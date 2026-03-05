@@ -209,8 +209,11 @@ class AgentConfiguration(BaseModel):
     tool_result_stop_conditions: Optional[List[Union[str, Dict[str, Any]]]] = Field(
         default=None,
         description="When tool result matches any condition, stop LLM loop and use result as final output. "
-        "Each item: string (substring match) or dict with 'type' ('substring'|'regex'|'html_tag') and 'pattern'/'value'. "
-        "Example: ['</html>', {'type': 'regex', 'pattern': r'<div[^>]*>.*</div>'}].",
+        "Each item: string (substring match) or dict with 'type' and optional 'pattern'/'value'. "
+        "Supported types: 'substring' (default), 'regex', 'html_tag', 'html_document'. "
+        "'html_document' requires no pattern – it matches when the result is a complete HTML document "
+        "(contains '<!DOCTYPE html>' or '<html' AND '</html>'). "
+        "Example: [{'type': 'html_document'}, {'type': 'regex', 'pattern': r'FINAL_ANSWER:'}].",
     )
 
     # Memory configuration

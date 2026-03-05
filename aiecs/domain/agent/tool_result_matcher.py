@@ -20,12 +20,35 @@ def _to_text(result: Any) -> str:
     return str(result)
 
 
+_HTML_DOCUMENT_RE = re.compile(
+    r"(?:<!doctype\s+html|<html[\s>])",
+    re.IGNORECASE,
+)
+
+
+def _is_html_document(text: str) -> bool:
+    """
+    Detect whether text is a complete HTML document.
+
+    Requires ALL of:
+    - Opening signal: ``<!DOCTYPE html>`` or ``<html``
+    - Closing tag:    ``</html>``
+    """
+    lower = text.lower()
+    has_open = bool(_HTML_DOCUMENT_RE.search(text))
+    has_close = "</html>" in lower
+    return has_open and has_close
+
+
 def _match_one(text: str, result: Any, condition: Union[str, Dict[str, Any]]) -> bool:
     """Check if result matches a single condition."""
     if isinstance(condition, str):
         return condition in text
     if isinstance(condition, dict):
         cond_type = condition.get("type", "substring")
+        if cond_type == "html_document":
+            # No pattern needed – detect a complete HTML document structurally.
+            return _is_html_document(text)
         pattern = condition.get("pattern") or condition.get("value")
         if not pattern:
             return False
@@ -54,12 +77,19 @@ def matches_stop_condition(
         result: Tool execution result (str, dict, or other)
         conditions: List of conditions. Each item:
             - str: substring match
-            - dict: {"type": "substring"|"regex"|"html_tag", "pattern": "..."} or {"value": "..."}
+            - dict with ``"type"`` one of:
+                - ``"substring"``    – pattern/value is a substring to find
+                - ``"regex"``        – pattern/value is a regular expression (re.DOTALL)
+                - ``"html_tag"``     – pattern/value is a tag name; matches if the tag exists
+                - ``"html_document"``– no pattern needed; matches complete HTML documents
+                  (requires ``<!DOCTYPE html>`` or ``<html`` **and** ``</html>``)
 
     Returns:
         True if any condition matches, False otherwise.
 
     Example:
+        >>> matches_stop_condition("<!DOCTYPE html><html><body></body></html>", [{"type": "html_document"}])
+        True
         >>> matches_stop_condition("<html>...</html>", ["</html>"])
         True
         >>> matches_stop_condition({"status": "done"}, [{"type": "substring", "pattern": "done"}])
