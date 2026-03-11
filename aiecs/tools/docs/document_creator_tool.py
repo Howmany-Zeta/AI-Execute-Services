@@ -284,6 +284,16 @@ class DocumentCreatorTool(BaseTool):
             # Step 1: Validate and prepare template
             template = self._get_template(template_type)
 
+            # Step 1b: Enforce supported_formats contract
+            template_supported = template.get("supported_formats", [])
+            if template_supported and output_format.value not in template_supported:
+                raise DocumentCreationError(
+                    f"Format '{output_format.value}' is not supported by template "
+                    f"'{template_type.value}'. "
+                    f"Supported formats: {template_supported}. "
+                    f"Please choose one of the supported formats."
+                )
+
             # Step 2: Generate output path
             if not output_path:
                 output_path = self._generate_output_path(document_type, output_format, document_id)
@@ -601,7 +611,7 @@ class DocumentCreatorTool(BaseTool):
                 "conclusion",
                 "appendices",
             ],
-            "supported_formats": ["markdown", "html", "docx", "pdf"],
+            "supported_formats": ["markdown", "html", "docx"],  # pdf: not yet implemented
             "style_presets": ["corporate", "professional", "modern"],
         }
 
@@ -677,7 +687,7 @@ class DocumentCreatorTool(BaseTool):
                 "troubleshooting",
                 "changelog",
             ],
-            "supported_formats": ["markdown", "html", "pdf"],
+            "supported_formats": ["markdown", "html"],  # pdf: not yet implemented
             "style_presets": ["technical", "modern", "minimal"],
         }
 
@@ -758,7 +768,7 @@ class DocumentCreatorTool(BaseTool):
                 "references",
                 "appendices",
             ],
-            "supported_formats": ["markdown", "latex", "pdf"],
+            "supported_formats": ["markdown", "latex"],  # pdf: not yet implemented
             "style_presets": ["academic", "classic", "formal"],
         }
 
@@ -831,7 +841,7 @@ class DocumentCreatorTool(BaseTool):
                 "success_criteria",
                 "next_steps",
             ],
-            "supported_formats": ["markdown", "html", "docx", "pdf"],
+            "supported_formats": ["markdown", "html", "docx"],  # pdf: not yet implemented
             "style_presets": ["professional", "corporate", "modern"],
         }
 
@@ -890,7 +900,7 @@ class DocumentCreatorTool(BaseTool):
                 "faq",
                 "support_info",
             ],
-            "supported_formats": ["markdown", "html", "pdf"],
+            "supported_formats": ["markdown", "html"],  # pdf: not yet implemented
             "style_presets": ["user-friendly", "modern", "minimal"],
         }
 
@@ -1059,7 +1069,7 @@ class DocumentCreatorTool(BaseTool):
                 "payment_terms",
                 "notes",
             ],
-            "supported_formats": ["markdown", "html", "pdf"],
+            "supported_formats": ["markdown", "html"],  # pdf: not yet implemented
             "style_presets": ["professional", "corporate", "minimal"],
         }
 
@@ -1201,6 +1211,17 @@ class DocumentCreatorTool(BaseTool):
         elif output_format == DocumentFormat.DOCX:
             # Use office_tool to create DOCX file
             self._write_docx_file(output_path, content)
+        elif output_format == DocumentFormat.PDF:
+            # PDF generation is not yet implemented.
+            # A real implementation would require a rendering library
+            # (e.g. WeasyPrint, ReportLab, or a headless-browser pipeline).
+            # Refusing here prevents a text file with a .pdf extension from
+            # being silently produced and passed to downstream consumers.
+            raise DocumentCreationError(
+                "PDF output is not yet implemented. "
+                "Please choose a supported format such as 'markdown', 'html', or 'docx'. "
+                "PDF support will be added in a future release."
+            )
         else:
             # For other formats, write as text for now
             with open(output_path, "w", encoding="utf-8") as f:
