@@ -6,7 +6,6 @@ from pptx.util import Inches
 from pptx import Presentation
 from docx.shared import Pt
 from docx import Document as DocxDocument
-from tika import parser  # type: ignore[import-untyped]
 import os
 import logging
 import warnings
@@ -17,10 +16,11 @@ import pdfplumber
 import pytesseract  # type: ignore[import-untyped]
 from PIL import Image
 
-# Tika log path will be configured via Config class
-
 # Suppress pkg_resources deprecation warning from tika
 warnings.filterwarnings("ignore", category=UserWarning, module="tika")
+
+# tika is imported lazily (inside methods) so that TIKA_LOG_PATH can be
+# configured before tika initialises its logging at import-time.
 
 
 # Module-level default configuration for validators
@@ -218,9 +218,29 @@ class OfficeTool(BaseTool):
         # Access config via self._config_obj (BaseSettings instance)
         self.config = self._config_obj if self._config_obj else self.Config()
         
-        # Configure Tika log path from config
-        os.environ["TIKA_LOG_PATH"] = self.config.tika_log_path
-        os.makedirs(self.config.tika_log_path, exist_ok=True)
+        # Configure Tika log path BEFORE tika is imported for the first time.
+        # tika initialises its logging at import-time, so the env-var must be
+        # set beforehand.  We also add a fallback to a writable temp directory
+        # so that initialisation never fails because of a missing/non-writable
+        # path.
+        tika_log_path = self.config.tika_log_path
+        try:
+            os.makedirs(tika_log_path, exist_ok=True)
+            # Quick write-access probe
+            probe = os.path.join(tika_log_path, ".write_probe")
+            with open(probe, "w") as _f:
+                pass
+            os.remove(probe)
+        except OSError:
+            import tempfile
+            tika_log_path = tempfile.mkdtemp(prefix="tika_log_")
+            logging.getLogger(__name__).warning(
+                "Configured TIKA_LOG_PATH '%s' is not writable; "
+                "falling back to '%s'.",
+                self.config.tika_log_path,
+                tika_log_path,
+            )
+        os.environ["TIKA_LOG_PATH"] = tika_log_path
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
@@ -261,8 +281,10 @@ class OfficeTool(BaseTool):
                 img = Image.open(file_path)
                 img.verify()  # Verify it's a valid image
             else:
-                # Use tika as fallback for other formats
-                parsed = parser.from_file(file_path)
+                # Use tika as fallback for other formats (lazy import so that
+                # TIKA_LOG_PATH is already set before tika initialises logging)
+                from tika import parser as tika_parser  # type: ignore[import-untyped]
+                parsed = tika_parser.from_file(file_path)
                 if not parsed or not parsed.get("content"):
                     raise ContentValidationError("Unable to parse file content")
         except Exception as e:
@@ -383,7 +405,9 @@ class OfficeTool(BaseTool):
             FileOperationError: If Tika text extraction fails.
         """
         try:
-            parsed = parser.from_file(file_path)
+            # Lazy import: TIKA_LOG_PATH must be set in __init__ before this runs
+            from tika import parser as tika_parser  # type: ignore[import-untyped]
+            parsed = tika_parser.from_file(file_path)
             content = parsed.get("content", "")
             return content.strip() if content else ""
         except Exception as e:

@@ -26,7 +26,7 @@ class DocumentFormat(str, Enum):
     JSON = "json"
     CSV = "csv"
     XML = "xml"
-    MARKDOWN = "md"
+    MARKDOWN = "markdown"
     HTML = "html"
     YAML = "yaml"
     PDF = "pdf"
@@ -175,7 +175,7 @@ class DocumentWriterTool(BaseTool):
             description="Whether to automatically backup before write operations",
         )
         atomic_writes: bool = Field(default=True, description="Whether to use atomic write operations")
-        default_format: str = Field(default="md", description="Default document format")
+        default_format: str = Field(default="markdown", description="Default document format")
         version_control: bool = Field(default=True, description="Whether to enable version control")
         security_scan: bool = Field(default=True, description="Whether to enable security scanning")
         enable_cloud_storage: bool = Field(
