@@ -95,7 +95,7 @@ class LLMClientProtocol(Protocol):
         """
         ...
 
-    async def stream_text(
+    def stream_text(
         self,
         messages: List[LLMMessage],
         model: Optional[str] = None,

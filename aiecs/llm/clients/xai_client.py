@@ -157,7 +157,7 @@ class XAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
             logger.error(f"xAI API error: {str(e)}")
             raise
 
-    async def stream_text(  # type: ignore[override]
+    async def stream_text(
         self,
         messages: List[LLMMessage],
         model: Optional[str] = None,

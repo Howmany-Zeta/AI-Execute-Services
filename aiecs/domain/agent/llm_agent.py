@@ -487,7 +487,7 @@ class LLMAgent(BaseAIAgent):
 
             # Stream LLM response
             output_tokens = []
-            async for token in self.llm_client.stream_text(  # type: ignore[attr-defined]
+            async for token in self.llm_client.stream_text(
                 messages=messages,
                 model=self._config.llm_model,
                 temperature=self._config.temperature,

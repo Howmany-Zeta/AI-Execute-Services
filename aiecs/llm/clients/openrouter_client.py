@@ -186,12 +186,13 @@ class OpenRouterClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
             logger.error(f"OpenRouter API error: {str(e)}")
             raise
 
-    async def stream_text(  # type: ignore[override]
+    async def stream_text(
         self,
         messages: List[LLMMessage],
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
         functions: Optional[List[Dict[str, Any]]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Any] = None,

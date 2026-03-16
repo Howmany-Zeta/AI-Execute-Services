@@ -208,7 +208,7 @@ class BaseLLMClient(ABC):
         """
 
     @abstractmethod
-    async def stream_text(
+    def stream_text(
         self,
         messages: List[LLMMessage],
         model: Optional[str] = None,
