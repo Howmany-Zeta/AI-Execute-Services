@@ -1,6 +1,6 @@
 import redis.asyncio as redis
 import logging
-from typing import Optional
+from typing import Any, Dict, Optional, cast
 import os
 
 logger = logging.getLogger(__name__)
@@ -63,17 +63,17 @@ class RedisClient:
     async def hincrby(self, name: str, key: str, amount: int = 1) -> int:
         """Atomically increment hash field"""
         client = await self.get_client()
-        return await client.hincrby(name, key, amount)  # type: ignore[misc]
+        return cast(int, await client.hincrby(name, key, amount))  # type: ignore[misc]
 
     async def hget(self, name: str, key: str) -> Optional[str]:
         """Get hash field value"""
         client = await self.get_client()
-        return await client.hget(name, key)  # type: ignore[misc]
+        return cast(Optional[str], await client.hget(name, key))  # type: ignore[misc]
 
-    async def hgetall(self, name: str) -> dict:
+    async def hgetall(self, name: str) -> Dict[Any, Any]:
         """Get all hash fields"""
         client = await self.get_client()
-        return await client.hgetall(name)  # type: ignore[misc]
+        return cast(Dict[Any, Any], await client.hgetall(name))  # type: ignore[misc]
 
     async def hset(
         self,
@@ -115,17 +115,17 @@ class RedisClient:
 
         if mapping is not None:
             # Multiple fields mode
-            return await client.hset(name, mapping=mapping)  # type: ignore[misc]
+            return cast(int, await client.hset(name, mapping=mapping))  # type: ignore[misc]
         elif key is not None and value is not None:
             # Single field mode
-            return await client.hset(name, key=key, value=value)  # type: ignore[misc]
+            return cast(int, await client.hset(name, key=key, value=value))  # type: ignore[misc]
         else:
             raise ValueError("Either provide (key, value) or mapping parameter. " f"Got: key={key}, value={value}, mapping={mapping}")
 
     async def expire(self, name: str, time: int) -> bool:
         """Set expiration time"""
         client = await self.get_client()
-        return await client.expire(name, time)  # type: ignore[misc]
+        return cast(bool, await client.expire(name, time))
 
     async def exists(self, name: str) -> bool:
         """Check if key exists"""
@@ -137,25 +137,25 @@ class RedisClient:
         try:
             client = await self.get_client()
             result = await client.ping()
-            return result
+            return bool(result)
         except Exception as e:
             logger.error(f"Redis ping failed: {e}")
             return False
 
-    async def info(self, section: Optional[str] = None) -> dict:
+    async def info(self, section: Optional[str] = None) -> Dict[Any, Any]:
         """Get Redis server information"""
         try:
             client = await self.get_client()
-            return await client.info(section)  # type: ignore[misc]
+            return cast(Dict[Any, Any], await client.info(section))
         except Exception as e:
             logger.error(f"Redis info failed: {e}")
             return {}
 
-    async def delete(self, *keys) -> int:
+    async def delete(self, *keys: str) -> int:
         """Delete one or more keys"""
         try:
             client = await self.get_client()
-            return await client.delete(*keys)  # type: ignore[misc]
+            return cast(int, await client.delete(*keys))
         except Exception as e:
             logger.error(f"Redis delete failed: {e}")
             return 0
@@ -164,7 +164,7 @@ class RedisClient:
         """Set a key-value pair with optional expiration"""
         try:
             client = await self.get_client()
-            return await client.set(key, value, ex=ex)  # type: ignore[misc]
+            return bool(await client.set(key, value, ex=ex))
         except Exception as e:
             logger.error(f"Redis set failed for key {key}: {e}")
             return False
@@ -173,7 +173,7 @@ class RedisClient:
         """Get value by key"""
         try:
             client = await self.get_client()
-            return await client.get(key)  # type: ignore[misc]
+            return cast(Optional[str], await client.get(key))
         except Exception as e:
             logger.error(f"Redis get failed for key {key}: {e}")
             return None

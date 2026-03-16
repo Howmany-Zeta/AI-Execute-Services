@@ -18,7 +18,7 @@ from vertexai.generative_models import (
     Part,
 )
 
-from aiecs.llm.utils.image_utils import parse_image_source, ImageContent
+from aiecs.llm.utils.image_utils import parse_image_source
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +29,12 @@ logger = logging.getLogger(__name__)
 _CACHED_CONTENT_SDK_VERSION: Optional[str] = None
 try:
     import google.cloud.aiplatform as _aiplatform
-    _CACHED_CONTENT_SDK_VERSION = getattr(_aiplatform, '__version__', None)
+
+    _CACHED_CONTENT_SDK_VERSION = getattr(_aiplatform, "__version__", None)
 except ImportError:
     pass
 
-from aiecs.llm.clients.base_client import (
+from aiecs.llm.clients.base_client import (  # noqa: E402
     BaseLLMClient,
     LLMMessage,
     LLMResponse,
@@ -41,8 +42,8 @@ from aiecs.llm.clients.base_client import (
     RateLimitError,
     SafetyBlockError,
 )
-from aiecs.llm.clients.google_function_calling_mixin import GoogleFunctionCallingMixin
-from aiecs.config.config import get_settings
+from aiecs.llm.clients.google_function_calling_mixin import GoogleFunctionCallingMixin  # noqa: E402
+from aiecs.config.config import get_settings  # noqa: E402
 
 # Suppress Vertex AI SDK deprecation warnings (deprecated June 2025, removal June 2026)
 # TODO: Migrate to Google Gen AI SDK when official migration guide is available
@@ -74,9 +75,7 @@ def _extract_safety_ratings(safety_ratings: Any) -> List[Dict[str, Any]]:
 
     for rating in ratings_iter:
         if not isinstance(rating, dict) and not hasattr(rating, "category"):
-            logger.debug(
-                f"Skipping non-dict/non-object rating element: type={type(rating).__name__}"
-            )
+            logger.debug(f"Skipping non-dict/non-object rating element: type={type(rating).__name__}")
             continue
         rating_dict: Dict[str, Any] = {}
 
@@ -126,18 +125,18 @@ def _build_safety_block_error(
 ) -> SafetyBlockError:
     """
     Build a detailed SafetyBlockError from Vertex AI response.
-    
+
     Args:
         response: Vertex AI response object
         block_type: "prompt" or "response"
         default_message: Default error message
-        
+
     Returns:
         SafetyBlockError with detailed information
     """
     block_reason = None
     safety_ratings = []
-    
+
     if block_type == "prompt":
         # Check prompt_feedback for prompt blocks
         if hasattr(response, "prompt_feedback"):
@@ -160,13 +159,13 @@ def _build_safety_block_error(
                 safety_ratings = _extract_safety_ratings(candidate.safety_ratings)
             elif isinstance(candidate, dict):
                 safety_ratings = _extract_safety_ratings(candidate.get("safety_ratings", []))
-            
+
             # Check finish_reason
             if hasattr(candidate, "finish_reason"):
                 finish_reason = str(candidate.finish_reason)
                 if finish_reason in ["SAFETY", "RECITATION"]:
                     block_reason = finish_reason
-    
+
     # Build detailed error message
     error_parts = [default_message]
     if block_reason:
@@ -187,18 +186,12 @@ def _build_safety_block_error(
             continue
         if rating.get("blocked"):
             if "severity" in rating:
-                error_parts.append(
-                    f"{rating.get('category', 'UNKNOWN')}: severity={rating.get('severity')}, "
-                    f"score={rating.get('severity_score', 'N/A')}"
-                )
+                error_parts.append(f"{rating.get('category', 'UNKNOWN')}: severity={rating.get('severity')}, " f"score={rating.get('severity_score', 'N/A')}")
             elif "probability" in rating:
-                error_parts.append(
-                    f"{rating.get('category', 'UNKNOWN')}: probability={rating.get('probability')}, "
-                    f"score={rating.get('probability_score', 'N/A')}"
-                )
-    
+                error_parts.append(f"{rating.get('category', 'UNKNOWN')}: probability={rating.get('probability')}, " f"score={rating.get('probability_score', 'N/A')}")
+
     error_message = " | ".join(error_parts)
-    
+
     return SafetyBlockError(
         message=error_message,
         block_reason=block_reason,
@@ -215,7 +208,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
         self.settings = get_settings()
         self._initialized = False
         # Track part count statistics for monitoring
-        self._part_count_stats = {
+        self._part_count_stats: Dict[str, Any] = {
             "total_responses": 0,
             "part_counts": {},  # {part_count: frequency}
             "last_part_count": None,
@@ -265,9 +258,10 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
         if tools:
             # Include tools in the hash so different tool configurations get different cached contents
             import json
+
             tools_str = json.dumps([str(t) for t in tools], sort_keys=True)
             hash_input = f"{content}|tools:{tools_str}"
-        return hashlib.md5(hash_input.encode('utf-8')).hexdigest()
+        return hashlib.md5(hash_input.encode("utf-8")).hexdigest()
 
     async def _create_or_get_cached_content(
         self,
@@ -311,26 +305,23 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             warnings.filterwarnings("ignore", category=UserWarning, module="vertexai")
             try:
                 from vertexai.preview import caching as caching_module  # type: ignore
+
                 import_path = "vertexai.preview.caching"
             except ImportError:
                 try:
                     from vertexai import caching as caching_module  # type: ignore
+
                     import_path = "vertexai.caching"
                 except ImportError:
                     pass
 
         if caching_module is None or not hasattr(caching_module, "CachedContent"):
             version_info = (
-                f" (SDK version: {_CACHED_CONTENT_SDK_VERSION})" if _CACHED_CONTENT_SDK_VERSION
-                else (
-                    f" (import path '{import_path}' available but CachedContent class not found)"
-                    if import_path else ""
-                )
+                f" (SDK version: {_CACHED_CONTENT_SDK_VERSION})"
+                if _CACHED_CONTENT_SDK_VERSION
+                else (f" (import path '{import_path}' available but CachedContent class not found)" if import_path else "")
             )
-            self.logger.debug(
-                f"CachedContent API not available{version_info}, skipping cache creation. "
-                f"Requires google-cloud-aiplatform >=1.38.0"
-            )
+            self.logger.debug(f"CachedContent API not available{version_info}, skipping cache creation. " f"Requires google-cloud-aiplatform >=1.38.0")
             return None
 
         # Generate cache key (includes tools for unique caching per tool configuration)
@@ -346,10 +337,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             self._init_vertex_ai()
 
             # Build the content to cache (system instruction as Content)
-            cached_content_obj = Content(
-                role="user",
-                parts=[Part.from_text(content)]
-            )
+            cached_content_obj = Content(role="user", parts=[Part.from_text(content)])
 
             cached_content_id: Optional[str] = None
 
@@ -365,10 +353,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                     create_params["tools"] = tools
                     self.logger.debug(f"Including {len(tools)} tools in cached content")
 
-                cached_content = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: caching_module.CachedContent.create(**create_params)  # type: ignore
-                )
+                cached_content = await asyncio.get_event_loop().run_in_executor(None, lambda: caching_module.CachedContent.create(**create_params))
 
                 if hasattr(cached_content, "name"):
                     cached_content_id = cached_content.name
@@ -388,10 +373,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 self.logger.debug(f"Failed to create CachedContent using pattern 1: {str(e)}")
 
             # Pattern 1 failed – fall back to system_instruction
-            version_info = (
-                f" Current SDK version: {_CACHED_CONTENT_SDK_VERSION}."
-                if _CACHED_CONTENT_SDK_VERSION else " Unable to detect SDK version."
-            )
+            version_info = f" Current SDK version: {_CACHED_CONTENT_SDK_VERSION}." if _CACHED_CONTENT_SDK_VERSION else " Unable to detect SDK version."
             self.logger.warning(
                 f"CachedContent API not available or incompatible with current SDK version.{version_info} "
                 f"Falling back to system_instruction (prompt caching disabled). "
@@ -401,14 +383,10 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             return None
 
         except Exception as e:
-            self.logger.warning(
-                f"Failed to create CachedContent (prompt caching disabled, using system_instruction): {str(e)}"
-            )
+            self.logger.warning(f"Failed to create CachedContent (prompt caching disabled, using system_instruction): {str(e)}")
             return None
 
-    def _convert_messages_to_contents(
-        self, messages: List[LLMMessage]
-    ) -> List[Content]:
+    def _convert_messages_to_contents(self, messages: List[LLMMessage]) -> List[Content]:
         """
         Convert LLMMessage list to Vertex AI Content objects.
 
@@ -446,15 +424,11 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             if msg.role == "tool":
                 # Resolve the function *declaration* name from the mapping built
                 # when the preceding assistant turn was processed.
-                func_name = (
-                    tool_call_id_to_name.get(msg.tool_call_id or "")
-                    or msg.tool_call_id
-                    or "unknown_function"
-                )
+                func_name = tool_call_id_to_name.get(msg.tool_call_id or "") or msg.tool_call_id or "unknown_function"
 
                 # Parse content as the function response payload
                 try:
-                    if msg.content and msg.content.strip().startswith('{'):
+                    if msg.content and msg.content.strip().startswith("{"):
                         response_data = json.loads(msg.content)
                     else:
                         response_data = {"result": msg.content}
@@ -495,17 +469,21 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                     for image_source in msg.images:
                         image_content = parse_image_source(image_source)
                         if image_content.is_url():
-                            parts.append(Part.from_uri(
-                                uri=image_content.get_url(),
-                                mime_type=image_content.mime_type,
-                            ))
+                            parts.append(
+                                Part.from_uri(
+                                    uri=image_content.get_url(),
+                                    mime_type=image_content.mime_type,
+                                )
+                            )
                         else:
                             base64_data = image_content.get_base64_data()
                             image_bytes = base64.b64decode(base64_data)
-                            parts.append(Part.from_bytes(  # type: ignore[attr-defined]
-                                data=image_bytes,
-                                mime_type=image_content.mime_type,
-                            ))
+                            parts.append(
+                                Part.from_bytes(  # type: ignore[attr-defined]
+                                    data=image_bytes,
+                                    mime_type=image_content.mime_type,
+                                )
+                            )
 
                 if sanitized_tool_calls:
                     for tool_call in sanitized_tool_calls:
@@ -517,9 +495,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                         except json.JSONDecodeError:
                             args_dict = {}
                         # Create FunctionCall part using Part.from_dict
-                        function_call_part = Part.from_dict({
-                            "function_call": {"name": func_name, "args": args_dict}
-                        })
+                        function_call_part = Part.from_dict({"function_call": {"name": func_name, "args": args_dict}})
                         parts.append(function_call_part)
 
                 contents.append(Content(role="model", parts=parts))
@@ -542,17 +518,21 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                     for image_source in msg.images:
                         image_content = parse_image_source(image_source)
                         if image_content.is_url():
-                            parts.append(Part.from_uri(
-                                uri=image_content.get_url(),
-                                mime_type=image_content.mime_type,
-                            ))
+                            parts.append(
+                                Part.from_uri(
+                                    uri=image_content.get_url(),
+                                    mime_type=image_content.mime_type,
+                                )
+                            )
                         else:
                             base64_data = image_content.get_base64_data()
                             image_bytes = base64.b64decode(base64_data)
-                            parts.append(Part.from_bytes(  # type: ignore[attr-defined]
-                                data=image_bytes,
-                                mime_type=image_content.mime_type,
-                            ))
+                            parts.append(
+                                Part.from_bytes(  # type: ignore[attr-defined]
+                                    data=image_bytes,
+                                    mime_type=image_content.mime_type,
+                                )
+                            )
 
                 if parts:
                     contents.append(Content(role=role, parts=parts))
@@ -664,7 +644,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             if final_system_instruction and system_cache_control:
                 # Create or get CachedContent for the system instruction (and tools if provided)
                 # Extract TTL from cache_control if available (defaults to 3600 seconds)
-                ttl_seconds = getattr(system_cache_control, 'ttl_seconds', None) or 3600
+                ttl_seconds = getattr(system_cache_control, "ttl_seconds", None) or 3600
                 cached_content_id = await self._create_or_get_cached_content(
                     content=final_system_instruction,
                     model_name=model_name,
@@ -682,10 +662,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 self.logger.debug(f"Initialized Vertex AI model from cached content: {model_name}")
             else:
                 # Initialize model WITH system instruction
-                model_instance = GenerativeModel(
-                    model_name,
-                    system_instruction=final_system_instruction
-                )
+                model_instance = GenerativeModel(model_name, system_instruction=final_system_instruction)
                 self.logger.debug(f"Initialized Vertex AI model: {model_name}")
 
             # Convert messages to Vertex AI format
@@ -752,7 +729,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             for key, value in kwargs.items():
                 if key not in ["tools", "safety_settings"]:
                     api_params[key] = value
-            
+
             response = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: model_instance.generate_content(**api_params),  # type: ignore[call-overload]
@@ -838,13 +815,13 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                                         # Ensure part is a string (use different name to avoid redefinition)
                                         part_str: str = str(part_raw) if not isinstance(part_raw, str) else part_raw
 
-                                        if "<thinking>" in part_str and "</thinking>" not in part_str:  # type: ignore[operator]
+                                        if "<thinking>" in part_str and "</thinking>" not in part_str:
                                             # Incomplete <thinking> tag: add
                                             # closing tag
-                                            part_str = part_str + "\n</thinking>"  # type: ignore[operator]
+                                            part_str = part_str + "\n</thinking>"
                                             needs_thinking_format = True
                                             self.logger.debug(f"  Part {i+1}: Incomplete <thinking> tag fixed")
-                                        elif isinstance(part_str, str) and part_str.startswith("thinking") and "</thinking>" not in part_str:  # type: ignore[operator]
+                                        elif isinstance(part_str, str) and part_str.startswith("thinking") and "</thinking>" not in part_str:
                                             # thinking\n format: convert to
                                             # <thinking>...</thinking>
                                             if part_str.startswith("thinking\n"):
@@ -922,9 +899,9 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                                     block_type="prompt",
                                     default_message="No candidates found - prompt blocked by safety filters",
                                 )
-                    
+
                     # If not a safety block, raise generic error with details
-                    error_msg = f"Response error: No candidates found - Response has no candidates (and thus no text)."
+                    error_msg = "Response error: No candidates found - Response has no candidates (and thus no text)."
                     if hasattr(response, "prompt_feedback"):
                         error_msg += " Check prompt_feedback for details."
                     raise ValueError(error_msg)
@@ -1114,7 +1091,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             if final_system_instruction and system_cache_control:
                 # Create or get CachedContent for the system instruction (and tools if provided)
                 # Extract TTL from cache_control if available (defaults to 3600 seconds)
-                ttl_seconds = getattr(system_cache_control, 'ttl_seconds', None) or 3600
+                ttl_seconds = getattr(system_cache_control, "ttl_seconds", None) or 3600
                 cached_content_id = await self._create_or_get_cached_content(
                     content=final_system_instruction,
                     model_name=model_name,
@@ -1132,10 +1109,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 self.logger.debug(f"Initialized Vertex AI model from cached content for streaming: {model_name}")
             else:
                 # Initialize model WITH system instruction
-                model_instance = GenerativeModel(
-                    model_name,
-                    system_instruction=final_system_instruction
-                )
+                model_instance = GenerativeModel(model_name, system_instruction=final_system_instruction)
                 self.logger.debug(f"Initialized Vertex AI model for streaming: {model_name}")
 
             # Convert messages to Vertex AI format
@@ -1181,7 +1155,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 ]
 
             # Use mixin method for Function Calling support
-            from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
+            from aiecs.llm.clients.openai_compatible_mixin import StreamChunk  # noqa: F401
 
             # Note: When using cached_content, the model instance is already created
             # from the cached content, so we don't pass cached_content as a parameter
@@ -1270,48 +1244,42 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
     ) -> List[List[float]]:
         """
         Generate embeddings using Vertex AI embedding model
-        
+
         Args:
             texts: List of texts to embed
             model: Embedding model name (default: gemini-embedding-001)
-            
+
         Returns:
             List of embedding vectors (each is a list of floats)
         """
         self._init_vertex_ai()
-        
+
         # Use gemini-embedding-001 as default
         embedding_model_name = model or "gemini-embedding-001"
-        
+
         try:
-            from google.cloud import aiplatform
+            from google.cloud import aiplatform  # noqa: F401
             from google.cloud.aiplatform.gapic import PredictionServiceClient
             from google.protobuf import struct_pb2
-            
+
             # Initialize prediction client
             location = getattr(self.settings, "vertex_location", "us-central1")
             endpoint = f"{location}-aiplatform.googleapis.com"
             client = PredictionServiceClient(client_options={"api_endpoint": endpoint})
-            
+
             # Model resource name
             model_resource = f"projects/{self.settings.vertex_project_id}/locations/{location}/publishers/google/models/{embedding_model_name}"
-            
+
             # Generate embeddings for each text
             embeddings = []
             for text in texts:
                 # Prepare instance
                 instance = struct_pb2.Struct()
                 instance.fields["content"].string_value = text
-                
+
                 # Make prediction request
-                response = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: client.predict(
-                        endpoint=model_resource,
-                        instances=[instance]
-                    )
-                )
-                
+                response = await asyncio.get_event_loop().run_in_executor(None, lambda: client.predict(endpoint=model_resource, instances=[instance]))
+
                 # Extract embedding
                 if response.predictions and len(response.predictions) > 0:
                     prediction = response.predictions[0]
@@ -1325,9 +1293,9 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 else:
                     self.logger.warning("No predictions returned from embedding model")
                     embeddings.append([0.0] * 768)
-            
+
             return embeddings
-            
+
         except ImportError as e:
             self.logger.error(f"Required Vertex AI libraries not available: {e}")
             # Return zero vectors as fallback

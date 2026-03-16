@@ -7,7 +7,7 @@ resource sharing, and collaborative decision-making.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Set, Protocol, TYPE_CHECKING
+from typing import Dict, List, Any, Optional, Set, Protocol, TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from aiecs.domain.context.context_engine import ContextEngine
@@ -732,10 +732,10 @@ class CommunityManager:
             # The exact method depends on the context engine implementation
             if hasattr(self.context_engine, "get_context"):
                 data = await self.context_engine.get_context(key)
-                return data
+                return cast(Optional[Dict[str, Any]], data)
             elif hasattr(self.context_engine, "get"):
                 data = await self.context_engine.get(key)
-                return data
+                return cast(Optional[Dict[str, Any]], data)
             else:
                 logger.warning("Context engine does not support get operations")
                 return None

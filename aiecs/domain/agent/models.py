@@ -242,12 +242,12 @@ class AgentConfiguration(BaseModel):
         "If provided, goal, backstory, domain_knowledge, and reasoning_guidance are ignored for system prompt construction. "
         "Deprecated: Use system_prompts for multiple system messages with individual cache control.",
     )
-    
+
     system_prompts: Optional[List[Union[str, Dict[str, Any]]]] = Field(
         None,
         description="Multiple system prompts for better development experience. "
         "Each prompt can be a string or a dict with 'content' and optional 'cache_control' (bool). "
-        "Example: [\"Fixed instructions...\", {\"content\": \"Dynamic context\", \"cache_control\": False}]. "
+        'Example: ["Fixed instructions...", {"content": "Dynamic context", "cache_control": False}]. '
         "If provided, system_prompt is ignored. "
         "Allows separate caching control for each system message (e.g., cache long fixed instructions, don't cache dynamic context).",
     )
@@ -299,13 +299,11 @@ class AgentConfiguration(BaseModel):
     )
     skill_auto_register_tools: bool = Field(
         default=False,
-        description="When True, skill scripts are automatically registered as tools for LLM-driven execution. "
-        "When False (default), scripts are available via context injection only.",
+        description="When True, skill scripts are automatically registered as tools for LLM-driven execution. " "When False (default), scripts are available via context injection only.",
     )
     skill_inject_script_paths: bool = Field(
         default=True,
-        description="When True (default), skill script paths are included in context injection. "
-        "When False, only skill knowledge is injected without script details.",
+        description="When True (default), skill script paths are included in context injection. " "When False, only skill knowledge is injected without script details.",
     )
     skill_context_max_skills: int = Field(
         default=3,

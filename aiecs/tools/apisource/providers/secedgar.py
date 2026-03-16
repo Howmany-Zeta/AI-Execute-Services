@@ -9,7 +9,7 @@ Base URL: https://data.sec.gov
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from aiecs.tools.apisource.providers.base import (
     BaseAPIProvider,
@@ -68,25 +68,15 @@ class SECEdgarProvider(BaseAPIProvider):
 
         if operation == "get_company_submissions":
             if "cik" not in params:
-                return False, (
-                    "Missing required parameter: cik\n"
-                    "Example: {'cik': '0000320193'}\n"
-                    "CIK must be a 10-digit string (padded with leading zeros)"
-                )
+                return False, ("Missing required parameter: cik\n" "Example: {'cik': '0000320193'}\n" "CIK must be a 10-digit string (padded with leading zeros)")
 
         elif operation == "get_company_concept":
             if "cik" not in params:
                 return False, "Missing required parameter: cik"
             if "taxonomy" not in params:
-                return False, (
-                    "Missing required parameter: taxonomy\n"
-                    "Example: 'us-gaap' or 'ifrs-full'"
-                )
+                return False, ("Missing required parameter: taxonomy\n" "Example: 'us-gaap' or 'ifrs-full'")
             if "tag" not in params:
-                return False, (
-                    "Missing required parameter: tag\n"
-                    "Example: 'AccountsPayableCurrent' or 'Assets'"
-                )
+                return False, ("Missing required parameter: tag\n" "Example: 'AccountsPayableCurrent' or 'Assets'")
 
         elif operation == "get_company_facts":
             if "cik" not in params:
@@ -94,19 +84,13 @@ class SECEdgarProvider(BaseAPIProvider):
 
         elif operation == "search_filings":
             if "cik" not in params:
-                return False, (
-                    "Missing required parameter: cik\n"
-                    "Example: {'cik': '0000320193', 'form_type': '10-K'}"
-                )
+                return False, ("Missing required parameter: cik\n" "Example: {'cik': '0000320193', 'form_type': '10-K'}")
 
         elif operation == "get_filing_documents":
             if "cik" not in params:
                 return False, "Missing required parameter: cik"
             if "accession_number" not in params:
-                return False, (
-                    "Missing required parameter: accession_number\n"
-                    "Example: {'cik': '0000320193', 'accession_number': '0000320193-23-000077'}"
-                )
+                return False, ("Missing required parameter: accession_number\n" "Example: {'cik': '0000320193', 'accession_number': '0000320193-23-000077'}")
 
         elif operation == "get_filing_text":
             if "cik" not in params:
@@ -118,10 +102,7 @@ class SECEdgarProvider(BaseAPIProvider):
             if "cik" not in params:
                 return False, "Missing required parameter: cik"
             if "form_type" not in params:
-                return False, (
-                    "Missing required parameter: form_type\n"
-                    "Example: {'cik': '0000320193', 'form_type': '10-K'}"
-                )
+                return False, ("Missing required parameter: form_type\n" "Example: {'cik': '0000320193', 'form_type': '10-K'}")
 
         elif operation == "calculate_financial_ratios":
             if "cik" not in params:
@@ -131,10 +112,7 @@ class SECEdgarProvider(BaseAPIProvider):
             if "cik" not in params:
                 return False, "Missing required parameter: cik"
             if "statement_type" not in params:
-                return False, (
-                    "Missing required parameter: statement_type\n"
-                    "Options: 'balance_sheet', 'income_statement', 'cash_flow'"
-                )
+                return False, ("Missing required parameter: statement_type\n" "Options: 'balance_sheet', 'income_statement', 'cash_flow'")
 
         elif operation == "get_insider_transactions":
             if "cik" not in params:
@@ -399,16 +377,11 @@ class SECEdgarProvider(BaseAPIProvider):
         """Fetch data from SEC EDGAR API"""
 
         if not REQUESTS_AVAILABLE:
-            raise ImportError(
-                "requests library is required for SEC EDGAR provider. Install with: pip install requests"
-            )
+            raise ImportError("requests library is required for SEC EDGAR provider. Install with: pip install requests")
 
         # SEC requires a User-Agent header
         # Format: User-Agent: Sample Company Name AdminContact@<sample company domain>.com
-        user_agent = self.config.get(
-            "user_agent",
-            "APISourceTool contact@example.com"
-        )
+        user_agent = self.config.get("user_agent", "APISourceTool contact@example.com")
 
         headers = {
             "User-Agent": user_agent,
@@ -419,7 +392,7 @@ class SECEdgarProvider(BaseAPIProvider):
         if operation == "get_company_submissions":
             cik = params["cik"]
             endpoint = f"{self.BASE_URL}/submissions/CIK{cik}.json"
-            query_params = {}
+            query_params: Dict[str, Any] = {}
 
         elif operation == "get_company_concept":
             cik = params["cik"]
@@ -526,11 +499,7 @@ class SECEdgarProvider(BaseAPIProvider):
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 404:
                 self.logger.error(f"SEC EDGAR resource not found: {endpoint}")
-                raise Exception(
-                    f"SEC EDGAR resource not found. "
-                    f"Please verify the CIK or parameters are correct. "
-                    f"Error: {str(e)}"
-                )
+                raise Exception(f"SEC EDGAR resource not found. " f"Please verify the CIK or parameters are correct. " f"Error: {str(e)}")
             else:
                 self.logger.error(f"SEC EDGAR API request failed: {e}")
                 raise Exception(f"SEC EDGAR API request failed: {str(e)}")
@@ -556,13 +525,15 @@ class SECEdgarProvider(BaseAPIProvider):
             if form_type and form_types[i] != form_type:
                 continue
 
-            filtered_filings.append({
-                "accessionNumber": accession_numbers[i],
-                "filingDate": filing_dates[i],
-                "reportDate": report_dates[i] if i < len(report_dates) else None,
-                "formType": form_types[i],
-                "primaryDocument": primary_documents[i] if i < len(primary_documents) else None,
-            })
+            filtered_filings.append(
+                {
+                    "accessionNumber": accession_numbers[i],
+                    "filingDate": filing_dates[i],
+                    "reportDate": report_dates[i] if i < len(report_dates) else None,
+                    "formType": form_types[i],
+                    "primaryDocument": primary_documents[i] if i < len(primary_documents) else None,
+                }
+            )
 
             if len(filtered_filings) >= limit:
                 break
@@ -757,7 +728,7 @@ class SECEdgarProvider(BaseAPIProvider):
                 "current_liabilities": current_liabilities,
                 "revenue": revenue,
                 "net_income": net_income,
-            }
+            },
         }
 
         return self._format_response(
@@ -785,23 +756,25 @@ class SECEdgarProvider(BaseAPIProvider):
 
         # Define statement line items
         statement_items = {
-            "balance_sheet": [
-                "AssetsCurrent", "AssetsNoncurrent", "Assets",
-                "LiabilitiesCurrent", "LiabilitiesNoncurrent", "Liabilities",
-                "StockholdersEquity", "LiabilitiesAndStockholdersEquity"
-            ],
+            "balance_sheet": ["AssetsCurrent", "AssetsNoncurrent", "Assets", "LiabilitiesCurrent", "LiabilitiesNoncurrent", "Liabilities", "StockholdersEquity", "LiabilitiesAndStockholdersEquity"],
             "income_statement": [
-                "Revenues", "CostOfRevenue", "GrossProfit",
-                "OperatingExpenses", "OperatingIncomeLoss",
-                "InterestExpense", "IncomeTaxExpense",
-                "NetIncomeLoss", "EarningsPerShareBasic", "EarningsPerShareDiluted"
+                "Revenues",
+                "CostOfRevenue",
+                "GrossProfit",
+                "OperatingExpenses",
+                "OperatingIncomeLoss",
+                "InterestExpense",
+                "IncomeTaxExpense",
+                "NetIncomeLoss",
+                "EarningsPerShareBasic",
+                "EarningsPerShareDiluted",
             ],
             "cash_flow": [
                 "NetCashProvidedByUsedInOperatingActivities",
                 "NetCashProvidedByUsedInInvestingActivities",
                 "NetCashProvidedByUsedInFinancingActivities",
-                "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"
-            ]
+                "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+            ],
         }
 
         items = statement_items.get(statement_type, [])
@@ -990,7 +963,7 @@ class SECEdgarProvider(BaseAPIProvider):
             },
         }
 
-        return schemas.get(operation)
+        return cast(Optional[Dict[str, Any]], schemas.get(operation))
 
     def calculate_data_quality(self, operation: str, data: Any, response_time_ms: float) -> Dict[str, Any]:
         """Calculate quality metadata specific to SEC EDGAR data"""
@@ -1008,4 +981,3 @@ class SECEdgarProvider(BaseAPIProvider):
         quality["completeness"] = 1.0
 
         return quality
-

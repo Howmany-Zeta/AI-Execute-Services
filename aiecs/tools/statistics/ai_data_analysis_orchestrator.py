@@ -65,7 +65,7 @@ class AIDataAnalysisOrchestrator(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the AI data analysis orchestrator tool
-        
+
         Automatically reads from environment variables with AI_DATA_ORCHESTRATOR_ prefix.
         Example: AI_DATA_ORCHESTRATOR_DEFAULT_MODE -> default_mode
         """
@@ -118,7 +118,7 @@ class AIDataAnalysisOrchestrator(BaseTool):
 
     def _init_foundation_tools(self):
         """Initialize foundation data analysis tools"""
-        self.foundation_tools = {}
+        self.foundation_tools: Dict[str, Any] = {}
 
         try:
             from aiecs.tools.statistics.data_loader_tool import DataLoaderTool

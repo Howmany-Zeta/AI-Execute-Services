@@ -22,17 +22,10 @@ try:
     LOGIC_PARSER_AVAILABLE = True
 except ImportError:
     LOGIC_PARSER_AVAILABLE = False
-    from typing import Any, TYPE_CHECKING
-    if TYPE_CHECKING:
-        LogicQueryParser: Any  # type: ignore[assignment,no-redef]
-        ParserError: Any  # type: ignore[assignment,no-redef]
-        QueryPlan: Any  # type: ignore[assignment,no-redef]
-        GraphStore: Any  # type: ignore[assignment,no-redef]
-    else:
-        LogicQueryParser = None  # type: ignore[assignment]
-        ParserError = None  # type: ignore[assignment]
-        QueryPlan = None  # type: ignore[assignment]
-        GraphStore = None  # type: ignore[assignment]
+    LogicQueryParser = None  # type: ignore[misc, assignment]
+    ParserError = None  # type: ignore[misc, assignment]
+    QueryPlan = None  # type: ignore[misc, assignment]
+    GraphStore = None  # type: ignore[misc, assignment]
 
 
 class LogicQueryIntegration:
@@ -91,7 +84,7 @@ class LogicQueryIntegration:
                 print(f"Plan: {plan.plan_id}")
             ```
         """
-        return self.parser.parse_to_query_plan(query)
+        return self.parser.parse_to_query_plan(query)  # type: ignore[no-any-return]
 
     async def parse_and_execute(self, query: str, optimize: bool = True) -> Dict[str, Any]:
         """

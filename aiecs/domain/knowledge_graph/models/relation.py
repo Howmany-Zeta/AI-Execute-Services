@@ -8,7 +8,7 @@ from typing import Any, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from aiecs.infrastructure.graph_storage.tenant import validate_tenant_id, InvalidTenantIdError, CrossTenantRelationError
+from aiecs.infrastructure.graph_storage.tenant import validate_tenant_id, CrossTenantRelationError
 
 
 class Relation(BaseModel):
@@ -130,25 +130,25 @@ class Relation(BaseModel):
                 raise CrossTenantRelationError(source_entity_tenant_id, self.tenant_id)
             if target_entity_tenant_id != self.tenant_id:
                 raise CrossTenantRelationError(self.tenant_id, target_entity_tenant_id)
-        
+
         # Both entities must have the same tenant_id (or both None)
         if source_entity_tenant_id != target_entity_tenant_id:
             raise CrossTenantRelationError(source_entity_tenant_id, target_entity_tenant_id)
-        
+
         # Return the effective tenant_id (relation's own or inferred from entities)
         # Callers can use this to set the relation's tenant_id if needed
         return self.tenant_id if self.tenant_id is not None else source_entity_tenant_id
-    
+
     def with_tenant_id(self, tenant_id: Optional[str]) -> "Relation":
         """
         Create a copy of this relation with a new tenant_id.
-        
+
         This is the Pydantic-idiomatic way to create a modified copy
         without mutating the original instance.
-        
+
         Args:
             tenant_id: The tenant_id to set on the new relation
-            
+
         Returns:
             A new Relation instance with the updated tenant_id
         """

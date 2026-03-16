@@ -11,11 +11,10 @@ Provides optimizations for structured data import:
 
 import asyncio
 import os
-import time
 import psutil
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, TypeVar
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional, Union
 import logging
 
 logger = logging.getLogger(__name__)
@@ -25,33 +24,33 @@ logger = logging.getLogger(__name__)
 class PerformanceMetrics:
     """
     Import performance metrics
-    
+
     Tracks detailed timing and throughput information during import.
     """
-    
+
     # Timing
     start_time: float = 0.0
     end_time: float = 0.0
     read_time_seconds: float = 0.0
     transform_time_seconds: float = 0.0
     write_time_seconds: float = 0.0
-    
+
     # Throughput
     total_rows: int = 0
     rows_per_second: float = 0.0
-    
+
     # Memory
     peak_memory_mb: float = 0.0
     initial_memory_mb: float = 0.0
-    
+
     # Batch info
     batch_count: int = 0
     avg_batch_time_seconds: float = 0.0
-    
+
     # Parallelism
     worker_count: int = 1
     parallel_speedup: float = 1.0
-    
+
     def calculate_throughput(self) -> None:
         """Calculate derived metrics after import completes"""
         duration = self.end_time - self.start_time
@@ -60,7 +59,7 @@ class PerformanceMetrics:
         if self.batch_count > 0:
             total_batch_time = self.read_time_seconds + self.transform_time_seconds + self.write_time_seconds
             self.avg_batch_time_seconds = total_batch_time / self.batch_count
-    
+
     def get_summary(self) -> Dict[str, Any]:
         """Get summary dictionary for logging/reporting"""
         duration = self.end_time - self.start_time
@@ -80,34 +79,34 @@ class PerformanceMetrics:
 class BatchSizeOptimizer:
     """
     Auto-tunes batch size based on system resources and data characteristics.
-    
+
     Factors considered:
     - Available memory
     - Number of columns/properties
     - Data type complexity
     - Historical performance
     """
-    
+
     # Memory thresholds
     MIN_BATCH_SIZE = 50
     MAX_BATCH_SIZE = 10000
     DEFAULT_BATCH_SIZE = 1000
-    
+
     # Memory allocation per row (estimated)
     BASE_MEMORY_PER_ROW_BYTES = 1024  # 1KB base
     MEMORY_PER_COLUMN_BYTES = 100  # 100 bytes per column
-    
+
     def __init__(self, target_memory_percent: float = 0.25):
         """
         Initialize batch size optimizer
-        
+
         Args:
             target_memory_percent: Target percentage of available memory to use (0-1)
         """
         self.target_memory_percent = target_memory_percent
         self._batch_times: List[float] = []
         self._current_batch_size = self.DEFAULT_BATCH_SIZE
-    
+
     def estimate_batch_size(
         self,
         column_count: int,
@@ -115,11 +114,11 @@ class BatchSizeOptimizer:
     ) -> int:
         """
         Estimate optimal batch size based on system resources.
-        
+
         Args:
             column_count: Number of columns in the data
             sample_row_size_bytes: Optional measured row size
-            
+
         Returns:
             Recommended batch size
         """
@@ -128,22 +127,22 @@ class BatchSizeOptimizer:
         except Exception:
             # Fallback if psutil fails
             return self.DEFAULT_BATCH_SIZE
-        
+
         # Calculate target memory for batches
         target_memory = available_memory * self.target_memory_percent
-        
+
         # Estimate memory per row
         if sample_row_size_bytes:
             memory_per_row = sample_row_size_bytes
         else:
             memory_per_row = self.BASE_MEMORY_PER_ROW_BYTES + (column_count * self.MEMORY_PER_COLUMN_BYTES)
-        
+
         # Calculate batch size
         batch_size = int(target_memory / memory_per_row)
-        
+
         # Clamp to reasonable range
         batch_size = max(self.MIN_BATCH_SIZE, min(batch_size, self.MAX_BATCH_SIZE))
-        
+
         self._current_batch_size = batch_size
         logger.debug(f"Estimated batch size: {batch_size} (columns={column_count}, memory_per_row={memory_per_row})")
 
@@ -175,16 +174,10 @@ class BatchSizeOptimizer:
 
         # If processing is fast, increase batch size
         if avg_time_per_row < 0.001:  # < 1ms per row
-            self._current_batch_size = min(
-                self._current_batch_size * 2,
-                self.MAX_BATCH_SIZE
-            )
+            self._current_batch_size = min(self._current_batch_size * 2, self.MAX_BATCH_SIZE)
         # If processing is slow, decrease batch size
         elif avg_time_per_row > 0.01:  # > 10ms per row
-            self._current_batch_size = max(
-                self._current_batch_size // 2,
-                self.MIN_BATCH_SIZE
-            )
+            self._current_batch_size = max(self._current_batch_size // 2, self.MIN_BATCH_SIZE)
 
         return self._current_batch_size
 
@@ -210,11 +203,11 @@ class ParallelBatchProcessor:
             use_processes: Use ProcessPoolExecutor instead of ThreadPoolExecutor
         """
         if max_workers is None:
-            max_workers = max(1, os.cpu_count() - 1) if os.cpu_count() else 1
+            max_workers = max(1, (os.cpu_count() or 2) - 1)
 
         self.max_workers = max_workers
         self.use_processes = use_processes
-        self._executor: Optional[ThreadPoolExecutor] = None
+        self._executor: Optional[Union[ThreadPoolExecutor, ProcessPoolExecutor]] = None
         self._progress_lock = asyncio.Lock()
         self._processed_rows = 0
         self._total_rows = 0
@@ -387,10 +380,9 @@ class StreamingCSVReader:
             Total row count (excluding header)
         """
         count = 0
-        with open(self.file_path, 'r', encoding=self.encoding) as f:
+        with open(self.file_path, "r", encoding=self.encoding) as f:
             # Skip header
             next(f, None)
             for _ in f:
                 count += 1
         return count
-

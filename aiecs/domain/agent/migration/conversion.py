@@ -42,7 +42,7 @@ def convert_legacy_config(legacy_config: Dict[str, Any]) -> AgentConfiguration:
 
     # Create AgentConfiguration
     try:
-        config = AgentConfiguration(**converted)  # type: ignore[call-arg]
+        config = AgentConfiguration(**converted)
         logger.info("Legacy configuration converted successfully")
         return config
     except Exception as e:

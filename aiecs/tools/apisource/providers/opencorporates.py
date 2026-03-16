@@ -65,48 +65,27 @@ class OpenCorporatesProvider(BaseAPIProvider):
 
         if operation == "search_companies":
             if "q" not in params:
-                return False, (
-                    "Missing required parameter: q\n"
-                    "Example: {'q': 'Apple Inc'}"
-                )
+                return False, ("Missing required parameter: q\n" "Example: {'q': 'Apple Inc'}")
 
         elif operation == "get_company":
             if "jurisdiction_code" not in params:
-                return False, (
-                    "Missing required parameter: jurisdiction_code\n"
-                    "Example: {'jurisdiction_code': 'us_ca', 'company_number': 'C0806592'}"
-                )
+                return False, ("Missing required parameter: jurisdiction_code\n" "Example: {'jurisdiction_code': 'us_ca', 'company_number': 'C0806592'}")
             if "company_number" not in params:
-                return False, (
-                    "Missing required parameter: company_number\n"
-                    "Example: {'jurisdiction_code': 'us_ca', 'company_number': 'C0806592'}"
-                )
+                return False, ("Missing required parameter: company_number\n" "Example: {'jurisdiction_code': 'us_ca', 'company_number': 'C0806592'}")
 
         elif operation == "search_officers":
             if "q" not in params:
-                return False, (
-                    "Missing required parameter: q\n"
-                    "Example: {'q': 'John Smith'}"
-                )
+                return False, ("Missing required parameter: q\n" "Example: {'q': 'John Smith'}")
 
         elif operation == "get_officer":
             if "officer_id" not in params:
-                return False, (
-                    "Missing required parameter: officer_id\n"
-                    "Example: {'officer_id': '123456'}"
-                )
+                return False, ("Missing required parameter: officer_id\n" "Example: {'officer_id': '123456'}")
 
         elif operation == "get_company_filings":
             if "jurisdiction_code" not in params:
-                return False, (
-                    "Missing required parameter: jurisdiction_code\n"
-                    "Example: {'jurisdiction_code': 'us_ca', 'company_number': 'C0806592'}"
-                )
+                return False, ("Missing required parameter: jurisdiction_code\n" "Example: {'jurisdiction_code': 'us_ca', 'company_number': 'C0806592'}")
             if "company_number" not in params:
-                return False, (
-                    "Missing required parameter: company_number\n"
-                    "Example: {'jurisdiction_code': 'us_ca', 'company_number': 'C0806592'}"
-                )
+                return False, ("Missing required parameter: company_number\n" "Example: {'jurisdiction_code': 'us_ca', 'company_number': 'C0806592'}")
 
         return True, None
 
@@ -145,9 +124,7 @@ class OpenCorporatesProvider(BaseAPIProvider):
         operation_name="get_company",
         description="Get detailed information about a specific company by jurisdiction and company number",
     )
-    def get_company(
-        self, jurisdiction_code: str, company_number: str, sparse: bool = False
-    ) -> Dict[str, Any]:
+    def get_company(self, jurisdiction_code: str, company_number: str, sparse: bool = False) -> Dict[str, Any]:
         """
         Get company details by jurisdiction code and company number.
 
@@ -217,9 +194,7 @@ class OpenCorporatesProvider(BaseAPIProvider):
         operation_name="get_company_filings",
         description="Get statutory filings for a specific company",
     )
-    def get_company_filings(
-        self, jurisdiction_code: str, company_number: str, per_page: int = 30, page: int = 1
-    ) -> Dict[str, Any]:
+    def get_company_filings(self, jurisdiction_code: str, company_number: str, per_page: int = 30, page: int = 1) -> Dict[str, Any]:
         """
         Get company filings.
 
@@ -258,18 +233,12 @@ class OpenCorporatesProvider(BaseAPIProvider):
         """Fetch data from OpenCorporates API"""
 
         if not REQUESTS_AVAILABLE:
-            raise ImportError(
-                "requests library is required for OpenCorporates provider. "
-                "Install with: pip install requests"
-            )
+            raise ImportError("requests library is required for OpenCorporates provider. " "Install with: pip install requests")
 
         # Get API key
         api_key = self._get_api_key()
         if not api_key:
-            raise ValueError(
-                "OpenCorporates API key is required. "
-                "Set OPENCORPORATES_API_KEY environment variable or pass api_key in config."
-            )
+            raise ValueError("OpenCorporates API key is required. " "Set OPENCORPORATES_API_KEY environment variable or pass api_key in config.")
 
         # Build endpoint based on operation
         if operation == "search_companies":
@@ -501,4 +470,3 @@ class OpenCorporatesProvider(BaseAPIProvider):
         }
 
         return schemas.get(operation, {})
-

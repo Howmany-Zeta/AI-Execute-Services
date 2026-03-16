@@ -16,7 +16,7 @@ import logging
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from aiecs.application.knowledge_graph.fusion.matching_config import (
     EntityTypeConfig,
@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 class MatchStage(str, Enum):
     """Matching stages in the similarity pipeline."""
+
     EXACT = "exact"
     ALIAS = "alias"
     ABBREVIATION = "abbreviation"
@@ -47,6 +48,7 @@ class MatchResult:
         is_match: Whether this is considered a match (above threshold)
         details: Additional details about the match
     """
+
     score: float
     stage: MatchStage
     is_match: bool = False
@@ -65,6 +67,7 @@ class PipelineResult:
         stage_results: Results from each stage that was executed
         early_exit: Whether pipeline exited early on high-confidence match
     """
+
     final_score: float
     is_match: bool
     matched_stage: Optional[MatchStage] = None
@@ -219,9 +222,7 @@ class SimilarityPipeline:
             if stage not in enabled_stages:
                 continue
 
-            result = await self._execute_stage(
-                stage, name1, name2, type_config
-            )
+            result = await self._execute_stage(stage, name1, name2, type_config)
             stage_results.append(result)
 
             if result.score > best_score:
@@ -232,9 +233,7 @@ class SimilarityPipeline:
             if result.score >= self._early_exit_threshold:
                 self._early_exit_count += 1
                 early_exit = True
-                logger.debug(
-                    f"Early exit at stage {stage.value} with score {result.score:.3f}"
-                )
+                logger.debug(f"Early exit at stage {stage.value} with score {result.score:.3f}")
                 break
 
         # Determine if this is a match
@@ -250,9 +249,7 @@ class SimilarityPipeline:
             early_exit=early_exit,
         )
 
-    def _get_enabled_stages(
-        self, type_config: EntityTypeConfig
-    ) -> List[MatchStage]:
+    def _get_enabled_stages(self, type_config: EntityTypeConfig) -> List[MatchStage]:
         """Get list of enabled stages for entity type config."""
         enabled = []
         for stage in self.DEFAULT_STAGE_ORDER:
@@ -301,9 +298,7 @@ class SimilarityPipeline:
             )
         return MatchResult(score=0.0, stage=MatchStage.EXACT)
 
-    async def _alias_match(
-        self, name1: str, name2: str, type_config: EntityTypeConfig
-    ) -> MatchResult:
+    async def _alias_match(self, name1: str, name2: str, type_config: EntityTypeConfig) -> MatchResult:
         """Check for alias match via AliasIndex."""
         if self._alias_matcher is None:
             return MatchResult(score=0.0, stage=MatchStage.ALIAS)
@@ -314,9 +309,7 @@ class SimilarityPipeline:
 
         # Check if they point to the same entity
         if match1 and match2 and match1.entity_id == match2.entity_id:
-            score = type_config.get_threshold(
-                "alias_match_score", self._config.alias_match_score
-            )
+            score = type_config.get_threshold("alias_match_score", self._config.alias_match_score) or 0.0
             return MatchResult(
                 score=score,
                 stage=MatchStage.ALIAS,
@@ -326,18 +319,14 @@ class SimilarityPipeline:
 
         return MatchResult(score=0.0, stage=MatchStage.ALIAS)
 
-    def _abbreviation_match(
-        self, name1: str, name2: str, type_config: EntityTypeConfig
-    ) -> MatchResult:
+    def _abbreviation_match(self, name1: str, name2: str, type_config: EntityTypeConfig) -> MatchResult:
         """Check for abbreviation/acronym match."""
         if self._abbreviation_expander is None:
             return MatchResult(score=0.0, stage=MatchStage.ABBREVIATION)
 
         # Check if names match via abbreviation expansion
         if self._abbreviation_expander.matches(name1, name2):
-            score = type_config.get_threshold(
-                "abbreviation_match_score", self._config.abbreviation_match_score
-            )
+            score = type_config.get_threshold("abbreviation_match_score", self._config.abbreviation_match_score) or 0.0
             return MatchResult(
                 score=score,
                 stage=MatchStage.ABBREVIATION,
@@ -347,9 +336,7 @@ class SimilarityPipeline:
 
         return MatchResult(score=0.0, stage=MatchStage.ABBREVIATION)
 
-    def _normalized_match(
-        self, name1: str, name2: str, type_config: EntityTypeConfig
-    ) -> MatchResult:
+    def _normalized_match(self, name1: str, name2: str, type_config: EntityTypeConfig) -> MatchResult:
         """Check for normalized name match (after stripping prefixes/suffixes)."""
         if self._name_normalizer is None:
             return MatchResult(score=0.0, stage=MatchStage.NORMALIZED)
@@ -359,9 +346,7 @@ class SimilarityPipeline:
 
         # Check exact normalized match
         if result1.normalized == result2.normalized:
-            score = type_config.get_threshold(
-                "normalization_match_score", self._config.normalization_match_score
-            )
+            score = type_config.get_threshold("normalization_match_score", self._config.normalization_match_score) or 0.0
             return MatchResult(
                 score=score,
                 stage=MatchStage.NORMALIZED,
@@ -374,9 +359,7 @@ class SimilarityPipeline:
 
         # Check if one matches with initials expanded
         if self._name_normalizer.names_match_with_initials(name1, name2):
-            score = type_config.get_threshold(
-                "normalization_match_score", self._config.normalization_match_score
-            )
+            score = type_config.get_threshold("normalization_match_score", self._config.normalization_match_score) or 0.0
             return MatchResult(
                 score=score * 0.95,  # Slightly lower for initial matches
                 stage=MatchStage.NORMALIZED,
@@ -386,9 +369,7 @@ class SimilarityPipeline:
 
         return MatchResult(score=0.0, stage=MatchStage.NORMALIZED)
 
-    async def _semantic_match(
-        self, name1: str, name2: str, type_config: EntityTypeConfig
-    ) -> MatchResult:
+    async def _semantic_match(self, name1: str, name2: str, type_config: EntityTypeConfig) -> MatchResult:
         """Check for semantic similarity via embeddings."""
         if self._semantic_matcher is None:
             return MatchResult(score=0.0, stage=MatchStage.SEMANTIC)
@@ -397,9 +378,7 @@ class SimilarityPipeline:
             return MatchResult(score=0.0, stage=MatchStage.SEMANTIC)
 
         # Get semantic threshold
-        threshold = type_config.get_threshold(
-            "semantic_threshold", self._config.semantic_threshold
-        )
+        threshold = type_config.get_threshold("semantic_threshold", self._config.semantic_threshold)
 
         # Compute semantic similarity
         result = await self._semantic_matcher.match(name1, name2, threshold=threshold)
@@ -411,9 +390,7 @@ class SimilarityPipeline:
             details={"threshold": threshold},
         )
 
-    def _string_similarity(
-        self, name1: str, name2: str, type_config: EntityTypeConfig
-    ) -> MatchResult:
+    def _string_similarity(self, name1: str, name2: str, type_config: EntityTypeConfig) -> MatchResult:
         """Compute string similarity as fallback."""
         # Normalize strings
         n1 = name1.lower().strip()
@@ -442,9 +419,7 @@ class SimilarityPipeline:
         # Combine scores
         final_score = max(seq_similarity, 0.7 * seq_similarity + 0.3 * token_overlap)
 
-        threshold = type_config.get_threshold(
-            "string_similarity_threshold", self._config.string_similarity_threshold
-        )
+        threshold = type_config.get_threshold("string_similarity_threshold", self._config.string_similarity_threshold) or 0.0
 
         return MatchResult(
             score=final_score,
@@ -461,15 +436,8 @@ class SimilarityPipeline:
         return {
             "total_comparisons": self._total_comparisons,
             "early_exit_count": self._early_exit_count,
-            "early_exit_rate": (
-                self._early_exit_count / self._total_comparisons
-                if self._total_comparisons > 0
-                else 0.0
-            ),
-            "match_counts": {
-                stage.value: count
-                for stage, count in self._match_counts.items()
-            },
+            "early_exit_rate": (self._early_exit_count / self._total_comparisons if self._total_comparisons > 0 else 0.0),
+            "match_counts": {stage.value: count for stage, count in self._match_counts.items()},
         }
 
     def reset_stats(self) -> None:

@@ -31,7 +31,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 from pathlib import Path
 import logging
-from typing import Literal
+from typing import Literal, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from aiecs.application.knowledge_graph.fusion.matching_config import FusionMatchingConfig
 
 logger = logging.getLogger(__name__)
 
@@ -82,8 +85,8 @@ class Settings(BaseSettings):
     google_cloud_storage_bucket: str = Field(default="", alias="GOOGLE_CLOUD_STORAGE_BUCKET")
 
     # Qdrant configuration (legacy)
-    qdrant_url: str = Field("http://qdrant:6333", alias="QDRANT_URL")
-    qdrant_collection: str = Field("documents", alias="QDRANT_COLLECTION")
+    qdrant_url: str = Field(default="http://qdrant:6333", alias="QDRANT_URL")
+    qdrant_collection: str = Field(default="documents", alias="QDRANT_COLLECTION")
 
     # Vertex AI Vector Search configuration
     vertex_index_id: str | None = Field(default=None, alias="VERTEX_INDEX_ID")
@@ -92,7 +95,7 @@ class Settings(BaseSettings):
 
     # Vector store backend selection (Qdrant deprecated, using Vertex AI by
     # default)
-    vector_store_backend: str = Field("vertex", alias="VECTOR_STORE_BACKEND")  # "vertex" (qdrant deprecated)
+    vector_store_backend: str = Field(default="vertex", alias="VECTOR_STORE_BACKEND")  # "vertex" (qdrant deprecated)
 
     # Development/Server Configuration
     reload: bool = Field(default=False, alias="RELOAD")
@@ -147,7 +150,7 @@ class Settings(BaseSettings):
         alias="KG_INMEMORY_MAX_NODES",
         description="Maximum number of nodes for in-memory storage",
     )
-    
+
     kg_inmemory_max_tenants: int = Field(
         default=100,
         alias="KG_INMEMORY_MAX_TENANTS",
@@ -418,12 +421,6 @@ class Settings(BaseSettings):
         description="Enable Row-Level Security for PostgreSQL (SHARED_SCHEMA mode only)",
     )
 
-    kg_inmemory_max_tenants: int = Field(
-        default=100,
-        alias="KG_INMEMORY_MAX_TENANTS",
-        description="Maximum number of tenant graphs in memory (for InMemoryGraphStore LRU)",
-    )
-
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="allow")
 
     @property
@@ -488,23 +485,14 @@ class Settings(BaseSettings):
         if self.kg_enable_rls:
             # RLS only makes sense with PostgreSQL and SHARED_SCHEMA mode
             if self.kg_storage_backend != "postgresql":
-                logger.warning(
-                    "KG_ENABLE_RLS is enabled but storage backend is not PostgreSQL. "
-                    "RLS will have no effect."
-                )
+                logger.warning("KG_ENABLE_RLS is enabled but storage backend is not PostgreSQL. " "RLS will have no effect.")
             if self.kg_tenant_isolation_mode != "shared_schema":
-                logger.warning(
-                    "KG_ENABLE_RLS is enabled but isolation mode is not 'shared_schema'. "
-                    "RLS is only applicable to shared_schema mode."
-                )
+                logger.warning("KG_ENABLE_RLS is enabled but isolation mode is not 'shared_schema'. " "RLS is only applicable to shared_schema mode.")
 
         if self.kg_multi_tenancy_enabled:
             # Validate that tenant isolation mode is not disabled
             if self.kg_tenant_isolation_mode == "disabled":
-                raise ValueError(
-                    "KG_MULTI_TENANCY_ENABLED is True but KG_TENANT_ISOLATION_MODE is 'disabled'. "
-                    "Please set KG_TENANT_ISOLATION_MODE to 'shared_schema' or 'separate_schema'."
-                )
+                raise ValueError("KG_MULTI_TENANCY_ENABLED is True but KG_TENANT_ISOLATION_MODE is 'disabled'. " "Please set KG_TENANT_ISOLATION_MODE to 'shared_schema' or 'separate_schema'.")
 
         return True
 
@@ -669,10 +657,7 @@ class Settings(BaseSettings):
         """Validate tenant isolation mode"""
         valid_modes = ["disabled", "shared_schema", "separate_schema"]
         if v not in valid_modes:
-            raise ValueError(
-                f"Invalid KG_TENANT_ISOLATION_MODE: {v}. "
-                f"Must be one of: {', '.join(valid_modes)}"
-            )
+            raise ValueError(f"Invalid KG_TENANT_ISOLATION_MODE: {v}. " f"Must be one of: {', '.join(valid_modes)}")
         return v
 
     @field_validator("kg_enable_rls")
@@ -736,9 +721,7 @@ class Settings(BaseSettings):
         )
 
         # Parse enabled stages from comma-separated string
-        enabled_stages = [
-            s.strip() for s in self.kg_fusion_enabled_stages.split(",") if s.strip()
-        ]
+        enabled_stages = [s.strip() for s in self.kg_fusion_enabled_stages.split(",") if s.strip()]
 
         # Start with global config from Settings
         config = FusionMatchingConfig(
@@ -770,18 +753,11 @@ class Settings(BaseSettings):
                     # Merge entity type configs from file
                     for entity_type, type_config in file_config.entity_type_configs.items():
                         config.add_entity_type_config(entity_type, type_config)
-                    logger.info(
-                        f"Loaded per-entity-type config from: {config_path} "
-                        f"({len(file_config.entity_type_configs)} types)"
-                    )
+                    logger.info(f"Loaded per-entity-type config from: {config_path} " f"({len(file_config.entity_type_configs)} types)")
                 except Exception as e:
-                    logger.warning(
-                        f"Failed to load entity type config from {config_path}: {e}"
-                    )
+                    logger.warning(f"Failed to load entity type config from {config_path}: {e}")
             else:
-                logger.warning(
-                    f"Entity type config file not found: {config_path}"
-                )
+                logger.warning(f"Entity type config file not found: {config_path}")
 
         return config
 

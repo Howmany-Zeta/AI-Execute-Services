@@ -191,11 +191,7 @@ class USPTOProvider(BaseAPIProvider):
         # Get API key
         api_key = self._get_api_key()
         if not api_key:
-            raise ValueError(
-                "USPTO API key is required. Set USPTO_API_KEY environment variable "
-                "or provide 'api_key' in config. Request a key at: "
-                "https://search.patentsview.org/"
-            )
+            raise ValueError("USPTO API key is required. Set USPTO_API_KEY environment variable " "or provide 'api_key' in config. Request a key at: " "https://search.patentsview.org/")
 
         timeout = self.config.get("timeout", 30)
         headers = {
@@ -303,9 +299,7 @@ class USPTOProvider(BaseAPIProvider):
         elif operation == "search_by_assignee":
             # Search by assignee/organization
             assignee_name = params["assignee_name"]
-            query_body["q"] = {
-                "_text_any": {"assignees.assignee_organization": assignee_name}
-            }
+            query_body["q"] = {"_text_any": {"assignees.assignee_organization": assignee_name}}
 
             query_body["f"] = [
                 "patent_id",
@@ -327,12 +321,7 @@ class USPTOProvider(BaseAPIProvider):
 
         # Make API request
         try:
-            response = requests.post(
-                endpoint,
-                json=query_body,
-                headers=headers,
-                timeout=timeout
-            )
+            response = requests.post(endpoint, json=query_body, headers=headers, timeout=timeout)
             response.raise_for_status()
 
             # Parse JSON response
@@ -439,4 +428,3 @@ class USPTOProvider(BaseAPIProvider):
         }
 
         return schemas.get(operation)
-

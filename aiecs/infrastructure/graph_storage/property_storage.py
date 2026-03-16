@@ -13,7 +13,7 @@ when dealing with entities that have many properties.
 import json
 import zlib
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, Optional, Set, cast
 from collections import defaultdict
 import logging
 
@@ -30,22 +30,22 @@ LARGE_PROPERTY_SET_THRESHOLD = 50
 @dataclass
 class PropertyStorageConfig:
     """Configuration for property storage optimization"""
-    
+
     # Enable sparse storage (only store non-null values)
     enable_sparse_storage: bool = True
-    
+
     # Enable compression for large property sets
     enable_compression: bool = True
-    
+
     # Minimum properties before compression is applied
     compression_threshold: int = COMPRESSION_THRESHOLD
-    
+
     # Compression level (1-9, higher = better compression but slower)
     compression_level: int = 6
-    
+
     # Properties to always index for fast lookup
     indexed_properties: Set[str] = field(default_factory=set)
-    
+
     # Track query frequency for auto-indexing
     auto_index_threshold: int = 100  # Queries before auto-indexing
 
@@ -53,96 +53,96 @@ class PropertyStorageConfig:
 @dataclass
 class CompressedProperties:
     """Represents compressed property storage"""
-    
+
     # Compressed property data
     data: bytes
-    
+
     # Number of properties
     property_count: int
-    
+
     # Original size in bytes
     original_size: int
-    
+
     # Compressed size in bytes
     compressed_size: int
-    
+
     @property
     def compression_ratio(self) -> float:
         """Get compression ratio (0-1, lower is better)"""
         if self.original_size == 0:
             return 1.0
         return self.compressed_size / self.original_size
-    
+
     def decompress(self) -> Dict[str, Any]:
         """Decompress and return properties dict"""
         decompressed = zlib.decompress(self.data)
-        return json.loads(decompressed.decode('utf-8'))
+        return cast(Dict[str, Any], json.loads(decompressed.decode("utf-8")))
 
 
 class PropertyIndex:
     """
     Index for fast property-based lookups
-    
+
     Maintains reverse index from property values to entity IDs.
     """
-    
+
     def __init__(self):
         # property_name -> value -> set of entity_ids
         self._index: Dict[str, Dict[Any, Set[str]]] = defaultdict(lambda: defaultdict(set))
-        
+
         # Track indexed properties
         self._indexed_properties: Set[str] = set()
-        
+
         # Query frequency tracking for auto-indexing
         self._query_counts: Dict[str, int] = defaultdict(int)
-        
+
     def add_to_index(self, entity_id: str, property_name: str, value: Any) -> None:
         """Add a property value to the index"""
         if property_name not in self._indexed_properties:
             return
-        
+
         # Convert value to hashable type if needed
         hashable_value = self._make_hashable(value)
         if hashable_value is not None:
             self._index[property_name][hashable_value].add(entity_id)
-    
+
     def remove_from_index(self, entity_id: str, property_name: str, value: Any) -> None:
         """Remove a property value from the index"""
         if property_name not in self._indexed_properties:
             return
-        
+
         hashable_value = self._make_hashable(value)
         if hashable_value is not None and hashable_value in self._index[property_name]:
             self._index[property_name][hashable_value].discard(entity_id)
-    
+
     def lookup(self, property_name: str, value: Any) -> Set[str]:
         """Look up entity IDs by property value"""
         # Track query frequency
         self._query_counts[property_name] += 1
-        
+
         if property_name not in self._indexed_properties:
             return set()
-        
+
         hashable_value = self._make_hashable(value)
         if hashable_value is None:
             return set()
-        
+
         return self._index[property_name].get(hashable_value, set()).copy()
-    
+
     def add_indexed_property(self, property_name: str) -> None:
         """Mark a property as indexed"""
         self._indexed_properties.add(property_name)
-        
+
     def remove_indexed_property(self, property_name: str) -> None:
         """Remove a property from indexing"""
         self._indexed_properties.discard(property_name)
         if property_name in self._index:
             del self._index[property_name]
-    
+
     def get_query_counts(self) -> Dict[str, int]:
         """Get query counts for all properties"""
         return dict(self._query_counts)
-    
+
     def _make_hashable(self, value: Any) -> Optional[Any]:
         """Convert value to hashable type, or None if not possible"""
         if value is None:
@@ -211,19 +211,14 @@ class PropertyOptimizer:
             properties = {k: v for k, v in properties.items() if v is not None}
 
         # Serialize to JSON
-        json_str = json.dumps(properties, separators=(',', ':'))
-        json_bytes = json_str.encode('utf-8')
+        json_str = json.dumps(properties, separators=(",", ":"))
+        json_bytes = json_str.encode("utf-8")
         original_size = len(json_bytes)
 
         # Compress
         compressed = zlib.compress(json_bytes, level=self.config.compression_level)
 
-        return CompressedProperties(
-            data=compressed,
-            property_count=len(properties),
-            original_size=original_size,
-            compressed_size=len(compressed)
-        )
+        return CompressedProperties(data=compressed, property_count=len(properties), original_size=original_size, compressed_size=len(compressed))
 
     def decompress_properties(self, compressed: CompressedProperties) -> Dict[str, Any]:
         """
@@ -303,7 +298,7 @@ class PropertyOptimizer:
             "null_count": len(properties) - len(sparse_props),
             "sparse_reduction_pct": (1 - sparse_size / original_size) * 100 if original_size > 0 else 0,
             "compression_ratio": compressed.compression_ratio,
-            "compression_reduction_pct": (1 - compressed.compression_ratio) * 100
+            "compression_reduction_pct": (1 - compressed.compression_ratio) * 100,
         }
 
     # Index operations
@@ -350,4 +345,3 @@ class PropertyOptimizer:
     def add_indexed_property(self, property_name: str) -> None:
         """Add a property to the index"""
         self._property_index.add_indexed_property(property_name)
-

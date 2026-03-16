@@ -7,7 +7,7 @@ Provides query performance monitoring, query plan analysis, and optimization sug
 import time
 import logging
 import asyncio
-import asyncpg  # type: ignore[import-untyped]
+import asyncpg
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from collections import defaultdict

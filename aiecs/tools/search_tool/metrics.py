@@ -14,7 +14,7 @@ class EnhancedMetrics:
 
     def __init__(self):
         """Initialize enhanced metrics"""
-        self.metrics = {
+        self.metrics: Dict[str, Any] = {
             # Basic counters
             "requests": {
                 "total": 0,
@@ -241,7 +241,7 @@ class EnhancedMetrics:
         # Cache efficiency score (10%)
         cache_score = self.metrics["cache"]["hit_rate"] * 0.1
 
-        return success_score + performance_score + quality_score + cache_score
+        return float(success_score + performance_score + quality_score + cache_score)
 
     def generate_report(self) -> str:
         """
@@ -340,4 +340,4 @@ Query Patterns:
 
     def reset(self):
         """Reset all metrics"""
-        self.__init__()
+        self.metrics = EnhancedMetrics().metrics

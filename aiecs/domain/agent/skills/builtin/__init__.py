@@ -18,4 +18,3 @@ To add a new built-in skill:
 
 See the design documentation for the full SKILL.md format specification.
 """
-

@@ -20,4 +20,3 @@ class RetrievalStrategy(str, Enum):
     PAGERANK = "pagerank"  # Personalized PageRank retrieval
     FILTERED = "filtered"  # Property-based filtering
     HYBRID = "hybrid"  # Combination of multiple strategies
-

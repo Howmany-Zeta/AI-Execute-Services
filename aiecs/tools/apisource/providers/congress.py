@@ -292,9 +292,7 @@ class CongressProvider(BaseAPIProvider):
         operation_name="get_amendment",
         description="Get detailed information about a specific amendment",
     )
-    def get_amendment(
-        self, congress: int, amendment_type: str, amendment_number: int
-    ) -> Dict[str, Any]:
+    def get_amendment(self, congress: int, amendment_type: str, amendment_number: int) -> Dict[str, Any]:
         """
         Get amendment details.
 
@@ -622,4 +620,3 @@ class CongressProvider(BaseAPIProvider):
         }
 
         return schemas.get(operation)
-

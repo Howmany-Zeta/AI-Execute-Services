@@ -46,7 +46,7 @@ class TimeoutError(ToolExecutionError):
 class ExecutorConfig(BaseSettings):
     """
     Configuration for the ToolExecutor.
-    
+
     Automatically reads from environment variables with TOOL_EXECUTOR_ prefix.
     Example: TOOL_EXECUTOR_MAX_WORKERS -> max_workers
 

@@ -9,7 +9,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 import yaml
 
@@ -41,9 +41,7 @@ class EntityTypeConfig:
         ```
     """
 
-    enabled_stages: List[str] = field(
-        default_factory=lambda: DEFAULT_ENABLED_STAGES.copy()
-    )
+    enabled_stages: List[str] = field(default_factory=lambda: DEFAULT_ENABLED_STAGES.copy())
     semantic_enabled: bool = True
     thresholds: Dict[str, float] = field(default_factory=dict)
 
@@ -51,16 +49,11 @@ class EntityTypeConfig:
         """Validate enabled stages."""
         invalid = set(self.enabled_stages) - VALID_STAGES
         if invalid:
-            raise ValueError(
-                f"Invalid matching stages: {invalid}. "
-                f"Valid stages are: {VALID_STAGES}"
-            )
+            raise ValueError(f"Invalid matching stages: {invalid}. " f"Valid stages are: {VALID_STAGES}")
         # Validate threshold values are in range
         for key, value in self.thresholds.items():
             if not 0.0 <= value <= 1.0:
-                raise ValueError(
-                    f"Threshold '{key}' must be between 0.0 and 1.0, got {value}"
-                )
+                raise ValueError(f"Threshold '{key}' must be between 0.0 and 1.0, got {value}")
 
     def merge_overrides(self, overrides: "EntityTypeConfig") -> None:
         """
@@ -80,9 +73,7 @@ class EntityTypeConfig:
             return self.semantic_enabled and stage in self.enabled_stages
         return stage in self.enabled_stages
 
-    def get_threshold(
-        self, threshold_name: str, default: Optional[float] = None
-    ) -> Optional[float]:
+    def get_threshold(self, threshold_name: str, default: Optional[float] = None) -> Optional[float]:
         """Get a threshold value, or default if not set."""
         return self.thresholds.get(threshold_name, default)
 
@@ -128,9 +119,7 @@ class FusionMatchingConfig:
     string_similarity_threshold: float = 0.80
 
     # Default enabled stages
-    enabled_stages: List[str] = field(
-        default_factory=lambda: DEFAULT_ENABLED_STAGES.copy()
-    )
+    enabled_stages: List[str] = field(default_factory=lambda: DEFAULT_ENABLED_STAGES.copy())
 
     # Whether semantic matching is enabled globally
     semantic_enabled: bool = True
@@ -139,18 +128,13 @@ class FusionMatchingConfig:
     entity_type_configs: Dict[str, EntityTypeConfig] = field(default_factory=dict)
 
     # Configuration source tracking for debugging
-    _config_sources: Dict[str, str] = field(
-        default_factory=dict, repr=False, compare=False
-    )
+    _config_sources: Dict[str, str] = field(default_factory=dict, repr=False, compare=False)
 
     def __post_init__(self):
         """Validate configuration."""
         invalid = set(self.enabled_stages) - VALID_STAGES
         if invalid:
-            raise ValueError(
-                f"Invalid matching stages: {invalid}. "
-                f"Valid stages are: {VALID_STAGES}"
-            )
+            raise ValueError(f"Invalid matching stages: {invalid}. " f"Valid stages are: {VALID_STAGES}")
         self._validate_thresholds()
 
     def _validate_thresholds(self) -> None:
@@ -164,9 +148,7 @@ class FusionMatchingConfig:
         }
         for name, value in thresholds.items():
             if not 0.0 <= value <= 1.0:
-                raise ValueError(
-                    f"Threshold '{name}' must be between 0.0 and 1.0, got {value}"
-                )
+                raise ValueError(f"Threshold '{name}' must be between 0.0 and 1.0, got {value}")
 
     def get_config_for_type(self, entity_type: str) -> EntityTypeConfig:
         """
@@ -224,9 +206,7 @@ class FusionMatchingConfig:
             "string_similarity_threshold": self.string_similarity_threshold,
         }
 
-    def add_entity_type_config(
-        self, entity_type: str, config: EntityTypeConfig
-    ) -> None:
+    def add_entity_type_config(self, entity_type: str, config: EntityTypeConfig) -> None:
         """
         Add or update configuration for an entity type.
 
@@ -300,11 +280,7 @@ def load_matching_config_from_dict(data: Dict[str, Any]) -> FusionMatchingConfig
         raise ValueError("Configuration data cannot be None")
 
     # Extract global settings
-    global_settings = {
-        k: v
-        for k, v in data.items()
-        if k not in ("entity_types", "entity_type_configs")
-    }
+    global_settings = {k: v for k, v in data.items() if k not in ("entity_types", "entity_type_configs")}
 
     # Parse entity type configs
     entity_type_configs: Dict[str, EntityTypeConfig] = {}
@@ -315,7 +291,7 @@ def load_matching_config_from_dict(data: Dict[str, Any]) -> FusionMatchingConfig
         # Skip None values - they represent missing or invalid configs
         if type_data is None:
             continue
-        
+
         entity_type_configs[entity_type] = EntityTypeConfig(
             enabled_stages=type_data.get("enabled_stages", DEFAULT_ENABLED_STAGES.copy()),
             semantic_enabled=type_data.get("semantic_enabled", True),
@@ -413,10 +389,7 @@ def load_matching_config(filepath: str) -> FusionMatchingConfig:
     elif suffix in (".yaml", ".yml"):
         return load_matching_config_from_yaml(filepath)
     else:
-        raise ValueError(
-            f"Unsupported config file format: {suffix}. "
-            f"Supported formats: .json, .yaml, .yml"
-        )
+        raise ValueError(f"Unsupported config file format: {suffix}. " f"Supported formats: .json, .yaml, .yml")
 
 
 def save_matching_config_to_dict(config: FusionMatchingConfig) -> Dict[str, Any]:
@@ -449,9 +422,7 @@ def save_matching_config_to_dict(config: FusionMatchingConfig) -> Dict[str, Any]
     }
 
 
-def save_matching_config_to_json(
-    config: FusionMatchingConfig, filepath: str
-) -> None:
+def save_matching_config_to_json(config: FusionMatchingConfig, filepath: str) -> None:
     """
     Save FusionMatchingConfig to JSON file.
 
@@ -469,9 +440,7 @@ def save_matching_config_to_json(
     logger.info(f"Saved matching config to JSON: {filepath}")
 
 
-def save_matching_config_to_yaml(
-    config: FusionMatchingConfig, filepath: str
-) -> None:
+def save_matching_config_to_yaml(config: FusionMatchingConfig, filepath: str) -> None:
     """
     Save FusionMatchingConfig to YAML file.
 

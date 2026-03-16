@@ -4,7 +4,7 @@ AIECS Client - Main API for programmatic usage of AI Execute Services
 
 import asyncio
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, cast
 from contextlib import asynccontextmanager
 
 # Import core components
@@ -48,10 +48,10 @@ class AIECS:
         self.mode = mode
 
         # Core components (loaded based on mode)
-        self.db_manager = None
-        self.task_manager = None
-        self.operation_executor = None
-        self.llm_manager = None
+        self.db_manager: Optional[Any] = None
+        self.task_manager: Optional[Any] = None
+        self.operation_executor: Optional[Any] = None
+        self.llm_manager: Optional[LLMClientManager] = None
 
         # State
         self._initialized = False
@@ -216,22 +216,19 @@ class AIECS:
             # Some tools use "op", others use "action" - include both for compatibility
             tool_params = {**params, "op": operation, "action": operation}
             return await tool.execute(**tool_params)
-        
+
         # Check if tool has run_async() method (BaseTool-based tools)
         elif hasattr(tool, "run_async") and callable(getattr(tool, "run_async")):
             # BaseTool.run_async expects op as first parameter, then kwargs
             return await tool.run_async(operation, **params)
-        
+
         # Check if tool has run() method (synchronous BaseTool)
         elif hasattr(tool, "run") and callable(getattr(tool, "run")):
             # BaseTool.run expects op as first parameter, then kwargs
             return tool.run(operation, **params)
-        
+
         else:
-            raise ValueError(
-                f"Tool '{tool_name}' does not have an 'execute()', 'run_async()', or 'run()' method. "
-                f"Available methods: {[m for m in dir(tool) if not m.startswith('_')]}"
-            )
+            raise ValueError(f"Tool '{tool_name}' does not have an 'execute()', 'run_async()', or 'run()' method. " f"Available methods: {[m for m in dir(tool) if not m.startswith('_')]}")
 
     async def get_available_tools(self) -> List[Dict[str, Any]]:
         """Get list of all available tools"""
@@ -239,7 +236,7 @@ class AIECS:
             discover_tools("aiecs.tools")
             self._tools_discovered = True
 
-        return list_tools()
+        return cast(List[Dict[str, Any]], list_tools())
 
     async def get_tool(self, tool_name: str):
         """Get a specific tool instance"""
@@ -382,7 +379,8 @@ class AIECS:
             error_str = str(e).lower()
             if "api key not configured" in error_str or "providernotavailable" in error_str:
                 logger.warning("AI provider unavailable, using mock response for testing")
-                mock_content = f"Mock AI-generated content for prompt: {prompt[:100] if len(prompt) > 100 else prompt}..."
+                prompt_str = str(prompt)
+                mock_content = f"Mock AI-generated content for prompt: {prompt_str[:100] if len(prompt_str) > 100 else prompt_str}..."
                 return {
                     "status": "completed",
                     "response": mock_content,
@@ -420,7 +418,7 @@ class AIECS:
             status = await self.task_manager.get_task_status(task_id)
 
             if status.get("status") in ["completed", "failed", "cancelled"]:
-                return status
+                return cast(Dict[str, Any], status)
 
             # Check timeout
             if asyncio.get_event_loop().time() - start_time > timeout:

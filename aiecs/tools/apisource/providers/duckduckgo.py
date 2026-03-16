@@ -186,10 +186,7 @@ class DuckDuckGoProvider(BaseAPIProvider):
         timeout = self.config.get("timeout", 30)
 
         # Set User-Agent header for API etiquette
-        user_agent = self.config.get(
-            "user_agent",
-            "AIECS-APISource/2.0 (https://github.com/your-org/aiecs; iretbl@gmail.com)"
-        )
+        user_agent = self.config.get("user_agent", "AIECS-APISource/2.0 (https://github.com/your-org/aiecs; iretbl@gmail.com)")
         headers = {
             "User-Agent": user_agent,
         }
@@ -208,12 +205,7 @@ class DuckDuckGoProvider(BaseAPIProvider):
 
         # Make API request
         try:
-            response = requests.get(
-                self.BASE_URL,
-                params=query_params,
-                headers=headers,
-                timeout=timeout
-            )
+            response = requests.get(self.BASE_URL, params=query_params, headers=headers, timeout=timeout)
             response.raise_for_status()
 
             data = response.json()
@@ -291,26 +283,30 @@ class DuckDuckGoProvider(BaseAPIProvider):
             if isinstance(topic, dict):
                 if "Topics" in topic:
                     # This is a category with subtopics
-                    topics.append({
-                        "type": "category",
-                        "name": topic.get("Name", ""),
-                        "topics": [
-                            {
-                                "text": t.get("Text", ""),
-                                "url": t.get("FirstURL", ""),
-                                "icon": t.get("Icon", {}).get("URL", ""),
-                            }
-                            for t in topic.get("Topics", [])
-                        ],
-                    })
+                    topics.append(
+                        {
+                            "type": "category",
+                            "name": topic.get("Name", ""),
+                            "topics": [
+                                {
+                                    "text": t.get("Text", ""),
+                                    "url": t.get("FirstURL", ""),
+                                    "icon": t.get("Icon", {}).get("URL", ""),
+                                }
+                                for t in topic.get("Topics", [])
+                            ],
+                        }
+                    )
                 else:
                     # This is a single topic
-                    topics.append({
-                        "type": "topic",
-                        "text": topic.get("Text", ""),
-                        "url": topic.get("FirstURL", ""),
-                        "icon": topic.get("Icon", {}).get("URL", ""),
-                    })
+                    topics.append(
+                        {
+                            "type": "topic",
+                            "text": topic.get("Text", ""),
+                            "url": topic.get("FirstURL", ""),
+                            "icon": topic.get("Icon", {}).get("URL", ""),
+                        }
+                    )
 
         return {
             "heading": data.get("Heading", ""),
@@ -326,6 +322,7 @@ class DuckDuckGoProvider(BaseAPIProvider):
         if isinstance(infobox_data, str):
             try:
                 import json
+
                 infobox_data = json.loads(infobox_data)
             except (json.JSONDecodeError, ImportError):
                 infobox_data = {}
@@ -438,4 +435,3 @@ class DuckDuckGoProvider(BaseAPIProvider):
         }
 
         return schemas.get(operation)
-

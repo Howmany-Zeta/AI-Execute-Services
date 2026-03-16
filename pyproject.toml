@@ -279,3 +279,40 @@ filterwarnings = [
     "ignore::UserWarning",
     "ignore::pytest.PytestUnknownMarkWarning"
 ]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["aiecs"]
+
+# Error reporting
+show_error_codes = true
+pretty = true
+
+# Import handling: ignore missing stubs for third-party packages
+ignore_missing_imports = true
+
+# Strictness — baseline settings suitable for a large existing codebase
+warn_return_any = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+strict_equality = true
+
+# Do not require type annotations on every function (allow gradual adoption)
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+
+# Exclude non-production directories
+exclude = [
+    "^test/",
+    "^tests/",
+    "^examples/",
+    "^docs/",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit (>=4.5.1,<5.0.0)"
+]

@@ -5,7 +5,7 @@ import hashlib
 import logging
 import asyncio
 import shutil
-from typing import Dict, Any, List, Optional, Union, Tuple
+from typing import Dict, Any, List, Optional, Union, Tuple, cast
 from enum import Enum
 from datetime import datetime
 from pathlib import Path
@@ -205,7 +205,7 @@ class DocumentWriterTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: "DocumentWriterTool.Config" = self._config_obj if self._config_obj else self.Config()  # type: ignore[assignment]
 
         self.logger = logging.getLogger(__name__)
 
@@ -250,7 +250,7 @@ class DocumentWriterTool(BaseTool):
                 self.file_storage = FileStorage(storage_config)
                 # Initialize storage asynchronously if in async context, otherwise defer
                 try:
-                    loop = asyncio.get_running_loop()
+                    asyncio.get_running_loop()
                     # We're in an async context, create task
                     asyncio.create_task(self._init_storage_async())
                 except RuntimeError:
@@ -275,6 +275,7 @@ class DocumentWriterTool(BaseTool):
 
     def _init_office_tool(self):
         """Initialize office tool for PPTX/DOCX writing"""
+        self.office_tool: Optional[Any] = None
         try:
             from aiecs.tools.task_tools.office_tool import OfficeTool
 
@@ -296,14 +297,14 @@ class DocumentWriterTool(BaseTool):
 
     def _run_async_safely(self, coro):
         """Safely run async coroutine from sync context
-        
+
         This method handles both cases:
         1. If already in an async context (event loop running), creates a new event loop in a thread
         2. If not in async context, uses asyncio.run() to create new event loop
-        
+
         Args:
             coro: Coroutine to run
-            
+
         Returns:
             Result of the coroutine
         """
@@ -312,12 +313,11 @@ class DocumentWriterTool(BaseTool):
             asyncio.get_running_loop()
             # If we get here, we're in an async context
             # We need to run the coroutine in a separate thread with its own event loop
-            import concurrent.futures
             import threading
-            
+
             result = None
             exception = None
-            
+
             def run_in_thread():
                 nonlocal result, exception
                 try:
@@ -327,11 +327,11 @@ class DocumentWriterTool(BaseTool):
                     new_loop.close()
                 except Exception as e:
                     exception = e
-            
+
             thread = threading.Thread(target=run_in_thread)
             thread.start()
             thread.join()
-            
+
             if exception:
                 raise exception
             return result
@@ -383,25 +383,12 @@ class DocumentWriterTool(BaseTool):
         target_path: str = Field(description="Target file path")
         find_text: str = Field(description="Text to find")
         replace_text: str = Field(description="Text to replace with")
-        replace_all: bool = Field(
-            default=False,
-            description="Replace all occurrences (ignored if occurrence is set)"
-        )
+        replace_all: bool = Field(default=False, description="Replace all occurrences (ignored if occurrence is set)")
         occurrence: Optional[int] = Field(
-            default=None,
-            description="Replace only the nth occurrence (1-based index). If None, uses replace_all. Example: occurrence=3 replaces only the 3rd match",
-            ge=1
+            default=None, description="Replace only the nth occurrence (1-based index). If None, uses replace_all. Example: occurrence=3 replaces only the 3rd match", ge=1
         )
-        start_line: Optional[int] = Field(
-            default=None,
-            description="Start line number (1-based, inclusive) to limit search range. Example: start_line=10 begins search at line 10",
-            ge=1
-        )
-        end_line: Optional[int] = Field(
-            default=None,
-            description="End line number (1-based, inclusive) to limit search range. Example: end_line=50 ends search at line 50",
-            ge=1
-        )
+        start_line: Optional[int] = Field(default=None, description="Start line number (1-based, inclusive) to limit search range. Example: start_line=10 begins search at line 10", ge=1)
+        end_line: Optional[int] = Field(default=None, description="End line number (1-based, inclusive) to limit search range. Example: end_line=50 ends search at line 50", ge=1)
         case_sensitive: bool = Field(default=True, description="Case sensitive search")
         regex_mode: bool = Field(default=False, description="Use regex for find/replace")
 
@@ -420,10 +407,7 @@ new text to replace with
 
 Multiple blocks can be provided sequentially. Each block will be executed in order."""
         )
-        case_sensitive: bool = Field(
-            default=True,
-            description="Case sensitive search for all blocks"
-        )
+        case_sensitive: bool = Field(default=True, description="Case sensitive search for all blocks")
 
     def write_document(
         self,
@@ -787,7 +771,7 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
             # Handle PPTX format using office_tool
             if format in [DocumentFormat.PPTX, DocumentFormat.PPT]:
                 return self._write_pptx_file(target_path, content, plan)
-            
+
             # Handle DOCX format using office_tool
             if format == DocumentFormat.DOCX:
                 return self._write_docx_file(target_path, content, plan)
@@ -949,14 +933,14 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
 
     def _parse_content_to_slides(self, content: str) -> List[str]:
         """Parse content string into list of slide contents
-        
+
         Supports multiple slide separation formats:
         - "---" separator (markdown style)
         - "## Slide X:" headers
         - Empty lines between slides
         """
         slides = []
-        
+
         # Split by "---" separator (common in markdown presentations)
         if "---" in content:
             parts = content.split("---")
@@ -994,7 +978,7 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
             else:
                 # Fallback: split by double newlines (paragraph breaks)
                 parts = content.split("\n\n")
-                current_slide = []
+                current_slide: List[str] = []
                 for part in parts:
                     part = part.strip()
                     if part:
@@ -1004,7 +988,7 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
                                 slides.append("\n".join(current_slide))
                                 current_slide = []
                         current_slide.append(part)
-                
+
                 if current_slide:
                     slides.append("\n".join(current_slide))
 
@@ -1343,7 +1327,7 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
         try:
             if os.path.exists(version_file):
                 with open(version_file, "r") as f:
-                    return json.load(f)
+                    return cast(List[Dict[Any, Any]], json.load(f))
         except Exception:
             pass
         return []
@@ -1667,10 +1651,7 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
 
                 # Add line range info if specified
                 if start_line or end_line:
-                    result["line_range"] = {
-                        "start": start_line,
-                        "end": end_line
-                    }
+                    result["line_range"] = {"start": start_line, "end": end_line}
 
                 return result
             else:
@@ -1683,10 +1664,7 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
                 }
 
                 if start_line or end_line:
-                    result["line_range"] = {
-                        "start": start_line,
-                        "end": end_line
-                    }
+                    result["line_range"] = {"start": start_line, "end": end_line}
 
                 return result
 
@@ -1753,7 +1731,7 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
                     "blocks_successful": 0,
                     "total_replacements": 0,
                     "message": "No valid SEARCH/REPLACE blocks found",
-                    "errors": ["No blocks could be parsed from input"]
+                    "errors": ["No blocks could be parsed from input"],
                 }
 
             # Execute each block sequentially
@@ -1776,13 +1754,15 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
                         regex_mode=False,
                     )
 
-                    results.append({
-                        "block_number": i,
-                        "search": search_text[:100] + "..." if len(search_text) > 100 else search_text,
-                        "replace": replace_text[:100] + "..." if len(replace_text) > 100 else replace_text,
-                        "replacements": result.get("replacements_made", 0),
-                        "success": result.get("replacements_made", 0) > 0
-                    })
+                    results.append(
+                        {
+                            "block_number": i,
+                            "search": search_text[:100] + "..." if len(search_text) > 100 else search_text,
+                            "replace": replace_text[:100] + "..." if len(replace_text) > 100 else replace_text,
+                            "replacements": result.get("replacements_made", 0),
+                            "success": result.get("replacements_made", 0) > 0,
+                        }
+                    )
 
                     total_replacements += result.get("replacements_made", 0)
 
@@ -1791,11 +1771,7 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
 
                 except Exception as e:
                     errors.append(f"Block {i}: {str(e)}")
-                    results.append({
-                        "block_number": i,
-                        "error": str(e),
-                        "success": False
-                    })
+                    results.append({"block_number": i, "error": str(e), "success": False})
 
             return {
                 "target_path": target_path,
@@ -1803,7 +1779,7 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
                 "blocks_successful": sum(1 for r in results if r.get("success", False)),
                 "total_replacements": total_replacements,
                 "results": results,
-                "errors": errors if errors else None
+                "errors": errors if errors else None,
             }
 
         except Exception as e:
@@ -1823,16 +1799,13 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
 
         # Pattern to match SEARCH/REPLACE blocks
         # Supports both <<<<<<< and <<<<<< (6 or 7 angle brackets)
-        pattern = r'<{6,7}\s*SEARCH\s*\n(.*?)\n={7}\s*\n(.*?)\n>{6,7}\s*REPLACE'
+        pattern = r"<{6,7}\s*SEARCH\s*\n(.*?)\n={7}\s*\n(.*?)\n>{6,7}\s*REPLACE"
 
         matches = re.findall(pattern, blocks_text, re.DOTALL)
 
         parsed_blocks = []
         for search_text, replace_text in matches:
-            parsed_blocks.append({
-                "search": search_text,
-                "replace": replace_text
-            })
+            parsed_blocks.append({"search": search_text, "replace": replace_text})
 
         return parsed_blocks
 
@@ -2091,7 +2064,7 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
             )
 
             if start_line == end_line:
-                return lines[start_line][start_col:end_col]
+                return cast(str, lines[start_line][start_col:end_col])
             else:
                 result = [lines[start_line][start_col:]]
                 result.extend(lines[start_line + 1 : end_line])
@@ -2238,14 +2211,14 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
         Returns:
             Tuple of (new_content, replacements_count, occurrence_info)
         """
-        import re
+        import re  # noqa: F401
 
         replacements = 0
         occurrence_info = {}
 
         # If line range is specified, extract that portion
         if start_line is not None or end_line is not None:
-            lines = content.split('\n')
+            lines = content.split("\n")
             total_lines = len(lines)
 
             # Convert to 0-based indices
@@ -2263,7 +2236,7 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
             target_lines = lines[start_idx:end_idx]
             after_lines = lines[end_idx:]
 
-            target_content = '\n'.join(target_lines)
+            target_content = "\n".join(target_lines)
 
             # Perform replacement on target content
             new_target_content, replacements, occ_info = self._perform_find_replace_core(
@@ -2277,7 +2250,7 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
             )
 
             # Reconstruct full content
-            new_content = '\n'.join(before_lines + [new_target_content] + after_lines)
+            new_content = "\n".join(before_lines + [new_target_content] + after_lines)
             occurrence_info = occ_info
 
         else:
@@ -2321,6 +2294,7 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
                 return content, 0, {"error": "occurrence must be >= 1"}
 
             # Find all matches first
+            matches: List[Any] = []
             if regex_mode:
                 flags = 0 if case_sensitive else re.IGNORECASE
                 matches = list(re.finditer(find_text, content, flags=flags))
@@ -2342,10 +2316,7 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
 
             # Check if the requested occurrence exists
             if occurrence > len(matches):
-                return content, 0, {
-                    "error": f"occurrence {occurrence} not found (only {len(matches)} matches)",
-                    "total_matches": len(matches)
-                }
+                return content, 0, {"error": f"occurrence {occurrence} not found (only {len(matches)} matches)", "total_matches": len(matches)}
 
             # Replace only the specified occurrence (1-based to 0-based)
             target_match = matches[occurrence - 1]
@@ -2360,11 +2331,7 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
 
             new_content = content[:start_pos] + replace_text + content[end_pos:]
             replacements = 1
-            occurrence_info = {
-                "occurrence_replaced": occurrence,
-                "total_matches": len(matches),
-                "position": start_pos
-            }
+            occurrence_info = {"occurrence_replaced": occurrence, "total_matches": len(matches), "position": start_pos}
 
         else:
             # Standard replace_all or replace_first logic

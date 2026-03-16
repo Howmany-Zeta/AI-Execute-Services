@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 @dataclass
 class NormalizationResult:
     """Result of name normalization"""
+
     normalized: str
     original: str
     stripped_prefixes: List[str] = field(default_factory=list)
@@ -36,13 +37,13 @@ class NameNormalizer:
     Example:
         ```python
         normalizer = NameNormalizer()
-        
+
         # Strip prefixes and suffixes
         result = normalizer.normalize("Dr. John Smith, PhD")
         assert result.normalized == "john smith"
         assert "Dr." in result.stripped_prefixes
         assert "PhD" in result.stripped_suffixes
-        
+
         # Match initials with full names
         assert normalizer.names_match_with_initials("J. Smith", "John Smith")
         ```
@@ -50,40 +51,94 @@ class NameNormalizer:
 
     # Common prefixes to strip (case-insensitive)
     DEFAULT_PREFIXES: Set[str] = {
-        "dr", "dr.", "doctor",
-        "prof", "prof.", "professor",
-        "mr", "mr.", "mister",
-        "mrs", "mrs.",
-        "ms", "ms.", "miss",
-        "sir", "dame", "lord", "lady",
-        "rev", "rev.", "reverend",
-        "hon", "hon.", "honorable",
-        "capt", "capt.", "captain",
-        "col", "col.", "colonel",
-        "gen", "gen.", "general",
-        "lt", "lt.", "lieutenant",
-        "sgt", "sgt.", "sergeant",
+        "dr",
+        "dr.",
+        "doctor",
+        "prof",
+        "prof.",
+        "professor",
+        "mr",
+        "mr.",
+        "mister",
+        "mrs",
+        "mrs.",
+        "ms",
+        "ms.",
+        "miss",
+        "sir",
+        "dame",
+        "lord",
+        "lady",
+        "rev",
+        "rev.",
+        "reverend",
+        "hon",
+        "hon.",
+        "honorable",
+        "capt",
+        "capt.",
+        "captain",
+        "col",
+        "col.",
+        "colonel",
+        "gen",
+        "gen.",
+        "general",
+        "lt",
+        "lt.",
+        "lieutenant",
+        "sgt",
+        "sgt.",
+        "sergeant",
     }
 
     # Common suffixes to strip (case-insensitive)
     DEFAULT_SUFFIXES: Set[str] = {
-        "jr", "jr.", "junior",
-        "sr", "sr.", "senior",
-        "phd", "ph.d", "ph.d.",
-        "md", "m.d", "m.d.",
-        "esq", "esq.", "esquire",
-        "ii", "iii", "iv", "v",
-        "2nd", "3rd", "4th", "5th",
-        "cpa", "c.p.a", "c.p.a.",
-        "mba", "m.b.a", "m.b.a.",
-        "jd", "j.d", "j.d.",
-        "llb", "ll.b", "ll.b.",
-        "dds", "d.d.s", "d.d.s.",
-        "rn", "r.n", "r.n.",
+        "jr",
+        "jr.",
+        "junior",
+        "sr",
+        "sr.",
+        "senior",
+        "phd",
+        "ph.d",
+        "ph.d.",
+        "md",
+        "m.d",
+        "m.d.",
+        "esq",
+        "esq.",
+        "esquire",
+        "ii",
+        "iii",
+        "iv",
+        "v",
+        "2nd",
+        "3rd",
+        "4th",
+        "5th",
+        "cpa",
+        "c.p.a",
+        "c.p.a.",
+        "mba",
+        "m.b.a",
+        "m.b.a.",
+        "jd",
+        "j.d",
+        "j.d.",
+        "llb",
+        "ll.b",
+        "ll.b.",
+        "dds",
+        "d.d.s",
+        "d.d.s.",
+        "rn",
+        "r.n",
+        "r.n.",
     }
 
     # Pattern for detecting initials (e.g., "J.", "A. B.")
-    INITIAL_PATTERN = re.compile(r'^([A-Za-z])\.$')
+    INITIAL_PATTERN = re.compile(r"^([A-Za-z])\.$")
 
     def __init__(
         self,
@@ -99,7 +154,7 @@ class NameNormalizer:
         """
         self.prefixes = self.DEFAULT_PREFIXES.copy()
         self.suffixes = self.DEFAULT_SUFFIXES.copy()
-        
+
         if custom_prefixes:
             self.prefixes.update(p.lower() for p in custom_prefixes)
         if custom_suffixes:
@@ -127,22 +182,22 @@ class NameNormalizer:
             return NormalizationResult(normalized="", original=name)
 
         original = name
-        
+
         # Step 1: Normalize whitespace
         normalized = self._normalize_whitespace(name)
-        
+
         # Step 2: Normalize punctuation
         normalized = self._normalize_punctuation(normalized)
-        
+
         # Step 3: Strip prefixes
         normalized, stripped_prefixes = self._strip_prefixes(normalized)
-        
+
         # Step 4: Strip suffixes
         normalized, stripped_suffixes = self._strip_suffixes(normalized)
-        
+
         # Step 5: Lowercase
         normalized = normalized.lower().strip()
-        
+
         # Step 6: Detect initials
         has_initials = self._has_initials(normalized)
 
@@ -156,7 +211,7 @@ class NameNormalizer:
 
     def _normalize_whitespace(self, name: str) -> str:
         """Normalize whitespace: multiple spaces/tabs → single space"""
-        return re.sub(r'\s+', ' ', name).strip()
+        return re.sub(r"\s+", " ", name).strip()
 
     def _normalize_punctuation(self, name: str) -> str:
         """
@@ -167,9 +222,9 @@ class NameNormalizer:
         - "Smith-Jones" → "Smith-Jones" (preserve hyphens)
         """
         # Remove commas (handles "Smith, John" format)
-        name = name.replace(',', ' ')
+        name = name.replace(",", " ")
         # Normalize whitespace after comma removal
-        name = re.sub(r'\s+', ' ', name).strip()
+        name = re.sub(r"\s+", " ", name).strip()
         return name
 
     def _strip_prefixes(self, name: str) -> Tuple[str, List[str]]:
@@ -183,14 +238,14 @@ class NameNormalizer:
         tokens = name.split()
 
         while tokens:
-            token_lower = tokens[0].lower().rstrip('.')
+            token_lower = tokens[0].lower().rstrip(".")
             # Check if first token is a prefix
             if token_lower in self.prefixes or f"{token_lower}." in self.prefixes:
                 stripped.append(tokens.pop(0))
             else:
                 break
 
-        return ' '.join(tokens), stripped
+        return " ".join(tokens), stripped
 
     def _strip_suffixes(self, name: str) -> Tuple[str, List[str]]:
         """
@@ -199,18 +254,18 @@ class NameNormalizer:
         Returns:
             Tuple of (name_without_suffixes, list_of_stripped_suffixes)
         """
-        stripped = []
+        stripped: List[str] = []
         tokens = name.split()
 
         while tokens:
             # Check last token
-            token_lower = tokens[-1].lower().rstrip('.').rstrip(',')
+            token_lower = tokens[-1].lower().rstrip(".").rstrip(",")
             if token_lower in self.suffixes or f"{token_lower}." in self.suffixes:
                 stripped.insert(0, tokens.pop())  # Insert at beginning to preserve order
             else:
                 break
 
-        return ' '.join(tokens), stripped
+        return " ".join(tokens), stripped
 
     def _has_initials(self, name: str) -> bool:
         """Check if name contains initials (e.g., 'J.' or 'A. B.')"""
@@ -275,13 +330,13 @@ class NameNormalizer:
                 if len1 > len2:
                     # Try removing middle token from tokens1
                     for i in range(len(tokens1)):
-                        test_tokens = tokens1[:i] + tokens1[i+1:]
+                        test_tokens = tokens1[:i] + tokens1[i + 1 :]
                         if self._tokens_match_exact(test_tokens, tokens2):
                             return True
                 else:
                     # Try removing middle token from tokens2
                     for i in range(len(tokens2)):
-                        test_tokens = tokens2[:i] + tokens2[i+1:]
+                        test_tokens = tokens2[:i] + tokens2[i + 1 :]
                         if self._tokens_match_exact(tokens1, test_tokens):
                             return True
             return False
@@ -306,8 +361,8 @@ class NameNormalizer:
         - Tokens are equal
         - One is an initial that matches the first letter of the other
         """
-        t1 = token1.rstrip('.')
-        t2 = token2.rstrip('.')
+        t1 = token1.rstrip(".")
+        t2 = token2.rstrip(".")
 
         # Exact match
         if t1 == t2:
@@ -349,4 +404,3 @@ class NameNormalizer:
             variants.append(f"{tokens[0][0]} {' '.join(tokens[1:])}")
 
         return variants
-

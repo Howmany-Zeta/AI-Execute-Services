@@ -9,7 +9,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, model_validator
 import numpy as np
 
-from aiecs.infrastructure.graph_storage.tenant import validate_tenant_id, InvalidTenantIdError
+from aiecs.infrastructure.graph_storage.tenant import validate_tenant_id
 
 
 class Entity(BaseModel):

@@ -9,11 +9,11 @@ from docx import Document as DocxDocument
 import os
 import logging
 import warnings
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, cast
 
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 import pdfplumber
-import pytesseract  # type: ignore[import-untyped]
+import pytesseract
 from PIL import Image
 
 # Suppress pkg_resources deprecation warning from tika
@@ -121,7 +121,7 @@ class OfficeTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the office tool
-        
+
         Automatically reads from environment variables with OFFICE_TOOL_ prefix.
         Example: OFFICE_TOOL_MAX_FILE_SIZE_MB -> max_file_size_mb
         """
@@ -216,8 +216,8 @@ class OfficeTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
-        
+        self.config: OfficeTool.Config = cast(OfficeTool.Config, self._config_obj) if self._config_obj else self.Config()
+
         # Configure Tika log path BEFORE tika is imported for the first time.
         # tika initialises its logging at import-time, so the env-var must be
         # set beforehand.  We also add a fallback to a writable temp directory
@@ -228,15 +228,15 @@ class OfficeTool(BaseTool):
             os.makedirs(tika_log_path, exist_ok=True)
             # Quick write-access probe
             probe = os.path.join(tika_log_path, ".write_probe")
-            with open(probe, "w") as _f:
+            with open(probe, "w"):
                 pass
             os.remove(probe)
         except OSError:
             import tempfile
+
             tika_log_path = tempfile.mkdtemp(prefix="tika_log_")
             logging.getLogger(__name__).warning(
-                "Configured TIKA_LOG_PATH '%s' is not writable; "
-                "falling back to '%s'.",
+                "Configured TIKA_LOG_PATH '%s' is not writable; " "falling back to '%s'.",
                 self.config.tika_log_path,
                 tika_log_path,
             )
@@ -283,7 +283,8 @@ class OfficeTool(BaseTool):
             else:
                 # Use tika as fallback for other formats (lazy import so that
                 # TIKA_LOG_PATH is already set before tika initialises logging)
-                from tika import parser as tika_parser  # type: ignore[import-untyped]
+                from tika import parser as tika_parser
+
                 parsed = tika_parser.from_file(file_path)
                 if not parsed or not parsed.get("content"):
                     raise ContentValidationError("Unable to parse file content")
@@ -387,7 +388,7 @@ class OfficeTool(BaseTool):
             if image.mode != "RGB":
                 image = image.convert("RGB")
             text = pytesseract.image_to_string(image, lang="eng+chi_sim")
-            return text.strip()
+            return str(text).strip()
         except Exception as e:
             raise FileOperationError(f"Failed to extract image text: {str(e)}")
 
@@ -406,7 +407,8 @@ class OfficeTool(BaseTool):
         """
         try:
             # Lazy import: TIKA_LOG_PATH must be set in __init__ before this runs
-            from tika import parser as tika_parser  # type: ignore[import-untyped]
+            from tika import parser as tika_parser
+
             parsed = tika_parser.from_file(file_path)
             content = parsed.get("content", "")
             return content.strip() if content else ""
@@ -584,12 +586,12 @@ class OfficeTool(BaseTool):
             # Handle different return types from pd.read_excel()
             if isinstance(data, pd.DataFrame):
                 # Single sheet or specific sheet requested
-                return data.to_dict(orient="records")
+                return list(data.to_dict(orient="records"))
             elif isinstance(data, dict):
                 # Multiple sheets returned as dict - use the first sheet
                 first_sheet_name = list(data.keys())[0]
                 first_df = data[first_sheet_name]
-                return first_df.to_dict(orient="records")
+                return list(first_df.to_dict(orient="records"))
             else:
                 raise FileOperationError("Unexpected data type returned from Excel file")
 

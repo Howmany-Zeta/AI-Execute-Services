@@ -12,7 +12,7 @@ This tool provides advanced report generation with:
 import os
 import logging
 import tempfile
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, cast
 from enum import Enum
 from datetime import datetime
 
@@ -67,7 +67,7 @@ class AIReportOrchestratorTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the AI report orchestrator tool
-        
+
         Automatically reads from environment variables with AI_REPORT_ORCHESTRATOR_ prefix.
         Example: AI_REPORT_ORCHESTRATOR_DEFAULT_REPORT_TYPE -> default_report_type
         """
@@ -113,7 +113,7 @@ class AIReportOrchestratorTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: AIReportOrchestratorTool.Config = cast(AIReportOrchestratorTool.Config, self._config_obj) if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
@@ -129,7 +129,7 @@ class AIReportOrchestratorTool(BaseTool):
 
     def _init_external_tools(self):
         """Initialize external task tools"""
-        self.external_tools = {}
+        self.external_tools: Dict[str, Any] = {}
 
         # Initialize ReportTool for document generation
         try:

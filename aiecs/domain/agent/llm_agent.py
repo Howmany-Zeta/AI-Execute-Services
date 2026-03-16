@@ -603,24 +603,16 @@ class LLMAgent(BaseAIAgent):
             content = prompt_dict.get("content", "")
             if not content:
                 continue
-            
+
             # Determine cache control: use prompt-specific setting if provided, else use global setting
             prompt_cache_control = prompt_dict.get("cache_control")
             if prompt_cache_control is None:
                 # Use global setting
-                cache_control = (
-                    CacheControl(type="ephemeral")
-                    if self._config.enable_prompt_caching
-                    else None
-                )
+                cache_control = CacheControl(type="ephemeral") if self._config.enable_prompt_caching else None
             else:
                 # Use prompt-specific setting
-                cache_control = (
-                    CacheControl(type="ephemeral")
-                    if prompt_cache_control
-                    else None
-                )
-            
+                cache_control = CacheControl(type="ephemeral") if prompt_cache_control else None
+
             messages.append(
                 LLMMessage(
                     role="system",
@@ -684,7 +676,7 @@ class LLMAgent(BaseAIAgent):
 
     def get_conversation_history(self) -> List[Dict[str, str]]:
         """Get conversation history."""
-        return [{"role": msg.role, "content": msg.content} for msg in self._conversation_history]
+        return [{"role": msg.role, "content": msg.content or ""} for msg in self._conversation_history]
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "LLMAgent":

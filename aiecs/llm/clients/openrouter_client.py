@@ -9,7 +9,6 @@ from aiecs.llm.clients.base_client import (
 )
 from aiecs.llm.clients.openai_compatible_mixin import (
     OpenAICompatibleFunctionCallingMixin,
-    StreamChunk,
 )
 from tenacity import (
     retry,
@@ -18,7 +17,7 @@ from tenacity import (
     retry_if_exception_type,
 )
 import logging
-from typing import Dict, Optional, List, AsyncGenerator, cast, Any
+from typing import Dict, Optional, List, AsyncGenerator, Any
 
 # Lazy import to avoid circular dependency
 
@@ -58,7 +57,7 @@ class OpenRouterClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
         api_key = getattr(self.settings, "openrouter_api_key", None)
         if not api_key:
             raise ProviderNotAvailableError("OpenRouter API key not configured. Set OPENROUTER_API_KEY.")
-        return api_key
+        return str(api_key)
 
     def _get_model_map(self) -> Dict[str, str]:
         """Get model mappings from configuration"""
@@ -78,26 +77,26 @@ class OpenRouterClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
     def _get_extra_headers(self, **kwargs) -> Dict[str, str]:
         """
         Get extra headers for OpenRouter API.
-        
+
         Supports HTTP-Referer and X-Title headers from kwargs or settings.
-        
+
         Args:
             **kwargs: May contain http_referer and x_title
-            
+
         Returns:
             Dictionary with extra headers
         """
         extra_headers: Dict[str, str] = {}
-        
+
         # Get from kwargs first, then from settings
         http_referer = kwargs.get("http_referer") or getattr(self.settings, "openrouter_http_referer", None)
         x_title = kwargs.get("x_title") or getattr(self.settings, "openrouter_x_title", None)
-        
+
         if http_referer:
             extra_headers["HTTP-Referer"] = http_referer
         if x_title:
             extra_headers["X-Title"] = x_title
-            
+
         return extra_headers
 
     @retry(
@@ -111,6 +110,7 @@ class OpenRouterClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
         functions: Optional[List[Dict[str, Any]]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Any] = None,
@@ -118,9 +118,9 @@ class OpenRouterClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
     ) -> LLMResponse:
         """
         Generate text using OpenRouter API via OpenAI library.
-        
+
         OpenRouter API is OpenAI-compatible, so it supports Function Calling and Vision.
-        
+
         Args:
             messages: List of LLM messages
             model: Model name (optional, uses default from config if not provided)
@@ -132,7 +132,7 @@ class OpenRouterClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
             http_referer: Optional HTTP-Referer header for OpenRouter rankings
             x_title: Optional X-Title header for OpenRouter rankings
             **kwargs: Additional arguments passed to OpenRouter API
-            
+
         Returns:
             LLMResponse with content and optional function_call information
         """
@@ -152,10 +152,10 @@ class OpenRouterClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
 
         # Extract extra headers from kwargs
         extra_headers = self._get_extra_headers(**kwargs)
-        
+
         # Remove extra header kwargs to avoid passing them to API
         kwargs_clean = {k: v for k, v in kwargs.items() if k not in ("http_referer", "x_title")}
-        
+
         # Add extra_headers to kwargs if present
         if extra_headers:
             kwargs_clean["extra_headers"] = extra_headers
@@ -173,11 +173,11 @@ class OpenRouterClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
                 tool_choice=tool_choice,
                 **kwargs_clean,
             )
-            
+
             # Override provider and model name for OpenRouter
             response.provider = self.provider_name
             response.model = selected_model
-            
+
             return response
 
         except Exception as e:
@@ -200,9 +200,9 @@ class OpenRouterClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
     ) -> AsyncGenerator[Any, None]:
         """
         Stream text using OpenRouter API via OpenAI library.
-        
+
         OpenRouter API is OpenAI-compatible, so it supports Function Calling and Vision.
-        
+
         Args:
             messages: List of LLM messages
             model: Model name (optional, uses default from config if not provided)
@@ -215,7 +215,7 @@ class OpenRouterClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
             http_referer: Optional HTTP-Referer header for OpenRouter rankings
             x_title: Optional X-Title header for OpenRouter rankings
             **kwargs: Additional arguments passed to OpenRouter API
-            
+
         Yields:
             str or StreamChunk: Text tokens as they are generated, or StreamChunk objects if return_chunks=True
         """
@@ -235,10 +235,10 @@ class OpenRouterClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
 
         # Extract extra headers from kwargs
         extra_headers = self._get_extra_headers(**kwargs)
-        
+
         # Remove extra header kwargs to avoid passing them to API
         kwargs_clean = {k: v for k, v in kwargs.items() if k not in ("http_referer", "x_title")}
-        
+
         # Add extra_headers to kwargs if present
         if extra_headers:
             kwargs_clean["extra_headers"] = extra_headers

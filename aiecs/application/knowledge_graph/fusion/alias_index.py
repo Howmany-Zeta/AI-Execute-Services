@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 class MatchType(Enum):
     """Type of alias match"""
+
     EXACT = "exact"
     ALIAS = "alias"
     ABBREVIATION = "abbreviation"
@@ -27,6 +28,7 @@ class MatchType(Enum):
 @dataclass
 class AliasEntry:
     """Entry in the alias index"""
+
     entity_id: str
     match_type: MatchType
     original_name: Optional[str] = None  # Original form before normalization
@@ -36,6 +38,7 @@ class AliasEntry:
 @dataclass
 class TransactionState:
     """State for tracking transaction operations"""
+
     operations: List[tuple] = field(default_factory=list)  # (op_type, key, value)
     committed: bool = False
 
@@ -74,10 +77,9 @@ class AliasIndexBackend(ABC):
         pass
 
     @abstractmethod
-    @asynccontextmanager
     async def transaction(self) -> AsyncIterator["TransactionContext"]:
         """Start a transaction for atomic operations"""
-        pass
+        ...
 
 
 class TransactionContext:
@@ -133,11 +135,11 @@ class InMemoryBackend(AliasIndexBackend):
     def _make_key(self, alias: str, tenant_id: Optional[str] = None) -> str:
         """
         Create tenant-prefixed key for alias lookup.
-        
+
         Args:
             alias: The alias string
             tenant_id: Optional tenant ID for multi-tenant isolation
-            
+
         Returns:
             Tenant-prefixed key (e.g., "tenant_123:apple" or "apple" for global)
         """
@@ -192,7 +194,7 @@ class InMemoryBackend(AliasIndexBackend):
         return len(self._index)
 
     @asynccontextmanager
-    async def transaction(self) -> AsyncIterator[TransactionContext]:
+    async def transaction(self) -> AsyncIterator[TransactionContext]:  # type: ignore[override]
         """Start a transaction with lock for concurrency safety"""
         async with self._lock:
             ctx = TransactionContext(self)
@@ -235,25 +237,20 @@ class RedisBackend(AliasIndexBackend):
         if self._client is None:
             try:
                 import redis.asyncio as redis
-                self._client = redis.from_url(
-                    self._redis_url or "redis://localhost:6379",
-                    decode_responses=True
-                )
+
+                self._client = redis.from_url(self._redis_url or "redis://localhost:6379", decode_responses=True)
             except ImportError:
-                raise ImportError(
-                    "redis package required for Redis backend. "
-                    "Install with: pip install redis"
-                )
+                raise ImportError("redis package required for Redis backend. " "Install with: pip install redis")
         self._initialized = True
 
     def _make_key(self, alias: str, tenant_id: Optional[str] = None) -> str:
         """
         Create tenant-prefixed key for alias lookup.
-        
+
         Args:
             alias: The alias string
             tenant_id: Optional tenant ID for multi-tenant isolation
-            
+
         Returns:
             Tenant-prefixed key (e.g., "tenant_123:apple" or "apple" for global)
         """
@@ -271,12 +268,7 @@ class RedisBackend(AliasIndexBackend):
         data = await self._client.hget(self.ALIAS_KEY, alias.lower())
         if data:
             entry_dict = json.loads(data)
-            return AliasEntry(
-                entity_id=entry_dict["entity_id"],
-                match_type=MatchType(entry_dict["match_type"]),
-                original_name=entry_dict.get("original_name"),
-                tenant_id=entry_dict.get("tenant_id")
-            )
+            return AliasEntry(entity_id=entry_dict["entity_id"], match_type=MatchType(entry_dict["match_type"]), original_name=entry_dict.get("original_name"), tenant_id=entry_dict.get("tenant_id"))
         return None
 
     async def set(self, alias: str, entry: AliasEntry) -> None:
@@ -285,12 +277,7 @@ class RedisBackend(AliasIndexBackend):
         import json
 
         key = self._make_key(alias, entry.tenant_id)
-        entry_dict = {
-            "entity_id": entry.entity_id,
-            "match_type": entry.match_type.value,
-            "original_name": entry.original_name,
-            "tenant_id": entry.tenant_id
-        }
+        entry_dict = {"entity_id": entry.entity_id, "match_type": entry.match_type.value, "original_name": entry.original_name, "tenant_id": entry.tenant_id}
         await self._client.hset(self.ALIAS_KEY, key, json.dumps(entry_dict))
         # Track reverse mapping
         await self._client.sadd(f"{self.ENTITY_KEY_PREFIX}{entry.entity_id}", key)
@@ -321,9 +308,7 @@ class RedisBackend(AliasIndexBackend):
         cursor = 0
         keys_to_delete = [self.ALIAS_KEY]
         while True:
-            cursor, keys = await self._client.scan(
-                cursor, match=f"{self.ENTITY_KEY_PREFIX}*", count=100
-            )
+            cursor, keys = await self._client.scan(cursor, match=f"{self.ENTITY_KEY_PREFIX}*", count=100)
             keys_to_delete.extend(keys)
             if cursor == 0:
                 break
@@ -333,10 +318,10 @@ class RedisBackend(AliasIndexBackend):
     async def size(self) -> int:
         """Get number of entries"""
         await self._ensure_client()
-        return await self._client.hlen(self.ALIAS_KEY)
+        return int(await self._client.hlen(self.ALIAS_KEY))
 
     @asynccontextmanager
-    async def transaction(self) -> AsyncIterator[TransactionContext]:
+    async def transaction(self) -> AsyncIterator[TransactionContext]:  # type: ignore[override]
         """
         Start a Redis transaction using MULTI/EXEC.
 
@@ -415,18 +400,13 @@ class AliasIndex:
         """Get or create backend"""
         if self._backend is None:
             if self._backend_type == "redis":
-                self._backend = RedisBackend(
-                    redis_client=self._redis_client,
-                    redis_url=self._redis_url
-                )
+                self._backend = RedisBackend(redis_client=self._redis_client, redis_url=self._redis_url)
             else:
                 # Default to in-memory
                 self._backend = InMemoryBackend()
         return self._backend
 
-    async def lookup(
-        self, alias: str, tenant_id: Optional[str] = None
-    ) -> Optional[AliasEntry]:
+    async def lookup(self, alias: str, tenant_id: Optional[str] = None) -> Optional[AliasEntry]:
         """
         Look up an alias - O(1).
 
@@ -470,17 +450,10 @@ class AliasIndex:
             tenant_id: Optional tenant ID for multi-tenant isolation
         """
         backend = await self._get_backend()
-        entry = AliasEntry(
-            entity_id=entity_id,
-            match_type=match_type,
-            original_name=original_name,
-            tenant_id=tenant_id
-        )
+        entry = AliasEntry(entity_id=entity_id, match_type=match_type, original_name=original_name, tenant_id=tenant_id)
         await backend.set(alias, entry)
 
-    async def remove_alias(
-        self, alias: str, tenant_id: Optional[str] = None
-    ) -> bool:
+    async def remove_alias(self, alias: str, tenant_id: Optional[str] = None) -> bool:
         """
         Remove an alias.
 
@@ -549,7 +522,7 @@ class AliasIndex:
             ```
         """
         backend = await self._get_backend()
-        async with backend.transaction() as ctx:
+        async with backend.transaction() as ctx:  # type: ignore[attr-defined]
             yield ctx
 
     async def batch_load(
@@ -594,4 +567,3 @@ class AliasIndex:
             True if Redis is recommended
         """
         return entity_count >= self._auto_redis_threshold
-

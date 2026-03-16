@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 try:
-    import pandas as pd  # type: ignore[import-untyped]
+    import pandas as pd
 
     PANDAS_AVAILABLE = True
 except ImportError:
@@ -33,13 +33,13 @@ from aiecs.application.knowledge_graph.builder.data_quality import (
 from aiecs.application.knowledge_graph.builder.import_optimizer import (
     PerformanceMetrics,
     BatchSizeOptimizer,
-    ParallelBatchProcessor,
     MemoryTracker,
     StreamingCSVReader,
 )
 
 # Import InferredSchema for type hints (avoid circular import)
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from aiecs.application.knowledge_graph.builder.schema_inference import InferredSchema
 
@@ -92,8 +92,8 @@ class AggregationAccumulator:
         self.count = 0
         self.sum = 0.0
         self.sum_sq = 0.0  # Sum of squares for variance/std
-        self.min_val = float('inf')
-        self.max_val = float('-inf')
+        self.min_val = float("inf")
+        self.max_val = float("-inf")
         self.values = []  # For median (if needed)
 
     def add(self, value: Any):
@@ -129,7 +129,7 @@ class AggregationAccumulator:
         # Use sample variance formula: sum((x - mean)^2) / (n - 1)
         # Which equals: (sum(x^2) - n*mean^2) / (n - 1)
         variance = (self.sum_sq - self.count * mean * mean) / (self.count - 1)
-        return variance ** 0.5 if variance >= 0 else 0.0
+        return variance**0.5 if variance >= 0 else 0.0
 
     def get_variance(self) -> Optional[float]:
         """Get variance (sample variance with Bessel's correction)"""
@@ -170,8 +170,8 @@ class AggregationAccumulator:
         sorted_vals = sorted(self.values)
         mid = self.count // 2
         if self.count % 2 == 0:
-            return (sorted_vals[mid - 1] + sorted_vals[mid]) / 2
-        return sorted_vals[mid]
+            return float((sorted_vals[mid - 1] + sorted_vals[mid]) / 2)
+        return float(sorted_vals[mid])
 
 
 class StructuredDataPipeline:
@@ -283,7 +283,7 @@ class StructuredDataPipeline:
         file_path: Union[str, Path],
         encoding: str = "utf-8",
         sample_size: int = 1000,
-    ) -> 'InferredSchema':
+    ) -> "InferredSchema":
         """
         Infer schema mapping from CSV file
 
@@ -321,7 +321,7 @@ class StructuredDataPipeline:
         file_path: Union[str, Path],
         encoding: str = "utf-8",
         sample_size: int = 1000,
-    ) -> 'InferredSchema':
+    ) -> "InferredSchema":
         """
         Infer schema mapping from SPSS file
 
@@ -342,11 +342,11 @@ class StructuredDataPipeline:
 
     @staticmethod
     def infer_schema_from_dataframe(
-        df: 'pd.DataFrame',
+        df: "pd.DataFrame",
         entity_type_hint: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         sample_size: int = 1000,
-    ) -> 'InferredSchema':
+    ) -> "InferredSchema":
         """
         Infer schema mapping from pandas DataFrame
 
@@ -371,7 +371,7 @@ class StructuredDataPipeline:
         entity_type_hint: Optional[str] = None,
         reshape_threshold: int = 50,
         **kwargs,
-    ) -> 'StructuredDataPipeline':
+    ) -> "StructuredDataPipeline":
         """
         Create pipeline with automatic reshaping for wide format data
 
@@ -409,12 +409,13 @@ class StructuredDataPipeline:
 
         # Load data to analyze
         file_path_str = str(file_path)
-        if file_path_str.endswith('.csv'):
+        if file_path_str.endswith(".csv"):
             df = pd.read_csv(file_path, nrows=1000)  # Sample for analysis
-        elif file_path_str.endswith(('.sav', '.por')):
+        elif file_path_str.endswith((".sav", ".por")):
             import pyreadstat
+
             df, _ = pyreadstat.read_sav(file_path_str, row_limit=1000)
-        elif file_path_str.endswith(('.xlsx', '.xls')):
+        elif file_path_str.endswith((".xlsx", ".xls")):
             df = pd.read_excel(file_path, nrows=1000)
         else:
             raise ValueError(f"Unsupported file format: {file_path}")
@@ -427,8 +428,7 @@ class StructuredDataPipeline:
 
             # Suggest melt configuration
             melt_config = DataReshaping.suggest_melt_config(df)
-            logger.info(f"Suggested melt config: id_vars={melt_config['id_vars']}, "
-                       f"{len(melt_config['value_vars'])} value columns")
+            logger.info(f"Suggested melt config: id_vars={melt_config['id_vars']}, " f"{len(melt_config['value_vars'])} value columns")
 
             # For wide format, we'll need to reshape during import
             # For now, infer schema from original data
@@ -436,10 +436,7 @@ class StructuredDataPipeline:
             inferred = inference.infer_from_dataframe(df, entity_type_hint=entity_type_hint)
 
             # Add warning about wide format
-            inferred.warnings.append(
-                f"Wide format detected ({df.shape[1]} columns). "
-                f"Consider using reshape_and_import() for normalized structure."
-            )
+            inferred.warnings.append(f"Wide format detected ({df.shape[1]} columns). " f"Consider using reshape_and_import() for normalized structure.")
 
             mapping = inferred.to_schema_mapping()
         else:
@@ -673,7 +670,7 @@ class StructuredDataPipeline:
                         row_relations = await self._row_to_relations(row)
 
                         # Add entities and relations
-                        if self.use_bulk_writes and hasattr(self.graph_store, 'add_entities_bulk'):
+                        if self.use_bulk_writes and hasattr(self.graph_store, "add_entities_bulk"):
                             added = await self.graph_store.add_entities_bulk(row_entities)
                             result.entities_added += added
                         else:
@@ -684,7 +681,7 @@ class StructuredDataPipeline:
                                 except ValueError:
                                     pass
 
-                        if self.use_bulk_writes and hasattr(self.graph_store, 'add_relations_bulk'):
+                        if self.use_bulk_writes and hasattr(self.graph_store, "add_relations_bulk"):
                             added = await self.graph_store.add_relations_bulk(row_relations)
                             result.relations_added += added
                         else:
@@ -759,12 +756,9 @@ class StructuredDataPipeline:
         try:
             # Import pyreadstat
             try:
-                import pyreadstat  # type: ignore[import-untyped]
+                import pyreadstat
             except ImportError:
-                raise ImportError(
-                    "pyreadstat is required for SPSS import. "
-                    "Install with: pip install pyreadstat"
-                )
+                raise ImportError("pyreadstat is required for SPSS import. " "Install with: pip install pyreadstat")
 
             if not PANDAS_AVAILABLE:
                 raise ImportError("pandas is required for SPSS import. Install with: pip install pandas")
@@ -779,13 +773,13 @@ class StructuredDataPipeline:
             if preserve_metadata and meta:
                 # Extract metadata
                 spss_metadata = {
-                    "column_names": meta.column_names if hasattr(meta, 'column_names') else [],
-                    "column_labels": meta.column_labels if hasattr(meta, 'column_labels') else [],
-                    "variable_value_labels": meta.variable_value_labels if hasattr(meta, 'variable_value_labels') else {},
+                    "column_names": meta.column_names if hasattr(meta, "column_names") else [],
+                    "column_labels": meta.column_labels if hasattr(meta, "column_labels") else [],
+                    "variable_value_labels": meta.variable_value_labels if hasattr(meta, "variable_value_labels") else {},
                 }
 
                 # Store metadata in result for reference
-                if spss_metadata.get('column_labels'):
+                if spss_metadata.get("column_labels"):
                     result.warnings.append(f"SPSS metadata preserved: {len(spss_metadata['column_labels'])} variable labels")
 
                 # Add metadata to each row's properties
@@ -886,8 +880,8 @@ class StructuredDataPipeline:
         file_path: Union[str, Path],
         id_vars: Optional[List[str]] = None,
         value_vars: Optional[List[str]] = None,
-        var_name: str = 'variable',
-        value_name: str = 'value',
+        var_name: str = "variable",
+        value_name: str = "value",
         entity_type_hint: Optional[str] = None,
         encoding: str = "utf-8",
     ) -> ImportResult:
@@ -936,9 +930,9 @@ class StructuredDataPipeline:
             # Auto-detect melt configuration if not provided
             if id_vars is None:
                 melt_config = DataReshaping.suggest_melt_config(df)
-                id_vars = melt_config['id_vars']
+                id_vars = melt_config["id_vars"]
                 if value_vars is None:
-                    value_vars = melt_config['value_vars']
+                    value_vars = melt_config["value_vars"]
                 result.warnings.append(f"Auto-detected id_vars: {id_vars}")
 
             # Reshape data
@@ -951,10 +945,8 @@ class StructuredDataPipeline:
                 dropna=True,
             )
 
-            result.warnings.extend(reshape_result.warnings)
-            result.warnings.append(
-                f"Reshaped from {reshape_result.original_shape} to {reshape_result.new_shape}"
-            )
+            result.warnings.extend(reshape_result.warnings or [])
+            result.warnings.append(f"Reshaped from {reshape_result.original_shape} to {reshape_result.new_shape}")
 
             # Convert reshaped data to rows
             rows = reshape_result.data.to_dict("records")
@@ -1080,15 +1072,13 @@ class StructuredDataPipeline:
                         result.entities_added += 1
                     except ValueError:
                         # Entity already exists, try to update if method exists
-                        if hasattr(self.graph_store, 'update_entity'):
+                        if hasattr(self.graph_store, "update_entity"):
                             await self.graph_store.update_entity(summary_entity)
                         else:
                             # For stores without update_entity, just skip
                             pass
 
-                    result.warnings.append(
-                        f"Applied aggregations to {entity_type}: {list(properties.keys())}"
-                    )
+                    result.warnings.append(f"Applied aggregations to {entity_type}: {list(properties.keys())}")
                 except Exception as e:
                     result.warnings.append(f"Failed to apply aggregations for {entity_type}: {e}")
 
@@ -1137,7 +1127,7 @@ class StructuredDataPipeline:
             self._update_aggregations(rows)
 
         # Add entities to graph store (use bulk writes if enabled)
-        if self.use_bulk_writes and hasattr(self.graph_store, 'add_entities_bulk'):
+        if self.use_bulk_writes and hasattr(self.graph_store, "add_entities_bulk"):
             try:
                 added = await self.graph_store.add_entities_bulk(entities_to_add)
                 batch_result.entities_added = added
@@ -1160,7 +1150,7 @@ class StructuredDataPipeline:
                         raise
 
         # Add relations to graph store (use bulk writes if enabled)
-        if self.use_bulk_writes and hasattr(self.graph_store, 'add_relations_bulk'):
+        if self.use_bulk_writes and hasattr(self.graph_store, "add_relations_bulk"):
             try:
                 added = await self.graph_store.add_relations_bulk(relations_to_add)
                 batch_result.relations_added = added
@@ -1273,7 +1263,7 @@ class StructuredDataPipeline:
         Args:
             rows: List of row dictionaries
         """
-        from aiecs.application.knowledge_graph.builder.schema_mapping import AggregationFunction
+        from aiecs.application.knowledge_graph.builder.schema_mapping import AggregationFunction  # noqa: F401
 
         for entity_agg in self.mapping.aggregations:
             entity_type = entity_agg.entity_type
@@ -1306,7 +1296,7 @@ class StructuredDataPipeline:
         """
         from aiecs.application.knowledge_graph.builder.schema_mapping import AggregationFunction
 
-        results = {}
+        results: Dict[str, Any] = {}
 
         for entity_agg in self.mapping.aggregations:
             entity_type = entity_agg.entity_type
@@ -1364,10 +1354,7 @@ class StructuredDataPipeline:
         range_rules = {}
         if "range_rules" in config:
             for prop, rule_dict in config["range_rules"].items():
-                range_rules[prop] = RangeRule(
-                    min_value=rule_dict.get("min"),
-                    max_value=rule_dict.get("max")
-                )
+                range_rules[prop] = RangeRule(min_value=rule_dict.get("min"), max_value=rule_dict.get("max"))
 
         # Parse required properties
         required_properties = set(config.get("required_properties", []))
@@ -1378,7 +1365,7 @@ class StructuredDataPipeline:
             required_properties=required_properties,
             detect_outliers=config.get("detect_outliers", False),
             fail_on_violations=config.get("fail_on_violations", False),
-            max_violation_rate=config.get("max_violation_rate", 0.1)
+            max_violation_rate=config.get("max_violation_rate", 0.1),
         )
 
         return DataQualityValidator(validation_config)

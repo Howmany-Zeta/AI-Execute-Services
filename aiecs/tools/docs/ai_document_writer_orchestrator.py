@@ -2,7 +2,7 @@ import os
 import asyncio
 import logging
 import tempfile
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, cast
 from enum import Enum
 from datetime import datetime
 
@@ -130,7 +130,10 @@ class AIDocumentWriterOrchestrator(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: AIDocumentWriterOrchestrator.Config = cast(
+            AIDocumentWriterOrchestrator.Config,
+            self._config_obj if self._config_obj is not None else self.Config(),
+        )
 
         self.logger = logging.getLogger(__name__)
 
@@ -148,6 +151,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
 
     def _init_document_writer(self):
         """Initialize document writer tool"""
+        self.document_writer: Optional[Any] = None
         try:
             from aiecs.tools.docs.document_writer_tool import (
                 DocumentWriterTool,
@@ -156,11 +160,10 @@ class AIDocumentWriterOrchestrator(BaseTool):
             self.document_writer = DocumentWriterTool()
         except ImportError:
             self.logger.error("DocumentWriterTool not available")
-            self.document_writer = None
 
     def _init_document_creation_tools(self):
         """Initialize document creation and layout tools"""
-        self.creation_tools = {}
+        self.creation_tools: Dict[str, Any] = {}
 
         # Initialize DocumentCreatorTool
         try:
@@ -206,6 +209,7 @@ class AIDocumentWriterOrchestrator(BaseTool):
         """Initialize AI providers"""
         self.ai_providers = {}
 
+        self.aiecs_client: Optional[Any] = None
         try:
             # Initialize AIECS client for AI operations
             from aiecs import AIECS
@@ -214,7 +218,6 @@ class AIDocumentWriterOrchestrator(BaseTool):
             self.ai_providers["aiecs"] = self.aiecs_client
         except ImportError:
             self.logger.warning("AIECS client not available")
-            self.aiecs_client = None
 
     def _init_content_templates(self):
         """Initialize content generation templates"""
@@ -527,6 +530,9 @@ class AIDocumentWriterOrchestrator(BaseTool):
 
             if self.config.auto_backup_on_ai_write and target == source_path:
                 write_mode = "backup_write"
+
+            if not self.document_writer:
+                raise WriteOrchestrationError("DocumentWriterTool not available")
 
             write_result = self.document_writer.write_document(
                 target_path=target,
@@ -882,6 +888,7 @@ Please provide a detailed editing plan with:
         format_options: Optional[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """Execute the AI-generated editing plan"""
+        assert self.document_writer is not None, "DocumentWriterTool not available"
         edit_results = []
 
         try:
@@ -963,10 +970,7 @@ Please provide a detailed editing plan with:
                 validation["structure_check"] = structure_check
                 # Extract structure preservation status from check results
                 # Structure is considered preserved if headers are preserved and similarity is above threshold
-                validation["structure_preserved"] = (
-                    structure_check.get("headers_preserved", False) and
-                    structure_check.get("structure_similarity", 0.0) > 0.8
-                )
+                validation["structure_preserved"] = structure_check.get("headers_preserved", False) and structure_check.get("structure_similarity", 0.0) > 0.8
             else:
                 validation["structure_preserved"] = None  # Not checked when preserve_structure is False
 
@@ -1092,8 +1096,8 @@ Please provide a detailed editing plan with:
         if struct1["total_lines"] == 0:
             return 1.0 if struct2["total_lines"] == 0 else 0.0
 
-        similarity = 1.0 - abs(struct1["total_lines"] - struct2["total_lines"]) / max(struct1["total_lines"], struct2["total_lines"])
-        return max(0.0, similarity)
+        similarity = 1.0 - abs(struct1["total_lines"] - struct2["total_lines"]) / float(max(struct1["total_lines"], struct2["total_lines"]))
+        return float(max(0.0, similarity))
 
     def _analyze_document_structure(self, file_path: str, format_type: str) -> Dict[str, Any]:
         """Analyze document structure for formatting"""
@@ -1253,9 +1257,9 @@ Please provide a detailed editing plan with:
             try:
                 tmpl_type = TemplateType(document_template)
             except ValueError:
-                # Default to basic template
-                tmpl_type = TemplateType.BASIC
-                self.logger.warning(f"Unknown template type '{document_template}', using basic")
+                # Default to blank template
+                tmpl_type = TemplateType.BLANK
+                self.logger.warning(f"Unknown template type '{document_template}', using blank")
 
             creation_result = creator.create_document(
                 document_type=doc_type,
@@ -1590,7 +1594,7 @@ Please provide a detailed editing plan with:
         """Batch insert complex content using ContentInsertionTool"""
         try:
             # Use the content tool's batch insertion capability
-            return content_tool.batch_insert_content(document_path=document_path, content_items=insertions)
+            return cast(List[Dict[str, Any]], content_tool.batch_insert_content(document_path=document_path, content_items=insertions))
         except Exception as e:
             self.logger.warning(f"Batch insertion failed: {e}")
             return []
@@ -1599,10 +1603,13 @@ Please provide a detailed editing plan with:
         """Optimize rich document based on goals"""
         try:
             if "layout" in self.creation_tools:
-                return self.creation_tools["layout"].optimize_layout_for_content(
-                    document_path=document_path,
-                    content_analysis={"content_length": 0},  # Simplified
-                    optimization_goals=optimization_goals,
+                return cast(
+                    Dict[str, Any],
+                    self.creation_tools["layout"].optimize_layout_for_content(
+                        document_path=document_path,
+                        content_analysis={"content_length": 0},  # Simplified
+                        optimization_goals=optimization_goals,
+                    ),
                 )
         except Exception as e:
             self.logger.warning(f"Document optimization failed: {e}")
@@ -1830,7 +1837,7 @@ Please provide a detailed editing plan with:
 
     def _execute_sequential_insertions(self, document_path: str, plan: List[Dict[str, Any]], content_tool) -> Dict[str, Any]:
         """Execute content insertions sequentially"""
-        return content_tool.batch_insert_content(document_path=document_path, content_items=plan)
+        return cast(Dict[str, Any], content_tool.batch_insert_content(document_path=document_path, content_items=plan))
 
     def _execute_parallel_insertions(self, document_path: str, plan: List[Dict[str, Any]], content_tool) -> Dict[str, Any]:
         """Execute content insertions in parallel (simplified to sequential for now)"""
@@ -1931,6 +1938,7 @@ Please provide a detailed editing plan with:
                 filled_content = ai_result["generated_content"]
 
             # Write document
+            assert self.document_writer is not None, "DocumentWriterTool not available"
             write_result = self.document_writer.write_document(
                 target_path=target_path,
                 content=filled_content,
@@ -2056,34 +2064,43 @@ Please provide a detailed editing plan with:
 
         if write_strategy == WriteStrategy.IMMEDIATE:
             # Write immediately
-            return self.document_writer.write_document(
-                target_path=target_path,
-                content=content,
-                format=document_format,
-                mode="create",
-                **write_params,
+            return cast(
+                Dict[str, Any],
+                self.document_writer.write_document(
+                    target_path=target_path,
+                    content=content,
+                    format=document_format,
+                    mode="create",
+                    **write_params,
+                ),
             )
 
         elif write_strategy == WriteStrategy.DRAFT:
             # Save as draft
             draft_path = f"{target_path}.draft"
-            return self.document_writer.write_document(
-                target_path=draft_path,
-                content=content,
-                format=document_format,
-                mode="create",
-                **write_params,
+            return cast(
+                Dict[str, Any],
+                self.document_writer.write_document(
+                    target_path=draft_path,
+                    content=content,
+                    format=document_format,
+                    mode="create",
+                    **write_params,
+                ),
             )
 
         elif write_strategy == WriteStrategy.REVIEW:
             # Save for review
             review_path = f"{target_path}.review"
-            return self.document_writer.write_document(
-                target_path=review_path,
-                content=content,
-                format=document_format,
-                mode="create",
-                **write_params,
+            return cast(
+                Dict[str, Any],
+                self.document_writer.write_document(
+                    target_path=review_path,
+                    content=content,
+                    format=document_format,
+                    mode="create",
+                    **write_params,
+                ),
             )
 
         elif write_strategy == WriteStrategy.STAGED:
@@ -2101,6 +2118,7 @@ Please provide a detailed editing plan with:
         write_params: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Execute staged write operation"""
+        assert self.document_writer is not None, "DocumentWriterTool not available"
 
         # Split content into stages (simplified implementation)
         content_parts = content.split("\n\n")  # Split by paragraphs
@@ -2175,7 +2193,7 @@ Please provide a detailed editing plan with:
                 )
 
                 result = self.aiecs_client.process_task(task_context)
-                return result.get("response", "")
+                return str(result.get("response", ""))
             else:
                 # Fallback to mock response
                 return self._generate_mock_content(prompt, params)

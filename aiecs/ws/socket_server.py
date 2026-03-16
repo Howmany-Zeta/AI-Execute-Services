@@ -1,7 +1,6 @@
 from typing import Any, Dict
 
-import socketio  # type: ignore[import-untyped]
-from typing import Dict, Any
+import socketio
 from aiecs.config.config import get_settings
 
 settings = get_settings()

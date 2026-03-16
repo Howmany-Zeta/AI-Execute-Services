@@ -315,10 +315,7 @@ class SemanticScholarProvider(BaseAPIProvider):
         timeout = self.config.get("timeout", 30)
 
         # Set User-Agent header as recommended by Semantic Scholar
-        user_agent = self.config.get(
-            "user_agent",
-            "AIECS-APISource/2.0 (https://github.com/your-org/aiecs; iretbl@gmail.com)"
-        )
+        user_agent = self.config.get("user_agent", "AIECS-APISource/2.0 (https://github.com/your-org/aiecs; iretbl@gmail.com)")
         headers = {
             "User-Agent": user_agent,
         }
@@ -416,12 +413,7 @@ class SemanticScholarProvider(BaseAPIProvider):
 
         # Make API request
         try:
-            response = requests.get(
-                url,
-                params=query_params,
-                headers=headers,
-                timeout=timeout
-            )
+            response = requests.get(url, params=query_params, headers=headers, timeout=timeout)
             response.raise_for_status()
 
             # Parse JSON response
@@ -628,4 +620,3 @@ class SemanticScholarProvider(BaseAPIProvider):
         }
 
         return schemas.get(operation)
-

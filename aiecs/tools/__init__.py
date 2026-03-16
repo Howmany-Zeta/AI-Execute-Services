@@ -75,9 +75,7 @@ def get_tool(name):
             # Pass tool name to BaseTool for config file discovery (used for YAML file lookup)
             # Check if tool class accepts tool_name parameter (for backward compatibility)
             sig = inspect.signature(tool_class.__init__)
-            if "tool_name" in sig.parameters or any(
-                p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
-            ):
+            if "tool_name" in sig.parameters or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
                 TOOL_REGISTRY[name] = tool_class(config=config, tool_name=name)
             else:
                 # Tool class doesn't accept tool_name, only pass config

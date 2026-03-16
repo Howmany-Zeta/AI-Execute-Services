@@ -1,7 +1,7 @@
 import re
 import json
 import logging
-from typing import Dict, List, Any, Callable, Optional
+from typing import Dict, List, Any, Callable, Optional, cast
 from aiecs.domain.execution.model import TaskStepResult, TaskStatus, ErrorCode
 
 logger = logging.getLogger(__name__)
@@ -109,17 +109,17 @@ class DSLProcessor:
         """Evaluate comparison operation"""
         try:
             if operator == "==":
-                return left_value == right_value
+                return cast(bool, left_value == right_value)
             elif operator == "!=":
-                return left_value != right_value
+                return cast(bool, left_value != right_value)
             elif operator == ">":
-                return left_value > right_value
+                return cast(bool, left_value > right_value)
             elif operator == "<":
-                return left_value < right_value
+                return cast(bool, left_value < right_value)
             elif operator == ">=":
-                return left_value >= right_value
+                return cast(bool, left_value >= right_value)
             elif operator == "<=":
-                return left_value <= right_value
+                return cast(bool, left_value <= right_value)
             else:
                 raise ValueError(f"Unsupported operator: {operator}")
         except TypeError:

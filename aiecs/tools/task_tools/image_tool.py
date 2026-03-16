@@ -2,7 +2,7 @@ import os
 import logging
 import subprocess
 import tempfile
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, cast
 from dataclasses import dataclass
 from dataclasses import field
 
@@ -80,7 +80,7 @@ class TesseractManager:
 
     pool_size: int
     processes: List[subprocess.Popen] = field(default_factory=list)
-    queue: Queue = field(default_factory=lambda: Queue())
+    queue: Queue[subprocess.Popen[Any]] = field(default_factory=lambda: Queue())
 
     def initialize(self):
         """Initialize Tesseract process pool."""
@@ -135,7 +135,7 @@ class ImageTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the image tool
-        
+
         Automatically reads from environment variables with IMAGE_TOOL_ prefix.
         Example: IMAGE_TOOL_MAX_FILE_SIZE_MB -> max_file_size_mb
         """
@@ -148,10 +148,7 @@ class ImageTool(BaseTool):
             description="Allowed image file extensions",
         )
         tesseract_pool_size: int = Field(default=2, description="Number of Tesseract processes for OCR")
-        default_ocr_language: str = Field(
-            default="eng",
-            description="Default OCR language code (e.g., 'eng', 'chi_sim'). Supports multi-language format like 'eng+chi_sim'"
-        )
+        default_ocr_language: str = Field(default="eng", description="Default OCR language code (e.g., 'eng', 'chi_sim'). Supports multi-language format like 'eng+chi_sim'")
 
     # Schema definitions
     class LoadSchema(BaseFileSchema):
@@ -163,10 +160,7 @@ class ImageTool(BaseTool):
         """Schema for ocr operation"""
 
         file_path: str = Field(description="Path to the image file for OCR text extraction")
-        lang: Optional[str] = Field(
-            default=None,
-            description="Optional language code for OCR (e.g., 'eng', 'chi_sim', 'eng+chi_sim'). If not specified, uses the configured default_ocr_language"
-        )
+        lang: Optional[str] = Field(default=None, description="Optional language code for OCR (e.g., 'eng', 'chi_sim', 'eng+chi_sim'). If not specified, uses the configured default_ocr_language")
 
     class MetadataSchema(BaseFileSchema):
         """Schema for metadata operation"""
@@ -238,7 +232,7 @@ class ImageTool(BaseTool):
         2. YAML config files (config/tools/image.yaml, config/tools/image_tool.yaml, or config/tools/ImageTool.yaml)
         3. Environment variables (via dotenv from .env files with IMAGE_TOOL_ prefix)
         4. Tool defaults (lowest priority)
-        
+
         YAML configuration files are automatically discovered by ToolConfigLoader using multiple naming conventions.
         See examples/config/tools/image_tool.yaml.example for a configuration template.
         """
@@ -249,7 +243,7 @@ class ImageTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: ImageTool.Config = cast(ImageTool.Config, self._config_obj) if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
@@ -326,7 +320,7 @@ class ImageTool(BaseTool):
         """
         # Validate input using schema
         validated_input = self.OcrSchema(file_path=file_path, lang=lang)
-        
+
         # Use configured default language if lang is not specified
         ocr_lang = lang if lang is not None else self.config.default_ocr_language
 
@@ -337,7 +331,7 @@ class ImageTool(BaseTool):
             # Preprocess image for better OCR results
             img = Image.open(validated_input.file_path).convert("L").filter(ImageFilter.SHARPEN)
             img.save(temp_path)
-            
+
             # Call Tesseract with dynamic language parameter
             # Use subprocess.run instead of process pool to support dynamic languages
             try:
@@ -352,12 +346,10 @@ class ImageTool(BaseTool):
                 raise FileOperationError(f"ocr: Tesseract timeout for '{file_path}' (lang: {ocr_lang})")
             except FileNotFoundError:
                 raise FileOperationError("ocr: Tesseract not found. Please install Tesseract OCR.")
-            
+
             if result.returncode != 0:
-                raise FileOperationError(
-                    f"ocr: Tesseract failed for '{file_path}' (lang: {ocr_lang}): {result.stderr}"
-                )
-            
+                raise FileOperationError(f"ocr: Tesseract failed for '{file_path}' (lang: {ocr_lang}): {result.stderr}")
+
             return result.stdout.strip()
         except FileOperationError:
             raise  # Re-raise FileOperationError as-is

@@ -581,10 +581,7 @@ class GraphStore(ABC):
         Raises:
             NotImplementedError: If backend doesn't implement this method
         """
-        raise NotImplementedError(
-            f"{type(self).__name__} must implement get_all_entities() "
-            "or override _default_get_all_entities()"
-        )
+        raise NotImplementedError(f"{type(self).__name__} must implement get_all_entities() " "or override _default_get_all_entities()")
 
     async def _default_vector_search(
         self,
@@ -593,7 +590,7 @@ class GraphStore(ABC):
         max_results: int,
         score_threshold: float,
         context: Optional[TenantContext],
-        ) -> List[tuple[Entity, float]]:
+    ) -> List[tuple[Entity, float]]:
         """
         Default brute-force vector search using cosine similarity
 
@@ -623,6 +620,7 @@ class GraphStore(ABC):
             except Exception as e:
                 # Skip entities with incompatible embedding dimensions
                 import logging
+
                 logger = logging.getLogger(__name__)
                 logger.debug(f"Skipping entity {entity.id} due to embedding error: {e}")
                 continue
@@ -744,12 +742,12 @@ class GraphStore(ABC):
 
         # Cosine similarity
         similarity = dot_product / (magnitude1 * magnitude2)
-        return max(0.0, min(1.0, similarity))  # Clamp to [0, 1]
+        return float(max(0.0, min(1.0, similarity)))  # Clamp to [0, 1]
 
     async def _default_execute_query(self, query: GraphQuery, context: Optional[TenantContext]) -> GraphResult:
         """
         Default query execution router with tenant filtering support.
-        
+
         If query.tenant_id is provided, it takes precedence over the context parameter
         for tenant filtering. This ensures GraphQuery objects carry their own tenant scope.
         """
@@ -764,6 +762,7 @@ class GraphStore(ABC):
             # Create TenantContext from query.tenant_id if not already provided
             # If context was provided but has different tenant_id, query.tenant_id wins
             from aiecs.infrastructure.graph_storage.tenant import TenantIsolationMode
+
             effective_context = TenantContext(
                 tenant_id=query.tenant_id,
                 isolation_mode=context.isolation_mode if context else TenantIsolationMode.SHARED_SCHEMA,

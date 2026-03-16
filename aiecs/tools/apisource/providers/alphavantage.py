@@ -66,32 +66,19 @@ class AlphaVantageProvider(BaseAPIProvider):
 
         if operation in ["get_quote", "get_time_series_daily", "get_time_series_intraday", "get_global_quote"]:
             if "symbol" not in params:
-                return False, (
-                    "Missing required parameter: symbol\n"
-                    "Example: {'symbol': 'AAPL'}\n"
-                    "Use search_symbol operation to find valid symbols"
-                )
+                return False, ("Missing required parameter: symbol\n" "Example: {'symbol': 'AAPL'}\n" "Use search_symbol operation to find valid symbols")
 
         elif operation == "search_symbol":
             if "keywords" not in params:
-                return False, (
-                    "Missing required parameter: keywords\n"
-                    "Example: {'keywords': 'Apple'}"
-                )
+                return False, ("Missing required parameter: keywords\n" "Example: {'keywords': 'Apple'}")
 
         elif operation == "get_forex_rate":
             if "from_currency" not in params or "to_currency" not in params:
-                return False, (
-                    "Missing required parameters: from_currency and to_currency\n"
-                    "Example: {'from_currency': 'USD', 'to_currency': 'EUR'}"
-                )
+                return False, ("Missing required parameters: from_currency and to_currency\n" "Example: {'from_currency': 'USD', 'to_currency': 'EUR'}")
 
         elif operation == "get_crypto_rating":
             if "symbol" not in params:
-                return False, (
-                    "Missing required parameter: symbol\n"
-                    "Example: {'symbol': 'BTC'}"
-                )
+                return False, ("Missing required parameter: symbol\n" "Example: {'symbol': 'BTC'}")
 
         return True, None
 
@@ -196,10 +183,13 @@ class AlphaVantageProvider(BaseAPIProvider):
         Returns:
             Dictionary containing exchange rate data
         """
-        return self.execute("get_forex_rate", {
-            "from_currency": from_currency,
-            "to_currency": to_currency,
-        })
+        return self.execute(
+            "get_forex_rate",
+            {
+                "from_currency": from_currency,
+                "to_currency": to_currency,
+            },
+        )
 
     @expose_operation(
         operation_name="get_crypto_rating",
@@ -221,17 +211,13 @@ class AlphaVantageProvider(BaseAPIProvider):
         """Fetch data from Alpha Vantage API"""
 
         if not REQUESTS_AVAILABLE:
-            raise ImportError(
-                "requests library is required for Alpha Vantage provider. "
-                "Install with: pip install requests"
-            )
+            raise ImportError("requests library is required for Alpha Vantage provider. " "Install with: pip install requests")
 
         # Get API key
         api_key = self._get_api_key("ALPHAVANTAGE_API_KEY")
         if not api_key:
             raise ValueError(
-                "Alpha Vantage API key not found. Set ALPHAVANTAGE_API_KEY environment variable or "
-                "provide 'api_key' in config. Get your free key at https://www.alphavantage.co/support/#api-key"
+                "Alpha Vantage API key not found. Set ALPHAVANTAGE_API_KEY environment variable or " "provide 'api_key' in config. Get your free key at https://www.alphavantage.co/support/#api-key"
             )
 
         # Build query parameters based on operation
@@ -486,14 +472,10 @@ class AlphaVantageProvider(BaseAPIProvider):
 
                     if len(close_values) >= 4:
                         # Detect outliers
-                        outlier_indices = self.validator.detect_outliers(
-                            close_values, method="iqr", threshold=3.0
-                        )
+                        outlier_indices = self.validator.detect_outliers(close_values, method="iqr", threshold=3.0)
 
                         if outlier_indices:
-                            result["validation_warnings"].append(
-                                f"{len(outlier_indices)} potential outliers detected"
-                            )
+                            result["validation_warnings"].append(f"{len(outlier_indices)} potential outliers detected")
                             result["statistics"]["outliers_count"] = len(outlier_indices)
 
         elif operation == "search_symbol":
@@ -528,4 +510,3 @@ class AlphaVantageProvider(BaseAPIProvider):
                     quality["score"] = min(quality["score"] + 0.05, 1.0)
 
         return quality
-

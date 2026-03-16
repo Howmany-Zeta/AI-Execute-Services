@@ -4,13 +4,10 @@ Entity Deduplicator
 Identifies and merges duplicate entities based on similarity matching.
 """
 
-from typing import List, Dict, Optional, Tuple, Set, TYPE_CHECKING
+from typing import List, Dict, Optional, Tuple, Set, TYPE_CHECKING, cast
 from difflib import SequenceMatcher
 from aiecs.domain.knowledge_graph.models.entity import Entity
-from aiecs.infrastructure.graph_storage.tenant import (
-    TenantContext,
-    CrossTenantFusionError,
-)
+from aiecs.infrastructure.graph_storage.tenant import TenantContext
 
 if TYPE_CHECKING:
     from aiecs.application.knowledge_graph.fusion.similarity_pipeline import (
@@ -75,9 +72,7 @@ class EntityDeduplicator:
         self.embedding_threshold = embedding_threshold
         self._similarity_pipeline = similarity_pipeline
 
-    async def deduplicate(
-        self, entities: List[Entity], context: Optional[TenantContext] = None
-    ) -> List[Entity]:
+    async def deduplicate(self, entities: List[Entity], context: Optional[TenantContext] = None) -> List[Entity]:
         """
         Deduplicate a list of entities
 
@@ -332,7 +327,7 @@ class EntityDeduplicator:
 
         # Cosine similarity ranges from -1 to 1, normalize to 0 to 1
         similarity = dot_product / (magnitude1 * magnitude2)
-        return (similarity + 1) / 2
+        return cast(float, (similarity + 1) / 2)
 
     def _find_clusters(self, n: int, edges: Set[Tuple[int, int]]) -> List[List[int]]:
         """

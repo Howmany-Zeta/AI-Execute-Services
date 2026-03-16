@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from aiecs.core.interface.storage_interface import IPermanentStorageBackend
 
-from .clickhouse_client import ClickHouseClient, CLICKHOUSE_AVAILABLE
+from .clickhouse_client import ClickHouseClient
 
 logger = logging.getLogger(__name__)
 

@@ -15,9 +15,6 @@ from enum import Enum
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.relation import Relation
 
-if TYPE_CHECKING:
-    from aiecs.infrastructure.graph_storage.protocols import PaginationMixinProtocol
-
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
@@ -179,9 +176,7 @@ class PaginationMixin:
 
     if TYPE_CHECKING:
         # Type hint for mypy: this mixin expects PaginationMixinProtocol
-        async def get_all_entities(
-            self, entity_type: Optional[str] = None, limit: Optional[int] = None
-        ) -> List[Entity]:
+        async def get_all_entities(self, entity_type: Optional[str] = None, limit: Optional[int] = None) -> List[Entity]:
             """Expected method from PaginationMixinProtocol"""
             ...
 
