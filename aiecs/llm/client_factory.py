@@ -399,7 +399,7 @@ class LLMClientManager:
             collected_content = ""
 
             # Stream text
-            stream_gen = await client.stream_text(
+            stream_gen = client.stream_text(
                 messages=messages,
                 model=final_model,
                 temperature=temperature,

@@ -682,7 +682,7 @@ class HybridAgent(BaseAIAgent):
                 kwargs["tools"] = [{"type": "function", "function": s} for s in self._tool_schemas]
                 kwargs["tool_choice"] = "auto"
                 kwargs["return_chunks"] = True
-            stream_gen = await self.llm_client.stream_text(**kwargs)
+            stream_gen = self.llm_client.stream_text(**kwargs)
 
             # Stream tokens and collect tool calls
             from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
