@@ -510,6 +510,10 @@ class ToolAgent(BaseAIAgent):
                 ]
 
             for tool_call in calls_to_process:
+                # Initialise name variables so the except block always has valid values
+                # regardless of where inside the try block the exception is raised.
+                func_name = "unknown"
+                tool_name: str = "unknown"
                 try:
                     func_name = tool_call["function"]["name"]
                     func_args = tool_call["function"]["arguments"]
@@ -542,7 +546,7 @@ class ToolAgent(BaseAIAgent):
                     logger.error(f"Tool execution error: {e}")
                     tool_results.append(
                         {
-                            "tool": func_name if "func_name" in locals() else "unknown",
+                            "tool": tool_name,
                             "error": str(e),
                             "success": False,
                         }
@@ -899,6 +903,10 @@ class ToolAgent(BaseAIAgent):
         # Process tool calls if received
         if tool_calls_from_stream:
             for tool_call in tool_calls_from_stream:
+                # Initialise name variables so the except block always has valid values
+                # regardless of where inside the try block the exception is raised.
+                func_name = "unknown"
+                tool_name: str = "unknown"
                 try:
                     func_name = tool_call["function"]["name"]
                     func_args = tool_call["function"]["arguments"]
@@ -946,13 +954,13 @@ class ToolAgent(BaseAIAgent):
                     logger.error(f"Tool execution error: {e}")
                     yield {
                         "type": "tool_error",
-                        "tool_name": func_name if "func_name" in locals() else "unknown",
+                        "tool_name": tool_name,
                         "error": str(e),
                         "timestamp": datetime.utcnow().isoformat(),
                     }
                     tool_results.append(
                         {
-                            "tool": func_name if "func_name" in locals() else "unknown",
+                            "tool": tool_name,
                             "error": str(e),
                             "success": False,
                         }
