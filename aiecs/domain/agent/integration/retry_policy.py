@@ -98,7 +98,7 @@ class EnhancedRetryPolicy:
         base_delay: float = 1.0,
         max_delay: float = 60.0,
         exponential_base: float = 2.0,
-        jitter: bool = True,
+        jitter_factor: float = 0.5,
     ):
         """
         Initialize retry policy.
@@ -108,13 +108,15 @@ class EnhancedRetryPolicy:
             base_delay: Base delay in seconds
             max_delay: Maximum delay in seconds
             exponential_base: Base for exponential backoff
-            jitter: Whether to add random jitter
+            jitter_factor: Jitter magnitude as a fraction of computed delay
+                (0.0 = no jitter, 0.2 = ±20%, 0.5 = ±50%).
+                Prevents thundering-herd when many clients retry simultaneously.
         """
         self.max_retries = max_retries
         self.base_delay = base_delay
         self.max_delay = max_delay
         self.exponential_base = exponential_base
-        self.jitter = jitter
+        self.jitter_factor = jitter_factor
 
     def calculate_delay(self, attempt: int, error_type: ErrorType) -> float:
         """
@@ -135,9 +137,9 @@ class EnhancedRetryPolicy:
             # Longer delay for rate limits
             delay *= 2
 
-        # Add jitter to prevent thundering herd
-        if self.jitter:
-            delay *= 0.5 + random.random()
+        # Add jitter: delay * (1 ± jitter_factor), e.g. 0.2 → [0.8x, 1.2x)
+        if self.jitter_factor > 0:
+            delay *= 1.0 + self.jitter_factor * (2 * random.random() - 1)
 
         return delay
 

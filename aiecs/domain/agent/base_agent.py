@@ -1372,7 +1372,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
             base_delay=retry_config.base_delay,
             max_delay=retry_config.max_delay,
             exponential_base=retry_config.exponential_factor,
-            jitter=retry_config.jitter_factor > 0,
+            jitter_factor=retry_config.jitter_factor,
         )
 
         # Execute with retry
