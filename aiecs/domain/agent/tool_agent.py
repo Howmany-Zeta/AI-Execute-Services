@@ -852,7 +852,7 @@ class ToolAgent(BaseAIAgent):
         # Import StreamChunk for type checking
         from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
 
-        stream_gen = await self.llm_client.stream_text(  # type: ignore[union-attr]
+        stream_gen = self.llm_client.stream_text(  # type: ignore[union-attr]
             messages=messages,
             model=self._config.llm_model,
             temperature=self._config.temperature,
