@@ -558,6 +558,9 @@ class HybridAgent(BaseAIAgent):
                 exponential_base=_retry_cfg.exponential_factor,
                 jitter_factor=_retry_cfg.jitter_factor,
             )
+            # Initialise event so the variable is always bound even if _tool_loop_streaming
+            # raises before yielding a single event (e.g. all retries exhausted).
+            event: Dict[str, Any] = {}
             for _attempt in range(_policy.max_retries + 1):
                 try:
                     async for event in self._tool_loop_streaming(task_description, context):
@@ -766,7 +769,11 @@ class HybridAgent(BaseAIAgent):
                 )
 
                 # Process each tool call
-                for tool_call in tool_calls_from_stream:
+                for i, tool_call in enumerate(tool_calls_from_stream):
+                    tool_name = "unknown"  # initialise so error handler always has a value
+                    # Use the call's own id; fall back to a per-index sentinel so that
+                    # every tool_result message in a parallel batch has a unique id.
+                    tool_call_id = tool_call.get("id") or f"call_{i}"
                     try:
                         func_name = tool_call["function"]["name"]
                         func_args = tool_call["function"]["arguments"]
@@ -851,13 +858,12 @@ class HybridAgent(BaseAIAgent):
                             LLMMessage(
                                 role="tool",
                                 content=json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result),
-                                tool_call_id=tool_call.get("id", "call_0"),
+                                tool_call_id=tool_call_id,
                             )
                         )
 
                     except Exception as e:
-                        error_content = f"Tool execution failed: {str(e)}"
-                        error_msg = f"<OBSERVATION>\n{error_content}\n</OBSERVATION>"
+                        error_msg = f"Tool execution failed: {str(e)}"
                         steps.append(
                             {
                                 "type": "observation",
@@ -868,7 +874,7 @@ class HybridAgent(BaseAIAgent):
                         )
                         yield {
                             "type": "tool_error",
-                            "tool_name": tool_name if "tool_name" in locals() else "unknown",
+                            "tool_name": tool_name,
                             "error": str(e),
                             "timestamp": datetime.utcnow().isoformat(),
                         }
@@ -876,7 +882,7 @@ class HybridAgent(BaseAIAgent):
                             LLMMessage(
                                 role="tool",
                                 content=error_msg,
-                                tool_call_id=tool_call.get("id", "call_0"),
+                                tool_call_id=tool_call_id,
                             )
                         )
 
@@ -1001,12 +1007,18 @@ class HybridAgent(BaseAIAgent):
                     LLMMessage(
                         role="assistant",
                         content=(thought_raw or "").strip() or None,
-                        tool_calls=tool_calls_to_process if tool_calls else None,
+                        # Fix: use tool_calls_to_process (processed list), not the raw
+                        # tool_calls attribute which is None when only function_call is set.
+                        tool_calls=tool_calls_to_process or None,
                     )
                 )
 
                 # Process each tool call
-                for tool_call in tool_calls_to_process:
+                for i, tool_call in enumerate(tool_calls_to_process):
+                    tool_name = "unknown"  # initialise so error handler always has a value
+                    # Use the call's own id; fall back to a per-index sentinel so that
+                    # every tool_result message in a parallel batch has a unique id.
+                    tool_call_id = tool_call.get("id") or f"call_{i}"
                     try:
                         func_name = tool_call["function"]["name"]
                         func_args = tool_call["function"]["arguments"]
@@ -1070,13 +1082,12 @@ class HybridAgent(BaseAIAgent):
                             LLMMessage(
                                 role="tool",
                                 content=json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result),
-                                tool_call_id=tool_call.get("id", "call_0"),
+                                tool_call_id=tool_call_id,
                             )
                         )
 
                     except Exception as e:
-                        error_content = f"Tool execution failed: {str(e)}"
-                        error_msg = f"<OBSERVATION>\n{error_content}\n</OBSERVATION>"
+                        error_msg = f"Tool execution failed: {str(e)}"
                         steps.append(
                             {
                                 "type": "observation",
@@ -1090,7 +1101,7 @@ class HybridAgent(BaseAIAgent):
                             LLMMessage(
                                 role="tool",
                                 content=error_msg,
-                                tool_call_id=tool_call.get("id", "call_0"),
+                                tool_call_id=tool_call_id,
                             )
                         )
 
