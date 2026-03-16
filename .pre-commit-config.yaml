@@ -15,7 +15,7 @@ repos:
         entry: poetry run black
         language: system
         types: [python]
-        files: '^aiecs/'
+        files: '^aiecs/(?!scripts/)'
         description: "Formats Python code with black (line-length=200, see pyproject.toml)"
 
       # -----------------------------------------------------------------------
@@ -27,7 +27,7 @@ repos:
         entry: poetry run flake8
         language: system
         types: [python]
-        files: '^aiecs/'
+        files: '^aiecs/(?!scripts/)'
         description: "Checks PEP8 compliance with flake8 (config in .flake8)"
 
       # -----------------------------------------------------------------------
@@ -41,7 +41,7 @@ repos:
         entry: poetry run mypy
         language: system
         types: [python]
-        files: '^aiecs/'
+        files: '^aiecs/(?!scripts/)'
         pass_filenames: false
         description: "Runs mypy static type checking on aiecs/ (config in pyproject.toml [tool.mypy])"
 
