@@ -1,5 +1,5 @@
 from io import StringIO
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 import numpy as np
 from typing import List, Dict, Union, Optional, cast, Any
 from pydantic import Field, BaseModel
@@ -54,7 +54,7 @@ class PandasTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the pandas tool
-        
+
         Automatically reads from environment variables with PANDAS_TOOL_ prefix.
         Example: PANDAS_TOOL_CSV_DELIMITER -> csv_delimiter
         """
@@ -340,7 +340,10 @@ class PandasTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: PandasTool.Config = cast(
+            PandasTool.Config,
+            self._config_obj if self._config_obj is not None else self.Config(),
+        )
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
@@ -403,11 +406,11 @@ class PandasTool(BaseTool):
         if isinstance(result, pd.DataFrame):
             for col in result.select_dtypes(include=["datetime64"]).columns:
                 result[col] = result[col].dt.strftime("%Y-%m-%d %H:%M:%S")
-            return result.to_dict(orient="records")
+            return cast(List[Dict], result.to_dict(orient="records"))
         elif isinstance(result, pd.Series):
             if pd.api.types.is_datetime64_any_dtype(result):
                 result = result.dt.strftime("%Y-%m-%d %H:%M:%S")
-            return result.to_dict()
+            return cast(Dict, result.to_dict())
         elif isinstance(result, dict):
 
             def convert_value(v):
@@ -424,7 +427,7 @@ class PandasTool(BaseTool):
                 return v
 
             return {k: convert_value(v) for k, v in result.items()}
-        return result
+        return cast(Union[List[Dict], Dict], result)
 
     def read_csv(self, csv_str: str) -> List[Dict]:
         """Read CSV string into a DataFrame."""
@@ -463,7 +466,7 @@ class PandasTool(BaseTool):
         """Read data from a file (CSV, Excel, JSON)."""
         try:
             if file_type == "csv":
-                file_size = sum(1 for _ in open(file_path, "r", encoding=self.config.encoding))
+                file_size = sum(1 for _ in open(file_path, "r", encoding=self.config.encoding))  # noqa: SIM115
                 if file_size > self.config.chunk_size:
                     chunks = []
                     for chunk in pd.read_csv(

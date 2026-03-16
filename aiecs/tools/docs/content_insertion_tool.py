@@ -19,7 +19,7 @@ import uuid
 import tempfile
 import logging
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Union, Tuple
+from typing import Dict, Any, List, Optional, Union, Tuple, cast
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -139,7 +139,7 @@ class ContentInsertionTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the content insertion tool
-        
+
         Automatically reads from environment variables with CONTENT_INSERT_ prefix.
         Example: CONTENT_INSERT_TEMP_DIR -> temp_dir
         """
@@ -189,7 +189,10 @@ class ContentInsertionTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: ContentInsertionTool.Config = cast(
+            ContentInsertionTool.Config,
+            self._config_obj if self._config_obj is not None else self.Config(),
+        )
 
         self.logger = logging.getLogger(__name__)
 
@@ -212,7 +215,7 @@ class ContentInsertionTool(BaseTool):
 
     def _init_external_tools(self):
         """Initialize external tools for content generation"""
-        self.external_tools = {}
+        self.external_tools: Dict[str, Any] = {}
 
         # Try to initialize chart tool
         try:
@@ -856,7 +859,7 @@ class ContentInsertionTool(BaseTool):
 
             # Clean up temp file
             os.unlink(temp_file.name)
-            return result
+            return cast(Dict[str, Any], result)
 
         except Exception as e:
             raise ChartInsertionError(f"Failed to generate chart: {str(e)}")
@@ -1238,7 +1241,7 @@ class ContentInsertionTool(BaseTool):
     def _detect_document_format_from_config(self, config: Optional[Dict[str, Any]]) -> str:
         """Detect document format from configuration"""
         if config and "document_format" in config:
-            return config["document_format"]
+            return cast(str, config["document_format"])
         return "markdown"  # Default
 
     def _download_image(self, url: str) -> str:
@@ -1276,7 +1279,7 @@ class ContentInsertionTool(BaseTool):
             from PIL import Image
 
             with Image.open(image_path) as img:
-                return img.size
+                return cast(Tuple[int, int], img.size)
         except ImportError:
             return None
         except Exception:

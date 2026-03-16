@@ -1,6 +1,5 @@
 from typing import Any, List, Optional
 import logging
-import time
 
 # Import the base callback handler from utils
 from aiecs.utils.base_callback import CustomAsyncCallbackHandler

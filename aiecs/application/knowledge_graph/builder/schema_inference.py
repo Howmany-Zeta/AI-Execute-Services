@@ -4,7 +4,7 @@ Schema Inference for Structured Data Import
 Automatically infers schema mappings from data structure, reducing manual configuration effort.
 """
 
-from typing import Dict, List, Optional, Any, Union, Set
+from typing import Dict, List, Optional, Any, Union, cast
 from pathlib import Path
 from dataclasses import dataclass
 import re
@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 # Check for pandas availability
 try:
     import pandas as pd
+
     PANDAS_AVAILABLE = True
 except ImportError:
     PANDAS_AVAILABLE = False
@@ -32,14 +33,15 @@ except ImportError:
 class InferredSchema:
     """
     Result of schema inference
-    
+
     Contains inferred entity and relation mappings that can be reviewed and modified.
     """
+
     entity_mappings: List[EntityMapping]
     relation_mappings: List[RelationMapping]
     confidence_scores: Dict[str, float]  # Mapping name -> confidence score (0-1)
     warnings: List[str]
-    
+
     def to_schema_mapping(self) -> SchemaMapping:
         """Convert to SchemaMapping for use in pipeline"""
         return SchemaMapping(
@@ -51,81 +53,81 @@ class InferredSchema:
 class SchemaInference:
     """
     Automatic schema inference from structured data
-    
+
     Analyzes data structure and content to automatically generate schema mappings.
     """
-    
+
     # Common ID column patterns
     ID_PATTERNS = [
-        r'^id$',
-        r'^.*_id$',
-        r'^key$',
-        r'^.*_key$',
-        r'^pk$',
-        r'^.*_pk$',
+        r"^id$",
+        r"^.*_id$",
+        r"^key$",
+        r"^.*_key$",
+        r"^pk$",
+        r"^.*_pk$",
     ]
-    
+
     # Foreign key patterns (for relation inference)
     FK_PATTERNS = [
-        r'^(.+)_id$',  # e.g., dept_id -> dept
-        r'^(.+)_key$',  # e.g., dept_key -> dept
-        r'^fk_(.+)$',  # e.g., fk_dept -> dept
+        r"^(.+)_id$",  # e.g., dept_id -> dept
+        r"^(.+)_key$",  # e.g., dept_key -> dept
+        r"^fk_(.+)$",  # e.g., fk_dept -> dept
     ]
-    
+
     def __init__(self, sample_size: int = 1000):
         """
         Initialize schema inference
-        
+
         Args:
             sample_size: Number of rows to sample for inference (default: 1000)
         """
         self.sample_size = sample_size
-    
+
     def infer_from_dataframe(
         self,
-        df: 'pd.DataFrame',
+        df: "pd.DataFrame",
         entity_type_hint: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> InferredSchema:
         """
         Infer schema from pandas DataFrame
-        
+
         Args:
             df: DataFrame to analyze
             entity_type_hint: Optional hint for entity type name
             metadata: Optional metadata (e.g., SPSS variable labels)
-        
+
         Returns:
             InferredSchema with entity and relation mappings
         """
         if not PANDAS_AVAILABLE:
             raise ImportError("pandas is required for schema inference")
-        
+
         warnings = []
         confidence_scores = {}
-        
+
         # Sample data if too large
         if len(df) > self.sample_size:
             df_sample = df.sample(n=self.sample_size, random_state=42)
             warnings.append(f"Sampled {self.sample_size} rows from {len(df)} for inference")
         else:
             df_sample = df
-        
+
         # Detect ID column
         id_column = self._detect_id_column(df_sample)
         if id_column:
-            confidence_scores['id_column'] = 0.9
+            confidence_scores["id_column"] = 0.9
         else:
             warnings.append("No clear ID column detected, will use first column")
             id_column = df.columns[0] if len(df.columns) > 0 else None
-            confidence_scores['id_column'] = 0.5
-        
-        # Infer property types
-        property_types = self._infer_property_types(df_sample, metadata)
-        
+            confidence_scores["id_column"] = 0.5
+
+        # Infer property types (used for schema analysis)
+        self._infer_property_types(df_sample, metadata)
+
         # Determine entity type
         entity_type = entity_type_hint or self._infer_entity_type(df.columns.tolist(), id_column)
-        
+
         # Create entity mapping
         entity_mapping = EntityMapping(
             source_columns=df.columns.tolist(),
@@ -133,11 +135,11 @@ class SchemaInference:
             property_mapping={col: col for col in df.columns},
             id_column=id_column,
         )
-        
+
         # Infer relations from foreign key patterns
         relation_mappings = self._infer_relations(df_sample, id_column)
         if relation_mappings:
-            confidence_scores['relations'] = 0.7
+            confidence_scores["relations"] = 0.7
 
         return InferredSchema(
             entity_mappings=[entity_mapping],
@@ -146,7 +148,7 @@ class SchemaInference:
             warnings=warnings,
         )
 
-    def _detect_id_column(self, df: 'pd.DataFrame') -> Optional[str]:
+    def _detect_id_column(self, df: "pd.DataFrame") -> Optional[str]:
         """
         Detect ID column from DataFrame
 
@@ -160,21 +162,21 @@ class SchemaInference:
         """
         # Check for columns matching ID patterns
         for col in df.columns:
-            col_lower = col.lower()
+            col_lower = str(col).lower()
             for pattern in self.ID_PATTERNS:
                 if re.match(pattern, col_lower):
-                    return col
+                    return cast(str, col)
 
         # Check for columns with all unique values
         for col in df.columns:
             if df[col].nunique() == len(df):
-                return col
+                return cast(str, col)
 
         return None
 
     def _infer_property_types(
         self,
-        df: 'pd.DataFrame',
+        df: "pd.DataFrame",
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, PropertyType]:
         """
@@ -211,7 +213,7 @@ class SchemaInference:
 
         return property_types
 
-    def _could_be_date(self, series: 'pd.Series') -> bool:
+    def _could_be_date(self, series: "pd.Series") -> bool:
         """
         Check if a string series could be dates
 
@@ -232,7 +234,7 @@ class SchemaInference:
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", UserWarning)
-            pd.to_datetime(sample, errors='raise')
+            pd.to_datetime(sample, errors="raise")
             return True
         except (ValueError, TypeError):
             return False
@@ -300,7 +302,7 @@ class SchemaInference:
             InferredSchema with entity and relation mappings
         """
         try:
-            import pyreadstat  # type: ignore[import-untyped]
+            import pyreadstat
         except ImportError:
             raise ImportError("pyreadstat is required for SPSS schema inference")
 
@@ -312,16 +314,16 @@ class SchemaInference:
 
         # Extract metadata
         metadata = {
-            "column_names": meta.column_names if hasattr(meta, 'column_names') else [],
-            "column_labels": meta.column_labels if hasattr(meta, 'column_labels') else [],
-            "variable_value_labels": meta.variable_value_labels if hasattr(meta, 'variable_value_labels') else {},
+            "column_names": meta.column_names if hasattr(meta, "column_names") else [],
+            "column_labels": meta.column_labels if hasattr(meta, "column_labels") else [],
+            "variable_value_labels": meta.variable_value_labels if hasattr(meta, "variable_value_labels") else {},
         }
 
         return self.infer_from_dataframe(df, metadata=metadata)
 
     def _infer_relations(
         self,
-        df: 'pd.DataFrame',
+        df: "pd.DataFrame",
         id_column: Optional[str],
     ) -> List[RelationMapping]:
         """
@@ -394,19 +396,18 @@ class SchemaInference:
         # e.g., "emp_id" -> "dept_id" = "WORKS_IN" or "BELONGS_TO"
 
         # Extract base names
-        source_base = source_column.lower().replace('_id', '').replace('_key', '')
-        target_base = target_column.lower().replace('_id', '').replace('_key', '').replace('fk_', '')
+        target_base = target_column.lower().replace("_id", "").replace("_key", "").replace("fk_", "")
 
         # Common relation verbs based on context
-        if 'dept' in target_base or 'department' in target_base:
+        if "dept" in target_base or "department" in target_base:
             return "WORKS_IN"
-        elif 'manager' in target_base or 'supervisor' in target_base:
+        elif "manager" in target_base or "supervisor" in target_base:
             return "REPORTS_TO"
-        elif 'company' in target_base or 'organization' in target_base:
+        elif "company" in target_base or "organization" in target_base:
             return "BELONGS_TO"
-        elif 'project' in target_base:
+        elif "project" in target_base:
             return "ASSIGNED_TO"
-        elif 'team' in target_base or 'group' in target_base:
+        elif "team" in target_base or "group" in target_base:
             return "MEMBER_OF"
         else:
             # Generic relation type
@@ -442,10 +443,7 @@ class SchemaInference:
                 entity_mappings.append(inferred_em)
 
         # Get relation types already defined by user
-        user_relation_types = {
-            (rm.source_entity_column, rm.target_entity_column, rm.relation_type)
-            for rm in partial_mapping.relation_mappings
-        }
+        user_relation_types = {(rm.source_entity_column, rm.target_entity_column, rm.relation_type) for rm in partial_mapping.relation_mappings}
 
         # Add inferred relation mappings that don't conflict
         for inferred_rm in inferred.relation_mappings:
@@ -459,4 +457,3 @@ class SchemaInference:
             confidence_scores=inferred.confidence_scores,
             warnings=inferred.warnings + ["Merged with user-provided partial schema"],
         )
-

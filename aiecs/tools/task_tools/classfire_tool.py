@@ -1,14 +1,11 @@
 from aiecs.tools import register_tool
-from aiecs.tools.tool_executor import (
-    validate_input,
-)
 from aiecs.tools.base_tool import BaseTool
 import os
 import re
 import logging
 import asyncio
 import time
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, cast
 from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator
@@ -25,7 +22,7 @@ def _init_heavy_dependencies():
 
     if rake_nltk is None:
         try:
-            import rake_nltk as _rake_nltk  # type: ignore[import-untyped]
+            import rake_nltk as _rake_nltk
 
             rake_nltk = _rake_nltk
         except ImportError:
@@ -81,7 +78,7 @@ class ClassifierTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the classifier tool
-        
+
         Automatically reads from environment variables with CLASSIFIER_TOOL_ prefix.
         Example: CLASSIFIER_TOOL_MAX_WORKERS -> max_workers
         """
@@ -224,7 +221,7 @@ class ClassifierTool(BaseTool):
 
         Raises:
             ValueError: If config contains invalid settings.
-        
+
         Configuration is automatically loaded by BaseTool from:
         1. Explicit config dict (highest priority)
         2. YAML config files (config/tools/classifier.yaml)
@@ -235,7 +232,7 @@ class ClassifierTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: "ClassifierTool.Config" = cast("ClassifierTool.Config", self._config_obj) if self._config_obj is not None else self.Config()
 
         # Set up logger
         self.logger = logging.getLogger(__name__)
@@ -413,8 +410,7 @@ class ClassifierTool(BaseTool):
 
             rake = rake_nltk.Rake()
             rake.extract_keywords_from_text(text)
-            phrases = rake.get_ranked_phrases()[:top_k]
-            return phrases
+            return cast(List[str], rake.get_ranked_phrases()[:top_k])
         except Exception as e:
             self.logger.error(f"Error extracting English phrases: {e}")
             # Fallback to simple keyword extraction
@@ -487,7 +483,7 @@ class ClassifierTool(BaseTool):
             ValueError: If the pipeline creation fails.
         """
         try:
-            from transformers import pipeline  # type: ignore[import-not-found]
+            from transformers import pipeline
 
             return pipeline(task, model=model)
         except ImportError:
@@ -803,7 +799,7 @@ class ClassifierTool(BaseTool):
                 ]["summary_text"],
             )
 
-        return result
+        return str(result)
 
     async def batch_process(
         self,

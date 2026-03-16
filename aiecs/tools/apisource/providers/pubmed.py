@@ -17,7 +17,7 @@ IMPORTANT - NCBI E-utilities API Rules:
 import logging
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urlencode
+
 
 from aiecs.tools.apisource.providers.base import (
     BaseAPIProvider,
@@ -298,10 +298,7 @@ class PubMedProvider(BaseAPIProvider):
         api_key = self._get_api_key()
 
         # Set User-Agent header as required by NCBI API etiquette
-        user_agent = self.config.get(
-            "user_agent",
-            "AIECS-APISource/2.0 (https://github.com/your-org/aiecs; iretbl@gmail.com)"
-        )
+        user_agent = self.config.get("user_agent", "AIECS-APISource/2.0 (https://github.com/your-org/aiecs; iretbl@gmail.com)")
         headers = {
             "User-Agent": user_agent,
         }
@@ -334,12 +331,7 @@ class PubMedProvider(BaseAPIProvider):
 
                 # Make ESearch request
                 search_url = f"{self.BASE_URL}/esearch.fcgi"
-                response = requests.get(
-                    search_url,
-                    params=search_params,
-                    headers=headers,
-                    timeout=timeout
-                )
+                response = requests.get(search_url, params=search_params, headers=headers, timeout=timeout)
                 response.raise_for_status()
 
                 # Parse search results
@@ -358,53 +350,48 @@ class PubMedProvider(BaseAPIProvider):
                         fetch_params["api_key"] = api_key
 
                     fetch_url = f"{self.BASE_URL}/efetch.fcgi"
-                    fetch_response = requests.get(
-                        fetch_url,
-                        params=fetch_params,
-                        headers=headers,
-                        timeout=timeout
-                    )
+                    fetch_response = requests.get(fetch_url, params=fetch_params, headers=headers, timeout=timeout)
                     fetch_response.raise_for_status()
 
                     # Parse paper details
                     papers = self._parse_efetch_result(fetch_response.text)
 
                     # Format response with search metadata
-                    response = self._format_response(
+                    result = self._format_response(
                         operation=operation,
                         data=papers,
                         source=f"PubMed E-utilities - {self.BASE_URL}",
                     )
 
                     # Add search-specific metadata
-                    response["metadata"]["search_info"] = {
+                    result["metadata"]["search_info"] = {
                         "total_results": search_result["count"],
                         "returned_results": len(papers),
                         "start_index": search_result["ret_start"],
                     }
 
-                    return response
+                    return result
                 else:
                     # Format response for empty results
-                    response = self._format_response(
+                    result = self._format_response(
                         operation=operation,
                         data=[],
                         source=f"PubMed E-utilities - {self.BASE_URL}",
                     )
 
                     # Add search-specific metadata
-                    response["metadata"]["search_info"] = {
+                    result["metadata"]["search_info"] = {
                         "total_results": 0,
                         "returned_results": 0,
                         "start_index": 0,
                     }
 
-                    return response
+                    return result
 
             elif operation in ["get_paper_by_id", "get_paper_details"]:
                 # Use EFetch to get paper details
                 pmid = params["pmid"]
-                fetch_params: Dict[str, Any] = {
+                fetch_params = {
                     "db": "pubmed",
                     "id": pmid,
                     "retmode": "xml",
@@ -413,12 +400,7 @@ class PubMedProvider(BaseAPIProvider):
                     fetch_params["api_key"] = api_key
 
                 fetch_url = f"{self.BASE_URL}/efetch.fcgi"
-                response = requests.get(
-                    fetch_url,
-                    params=fetch_params,
-                    headers=headers,
-                    timeout=timeout
-                )
+                response = requests.get(fetch_url, params=fetch_params, headers=headers, timeout=timeout)
                 response.raise_for_status()
 
                 # Parse paper details
@@ -517,4 +499,3 @@ class PubMedProvider(BaseAPIProvider):
         }
 
         return schemas.get(operation)
-

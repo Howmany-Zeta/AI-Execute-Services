@@ -9,16 +9,13 @@ from typing import Protocol, Optional, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from aiecs.domain.knowledge_graph.models.entity import Entity
-    from aiecs.domain.knowledge_graph.models.relation import Relation
-    import asyncpg  # type: ignore[import-untyped]
+    import asyncpg
 
 
 class PaginationMixinProtocol(Protocol):
     """Protocol for classes that PaginationMixin expects"""
 
-    async def get_all_entities(
-        self, entity_type: Optional[str] = None, limit: Optional[int] = None
-    ) -> List["Entity"]:
+    async def get_all_entities(self, entity_type: Optional[str] = None, limit: Optional[int] = None) -> List["Entity"]:
         """Get all entities, optionally filtered by type and limited"""
         ...
 
@@ -30,9 +27,7 @@ class LazyLoadingMixinProtocol(Protocol):
         """Get entity by ID"""
         ...
 
-    async def get_all_entities(
-        self, entity_type: Optional[str] = None, limit: Optional[int] = None
-    ) -> List["Entity"]:
+    async def get_all_entities(self, entity_type: Optional[str] = None, limit: Optional[int] = None) -> List["Entity"]:
         """Get all entities, optionally filtered by type and limited"""
         ...
 
@@ -73,4 +68,3 @@ class GraphAwareAgentMixinProtocol(Protocol):
         from aiecs.infrastructure.graph_storage.base import GraphStore
 
         graph_store: Optional["GraphStore"]
-

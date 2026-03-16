@@ -23,7 +23,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, cast
 from dataclasses import dataclass, asdict, is_dataclass
 
 
@@ -776,7 +776,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                     session.session_id,
                     json.dumps(session.to_dict(), cls=DateTimeEncoder),
                 )
-                await self.redis_client.expire("sessions", self.session_ttl)  # type: ignore[misc]
+                await self.redis_client.expire("sessions", self.session_ttl)
                 return
             except Exception as e:
                 logger.error(f"Failed to store session to Redis: {e}")
@@ -952,7 +952,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                     session_id,
                     json.dumps(sanitized_dict, cls=DateTimeEncoder),
                 )
-                await self.redis_client.expire("task_contexts", self.session_ttl)  # type: ignore[misc]
+                await self.redis_client.expire("task_contexts", self.session_ttl)
                 # Dual-write: append task context snapshot
                 if self._permanent_backend:
                     await self._fire_permanent(
@@ -1035,7 +1035,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                     json.dumps(checkpoint, cls=DateTimeEncoder),
                 )
                 # Set TTL
-                await self.redis_client.expire(f"checkpoints:{thread_id}", self.checkpoint_ttl)  # type: ignore[misc]
+                await self.redis_client.expire(f"checkpoints:{thread_id}", self.checkpoint_ttl)
 
                 # Dual-write: append checkpoint to permanent backend
                 if self._permanent_backend:
@@ -1080,7 +1080,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                     # Get specific checkpoint
                     data = await self.redis_client.hget(f"checkpoints:{thread_id}", checkpoint_id)  # type: ignore[misc]
                     if data:
-                        return json.loads(data)
+                        return cast(Dict[str, Any], json.loads(data))
                 else:
                     # Get latest checkpoint
                     checkpoints = await self.redis_client.hgetall(f"checkpoints:{thread_id}")  # type: ignore[misc]
@@ -1090,7 +1090,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                             checkpoints.values(),
                             key=lambda x: json.loads(x)["created_at"],
                         )
-                        return json.loads(latest)
+                        return cast(Dict[str, Any], json.loads(latest))
             except Exception as e:
                 logger.error(f"Failed to get checkpoint from Redis: {e}")
 
@@ -1172,11 +1172,11 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 # Remove session
                 await self.redis_client.hdel("sessions", session_id)  # type: ignore[misc]
                 # Remove conversation
-                await self.redis_client.delete(f"conversation:{session_id}")  # type: ignore[misc]
+                await self.redis_client.delete(f"conversation:{session_id}")
                 # Remove task context
                 await self.redis_client.hdel("task_contexts", session_id)  # type: ignore[misc]
                 # Remove checkpoints
-                await self.redis_client.delete(f"checkpoints:{session_id}")  # type: ignore[misc]
+                await self.redis_client.delete(f"checkpoints:{session_id}")
             except Exception as e:
                 logger.error(f"Failed to cleanup session data from Redis: {e}")
         else:
@@ -1238,7 +1238,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             if total_memory_items > 10000:  # Arbitrary threshold
                 issues.append(f"High memory usage: {total_memory_items} items")
                 health["status"] = "warning"
-        
+
         health["issues"] = issues  # Update health dict
 
         return health
@@ -1288,7 +1288,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                             checkpoint_id=checkpoint_id,
                             task_id=task_id,
                             writes_data=writes_data,
-                            created_at=writes_payload["created_at"],
+                            created_at=str(writes_payload["created_at"]),
                         )
                     )
                 return True
@@ -1305,7 +1305,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                     checkpoint_id=checkpoint_id,
                     task_id=task_id,
                     writes_data=writes_data,
-                    created_at=writes_payload["created_at"],
+                    created_at=str(writes_payload["created_at"]),
                 )
             )
         return True
@@ -1336,7 +1336,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
     async def store_task_context(self, session_id: str, context: Any) -> bool:
         """Store TaskContext for a session (ITaskContextStorage interface)."""
-        return await self._store_task_context(session_id, context)
+        return bool(await self._store_task_context(session_id, context))
 
     # ==================== Agent Communication and Conversation Isolation ====
 
@@ -1487,7 +1487,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 if hasattr(msg, "to_dict"):
                     msg_dict = msg.to_dict()
                 else:
-                    msg_dict = msg  # type: ignore[assignment]
+                    msg_dict = msg
 
                 msg_metadata = msg_dict.get("metadata", {})
                 msg_type = msg_metadata.get("message_type", "communication")
@@ -1526,7 +1526,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                     session_key,
                     json.dumps(session_data, cls=DateTimeEncoder),
                 )
-                await self.redis_client.expire("conversation_sessions", self.session_ttl)  # type: ignore[misc]
+                await self.redis_client.expire("conversation_sessions", self.session_ttl)
                 # Dual-write: append conversation session
                 if self._permanent_backend:
                     await self._fire_permanent(
@@ -1940,7 +1940,7 @@ Summary:"""
         # Type narrowing: ensure hybrid_strategies is a list
         if config.hybrid_strategies is None:
             config.hybrid_strategies = ["truncate", "summarize"]
-        
+
         for strategy in config.hybrid_strategies:
             if strategy == "truncate":
                 compressed = await self._compress_with_truncation(compressed, config)

@@ -168,7 +168,7 @@ class ContextCompressor:
         Returns:
             Estimated token count
         """
-        total_chars = sum(len(msg.content) for msg in messages)
+        total_chars = sum(len(msg.content or "") for msg in messages)
         # Rough estimate: 4 chars ≈ 1 token
         return total_chars // 4
 

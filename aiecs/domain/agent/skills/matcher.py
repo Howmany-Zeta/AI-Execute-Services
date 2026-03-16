@@ -24,9 +24,9 @@ import logging
 import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import Callable, Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
-from .models import SkillDefinition, SkillMetadata
+from .models import SkillDefinition
 from .registry import SkillRegistry
 
 logger = logging.getLogger(__name__)
@@ -35,18 +35,14 @@ logger = logging.getLogger(__name__)
 @dataclass
 class MatchResult:
     """Result of a skill match operation."""
+
     skill: SkillDefinition
     score: float
     matched_phrases: List[str]
     matched_keywords: List[str]
 
     def __repr__(self) -> str:
-        return (
-            f"MatchResult(skill={self.skill.metadata.name!r}, "
-            f"score={self.score:.3f}, "
-            f"matched_phrases={self.matched_phrases}, "
-            f"matched_keywords={self.matched_keywords})"
-        )
+        return f"MatchResult(skill={self.skill.metadata.name!r}, " f"score={self.score:.3f}, " f"matched_phrases={self.matched_phrases}, " f"matched_keywords={self.matched_keywords})"
 
 
 class SkillMatcher:
@@ -73,38 +69,122 @@ class SkillMatcher:
 
     # Regex to extract quoted phrases from descriptions
     # Matches: "phrase", 'phrase', or "phrase" (smart quotes)
-    TRIGGER_PHRASE_PATTERN = re.compile(
-        r'["\'\u201c\u201d]([^"\'\u201c\u201d]+)["\'\u201c\u201d]'
-    )
+    TRIGGER_PHRASE_PATTERN = re.compile(r'["\'\u201c\u201d]([^"\'\u201c\u201d]+)["\'\u201c\u201d]')
 
     # Common words to ignore in keyword matching
     STOP_WORDS = {
-        'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-        'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-        'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare',
-        'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'up',
-        'about', 'into', 'through', 'during', 'before', 'after', 'above',
-        'below', 'between', 'under', 'again', 'further', 'then', 'once',
-        'and', 'but', 'or', 'nor', 'so', 'yet', 'both', 'either', 'neither',
-        'not', 'only', 'own', 'same', 'than', 'too', 'very', 'just', 'also',
-        'this', 'that', 'these', 'those', 'it', 'its', 'i', 'me', 'my',
-        'you', 'your', 'he', 'she', 'we', 'they', 'who', 'which', 'when',
-        'where', 'why', 'how', 'all', 'each', 'every', 'any', 'some', 'no',
-        'user', 'asks', 'mentions', 'wants', 'skill', 'used', 'when',
+        "a",
+        "an",
+        "the",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "must",
+        "shall",
+        "can",
+        "need",
+        "dare",
+        "to",
+        "of",
+        "in",
+        "for",
+        "on",
+        "with",
+        "at",
+        "by",
+        "from",
+        "up",
+        "about",
+        "into",
+        "through",
+        "during",
+        "before",
+        "after",
+        "above",
+        "below",
+        "between",
+        "under",
+        "again",
+        "further",
+        "then",
+        "once",
+        "and",
+        "but",
+        "or",
+        "nor",
+        "so",
+        "yet",
+        "both",
+        "either",
+        "neither",
+        "not",
+        "only",
+        "own",
+        "same",
+        "than",
+        "too",
+        "very",
+        "just",
+        "also",
+        "this",
+        "that",
+        "these",
+        "those",
+        "it",
+        "its",
+        "i",
+        "me",
+        "my",
+        "you",
+        "your",
+        "he",
+        "she",
+        "we",
+        "they",
+        "who",
+        "which",
+        "when",
+        "where",
+        "why",
+        "how",
+        "all",
+        "each",
+        "every",
+        "any",
+        "some",
+        "no",
+        "user",
+        "asks",
+        "mentions",
+        "wants",
+        "skill",
+        "used",
+        "when",
     }
 
     # Weights for different match types
     EXACT_PHRASE_WEIGHT = 1.0
     FUZZY_PHRASE_WEIGHT = 0.7
     KEYWORD_WEIGHT = 0.5  # Increased from 0.3 to give description keywords more weight
-    TAG_WEIGHT = 0.4      # Increased from 0.2 to give tags more weight
+    TAG_WEIGHT = 0.4  # Increased from 0.2 to give tags more weight
 
-    def __init__(
-        self,
-        registry: Optional[SkillRegistry] = None,
-        default_threshold: float = 0.3,
-        default_max_results: int = 5
-    ):
+    def __init__(self, registry: Optional[SkillRegistry] = None, default_threshold: float = 0.3, default_max_results: int = 5):
         """
         Initialize the skill matcher.
 
@@ -150,20 +230,15 @@ class SkillMatcher:
             Set of keywords
         """
         # Split on non-word characters
-        words = re.split(r'\W+', text.lower())
+        words = re.split(r"\W+", text.lower())
         # Filter stop words and short words
-        return {
-            word for word in words
-            if word and len(word) > 2 and word not in self.STOP_WORDS
-        }
+        return {word for word in words if word and len(word) > 2 and word not in self.STOP_WORDS}
 
     def _get_skill_triggers(self, skill: SkillDefinition) -> List[str]:
         """Get cached trigger phrases for a skill."""
         name = skill.metadata.name
         if name not in self._trigger_cache:
-            self._trigger_cache[name] = self.extract_trigger_phrases(
-                skill.metadata.description
-            )
+            self._trigger_cache[name] = self.extract_trigger_phrases(skill.metadata.description)
         return self._trigger_cache[name]
 
     def _get_skill_keywords(self, skill: SkillDefinition) -> Set[str]:
@@ -196,12 +271,7 @@ class SkillMatcher:
         """Check if phrase appears in text (case-insensitive)."""
         return phrase.lower() in text.lower()
 
-    def _score_skill(
-        self,
-        skill: SkillDefinition,
-        request: str,
-        request_keywords: Set[str]
-    ) -> MatchResult:
+    def _score_skill(self, skill: SkillDefinition, request: str, request_keywords: Set[str]) -> MatchResult:
         """
         Score how well a skill matches a request.
 
@@ -271,10 +341,7 @@ class SkillMatcher:
         # Tags are explicit markers, so matching ANY tag should give significant score
         tag_score = 0.0
         if skill.metadata.tags:
-            tag_matches = [
-                tag for tag in skill.metadata.tags
-                if tag.lower() in request_lower
-            ]
+            tag_matches = [tag for tag in skill.metadata.tags if tag.lower() in request_lower]
             if tag_matches:
                 # Any tag match gives at least 0.7 of TAG_WEIGHT
                 base_score = 0.7
@@ -287,11 +354,7 @@ class SkillMatcher:
         # Use weighted combination where trigger match dominates, but keywords can also reach threshold
         if trigger_score > 0:
             # Trigger matched: trigger dominates (60%), keywords (25%), tags (15%)
-            final_score = (
-                trigger_score * 0.6 +
-                keyword_score * 0.25 +
-                tag_score * 0.15
-            )
+            final_score = trigger_score * 0.6 + keyword_score * 0.25 + tag_score * 0.15
         elif keyword_score > 0 or tag_score > 0:
             # No trigger match: keywords and tags can still reach threshold
             # keyword_score max = 0.5, tag_score max = 0.4
@@ -299,9 +362,7 @@ class SkillMatcher:
             final_score = keyword_score * 0.7 + tag_score * 0.5
         else:
             # No matches at all - use basic text similarity as fallback
-            final_score = self._fuzzy_match_score(
-                skill.metadata.description, request
-            ) * 0.4  # Increased from 0.3
+            final_score = self._fuzzy_match_score(skill.metadata.description, request) * 0.4  # Increased from 0.3
 
         # Ensure score is in valid range
         final_score = min(max(final_score, 0.0), 1.0)
@@ -315,20 +376,9 @@ class SkillMatcher:
             f"matched_phrases={matched_phrases}"
         )
 
-        return MatchResult(
-            skill=skill,
-            score=final_score,
-            matched_phrases=matched_phrases,
-            matched_keywords=list(set(matched_keywords))
-        )
+        return MatchResult(skill=skill, score=final_score, matched_phrases=matched_phrases, matched_keywords=list(set(matched_keywords)))
 
-    def match(
-        self,
-        request: str,
-        threshold: Optional[float] = None,
-        max_results: Optional[int] = None,
-        skills: Optional[List[SkillDefinition]] = None
-    ) -> List[Tuple[SkillDefinition, float]]:
+    def match(self, request: str, threshold: Optional[float] = None, max_results: Optional[int] = None, skills: Optional[List[SkillDefinition]] = None) -> List[Tuple[SkillDefinition, float]]:
         """
         Match a request to skills and return ranked results.
 
@@ -370,23 +420,14 @@ class SkillMatcher:
 
         # Log matches
         if results:
-            logger.debug(
-                f"Matched {len(results)} skills for request: "
-                f"{request[:50]}{'...' if len(request) > 50 else ''}"
-            )
+            logger.debug(f"Matched {len(results)} skills for request: " f"{request[:50]}{'...' if len(request) > 50 else ''}")
             for result in results:
                 logger.debug(f"  {result}")
 
         # Return as (skill, score) tuples for backward compatibility
         return [(r.skill, r.score) for r in results]
 
-    def match_detailed(
-        self,
-        request: str,
-        threshold: Optional[float] = None,
-        max_results: Optional[int] = None,
-        skills: Optional[List[SkillDefinition]] = None
-    ) -> List[MatchResult]:
+    def match_detailed(self, request: str, threshold: Optional[float] = None, max_results: Optional[int] = None, skills: Optional[List[SkillDefinition]] = None) -> List[MatchResult]:
         """
         Match a request to skills with detailed match information.
 
@@ -443,4 +484,5 @@ class SkillMatcher:
 
 class SkillMatcherError(Exception):
     """Raised when skill matching fails."""
+
     pass

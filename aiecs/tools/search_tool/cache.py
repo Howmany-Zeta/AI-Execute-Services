@@ -9,7 +9,7 @@ import hashlib
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from .constants import QueryIntentType
 
@@ -72,7 +72,7 @@ class IntelligentCache:
 
             if cached_data:
                 logger.debug(f"Cache hit for query: {query}")
-                return json.loads(cached_data)
+                return cast(Dict[str, Any], json.loads(cached_data))
 
             logger.debug(f"Cache miss for query: {query}")
             return None

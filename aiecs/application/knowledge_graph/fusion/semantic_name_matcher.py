@@ -8,8 +8,8 @@ Supports configurable similarity thresholds and caching to minimize API calls.
 import asyncio
 import logging
 import math
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple, Any
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple, Any, Union, cast
 from collections import OrderedDict
 import threading
 
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SemanticMatchResult:
     """Result of semantic name matching."""
+
     name1: str
     name2: str
     similarity: float
@@ -33,6 +34,7 @@ class SemanticMatchResult:
 @dataclass
 class EmbeddingCacheConfig:
     """Configuration for embedding cache."""
+
     max_size: int = 10000
     ttl_seconds: Optional[int] = None  # None = no TTL
 
@@ -40,6 +42,7 @@ class EmbeddingCacheConfig:
 @dataclass
 class SemanticMatcherConfig:
     """Configuration for SemanticNameMatcher."""
+
     # Similarity threshold for match
     similarity_threshold: float = 0.85
     # LLM provider for embeddings
@@ -198,12 +201,13 @@ class SemanticNameMatcher:
         """Get or create LLM client for embeddings."""
         async with self._lock:
             if self._llm_client is None:
+                provider: Union[AIProvider, str]
                 try:
                     provider = AIProvider(self._config.embedding_provider)
                 except ValueError:
                     # Try as custom provider
                     provider = self._config.embedding_provider
-                self._llm_client = LLMClientFactory.get_client(provider)
+                self._llm_client = cast(LLMClientProtocol, LLMClientFactory.get_client(provider))
             return self._llm_client
 
     async def get_embedding(self, name: str) -> List[float]:
@@ -242,9 +246,7 @@ class SemanticNameMatcher:
 
         return []
 
-    async def get_embeddings_batch(
-        self, names: List[str]
-    ) -> Dict[str, List[float]]:
+    async def get_embeddings_batch(self, names: List[str]) -> Dict[str, List[float]]:
         """
         Get embeddings for multiple names in batch.
 
@@ -276,7 +278,7 @@ class SemanticNameMatcher:
             try:
                 # Process in batches
                 for i in range(0, len(names_to_embed), self._config.batch_size):
-                    batch = names_to_embed[i:i + self._config.batch_size]
+                    batch = names_to_embed[i : i + self._config.batch_size]
                     embeddings = await client.get_embeddings(
                         batch,
                         model=self._config.embedding_model,
@@ -295,9 +297,7 @@ class SemanticNameMatcher:
 
         return results
 
-    def cosine_similarity(
-        self, embedding1: List[float], embedding2: List[float]
-    ) -> float:
+    def cosine_similarity(self, embedding1: List[float], embedding2: List[float]) -> float:
         """
         Calculate cosine similarity between two embeddings.
 
@@ -312,9 +312,7 @@ class SemanticNameMatcher:
             return 0.0
 
         if len(embedding1) != len(embedding2):
-            logger.warning(
-                f"Embedding dimension mismatch: {len(embedding1)} vs {len(embedding2)}"
-            )
+            logger.warning(f"Embedding dimension mismatch: {len(embedding1)} vs {len(embedding2)}")
             return 0.0
 
         # Calculate dot product and magnitudes
@@ -458,7 +456,3 @@ class SemanticNameMatcher:
     def config(self) -> SemanticMatcherConfig:
         """Get current configuration."""
         return self._config
-
-
-
-

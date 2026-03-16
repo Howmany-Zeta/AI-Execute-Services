@@ -67,24 +67,15 @@ class ExchangeRateProvider(BaseAPIProvider):
 
         if operation == "get_latest_rates":
             if "base_currency" not in params:
-                return False, (
-                    "Missing required parameter: base_currency\n"
-                    "Example: {'base_currency': 'USD'}"
-                )
+                return False, ("Missing required parameter: base_currency\n" "Example: {'base_currency': 'USD'}")
 
         elif operation == "convert_currency":
             if "from_currency" not in params or "to_currency" not in params or "amount" not in params:
-                return False, (
-                    "Missing required parameters: from_currency, to_currency, and amount\n"
-                    "Example: {'from_currency': 'USD', 'to_currency': 'EUR', 'amount': 100}"
-                )
+                return False, ("Missing required parameters: from_currency, to_currency, and amount\n" "Example: {'from_currency': 'USD', 'to_currency': 'EUR', 'amount': 100}")
 
         elif operation == "get_pair_rate":
             if "from_currency" not in params or "to_currency" not in params:
-                return False, (
-                    "Missing required parameters: from_currency and to_currency\n"
-                    "Example: {'from_currency': 'USD', 'to_currency': 'EUR'}"
-                )
+                return False, ("Missing required parameters: from_currency and to_currency\n" "Example: {'from_currency': 'USD', 'to_currency': 'EUR'}")
 
         return True, None
 
@@ -122,11 +113,14 @@ class ExchangeRateProvider(BaseAPIProvider):
         Returns:
             Dictionary containing conversion result
         """
-        return self.execute("convert_currency", {
-            "from_currency": from_currency,
-            "to_currency": to_currency,
-            "amount": amount,
-        })
+        return self.execute(
+            "convert_currency",
+            {
+                "from_currency": from_currency,
+                "to_currency": to_currency,
+                "amount": amount,
+            },
+        )
 
     @expose_operation(
         operation_name="get_pair_rate",
@@ -143,10 +137,13 @@ class ExchangeRateProvider(BaseAPIProvider):
         Returns:
             Dictionary containing pair exchange rate
         """
-        return self.execute("get_pair_rate", {
-            "from_currency": from_currency,
-            "to_currency": to_currency,
-        })
+        return self.execute(
+            "get_pair_rate",
+            {
+                "from_currency": from_currency,
+                "to_currency": to_currency,
+            },
+        )
 
     @expose_operation(
         operation_name="get_supported_currencies",
@@ -165,10 +162,7 @@ class ExchangeRateProvider(BaseAPIProvider):
         """Fetch data from ExchangeRate-API"""
 
         if not REQUESTS_AVAILABLE:
-            raise ImportError(
-                "requests library is required for ExchangeRate provider. "
-                "Install with: pip install requests"
-            )
+            raise ImportError("requests library is required for ExchangeRate provider. " "Install with: pip install requests")
 
         # Check if API key is available (determines which endpoint to use)
         api_key = self._get_api_key("EXCHANGERATE_API_KEY")
@@ -417,4 +411,3 @@ class ExchangeRateProvider(BaseAPIProvider):
         }
 
         return schemas.get(operation, {})
-

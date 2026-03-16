@@ -5,21 +5,17 @@ Provides tools for comparing different threshold configurations and
 evaluating matching performance across different parameter sets.
 """
 
-import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from aiecs.application.knowledge_graph.fusion.evaluation_dataset import (
-    EntityPair,
     EvaluationDataset,
 )
 from aiecs.application.knowledge_graph.fusion.matching_config import (
     FusionMatchingConfig,
 )
 from aiecs.application.knowledge_graph.fusion.similarity_pipeline import (
-    MatchStage,
-    PipelineResult,
     SimilarityPipeline,
 )
 
@@ -75,12 +71,7 @@ class EvaluationMetrics:
     @property
     def accuracy(self) -> float:
         """Calculate overall accuracy."""
-        total = (
-            self.true_positives
-            + self.false_positives
-            + self.false_negatives
-            + self.true_negatives
-        )
+        total = self.true_positives + self.false_positives + self.false_negatives + self.true_negatives
         if total == 0:
             return 0.0
         return (self.true_positives + self.true_negatives) / total
@@ -210,9 +201,7 @@ class ABTestingFramework:
                 # Track which stage matched
                 if result.is_match and result.matched_stage:
                     stage_name = result.matched_stage.value
-                    stage_breakdown[stage_name] = (
-                        stage_breakdown.get(stage_name, 0) + 1
-                    )
+                    stage_breakdown[stage_name] = stage_breakdown.get(stage_name, 0) + 1
 
                 # Update metrics
                 if pair.should_match:
@@ -303,9 +292,7 @@ class ABTestingFramework:
 
         return results
 
-    def compare_results(
-        self, results: List[ExperimentResult]
-    ) -> Dict[str, Any]:
+    def compare_results(self, results: List[ExperimentResult]) -> Dict[str, Any]:
         """
         Compare multiple experiment results.
 
@@ -318,7 +305,7 @@ class ABTestingFramework:
         if not results:
             return {}
 
-        comparison = {
+        comparison: Dict[str, Any] = {
             "configs": [],
             "best_precision": None,
             "best_recall": None,
@@ -326,10 +313,10 @@ class ABTestingFramework:
             "best_accuracy": None,
         }
 
-        best_precision_score = -1
-        best_recall_score = -1
-        best_f1_score = -1
-        best_accuracy_score = -1
+        best_precision_score: float = -1.0
+        best_recall_score: float = -1.0
+        best_f1_score: float = -1.0
+        best_accuracy_score: float = -1.0
 
         for result in results:
             config_info = {
@@ -377,9 +364,7 @@ class ABTestingFramework:
             Tuple of (is_valid, validation_details)
         """
         metrics = result.metrics
-        is_valid = (
-            metrics.recall >= min_recall and metrics.precision >= min_precision
-        )
+        is_valid = metrics.recall >= min_recall and metrics.precision >= min_precision
 
         validation_details = {
             "is_valid": is_valid,

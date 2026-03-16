@@ -4,7 +4,7 @@ Knowledge Graph Search Tool
 AIECS tool for searching knowledge graphs with multiple search modes.
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, cast
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from enum import Enum
@@ -231,7 +231,7 @@ class GraphSearchTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the Graph Search Tool
-        
+
         Automatically reads from environment variables with GRAPH_SEARCH_ prefix.
         Example: GRAPH_SEARCH_CACHE_MAX_SIZE -> cache_max_size
         """
@@ -265,7 +265,9 @@ class GraphSearchTool(BaseTool):
         max_results: int = Field(default=10, ge=1, le=100, description="Maximum number of results to return (1-100)")
         vector_threshold: float = Field(default=0.0, ge=0.0, le=1.0, description="Minimum similarity threshold for results (0.0-1.0)")
         enable_reranking: bool = Field(default=False, description="Whether to enable result reranking for improved relevance")
-        rerank_strategy: Optional[str] = Field(default="text", description="Reranking strategy: 'text' (text similarity), 'semantic' (embeddings), 'structural' (graph importance), or 'hybrid' (all signals)")
+        rerank_strategy: Optional[str] = Field(
+            default="text", description="Reranking strategy: 'text' (text similarity), 'semantic' (embeddings), 'structural' (graph importance), or 'hybrid' (all signals)"
+        )
         rerank_top_k: Optional[int] = Field(default=None, ge=1, le=500, description="Top-K results to fetch before reranking. If None, uses max_results")
 
     class Graph_searchSchema(BaseModel):
@@ -340,19 +342,19 @@ class GraphSearchTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: "GraphSearchTool.Config" = cast("GraphSearchTool.Config", self._config_obj) if self._config_obj is not None else self.Config()
 
         # Graph store (shared with KG builder)
-        self.graph_store = None
+        self.graph_store: Optional[InMemoryGraphStore] = None
 
         # Search strategies (using _strategy suffix to avoid shadowing public
         # methods)
-        self.hybrid_search_strategy = None
-        self.pagerank_strategy = None
-        self.multihop_strategy = None
-        self.filtered_strategy = None
-        self.traversal_strategy = None
-        self.cache = None
+        self.hybrid_search_strategy: Optional[HybridSearchStrategy] = None
+        self.pagerank_strategy: Optional[PersonalizedPageRank] = None
+        self.multihop_strategy: Optional[MultiHopRetrieval] = None
+        self.filtered_strategy: Optional[FilteredRetrieval] = None
+        self.traversal_strategy: Optional[EnhancedTraversal] = None
+        self.cache: Optional[RetrievalCache] = None
 
         self._initialized = False
 
@@ -512,6 +514,7 @@ class GraphSearchTool(BaseTool):
         vector_threshold: float,
     ) -> List[Dict[str, Any]]:
         """Perform vector similarity search"""
+        assert self.graph_store is not None
         if not query_embedding:
             return []
 
@@ -539,6 +542,7 @@ class GraphSearchTool(BaseTool):
         max_results: int,
     ) -> List[Dict[str, Any]]:
         """Perform graph structure search"""
+        assert self.hybrid_search_strategy is not None
         if not seed_entity_ids:
             return []
 
@@ -577,6 +581,7 @@ class GraphSearchTool(BaseTool):
         vector_threshold: float,
     ) -> List[Dict[str, Any]]:
         """Perform hybrid search"""
+        assert self.hybrid_search_strategy is not None
         if not query_embedding:
             return []
 
@@ -609,6 +614,7 @@ class GraphSearchTool(BaseTool):
 
     async def _pagerank_search(self, seed_entity_ids: Optional[List[str]], max_results: int) -> List[Dict[str, Any]]:
         """Perform PageRank search"""
+        assert self.pagerank_strategy is not None
         if not seed_entity_ids:
             return []
 
@@ -632,6 +638,7 @@ class GraphSearchTool(BaseTool):
         max_results: int,
     ) -> List[Dict[str, Any]]:
         """Perform multi-hop retrieval"""
+        assert self.multihop_strategy is not None
         if not seed_entity_ids:
             return []
 
@@ -659,6 +666,7 @@ class GraphSearchTool(BaseTool):
         max_results: int,
     ) -> List[Dict[str, Any]]:
         """Perform filtered retrieval"""
+        assert self.filtered_strategy is not None
         raw_results = await self.filtered_strategy.retrieve(
             entity_type=entity_type,
             property_filters=property_filters,
@@ -683,6 +691,7 @@ class GraphSearchTool(BaseTool):
         max_results: int,
     ) -> List[Dict[str, Any]]:
         """Perform pattern-based traversal"""
+        assert self.traversal_strategy is not None
         if not seed_entity_ids:
             return []
 
@@ -693,7 +702,7 @@ class GraphSearchTool(BaseTool):
         )
 
         # Get all paths from traversal
-        all_entities = {}
+        all_entities: Dict[str, Dict[str, Any]] = {}
         for seed_id in seed_entity_ids:
             paths = await self.traversal_strategy.traverse_with_pattern(
                 start_entity_id=seed_id,

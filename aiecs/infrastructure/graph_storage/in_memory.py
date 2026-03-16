@@ -20,7 +20,7 @@ Multi-tenancy Support:
 import os
 from collections import OrderedDict
 from typing import Any, List, Optional, Dict, Set, Tuple
-import networkx as nx  # type: ignore[import-untyped]
+import networkx as nx
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.relation import Relation
 from aiecs.infrastructure.graph_storage.base import GraphStore
@@ -28,7 +28,6 @@ from aiecs.infrastructure.graph_storage.tenant import TenantContext, CrossTenant
 from aiecs.infrastructure.graph_storage.property_storage import (
     PropertyOptimizer,
     PropertyStorageConfig,
-    PropertyIndex,
 )
 
 # Default maximum number of tenant graphs to keep in memory
@@ -224,7 +223,7 @@ class InMemoryGraphStore(GraphStore):
 
     def _get_entities_dict(self, tenant_id: Optional[str], update_lru: bool = True) -> Dict[str, Entity]:
         """Get entities dict for a tenant.
-        
+
         Args:
             tenant_id: Tenant ID or None for global namespace
             update_lru: Whether to update LRU tracking (default: True)
@@ -240,7 +239,7 @@ class InMemoryGraphStore(GraphStore):
 
     def _get_relations_dict(self, tenant_id: Optional[str], update_lru: bool = True) -> Dict[str, Relation]:
         """Get relations dict for a tenant.
-        
+
         Args:
             tenant_id: Tenant ID or None for global namespace
             update_lru: Whether to update LRU tracking (default: True)
@@ -537,40 +536,6 @@ class InMemoryGraphStore(GraphStore):
                     relations.append(relation)
 
         return relations
-
-    async def get_all_entities(
-        self,
-        entity_type: Optional[str] = None,
-        limit: Optional[int] = None,
-        context: Optional[TenantContext] = None,
-    ) -> List[Entity]:
-        """
-        Get all entities, optionally filtered by type
-
-        Args:
-            entity_type: Optional filter by entity type
-            limit: Optional limit on number of entities
-            context: Optional tenant context for multi-tenant isolation
-
-        Returns:
-            List of entities
-        """
-        if not self._initialized:
-            return []
-
-        tenant_id = self._get_tenant_id(context)
-        entities_dict = self._get_entities_dict(tenant_id)
-        entities = list(entities_dict.values())
-
-        # Filter by entity type if specified
-        if entity_type:
-            entities = [e for e in entities if e.entity_type == entity_type]
-
-        # Apply limit if specified
-        if limit:
-            entities = entities[:limit]
-
-        return entities
 
     # =========================================================================
     # BULK OPERATIONS - Optimized implementations
@@ -1120,10 +1085,7 @@ class InMemoryGraphStore(GraphStore):
                 return [entities_dict[eid] for eid in entity_ids if eid in entities_dict]
 
         # Fall back to scan
-        return [
-            entity for entity in entities_dict.values()
-            if entity.properties.get(property_name) == value
-        ]
+        return [entity for entity in entities_dict.values() if entity.properties.get(property_name) == value]
 
     def add_indexed_property(self, property_name: str, context: Optional[TenantContext] = None) -> None:
         """
@@ -1144,9 +1106,7 @@ class InMemoryGraphStore(GraphStore):
         # Index existing entities
         for entity_id, entity in entities_dict.items():
             if property_name in entity.properties:
-                self._property_optimizer.property_index.add_to_index(
-                    entity_id, property_name, entity.properties[property_name]
-                )
+                self._property_optimizer.property_index.add_to_index(entity_id, property_name, entity.properties[property_name])
 
     async def get_all_entities(
         self,
@@ -1188,10 +1148,7 @@ class InMemoryGraphStore(GraphStore):
 
     def __str__(self) -> str:
         stats = self.get_stats()
-        return (
-            f"InMemoryGraphStore(global_entities={stats['entities']}, "
-            f"global_relations={stats['relations']}, tenant_count={stats['tenant_count']})"
-        )
+        return f"InMemoryGraphStore(global_entities={stats['entities']}, " f"global_relations={stats['relations']}, tenant_count={stats['tenant_count']})"
 
     def __repr__(self) -> str:
         return self.__str__()

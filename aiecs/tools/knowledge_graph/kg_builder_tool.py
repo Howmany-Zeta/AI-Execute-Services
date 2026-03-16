@@ -4,7 +4,7 @@ Knowledge Graph Builder Tool
 AIECS tool for building knowledge graphs from text and documents.
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, cast
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -111,7 +111,7 @@ class KnowledgeGraphBuilderTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the Knowledge Graph Builder Tool
-        
+
         Automatically reads from environment variables with KG_BUILDER_ prefix.
         Example: KG_BUILDER_CHUNK_SIZE -> chunk_size
         """
@@ -206,13 +206,16 @@ class KnowledgeGraphBuilderTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: KnowledgeGraphBuilderTool.Config = cast(
+            KnowledgeGraphBuilderTool.Config,
+            self._config_obj if self._config_obj is not None else self.Config(),
+        )
 
         # Initialize graph store (in-memory for now)
         # In production, this would be configurable (SQLite, PostgreSQL, etc.)
-        self.graph_store = None
-        self.graph_builder = None
-        self.document_builder = None
+        self.graph_store: Optional[InMemoryGraphStore] = None
+        self.graph_builder: Optional[GraphBuilder] = None
+        self.document_builder: Optional[DocumentGraphBuilder] = None
         self._initialized = False
 
     async def _initialize(self):
@@ -295,6 +298,7 @@ class KnowledgeGraphBuilderTool(BaseTool):
         source = kwargs.get("source", "unknown")
 
         # Build graph
+        assert self.graph_builder is not None
         result = await self.graph_builder.build_from_text(text=text, source=source)
 
         return {
@@ -327,6 +331,7 @@ class KnowledgeGraphBuilderTool(BaseTool):
             }
 
         # Build graph from document
+        assert self.document_builder is not None
         result = await self.document_builder.build_from_document(document_path)
 
         return {
@@ -380,6 +385,7 @@ class KnowledgeGraphBuilderTool(BaseTool):
             )
 
             # Create structured data pipeline
+            assert self.graph_store is not None
             pipeline = StructuredDataPipeline(
                 mapping=schema_mapping,
                 graph_store=self.graph_store,
@@ -428,6 +434,7 @@ class KnowledgeGraphBuilderTool(BaseTool):
             Statistics dictionary
         """
         # Handle both async and sync get_stats methods
+        assert self.graph_store is not None
         if hasattr(self.graph_store.get_stats, "__call__"):
             stats_result = self.graph_store.get_stats()
             # Check if it's a coroutine

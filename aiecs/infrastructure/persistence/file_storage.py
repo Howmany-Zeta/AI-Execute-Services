@@ -23,17 +23,10 @@ try:
     GCS_AVAILABLE = True
 except ImportError:
     GCS_AVAILABLE = False
-    from typing import Any, TYPE_CHECKING
-    if TYPE_CHECKING:
-        storage: Any  # type: ignore[assignment,no-redef]
-        NotFound: Any  # type: ignore[assignment,no-redef]
-        GoogleCloudError: Any  # type: ignore[assignment,no-redef]
-        DefaultCredentialsError: Any  # type: ignore[assignment,no-redef]
-    else:
-        storage = None  # type: ignore[assignment]
-        NotFound = Exception  # type: ignore[assignment]
-        GoogleCloudError = Exception  # type: ignore[assignment]
-        DefaultCredentialsError = Exception  # type: ignore[assignment]
+    storage = None
+    NotFound = Exception  # type: ignore[assignment, misc]
+    GoogleCloudError = Exception  # type: ignore[assignment, misc]
+    DefaultCredentialsError = Exception  # type: ignore[assignment, misc]
 
 from ..monitoring.global_metrics_manager import get_global_metrics
 
@@ -93,8 +86,8 @@ class FileStorage:
 
     def __init__(self, config: Dict[str, Any]):
         self.config = FileStorageConfig(config)
-        self._gcs_client = None
-        self._gcs_bucket = None
+        self._gcs_client: Optional[Any] = None
+        self._gcs_bucket: Optional[Any] = None
         self._cache: Dict[str, Any] = {}
         self._cache_timestamps: Dict[str, datetime] = {}
         self._initialized = False
@@ -292,7 +285,7 @@ class FileStorage:
                 if cache_time and (datetime.utcnow() - cache_time).total_seconds() < float(self.config.cache_ttl_seconds):
                     if self.metrics:
                         self.metrics.record_operation("cache_hit", True)
-                    return self._cache[key]["data"]
+                    return self._cache[key]["data"]  # type: ignore[no-any-return]
                 else:
                     # Remove expired cache entry
                     self._cache.pop(key, None)
@@ -312,7 +305,7 @@ class FileStorage:
                         self._cache[key] = {"data": data, "metadata": {}}
                         self._cache_timestamps[key] = datetime.utcnow()
 
-                    return data
+                    return data  # type: ignore[no-any-return]
 
             # Fallback to local storage
             if self.config.enable_local_fallback:
@@ -328,7 +321,7 @@ class FileStorage:
                         self._cache[key] = {"data": data, "metadata": {}}
                         self._cache_timestamps[key] = datetime.utcnow()
 
-                    return data
+                    return data  # type: ignore[no-any-return]
 
             if self.metrics:
                 self.metrics.record_operation("retrieve_not_found", False)
@@ -546,7 +539,7 @@ class FileStorage:
             return False
         try:
             blob = self._gcs_bucket.blob(key)
-            return blob.exists()
+            return bool(blob.exists())
 
         except Exception as e:
             logger.error(f"GCS exists check failed for key {key}: {e}")

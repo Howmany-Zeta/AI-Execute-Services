@@ -284,7 +284,6 @@ class DependencyFixer:
                 # Get environment path for environment-specific NLTK data storage
                 env_path = self._get_environment_path()
                 nltk_data_path: Optional[Path] = None
-                original_nltk_data = os.environ.get("NLTK_DATA")
 
                 if env_path:
                     # Create nltk_data directory in the environment
@@ -299,12 +298,7 @@ class DependencyFixer:
                     # Build Python command that sets NLTK_DATA if environment path is available
                     if nltk_data_path:
                         # Set NLTK_DATA environment variable in the subprocess
-                        python_code = (
-                            f"import os; "
-                            f"os.environ['NLTK_DATA'] = '{nltk_data_path}'; "
-                            f"import nltk; "
-                            f"nltk.download('{data_name}', quiet=True)"
-                        )
+                        python_code = f"import os; " f"os.environ['NLTK_DATA'] = '{nltk_data_path}'; " f"import nltk; " f"nltk.download('{data_name}', quiet=True)"
                     else:
                         python_code = f"import nltk; nltk.download('{data_name}', quiet=True)"
 
@@ -421,7 +415,7 @@ def main():
 
     # Import and run dependency checker first
     try:
-        from aiecs.scripts.dependance_check.dependency_checker import DependencyChecker  # type: ignore[import-untyped]
+        from aiecs.scripts.dependance_check.dependency_checker import DependencyChecker
 
         checker = DependencyChecker()
         tools = checker.check_all_dependencies()

@@ -142,6 +142,7 @@ class LLMEntityExtractor(EntityExtractor):
             # Cast to LLMClientProtocol since BaseLLMClient implements the protocol
             from typing import cast
             from aiecs.llm.protocols import LLMClientProtocol
+
             llm_client = cast(LLMClientProtocol, client) if client else None
         else:
             llm_client = None
@@ -186,6 +187,7 @@ class LLMEntityExtractor(EntityExtractor):
             if self.llm_client is not None:
                 # Convert string prompt to list of LLMMessage
                 from aiecs.llm.clients.base_client import LLMMessage
+
                 messages = [LLMMessage(role="user", content=prompt)]
                 response = await self.llm_client.generate_text(
                     messages=messages,

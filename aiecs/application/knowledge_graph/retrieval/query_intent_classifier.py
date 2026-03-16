@@ -210,4 +210,3 @@ Respond with ONLY the strategy name (e.g., "MULTI_HOP"). No explanation needed."
         """Clear the classification cache."""
         self._cache.clear()
         logger.debug("Classification cache cleared")
-

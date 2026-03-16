@@ -8,8 +8,8 @@ Supports configurable dictionaries and bidirectional matching.
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
-from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Set
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AbbreviationMatch:
     """Result of abbreviation lookup"""
+
     abbreviation: str
     full_forms: List[str]
     category: Optional[str] = None  # e.g., "organization", "geographic", "technical"
@@ -25,27 +26,27 @@ class AbbreviationMatch:
 class AbbreviationExpander:
     """
     Expand and match abbreviations/acronyms.
-    
+
     Supports:
     - Configurable abbreviation dictionaries (JSON format)
     - Common patterns (organization, geographic, technical)
     - Bidirectional matching (abbreviation ↔ full form)
     - Domain-specific dictionary loading
-    
+
     Example:
         ```python
         expander = AbbreviationExpander()
-        
+
         # Load common abbreviations
         expander.load_common_abbreviations()
-        
+
         # Add custom abbreviation
         expander.add_abbreviation("MIT", ["Massachusetts Institute of Technology"])
-        
+
         # Bidirectional lookup
         match = expander.lookup("MIT")
         assert "Massachusetts Institute of Technology" in match.full_forms
-        
+
         match = expander.lookup("Massachusetts Institute of Technology")
         assert match.abbreviation == "MIT"
         ```
@@ -68,7 +69,7 @@ class AbbreviationExpander:
     ) -> None:
         """
         Add an abbreviation mapping.
-        
+
         Args:
             abbreviation: The abbreviation (e.g., "MIT")
             full_forms: List of full forms (e.g., ["Massachusetts Institute of Technology"])
@@ -76,10 +77,10 @@ class AbbreviationExpander:
         """
         abbrev_key = abbreviation.lower()
         self._abbrev_to_full[abbrev_key] = full_forms
-        
+
         if category:
             self._categories[abbrev_key] = category
-        
+
         # Build reverse index for bidirectional lookup
         for full_form in full_forms:
             self._full_to_abbrev[full_form.lower()] = abbreviation
@@ -87,19 +88,19 @@ class AbbreviationExpander:
     def lookup(self, text: str) -> Optional[AbbreviationMatch]:
         """
         Look up an abbreviation or full form.
-        
+
         Supports bidirectional matching:
         - "MIT" → full forms
         - "Massachusetts Institute of Technology" → abbreviation
-        
+
         Args:
             text: The text to look up
-            
+
         Returns:
             AbbreviationMatch if found, None otherwise
         """
         text_lower = text.lower()
-        
+
         # Try abbreviation -> full form
         if text_lower in self._abbrev_to_full:
             return AbbreviationMatch(
@@ -107,7 +108,7 @@ class AbbreviationExpander:
                 full_forms=self._abbrev_to_full[text_lower],
                 category=self._categories.get(text_lower),
             )
-        
+
         # Try full form -> abbreviation
         if text_lower in self._full_to_abbrev:
             abbrev = self._full_to_abbrev[text_lower]
@@ -117,21 +118,21 @@ class AbbreviationExpander:
                 full_forms=self._abbrev_to_full.get(abbrev_lower, [text]),
                 category=self._categories.get(abbrev_lower),
             )
-        
+
         return None
 
     def get_all_forms(self, text: str) -> Set[str]:
         """
         Get all equivalent forms of a text (abbreviation + full forms).
-        
+
         Args:
             text: The text to expand
-            
+
         Returns:
             Set of all equivalent forms (including original)
         """
         forms = {text, text.lower()}
-        
+
         match = self.lookup(text)
         if match:
             forms.add(match.abbreviation)
@@ -139,17 +140,17 @@ class AbbreviationExpander:
             for full_form in match.full_forms:
                 forms.add(full_form)
                 forms.add(full_form.lower())
-        
+
         return forms
 
     def matches(self, text1: str, text2: str) -> bool:
         """
         Check if two texts match via abbreviation expansion.
-        
+
         Args:
             text1: First text
             text2: Second text
-            
+
         Returns:
             True if texts match (same abbreviation or same full form)
         """
@@ -288,10 +289,7 @@ class AbbreviationExpander:
         Returns:
             List of abbreviations in that category
         """
-        return [
-            abbrev for abbrev, cat in self._categories.items()
-            if cat == category
-        ]
+        return [abbrev for abbrev, cat in self._categories.items() if cat == category]
 
     def size(self) -> int:
         """Get number of abbreviations in the expander"""
@@ -324,4 +322,3 @@ class AbbreviationExpander:
 
         with open(path, "w", encoding="utf-8") as f:
             json.dump(self._abbrev_to_full, f, indent=2)
-

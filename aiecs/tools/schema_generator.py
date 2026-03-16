@@ -23,7 +23,7 @@ def _normalize_type(param_type: Type) -> Type:
     # Handle None type
     if param_type is type(None):
         return Any
-    
+
     # Handle generics (List, Dict, Optional, Union, etc.)
     origin = get_origin(param_type)
     if origin is not None:
@@ -41,7 +41,7 @@ def _normalize_type(param_type: Type) -> Type:
             else:
                 # Union[None] -> Any
                 return Any
-        
+
         # Handle List[T], Dict[K, V], Tuple[T, ...], etc.
         # For now, simplify to List[Any] or Dict[str, Any]
         if origin is list or origin is List:
@@ -51,7 +51,7 @@ def _normalize_type(param_type: Type) -> Type:
         else:
             # Other generics -> Any
             return Any
-    
+
     # Get type name
     type_name = getattr(param_type, "__name__", str(param_type))
     type_str = str(param_type)
@@ -59,12 +59,12 @@ def _normalize_type(param_type: Type) -> Type:
     # Check if it's a pandas type
     if "DataFrame" in type_name or "Series" in type_name or "pandas" in type_str.lower():
         return Any
-    
+
     # Check for other complex types that might not be supported
     # numpy arrays, scipy types, etc.
     if "numpy" in type_str.lower() or "scipy" in type_str.lower():
         return Any
-    
+
     # Check for callable types (functions)
     if "Callable" in type_str or callable(param_type) and not isinstance(param_type, type):
         return Any
@@ -134,8 +134,8 @@ def _extract_param_description_from_docstring(docstring: str, param_name: str) -
                     # Remove possible type annotation (type) or [type]
                     param_part = parts[0].strip()
                     # Handle param_name (type): or param_name [type]:
-                    param_part = re.sub(r'\s*\([^)]*\)\s*$', '', param_part)  # Remove (type)
-                    param_part = re.sub(r'\s*\[[^\]]*\]\s*$', '', param_part)  # Remove [type]
+                    param_part = re.sub(r"\s*\([^)]*\)\s*$", "", param_part)  # Remove (type)
+                    param_part = re.sub(r"\s*\[[^\]]*\]\s*$", "", param_part)  # Remove [type]
                     param_part = param_part.strip()
 
                     current_param = param_part
@@ -200,7 +200,7 @@ def generate_schema_from_method(method: Callable[..., Any], method_name: str, ba
         schema_description = first_line if first_line else f"Execute {method_name} operation"
 
         # Build field definitions
-        field_definitions = {}
+        field_definitions: Dict[str, Any] = {}
 
         for param_name, param in sig.parameters.items():
             # Skip self parameter
@@ -209,11 +209,11 @@ def generate_schema_from_method(method: Callable[..., Any], method_name: str, ba
 
             # Get parameter type and normalize
             param_type = type_hints.get(param_name, Any)
-            
+
             # Handle Optional[T] explicitly - check if default is None or type is Optional
             has_default = param.default != inspect.Parameter.empty
             default_value = param.default if has_default else inspect.Parameter.empty
-            
+
             # Check if type is Optional or Union with None
             origin = get_origin(param_type)
             is_optional = False
@@ -225,10 +225,10 @@ def generate_schema_from_method(method: Callable[..., Any], method_name: str, ba
                     non_none_args = [arg for arg in args if arg is not type(None)]
                     if non_none_args:
                         param_type = non_none_args[0]
-            
+
             # Normalize the type
             param_type = _normalize_type(param_type)
-            
+
             # If default is None or type is Optional, make it Optional
             if default_value is None or (has_default and default_value == inspect.Parameter.empty and is_optional):
                 param_type = Optional[param_type]
@@ -293,7 +293,7 @@ def generate_schema_from_method(method: Callable[..., Any], method_name: str, ba
         # Create Schema class, allow arbitrary types
         # In Pydantic v2, create_model signature may vary - use type ignore for dynamic model creation
         try:
-            schema_class = create_model(  # type: ignore[call-overload]
+            schema_class = create_model(
                 schema_name,
                 __base__=base_class,
                 __doc__=schema_description,
@@ -301,7 +301,7 @@ def generate_schema_from_method(method: Callable[..., Any], method_name: str, ba
             )
             # Set model_config if base_class supports it
             if hasattr(schema_class, "model_config"):
-                schema_class.model_config = ConfigDict(arbitrary_types_allowed=True)  # type: ignore[assignment]
+                schema_class.model_config = ConfigDict(arbitrary_types_allowed=True)
 
             # Validate the generated schema
             _validate_generated_schema(schema_class, method_name, field_definitions)
@@ -317,33 +317,29 @@ def generate_schema_from_method(method: Callable[..., Any], method_name: str, ba
         return None
 
 
-def _validate_generated_schema(
-    schema_class: Type[BaseModel],
-    method_name: str,
-    field_definitions: Dict[str, Any]
-) -> None:
+def _validate_generated_schema(schema_class: Type[BaseModel], method_name: str, field_definitions: Dict[str, Any]) -> None:
     """
     Validate that a generated schema is a valid Pydantic model.
-    
+
     Args:
         schema_class: The generated schema class
         method_name: Name of the method for error reporting
         field_definitions: The field definitions used to create the schema
-    
+
     Raises:
         ValueError: If the schema is invalid
     """
     # Check it's a subclass of BaseModel
     if not issubclass(schema_class, BaseModel):
         raise ValueError(f"Generated schema for {method_name} is not a BaseModel subclass")
-    
+
     # Check it has model_fields
     if not hasattr(schema_class, "model_fields"):
         raise ValueError(f"Generated schema for {method_name} has no model_fields")
-    
+
     # Try to instantiate with minimal valid data
     try:
-        test_data = {}
+        test_data: Dict[str, Any] = {}
         for field_name, field_info in schema_class.model_fields.items():
             if not field_info.is_required():
                 # Skip optional fields for validation
@@ -364,7 +360,7 @@ def _validate_generated_schema(
                 test_data[field_name] = {}
             else:
                 test_data[field_name] = None
-        
+
         # Try to create an instance
         instance = schema_class(**test_data)
         if not isinstance(instance, BaseModel):

@@ -16,8 +16,8 @@ IMPORTANT - arXiv API Rules:
 
 import logging
 import xml.etree.ElementTree as ET
-from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import quote
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 
 from aiecs.tools.apisource.providers.base import (
     BaseAPIProvider,
@@ -293,10 +293,7 @@ class ArxivProvider(BaseAPIProvider):
 
         # Set User-Agent header as required by arXiv API etiquette
         # Use same format as Wikipedia provider for consistency
-        user_agent = self.config.get(
-            "user_agent",
-            "AIECS-APISource/2.0 (https://github.com/your-org/aiecs; iretbl@gmail.com)"
-        )
+        user_agent = self.config.get("user_agent", "AIECS-APISource/2.0 (https://github.com/your-org/aiecs; iretbl@gmail.com)")
         headers = {
             "User-Agent": user_agent,
         }
@@ -355,12 +352,7 @@ class ArxivProvider(BaseAPIProvider):
 
         # Make API request with proper headers
         try:
-            response = requests.get(
-                self.BASE_URL,
-                params=query_params,
-                headers=headers,
-                timeout=timeout
-            )
+            response = requests.get(self.BASE_URL, params=query_params, headers=headers, timeout=timeout)
             response.raise_for_status()
 
             # Parse Atom XML response
@@ -393,7 +385,7 @@ class ArxivProvider(BaseAPIProvider):
 
             # For single paper lookup, return just the paper
             if operation == "get_paper_by_id":
-                result_data = papers[0] if papers else {}
+                result_data: Union[Dict[str, Any], List[Dict[str, Any]]] = papers[0] if papers else {}
             else:
                 result_data = papers
 
@@ -509,4 +501,3 @@ class ArxivProvider(BaseAPIProvider):
         }
 
         return schemas.get(operation)
-

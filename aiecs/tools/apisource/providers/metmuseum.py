@@ -383,15 +383,14 @@ class MetMuseumProvider(BaseAPIProvider):
         # Build endpoint based on operation
         if operation == "get_departments":
             endpoint = f"{self.BASE_URL}/departments"
-            query_params = {}
+            query_params: Dict[str, Any] = {}
 
         elif operation == "get_object":
             object_id = params["object_id"]
             endpoint = f"{self.BASE_URL}/objects/{object_id}"
             query_params = {}
 
-        elif operation in ["search_objects", "search_by_artist", "search_by_medium",
-                          "search_by_culture", "search_highlight_objects", "get_objects_by_department"]:
+        elif operation in ["search_objects", "search_by_artist", "search_by_medium", "search_by_culture", "search_highlight_objects", "get_objects_by_department"]:
             endpoint = f"{self.BASE_URL}/search"
             query_params = {}
 
@@ -466,8 +465,7 @@ class MetMuseumProvider(BaseAPIProvider):
                 result_data = data.get("departments", [])
             elif operation == "get_object":
                 result_data = data
-            elif operation in ["search_objects", "search_by_artist", "search_by_medium",
-                              "search_by_culture", "search_highlight_objects", "get_objects_by_department"]:
+            elif operation in ["search_objects", "search_by_artist", "search_by_medium", "search_by_culture", "search_highlight_objects", "get_objects_by_department"]:
                 # Search operations return objectIDs
                 # Note: objectIDs can be None if no results found
                 object_ids = data.get("objectIDs") or []
@@ -484,10 +482,7 @@ class MetMuseumProvider(BaseAPIProvider):
 
                 for obj_id in object_ids[:max_detailed_fetch]:
                     try:
-                        obj_response = requests.get(
-                            f"{self.BASE_URL}/objects/{obj_id}",
-                            timeout=timeout
-                        )
+                        obj_response = requests.get(f"{self.BASE_URL}/objects/{obj_id}", timeout=timeout)
                         if obj_response.status_code == 200:
                             detailed_objects.append(obj_response.json())
                     except Exception as e:
@@ -771,10 +766,7 @@ class MetMuseumProvider(BaseAPIProvider):
 
         # If object_id provided, fetch the object to get image URL
         if not image_url and object_id:
-            obj_response = requests.get(
-                f"{self.BASE_URL}/objects/{object_id}",
-                timeout=timeout
-            )
+            obj_response = requests.get(f"{self.BASE_URL}/objects/{object_id}", timeout=timeout)
             obj_response.raise_for_status()
             obj_data = obj_response.json()
             image_url = obj_data.get("primaryImage")
@@ -800,7 +792,7 @@ class MetMuseumProvider(BaseAPIProvider):
         response.raise_for_status()
 
         # Save to file
-        with open(output_path, 'wb') as f:
+        with open(output_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
@@ -821,4 +813,3 @@ class MetMuseumProvider(BaseAPIProvider):
             data=result_data,
             source=f"Met Museum Image - {image_url}",
         )
-

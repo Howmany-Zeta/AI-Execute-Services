@@ -37,7 +37,7 @@ def format_conversation_history(
         lines = []
         for i, msg in enumerate(history):
             lines.append(f"[{i+1}] {msg.role.upper()}")
-            lines.append(msg.content)
+            lines.append(msg.content or "")
             lines.append("")  # Empty line between messages
         return "\n".join(lines)
 

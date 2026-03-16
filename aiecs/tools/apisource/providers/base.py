@@ -17,7 +17,7 @@ import time
 from abc import ABC, abstractmethod
 from datetime import datetime
 from threading import Lock
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from aiecs.tools.apisource.monitoring.metrics import DetailedMetrics
 from aiecs.tools.apisource.reliability.error_handler import SmartErrorHandler
@@ -512,7 +512,7 @@ class BaseAPIProvider(ABC):
 
         Returns:
             API key or None if not found
-        
+
         Note: When used through APISourceTool, API keys are loaded from .env files
         via BaseSettings and passed via config dict. This fallback is for backward
         compatibility and independent provider usage.
@@ -521,13 +521,13 @@ class BaseAPIProvider(ABC):
 
         # Try config first (primary path - API keys come from APISourceTool's BaseSettings)
         if "api_key" in self.config:
-            return self.config["api_key"]
+            return cast(str, self.config["api_key"])
 
         # Fallback: Try environment variable (ensures .env files are loaded)
         # Use ToolConfigLoader to ensure .env files are loaded if not already
         try:
             from aiecs.config.tool_config import get_tool_config_loader
-            
+
             loader = get_tool_config_loader()
             loader.load_env_config()  # Ensures .env files are loaded
         except Exception:
@@ -535,7 +535,7 @@ class BaseAPIProvider(ABC):
             try:
                 from dotenv import load_dotenv
                 from pathlib import Path
-                
+
                 # Try to load .env files from common locations
                 for env_file in [".env", ".env.local"]:
                     env_path = Path(env_file)
@@ -640,7 +640,7 @@ class BaseAPIProvider(ABC):
 
             self.logger.info(f"Successfully executed {self.name}.{operation} " f"in {response_time_ms:.0f}ms ({record_count} records)")
 
-            return result
+            return cast(Dict[str, Any], result)
         else:
             # All retries failed
             error_info = execution_result["error"]

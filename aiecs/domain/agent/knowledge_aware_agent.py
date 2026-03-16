@@ -177,11 +177,7 @@ class KnowledgeAwareAgent(HybridAgent):
         self._cache_misses: int = 0
 
         # Graph metrics
-        self._graph_metrics: GraphMetrics = GraphMetrics(
-            min_graph_query_time=None,
-            max_graph_query_time=None,
-            last_reset_at=None
-        )
+        self._graph_metrics: GraphMetrics = GraphMetrics(min_graph_query_time=None, max_graph_query_time=None, last_reset_at=None)
 
         # Prometheus metrics (initialized lazily)
         self._prometheus_metrics: Optional[Dict[str, Any]] = None
@@ -249,6 +245,7 @@ class KnowledgeAwareAgent(HybridAgent):
                 # Cast to LLMClientProtocol since BaseLLMClient implements the protocol
                 from typing import cast
                 from aiecs.llm.protocols import LLMClientProtocol
+
                 llm_client_protocol = cast(LLMClientProtocol, self.llm_client)
                 self._entity_extractor = LLMEntityExtractor(
                     schema=None,  # No schema constraint for now
@@ -366,18 +363,14 @@ Use graph reasoning proactively when questions involve:
 
         # Check if strategy selection LLM is configured
         config = self.get_config()
-        if (
-            config.strategy_selection_llm_provider is not None
-            and config.strategy_selection_llm_provider.strip()
-        ):
+        if config.strategy_selection_llm_provider is not None and config.strategy_selection_llm_provider.strip():
             try:
                 # Resolve LLM client from provider name
-                client = LLMClientFactory.get_client(
-                    config.strategy_selection_llm_provider
-                )
+                client = LLMClientFactory.get_client(config.strategy_selection_llm_provider)
                 # Cast to LLMClientProtocol since BaseLLMClient implements the protocol
                 from typing import cast
                 from aiecs.llm.protocols import LLMClientProtocol
+
                 llm_client = cast(LLMClientProtocol, client) if client else None
 
                 # Create classifier with custom client
@@ -386,17 +379,11 @@ Use graph reasoning proactively when questions involve:
                     enable_caching=True,
                 )
 
-                logger.info(
-                    f"Created QueryIntentClassifier with provider: "
-                    f"{config.strategy_selection_llm_provider}"
-                )
+                logger.info(f"Created QueryIntentClassifier with provider: " f"{config.strategy_selection_llm_provider}")
                 return classifier
 
             except Exception as e:
-                logger.warning(
-                    f"Failed to create QueryIntentClassifier with custom LLM: {e}, "
-                    f"falling back to rule-based classification"
-                )
+                logger.warning(f"Failed to create QueryIntentClassifier with custom LLM: {e}, " f"falling back to rule-based classification")
                 # Fall back to rule-based classifier (no LLM client)
                 return QueryIntentClassifier(llm_client=None, enable_caching=True)
         else:
@@ -531,12 +518,14 @@ Use graph reasoning proactively when questions involve:
             if any(word in task.lower() for word in query.lower().split()):
                 confidence = kg_context.get("confidence", 0.0)
                 timestamp = kg_context.get("timestamp")
-                relevant_knowledge.append({
-                    "query": query,
-                    "answer": kg_context['answer'],
-                    "confidence": confidence,
-                    "timestamp": timestamp,
-                })
+                relevant_knowledge.append(
+                    {
+                        "query": query,
+                        "answer": kg_context["answer"],
+                        "confidence": confidence,
+                        "timestamp": timestamp,
+                    }
+                )
 
         if relevant_knowledge:
             # Prioritize knowledge by confidence (relevance) and recency
@@ -551,8 +540,9 @@ Use graph reasoning proactively when questions involve:
                         if data.get("timestamp"):
                             try:
                                 from dateutil import parser  # type: ignore[import-untyped]
+
                                 self.created_at = parser.parse(data["timestamp"])
-                            except:
+                            except Exception:
                                 pass
 
                 knowledge_items.append((KnowledgeItem(item), item["confidence"]))
@@ -568,9 +558,7 @@ Use graph reasoning proactively when questions involve:
             formatted_knowledge = []
             for kg_item, priority_score in prioritized[:3]:
                 data = kg_item.data
-                formatted_knowledge.append(
-                    f"- {data['query']}: {data['answer']} (confidence: {data['confidence']:.2f})"
-                )
+                formatted_knowledge.append(f"- {data['query']}: {data['answer']} (confidence: {data['confidence']:.2f})")
 
             knowledge_section = "\n\nRELEVANT KNOWLEDGE FROM GRAPH:\n" + "\n".join(formatted_knowledge)
             return task + knowledge_section
@@ -689,9 +677,7 @@ Use graph reasoning proactively when questions involve:
         if self.graph_store is not None and self.enable_graph_reasoning:
             try:
                 event_callback = context.get("_knowledge_event_callback")
-                retrieved_knowledge = await self._retrieve_relevant_knowledge(
-                    task, context, 0, event_callback
-                )
+                retrieved_knowledge = await self._retrieve_relevant_knowledge(task, context, 0, event_callback)
                 if retrieved_knowledge:
                     knowledge_str = self._format_retrieved_knowledge(retrieved_knowledge)
                     augmented_task = task + "\n\nRETRIEVED KNOWLEDGE:\n" + knowledge_str
@@ -700,9 +686,7 @@ Use graph reasoning proactively when questions involve:
 
         return await super()._tool_loop(augmented_task, context)
 
-    async def _tool_loop_streaming(
-        self, task: str, context: Dict[str, Any]
-    ) -> AsyncIterator[Dict[str, Any]]:
+    async def _tool_loop_streaming(self, task: str, context: Dict[str, Any]) -> AsyncIterator[Dict[str, Any]]:
         """
         Execute knowledge-augmented tool loop with streaming: RETRIEVE once, then delegate to parent.
         """
@@ -710,9 +694,7 @@ Use graph reasoning proactively when questions involve:
         if self.graph_store is not None and self.enable_graph_reasoning:
             try:
                 event_callback = context.get("_knowledge_event_callback")
-                retrieved_knowledge = await self._retrieve_relevant_knowledge(
-                    task, context, 0, event_callback
-                )
+                retrieved_knowledge = await self._retrieve_relevant_knowledge(task, context, 0, event_callback)
                 if retrieved_knowledge:
                     knowledge_str = self._format_retrieved_knowledge(retrieved_knowledge)
                     augmented_task = task + "\n\nRETRIEVED KNOWLEDGE:\n" + knowledge_str
@@ -722,13 +704,7 @@ Use graph reasoning proactively when questions involve:
         async for event in super()._tool_loop_streaming(augmented_task, context):
             yield event
 
-    async def _retrieve_relevant_knowledge(
-        self,
-        task: str,
-        context: Dict[str, Any],
-        iteration: int,
-        event_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None
-    ) -> List[Entity]:
+    async def _retrieve_relevant_knowledge(self, task: str, context: Dict[str, Any], iteration: int, event_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None) -> List[Entity]:
         """
         Retrieve relevant knowledge for the current reasoning step.
 
@@ -753,10 +729,7 @@ Use graph reasoning proactively when questions involve:
 
         # Circuit breaker: if open, return empty results immediately
         if self._circuit_breaker_open:
-            logger.warning(
-                f"Circuit breaker is OPEN - skipping knowledge retrieval "
-                f"(failures: {self._circuit_breaker_failures}/{self._circuit_breaker_threshold})"
-            )
+            logger.warning(f"Circuit breaker is OPEN - skipping knowledge retrieval " f"(failures: {self._circuit_breaker_failures}/{self._circuit_breaker_threshold})")
             return []
 
         # Start timing
@@ -764,12 +737,14 @@ Use graph reasoning proactively when questions involve:
 
         # Emit knowledge_retrieval_started event
         if event_callback:
-            await event_callback({
-                "type": "knowledge_retrieval_started",
-                "query": task,
-                "iteration": iteration,
-                "timestamp": datetime.utcnow().isoformat(),
-            })
+            await event_callback(
+                {
+                    "type": "knowledge_retrieval_started",
+                    "query": task,
+                    "iteration": iteration,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
 
         try:
             # Step 1: Extract entities from task description (with caching)
@@ -780,12 +755,14 @@ Use graph reasoning proactively when questions involve:
 
             # Emit entity_extraction_completed event
             if event_callback:
-                await event_callback({
-                    "type": "entity_extraction_completed",
-                    "entity_ids": seed_entity_ids if seed_entity_ids else [],
-                    "entity_count": len(seed_entity_ids) if seed_entity_ids else 0,
-                    "timestamp": datetime.utcnow().isoformat(),
-                })
+                await event_callback(
+                    {
+                        "type": "entity_extraction_completed",
+                        "entity_ids": seed_entity_ids if seed_entity_ids else [],
+                        "entity_count": len(seed_entity_ids) if seed_entity_ids else 0,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                )
 
             # Step 2: Determine retrieval strategy
             strategy = getattr(self._config, "retrieval_strategy", "hybrid")
@@ -801,12 +778,14 @@ Use graph reasoning proactively when questions involve:
 
                 # Emit knowledge_cache_hit event
                 if event_callback:
-                    await event_callback({
-                        "type": "knowledge_cache_hit",
-                        "cache_key": cache_key,
-                        "entity_count": len(cached_entities),
-                        "timestamp": datetime.utcnow().isoformat(),
-                    })
+                    await event_callback(
+                        {
+                            "type": "knowledge_cache_hit",
+                            "cache_key": cache_key,
+                            "entity_count": len(cached_entities),
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    )
 
                 # Update metrics
                 self._update_graph_metrics(
@@ -818,13 +797,15 @@ Use graph reasoning proactively when questions involve:
 
                 # Emit knowledge_retrieval_completed event
                 if event_callback:
-                    await event_callback({
-                        "type": "knowledge_retrieval_completed",
-                        "entity_count": len(cached_entities),
-                        "retrieval_time_ms": (time.time() - start_time) * 1000,
-                        "cache_hit": True,
-                        "timestamp": datetime.utcnow().isoformat(),
-                    })
+                    await event_callback(
+                        {
+                            "type": "knowledge_retrieval_completed",
+                            "entity_count": len(cached_entities),
+                            "retrieval_time_ms": (time.time() - start_time) * 1000,
+                            "cache_hit": True,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    )
 
                 return cached_entities
 
@@ -869,6 +850,7 @@ Use graph reasoning proactively when questions involve:
             # Step 7: Execute hybrid search with retry logic
             async def _execute_search():
                 """Execute search with retry support"""
+                assert self._hybrid_search is not None
                 return await self._hybrid_search.search(
                     query_embedding=query_embedding,
                     config=config,
@@ -888,17 +870,11 @@ Use graph reasoning proactively when questions involve:
             # Step 8: Extract entities from results
             entities = [entity for entity, score in results]
 
-            logger.debug(
-                f"Retrieved {len(entities)} entities using {search_mode.value} search "
-                f"(iteration {iteration})"
-            )
+            logger.debug(f"Retrieved {len(entities)} entities using {search_mode.value} search " f"(iteration {iteration})")
 
             # Reset circuit breaker on successful retrieval
             if self._circuit_breaker_failures > 0:
-                logger.info(
-                    f"Knowledge retrieval succeeded - resetting circuit breaker "
-                    f"(was at {self._circuit_breaker_failures} failures)"
-                )
+                logger.info(f"Knowledge retrieval succeeded - resetting circuit breaker " f"(was at {self._circuit_breaker_failures} failures)")
                 self._circuit_breaker_failures = 0
 
             # Step 9: Apply context prioritization and pruning
@@ -918,15 +894,9 @@ Use graph reasoning proactively when questions involve:
             )
 
             # Extract entities from (Entity, score) tuples for caching
-            pruned_entities = [
-                entity if isinstance(entity, Entity) else entity[0]
-                for entity in pruned_entities_with_scores
-            ]
+            pruned_entities = [entity if isinstance(entity, Entity) else entity[0] for entity in pruned_entities_with_scores]
 
-            logger.debug(
-                f"Context management: {len(entities)} → {len(prioritized_entities)} prioritized → "
-                f"{len(pruned_entities)} pruned"
-            )
+            logger.debug(f"Context management: {len(entities)} → {len(prioritized_entities)} prioritized → " f"{len(pruned_entities)} pruned")
 
             # Step 10: Cache the pruned results
             await self._cache_knowledge(cache_key, pruned_entities)
@@ -947,14 +917,16 @@ Use graph reasoning proactively when questions involve:
                 if results:
                     avg_score = sum(score for _, score in results) / len(results)
 
-                await event_callback({
-                    "type": "knowledge_retrieval_completed",
-                    "entity_count": len(pruned_entities),
-                    "retrieval_time_ms": query_time * 1000,
-                    "cache_hit": False,
-                    "average_relevance_score": avg_score,
-                    "timestamp": datetime.utcnow().isoformat(),
-                })
+                await event_callback(
+                    {
+                        "type": "knowledge_retrieval_completed",
+                        "entity_count": len(pruned_entities),
+                        "retrieval_time_ms": query_time * 1000,
+                        "cache_hit": False,
+                        "average_relevance_score": avg_score,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                )
 
             return pruned_entities
 
@@ -962,19 +934,12 @@ Use graph reasoning proactively when questions involve:
             # Increment circuit breaker failure count
             self._circuit_breaker_failures += 1
 
-            logger.error(
-                f"Error retrieving knowledge (failure {self._circuit_breaker_failures}/"
-                f"{self._circuit_breaker_threshold}): {e}",
-                exc_info=True
-            )
+            logger.error(f"Error retrieving knowledge (failure {self._circuit_breaker_failures}/" f"{self._circuit_breaker_threshold}): {e}", exc_info=True)
 
             # Open circuit breaker if threshold reached
             if self._circuit_breaker_failures >= self._circuit_breaker_threshold:
                 self._circuit_breaker_open = True
-                logger.error(
-                    f"Circuit breaker OPENED after {self._circuit_breaker_failures} consecutive failures. "
-                    f"Knowledge retrieval will be disabled until manual reset."
-                )
+                logger.error(f"Circuit breaker OPENED after {self._circuit_breaker_failures} consecutive failures. " f"Knowledge retrieval will be disabled until manual reset.")
 
             # Fallback to empty results
             return []
@@ -993,18 +958,13 @@ Use graph reasoning proactively when questions involve:
             # Use LLM client to generate embeddings
             # Check if client supports embeddings (check both method existence and callability)
             if not hasattr(self.llm_client, "get_embeddings"):
-                logger.warning(
-                    f"LLM client ({type(self.llm_client).__name__}) does not support embeddings. "
-                    f"Available methods: {[m for m in dir(self.llm_client) if not m.startswith('_')]}"
-                )
+                logger.warning(f"LLM client ({type(self.llm_client).__name__}) does not support embeddings. " f"Available methods: {[m for m in dir(self.llm_client) if not m.startswith('_')]}")
                 return None
-            
+
             # Verify the method is callable
             get_embeddings_method = getattr(self.llm_client, "get_embeddings", None)
             if not callable(get_embeddings_method):
-                logger.warning(
-                    f"LLM client ({type(self.llm_client).__name__}) has 'get_embeddings' attribute but it's not callable"
-                )
+                logger.warning(f"LLM client ({type(self.llm_client).__name__}) has 'get_embeddings' attribute but it's not callable")
                 return None
 
             embeddings = await self.llm_client.get_embeddings(
@@ -1053,9 +1013,7 @@ Use graph reasoning proactively when questions involve:
             # Update extraction metrics
             self._graph_metrics.entity_extraction_count += 1
             self._graph_metrics.total_extraction_time += extraction_time
-            self._graph_metrics.average_extraction_time = (
-                self._graph_metrics.total_extraction_time / self._graph_metrics.entity_extraction_count
-            )
+            self._graph_metrics.average_extraction_time = self._graph_metrics.total_extraction_time / self._graph_metrics.entity_extraction_count
 
             # Record to Prometheus if enabled
             if self._prometheus_enabled and self._prometheus_metrics is not None:
@@ -1137,29 +1095,39 @@ Use graph reasoning proactively when questions involve:
 
         # Keywords indicating graph traversal is preferred
         graph_keywords = [
-            "related", "connected", "relationship", "link", "path", "neighbor",
-            "upstream", "downstream", "dependency", "depends on", "used by",
-            "parent", "child", "ancestor", "descendant", "connected to"
+            "related",
+            "connected",
+            "relationship",
+            "link",
+            "path",
+            "neighbor",
+            "upstream",
+            "downstream",
+            "dependency",
+            "depends on",
+            "used by",
+            "parent",
+            "child",
+            "ancestor",
+            "descendant",
+            "connected to",
         ]
 
         # Keywords indicating semantic search is preferred
-        vector_keywords = [
-            "similar", "like", "about", "concept", "topic", "meaning",
-            "semantic", "understand", "explain", "describe", "what is"
-        ]
+        vector_keywords = ["similar", "like", "about", "concept", "topic", "meaning", "semantic", "understand", "explain", "describe", "what is"]
 
         # Check for graph keywords
         if any(keyword in task_lower for keyword in graph_keywords):
-            logger.debug(f"Auto-selected GRAPH mode based on task keywords")
+            logger.debug("Auto-selected GRAPH mode based on task keywords")
             return SearchMode.GRAPH_ONLY
 
         # Check for vector keywords
         if any(keyword in task_lower for keyword in vector_keywords):
-            logger.debug(f"Auto-selected VECTOR mode based on task keywords")
+            logger.debug("Auto-selected VECTOR mode based on task keywords")
             return SearchMode.VECTOR_ONLY
 
         # Default to hybrid mode
-        logger.debug(f"Auto-selected HYBRID mode (default)")
+        logger.debug("Auto-selected HYBRID mode (default)")
         return SearchMode.HYBRID
 
     def _generate_cache_key(self, tool_name: str, parameters: Dict[str, Any]) -> str:
@@ -1211,6 +1179,7 @@ Use graph reasoning proactively when questions involve:
 
             # Deserialize entities
             import json
+
             entity_dicts = json.loads(cached_data)
 
             # Convert back to Entity objects
@@ -1244,6 +1213,7 @@ Use graph reasoning proactively when questions involve:
         try:
             # Serialize entities to JSON
             import json
+
             entity_dicts = []
             for entity in entities:
                 entity_dict = {
@@ -1313,9 +1283,7 @@ Use graph reasoning proactively when questions involve:
 
         # Update timing metrics
         self._graph_metrics.total_graph_query_time += query_time
-        self._graph_metrics.average_graph_query_time = (
-            self._graph_metrics.total_graph_query_time / self._graph_metrics.total_graph_queries
-        )
+        self._graph_metrics.average_graph_query_time = self._graph_metrics.total_graph_query_time / self._graph_metrics.total_graph_queries
 
         # Update min/max query times
         if self._graph_metrics.min_graph_query_time is None or query_time < self._graph_metrics.min_graph_query_time:
@@ -1412,9 +1380,9 @@ Use graph reasoning proactively when questions involve:
                 entity_age = None
 
                 # Try to get timestamp from entity
-                if hasattr(entity, 'updated_at') and entity.updated_at:
+                if hasattr(entity, "updated_at") and entity.updated_at:
                     entity_age = (current_time - entity.updated_at).total_seconds()
-                elif hasattr(entity, 'created_at') and entity.created_at:
+                elif hasattr(entity, "created_at") and entity.created_at:
                     entity_age = (current_time - entity.created_at).total_seconds()
 
                 # Skip if too old
@@ -1427,10 +1395,7 @@ Use graph reasoning proactively when questions involve:
         pruned.sort(key=lambda x: x[1], reverse=True)
         pruned = pruned[:max_context_size]
 
-        logger.debug(
-            f"Pruned knowledge context: {len(entities)} → {len(pruned)} entities "
-            f"(threshold={relevance_threshold}, max_size={max_context_size})"
-        )
+        logger.debug(f"Pruned knowledge context: {len(entities)} → {len(pruned)} entities " f"(threshold={relevance_threshold}, max_size={max_context_size})")
 
         return pruned
 
@@ -1473,9 +1438,9 @@ Use graph reasoning proactively when questions involve:
         for item in entities:
             entity = item[0] if isinstance(item, tuple) else item
 
-            if hasattr(entity, 'updated_at') and entity.updated_at:
+            if hasattr(entity, "updated_at") and entity.updated_at:
                 timestamps.append(entity.updated_at)
-            elif hasattr(entity, 'created_at') and entity.created_at:
+            elif hasattr(entity, "created_at") and entity.created_at:
                 timestamps.append(entity.created_at)
 
         # Calculate recency scores
@@ -1502,31 +1467,24 @@ Use graph reasoning proactively when questions involve:
             # Calculate recency score (0.0 = oldest, 1.0 = newest)
             recency_score = 0.5  # Default middle value
 
-            if hasattr(entity, 'updated_at') and entity.updated_at:
+            if hasattr(entity, "updated_at") and entity.updated_at:
                 age_seconds = (newest_time - entity.updated_at).total_seconds()
                 recency_score = 1.0 - (age_seconds / time_range) if time_range > 0 else 1.0
-            elif hasattr(entity, 'created_at') and entity.created_at:
+            elif hasattr(entity, "created_at") and entity.created_at:
                 age_seconds = (newest_time - entity.created_at).total_seconds()
                 recency_score = 1.0 - (age_seconds / time_range) if time_range > 0 else 1.0
 
             # Combine scores with weights
-            priority_score = (
-                relevance_score * norm_relevance_weight +
-                recency_score * norm_recency_weight
-            )
+            priority_score = relevance_score * norm_relevance_weight + recency_score * norm_recency_weight
 
             prioritized.append((entity, priority_score))
 
         # Sort by priority score descending
         prioritized.sort(key=lambda x: x[1], reverse=True)
 
-        logger.debug(
-            f"Prioritized {len(prioritized)} entities "
-            f"(relevance_weight={norm_relevance_weight:.2f}, recency_weight={norm_recency_weight:.2f})"
-        )
+        logger.debug(f"Prioritized {len(prioritized)} entities " f"(relevance_weight={norm_relevance_weight:.2f}, recency_weight={norm_recency_weight:.2f})")
 
         return prioritized
-
 
     def get_cache_metrics(self) -> Dict[str, Any]:
         """
@@ -1572,11 +1530,7 @@ Use graph reasoning proactively when questions involve:
 
     def reset_graph_metrics(self) -> None:
         """Reset graph metrics to initial state."""
-        self._graph_metrics = GraphMetrics(
-            min_graph_query_time=None,
-            max_graph_query_time=None,
-            last_reset_at=None
-        )
+        self._graph_metrics = GraphMetrics(min_graph_query_time=None, max_graph_query_time=None, last_reset_at=None)
         logger.debug(f"Reset graph metrics for agent {self.agent_id}")
 
     def get_comprehensive_status(self) -> Dict[str, Any]:
@@ -1751,9 +1705,7 @@ Use graph reasoning proactively when questions involve:
         have been resolved.
         """
         if self._circuit_breaker_open:
-            logger.info(
-                f"Resetting circuit breaker (was at {self._circuit_breaker_failures} failures)"
-            )
+            logger.info(f"Resetting circuit breaker (was at {self._circuit_breaker_failures} failures)")
         self._circuit_breaker_open = False
         self._circuit_breaker_failures = 0
 

@@ -23,6 +23,7 @@ Supported cloud storage formats:
 
 import asyncio
 import logging
+import os
 from pathlib import Path
 from typing import Dict, Any, List
 
@@ -36,10 +37,13 @@ def setup_document_parser_with_cloud():
         from aiecs.tools.docs.document_parser_tool import DocumentParserTool
         
         # Configure with cloud storage settings
+        # gcs_bucket_name and gcs_project_id must be set via environment variables:
+        #   DOC_PARSER_GCS_BUCKET_NAME=<your-bucket-name>
+        #   DOC_PARSER_GCS_PROJECT_ID=<your-project-id>
         config = {
             "enable_cloud_storage": True,
-            "gcs_bucket_name": "aiecs-documents",
-            "gcs_project_id": "my-ai-project",
+            "gcs_bucket_name": os.environ.get("DOC_PARSER_GCS_BUCKET_NAME"),
+            "gcs_project_id": os.environ.get("DOC_PARSER_GCS_PROJECT_ID"),
             "max_file_size": 100 * 1024 * 1024,  # 100MB
             "timeout": 60
         }
@@ -274,8 +278,8 @@ def example_5_cloud_storage_configuration():
             "name": "Google Cloud Storage",
             "config": {
                 "enable_cloud_storage": True,
-                "gcs_bucket_name": "my-gcs-bucket",
-                "gcs_project_id": "my-gcp-project",
+                "gcs_bucket_name": os.environ.get("DOC_PARSER_GCS_BUCKET_NAME"),  # set via env var
+                "gcs_project_id": os.environ.get("DOC_PARSER_GCS_PROJECT_ID"),    # set via env var
                 "gcs_location": "US"
             }
         },
@@ -283,8 +287,8 @@ def example_5_cloud_storage_configuration():
             "name": "AWS S3 (via compatible interface)",
             "config": {
                 "enable_cloud_storage": True,
-                "gcs_bucket_name": "my-s3-bucket",  # Using GCS interface
-                "gcs_project_id": "aws-compat-project"
+                "gcs_bucket_name": os.environ.get("DOC_PARSER_GCS_BUCKET_NAME"),  # set via env var; Using GCS interface
+                "gcs_project_id": os.environ.get("DOC_PARSER_GCS_PROJECT_ID")     # set via env var
             }
         },
         {

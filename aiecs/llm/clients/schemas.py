@@ -24,9 +24,7 @@ class ToolCallItem(BaseModel):
 
     id: Optional[str] = None
     type: str = "function"
-    function: Union[ToolCallFunction, dict] = Field(
-        default_factory=lambda: ToolCallFunction()
-    )
+    function: Union[ToolCallFunction, dict] = Field(default_factory=lambda: ToolCallFunction())
 
     model_config = {"extra": "ignore"}
 
@@ -94,17 +92,21 @@ def sanitize_tool_calls(raw: Optional[List[Any]]) -> Optional[List[Dict[str, Any
         if validated:
             func = validated.function
             if isinstance(func, ToolCallFunction):
-                result.append({
-                    "id": validated.id,
-                    "type": validated.type,
-                    "function": {"name": func.name, "arguments": func.arguments},
-                })
+                result.append(
+                    {
+                        "id": validated.id,
+                        "type": validated.type,
+                        "function": {"name": func.name, "arguments": func.arguments},
+                    }
+                )
             else:
-                result.append({
-                    "id": validated.id,
-                    "type": validated.type,
-                    "function": func if isinstance(func, dict) else {},
-                })
+                result.append(
+                    {
+                        "id": validated.id,
+                        "type": validated.type,
+                        "function": func if isinstance(func, dict) else {},
+                    }
+                )
     return result if result else None
 
 

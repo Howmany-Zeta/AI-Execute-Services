@@ -7,15 +7,12 @@ during conversations.
 """
 
 import logging
-from typing import Dict, Any, Optional, List, TYPE_CHECKING
+from typing import Dict, Any, Optional, List, TYPE_CHECKING, cast
 from datetime import datetime
 
 from aiecs.infrastructure.graph_storage.base import GraphStore
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.relation import Relation
-
-if TYPE_CHECKING:
-    from aiecs.infrastructure.graph_storage.protocols import GraphMemoryMixinProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -174,17 +171,17 @@ class GraphMemoryMixin:
             # 2. If query provided, use embedding-based search (if available)
             if query and len(entities) < limit:
                 remaining_limit = limit - len(entities)
-                
+
                 # Try embedding-based search first
                 query_embedding = await self._generate_query_embedding(query)
-                
+
                 if query_embedding:
                     # Use vector search with embedding
                     try:
                         # Handle entity_types: vector_search takes single entity_type
                         # If multiple types specified, search each separately and combine
                         vector_results = []
-                        
+
                         if entity_types:
                             # Search each entity type separately
                             for entity_type in entity_types:
@@ -203,7 +200,7 @@ class GraphMemoryMixin:
                                 max_results=remaining_limit,
                                 score_threshold=0.0,
                             )
-                        
+
                         # Extract entities from (entity, score) tuples
                         for entity, score in vector_results:
                             if entity.id not in seen:
@@ -211,21 +208,21 @@ class GraphMemoryMixin:
                                 entities.append(entity)
                                 if len(entities) >= limit:
                                     break
-                                    
+
                         logger.debug(f"Retrieved {len(vector_results)} entities via vector search")
-                        
+
                     except Exception as e:
                         logger.warning(f"Vector search failed: {e}, falling back to text search")
                         # Fallback to text search below
                         query_embedding = None
-                
+
                 # Fallback to text search if embeddings unavailable or vector search failed
                 if not query_embedding and len(entities) < limit:
                     remaining_limit = limit - len(entities)
                     try:
                         # Handle entity_types: text_search takes single entity_type
                         text_results = []
-                        
+
                         if entity_types:
                             # Search each entity type separately
                             for entity_type in entity_types:
@@ -244,7 +241,7 @@ class GraphMemoryMixin:
                                 max_results=remaining_limit,
                                 score_threshold=0.0,
                             )
-                        
+
                         # Extract entities from (entity, score) tuples
                         for entity, score in text_results:
                             if entity.id not in seen:
@@ -252,9 +249,9 @@ class GraphMemoryMixin:
                                 entities.append(entity)
                                 if len(entities) >= limit:
                                     break
-                                    
+
                         logger.debug(f"Retrieved {len(text_results)} entities via text search")
-                        
+
                     except Exception as e:
                         logger.warning(f"Text search also failed: {e}")
 
@@ -271,12 +268,12 @@ class GraphMemoryMixin:
     async def _generate_query_embedding(self, query: str) -> Optional[List[float]]:
         """
         Generate embedding for query text using available embedding service.
-        
+
         Checks if the class has an llm_client attribute that supports get_embeddings.
-        
+
         Args:
             query: Query text to embed
-            
+
         Returns:
             Embedding vector or None if unavailable
         """
@@ -285,30 +282,30 @@ class GraphMemoryMixin:
             if not hasattr(self, "llm_client") or self.llm_client is None:
                 logger.debug("No llm_client available for embedding generation")
                 return None
-            
+
             # Check if llm_client supports get_embeddings
             if not hasattr(self.llm_client, "get_embeddings"):
                 logger.debug(f"LLM client ({type(self.llm_client).__name__}) does not support embeddings")
                 return None
-            
+
             # Verify the method is callable
             get_embeddings_method = getattr(self.llm_client, "get_embeddings", None)
             if not callable(get_embeddings_method):
-                logger.debug(f"LLM client has 'get_embeddings' attribute but it's not callable")
+                logger.debug("LLM client has 'get_embeddings' attribute but it's not callable")
                 return None
-            
+
             # Generate embedding
             embeddings = await self.llm_client.get_embeddings(
                 texts=[query],
                 model=None,  # Use default embedding model
             )
-            
+
             if embeddings and len(embeddings) > 0 and embeddings[0]:
                 logger.debug(f"Generated query embedding (dimension: {len(embeddings[0])})")
-                return embeddings[0]
-            
+                return cast(List[float], embeddings[0])
+
             return None
-            
+
         except NotImplementedError:
             logger.debug("Embedding generation not implemented for this LLM client")
             return None

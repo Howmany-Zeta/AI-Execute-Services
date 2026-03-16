@@ -532,14 +532,13 @@ class QueryStatisticsCollector:
         Returns:
             Query statistics
         """
-        from aiecs.infrastructure.graph_storage.base import GraphStore  # type: ignore[import-untyped]
-
         # Use duck typing to check if graph_store has required attributes
         # Some graph stores may not expose entities/relations directly
-        if not hasattr(graph_store, 'entities') or not hasattr(graph_store, 'relations'):
+        if not hasattr(graph_store, "entities") or not hasattr(graph_store, "relations"):
             # Try to use isinstance check as fallback
             try:
                 from aiecs.infrastructure.graph_storage.base import GraphStore as GS
+
                 if not isinstance(graph_store, GS):
                     logger.debug("Graph store does not expose entities/relations attributes, skipping statistics collection")
                     return QueryStatistics()

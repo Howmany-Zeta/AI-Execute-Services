@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List, AsyncGenerator, Union
+from typing import Dict, Any, Optional, List, AsyncGenerator, Union, cast
 from dataclasses import dataclass, field
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Lazy import to avoid circular dependency
-from aiecs.llm.clients.schemas import sanitize_tool_calls, sanitize_tools_list
+# Placed after logger to avoid circular dependency
+from aiecs.llm.clients.schemas import sanitize_tool_calls, sanitize_tools_list  # noqa: E402
 
 
 def _get_config_loader():
@@ -112,7 +112,7 @@ class RateLimitError(LLMClientError):
 
 class SafetyBlockError(LLMClientError):
     """Raised when content is blocked by safety filters"""
-    
+
     def __init__(
         self,
         message: str,
@@ -122,7 +122,7 @@ class SafetyBlockError(LLMClientError):
     ):
         """
         Initialize SafetyBlockError with detailed information.
-        
+
         Args:
             message: Error message
             block_reason: Reason for blocking (e.g., SAFETY, RECITATION, JAILBREAK)
@@ -133,7 +133,7 @@ class SafetyBlockError(LLMClientError):
         self.block_reason = block_reason
         self.block_type = block_type
         self.safety_ratings = safety_ratings or []
-    
+
     def __str__(self) -> str:
         """Return detailed error message"""
         msg = super().__str__()
@@ -159,9 +159,7 @@ class BaseLLMClient(ABC):
         self.provider_name = provider_name
         self.logger = logging.getLogger(f"{__name__}.{provider_name}")
 
-    def _sanitize_tool_calls(
-        self, tool_calls: Optional[List[Any]]
-    ) -> Optional[List[Dict[str, Any]]]:
+    def _sanitize_tool_calls(self, tool_calls: Optional[List[Any]]) -> Optional[List[Dict[str, Any]]]:
         """
         Validate and sanitize tool_calls using Pydantic schemas.
 
@@ -170,9 +168,7 @@ class BaseLLMClient(ABC):
         """
         return sanitize_tool_calls(tool_calls)
 
-    def _sanitize_tools(
-        self, tools: Optional[List[Any]]
-    ) -> List[Dict[str, Any]]:
+    def _sanitize_tools(self, tools: Optional[List[Any]]) -> List[Dict[str, Any]]:
         """
         Validate and sanitize tools list using Pydantic schemas.
 
@@ -330,7 +326,7 @@ class BaseLLMClient(ABC):
         """
         if model in token_costs:
             costs = token_costs[model]
-            return (input_tokens * costs["input"] + output_tokens * costs["output"]) / 1000
+            return float((input_tokens * costs["input"] + output_tokens * costs["output"]) / 1000)
         return 0.0
 
     def _estimate_cost_from_config(self, model_name: str, input_tokens: int, output_tokens: int) -> float:
@@ -352,7 +348,7 @@ class BaseLLMClient(ABC):
             if model_config and model_config.costs:
                 input_cost = (input_tokens * model_config.costs.input) / 1000
                 output_cost = (output_tokens * model_config.costs.output) / 1000
-                return input_cost + output_cost
+                return float(input_cost + output_cost)
             else:
                 self.logger.warning(f"No cost configuration found for model {model_name} " f"in provider {self.provider_name}")
                 return 0.0
@@ -386,7 +382,7 @@ class BaseLLMClient(ABC):
         """
         try:
             loader = _get_config_loader()
-            return loader.get_default_model(self.provider_name)
+            return cast(Optional[str], loader.get_default_model(self.provider_name))
         except Exception as e:
             self.logger.warning(f"Failed to get default model: {e}")
             return None

@@ -71,7 +71,7 @@ MIGRATION_ADD_TENANT_ID = """
 -- Add tenant_id column to entities if not exists
 ALTER TABLE entities ADD COLUMN tenant_id TEXT;
 
--- Add tenant_id column to relations if not exists  
+-- Add tenant_id column to relations if not exists
 ALTER TABLE relations ADD COLUMN tenant_id TEXT;
 
 -- Create tenant indexes
@@ -180,7 +180,7 @@ class SQLiteGraphStore(GraphStore):
     def _get_table_name(self, base_table: str, tenant_id: Optional[str]) -> str:
         """
         Get table name based on isolation mode.
-        
+
         For SHARED_SCHEMA: Returns base table name (filtering done via WHERE clause)
         For SEPARATE_SCHEMA: Returns prefixed table name (tenant_xxx_entities)
         """
@@ -193,15 +193,15 @@ class SQLiteGraphStore(GraphStore):
     async def _ensure_tenant_tables(self, tenant_id: str) -> None:
         """
         Ensure tenant-specific tables exist for SEPARATE_SCHEMA mode.
-        
+
         Creates tables like tenant_xxx_entities and tenant_xxx_relations.
         """
         if self.isolation_mode != TenantIsolationMode.SEPARATE_SCHEMA:
             return
-        
+
         if tenant_id in self._initialized_tenant_tables:
             return
-        
+
         if self.conn is None:
             raise RuntimeError("Database connection not initialized")
 
@@ -244,12 +244,12 @@ class SQLiteGraphStore(GraphStore):
     def _build_tenant_filter(self, tenant_id: Optional[str], table_alias: str = "") -> Tuple[str, List]:
         """
         Build SQL WHERE clause for tenant filtering in SHARED_SCHEMA mode.
-        
+
         Returns:
             Tuple of (WHERE clause fragment, parameters list)
         """
         prefix = f"{table_alias}." if table_alias else ""
-        
+
         if tenant_id is None:
             return f"{prefix}tenant_id IS NULL", []
         else:
@@ -271,7 +271,7 @@ class SQLiteGraphStore(GraphStore):
         Note: SQLite uses connection-level transactions. Within a transaction,
         commits are deferred until the context exits successfully.
         """
-        if not self._is_initialized:
+        if not self._is_initialized or self.conn is None:
             raise RuntimeError("GraphStore not initialized")
 
         # Track transaction state to prevent auto-commits in operations
@@ -296,7 +296,7 @@ class SQLiteGraphStore(GraphStore):
     async def add_entity(self, entity: Entity, context: Optional[TenantContext] = None) -> None:
         """
         Add entity to SQLite database
-        
+
         Args:
             entity: Entity to add
             context: Optional tenant context for multi-tenant isolation
@@ -307,11 +307,11 @@ class SQLiteGraphStore(GraphStore):
             raise RuntimeError("Database connection not initialized")
 
         tenant_id = self._get_tenant_id(context)
-        
+
         # Ensure tenant tables exist for SEPARATE_SCHEMA mode
         if tenant_id and self.isolation_mode == TenantIsolationMode.SEPARATE_SCHEMA:
             await self._ensure_tenant_tables(tenant_id)
-        
+
         table_name = self._get_table_name("entities", tenant_id)
 
         # Check if entity already exists (within tenant scope)
@@ -319,11 +319,8 @@ class SQLiteGraphStore(GraphStore):
             cursor = await self.conn.execute(f"SELECT id FROM {table_name} WHERE id = ?", (entity.id,))
         else:
             tenant_filter, params = self._build_tenant_filter(tenant_id)
-            cursor = await self.conn.execute(
-                f"SELECT id FROM {table_name} WHERE id = ? AND {tenant_filter}",
-                [entity.id] + params
-            )
-        
+            cursor = await self.conn.execute(f"SELECT id FROM {table_name} WHERE id = ? AND {tenant_filter}", [entity.id] + params)
+
         existing = await cursor.fetchone()
         if existing:
             raise ValueError(f"Entity with ID '{entity.id}' already exists")
@@ -353,14 +350,14 @@ class SQLiteGraphStore(GraphStore):
                 """,
                 (entity.id, tenant_id, entity.entity_type, properties_json, embedding_blob),
             )
-        
+
         if not self._in_transaction:
             await self.conn.commit()
 
     async def get_entity(self, entity_id: str, context: Optional[TenantContext] = None) -> Optional[Entity]:
         """
         Get entity from SQLite database
-        
+
         Args:
             entity_id: Entity ID to retrieve
             context: Optional tenant context for multi-tenant isolation
@@ -406,7 +403,7 @@ class SQLiteGraphStore(GraphStore):
     async def update_entity(self, entity: Entity, context: Optional[TenantContext] = None) -> Entity:
         """
         Update entity in SQLite database
-        
+
         Args:
             entity: Entity to update
             context: Optional tenant context for multi-tenant isolation
@@ -448,7 +445,7 @@ class SQLiteGraphStore(GraphStore):
                 """,
                 [entity.entity_type, properties_json, embedding_blob, entity.id] + params,
             )
-        
+
         if not self._in_transaction:
             await self.conn.commit()
 
@@ -457,7 +454,7 @@ class SQLiteGraphStore(GraphStore):
     async def delete_entity(self, entity_id: str, context: Optional[TenantContext] = None):
         """
         Delete entity and its relations from SQLite database
-        
+
         Args:
             entity_id: Entity ID to delete
             context: Optional tenant context for multi-tenant isolation
@@ -473,34 +470,25 @@ class SQLiteGraphStore(GraphStore):
 
         if self.isolation_mode == TenantIsolationMode.SEPARATE_SCHEMA and tenant_id:
             # Delete relations first (no foreign key in SEPARATE_SCHEMA)
-            await self.conn.execute(
-                f"DELETE FROM {relations_table} WHERE source_id = ? OR target_id = ?",
-                (entity_id, entity_id)
-            )
+            await self.conn.execute(f"DELETE FROM {relations_table} WHERE source_id = ? OR target_id = ?", (entity_id, entity_id))
             await self.conn.execute(f"DELETE FROM {entities_table} WHERE id = ?", (entity_id,))
         else:
             tenant_filter, params = self._build_tenant_filter(tenant_id)
             # Delete relations first
-            await self.conn.execute(
-                f"DELETE FROM {relations_table} WHERE (source_id = ? OR target_id = ?) AND {tenant_filter}",
-                [entity_id, entity_id] + params
-            )
-            await self.conn.execute(
-                f"DELETE FROM {entities_table} WHERE id = ? AND {tenant_filter}",
-                [entity_id] + params
-            )
-        
+            await self.conn.execute(f"DELETE FROM {relations_table} WHERE (source_id = ? OR target_id = ?) AND {tenant_filter}", [entity_id, entity_id] + params)
+            await self.conn.execute(f"DELETE FROM {entities_table} WHERE id = ? AND {tenant_filter}", [entity_id] + params)
+
         if not self._in_transaction:
             await self.conn.commit()
 
     async def add_relation(self, relation: Relation, context: Optional[TenantContext] = None) -> None:
         """
         Add relation to SQLite database
-        
+
         Args:
             relation: Relation to add
             context: Optional tenant context for multi-tenant isolation
-            
+
         Raises:
             CrossTenantRelationError: If source and target entities belong to different tenants
         """
@@ -510,11 +498,11 @@ class SQLiteGraphStore(GraphStore):
             raise RuntimeError("Database connection not initialized")
 
         tenant_id = self._get_tenant_id(context)
-        
+
         # Ensure tenant tables exist for SEPARATE_SCHEMA mode
         if tenant_id and self.isolation_mode == TenantIsolationMode.SEPARATE_SCHEMA:
             await self._ensure_tenant_tables(tenant_id)
-        
+
         table_name = self._get_table_name("relations", tenant_id)
 
         # Check if relation already exists (within tenant scope)
@@ -522,11 +510,8 @@ class SQLiteGraphStore(GraphStore):
             cursor = await self.conn.execute(f"SELECT id FROM {table_name} WHERE id = ?", (relation.id,))
         else:
             tenant_filter, params = self._build_tenant_filter(tenant_id)
-            cursor = await self.conn.execute(
-                f"SELECT id FROM {table_name} WHERE id = ? AND {tenant_filter}",
-                [relation.id] + params
-            )
-        
+            cursor = await self.conn.execute(f"SELECT id FROM {table_name} WHERE id = ? AND {tenant_filter}", [relation.id] + params)
+
         existing = await cursor.fetchone()
         if existing:
             raise ValueError(f"Relation with ID '{relation.id}' already exists")
@@ -534,7 +519,7 @@ class SQLiteGraphStore(GraphStore):
         # Check if entities exist within tenant scope
         source_entity = await self.get_entity(relation.source_id, context=context)
         target_entity = await self.get_entity(relation.target_id, context=context)
-        
+
         if not source_entity:
             raise ValueError(f"Source entity '{relation.source_id}' does not exist")
         if not target_entity:
@@ -586,14 +571,14 @@ class SQLiteGraphStore(GraphStore):
                     relation.weight,
                 ),
             )
-        
+
         if not self._in_transaction:
             await self.conn.commit()
 
     async def get_relation(self, relation_id: str, context: Optional[TenantContext] = None) -> Optional[Relation]:
         """
         Get relation from SQLite database
-        
+
         Args:
             relation_id: Relation ID to retrieve
             context: Optional tenant context for multi-tenant isolation
@@ -637,7 +622,7 @@ class SQLiteGraphStore(GraphStore):
     async def update_relation(self, relation: Relation, context: Optional[TenantContext] = None) -> Relation:
         """
         Update relation in SQLite database
-        
+
         Args:
             relation: Relation to update
             context: Optional tenant context for multi-tenant isolation
@@ -692,9 +677,10 @@ class SQLiteGraphStore(GraphStore):
                     properties_json,
                     relation.weight,
                     relation.id,
-                ] + params,
+                ]
+                + params,
             )
-        
+
         if not self._in_transaction:
             await self.conn.commit()
 
@@ -703,7 +689,7 @@ class SQLiteGraphStore(GraphStore):
     async def delete_relation(self, relation_id: str, context: Optional[TenantContext] = None):
         """
         Delete relation from SQLite database
-        
+
         Args:
             relation_id: Relation ID to delete
             context: Optional tenant context for multi-tenant isolation
@@ -720,11 +706,8 @@ class SQLiteGraphStore(GraphStore):
             await self.conn.execute(f"DELETE FROM {table_name} WHERE id = ?", (relation_id,))
         else:
             tenant_filter, params = self._build_tenant_filter(tenant_id)
-            await self.conn.execute(
-                f"DELETE FROM {table_name} WHERE id = ? AND {tenant_filter}",
-                [relation_id] + params
-            )
-        
+            await self.conn.execute(f"DELETE FROM {table_name} WHERE id = ? AND {tenant_filter}", [relation_id] + params)
+
         if not self._in_transaction:
             await self.conn.commit()
 
@@ -900,9 +883,9 @@ class SQLiteGraphStore(GraphStore):
             if entity_type:
                 conditions.append("entity_type = ?")
                 params.append(entity_type)
-            
+
             where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
-            
+
             # Build LIMIT and OFFSET clauses
             limit_clause = ""
             if limit is not None and offset > 0:
@@ -911,7 +894,7 @@ class SQLiteGraphStore(GraphStore):
                 limit_clause = f"LIMIT {limit}"
             elif offset > 0:
                 limit_clause = f"OFFSET {offset}"
-            
+
             # Execute query
             query = f"""
                 SELECT id, entity_type, properties, embedding
@@ -919,10 +902,10 @@ class SQLiteGraphStore(GraphStore):
                 {where_clause}
                 {limit_clause}
             """
-            
+
             cursor = await self.conn.execute(query, params)
             rows = await cursor.fetchall()
-            
+
             # Convert rows to entities
             entities = []
             for row in rows:
@@ -934,15 +917,15 @@ class SQLiteGraphStore(GraphStore):
             if tenant_filter:
                 conditions.append(tenant_filter)
                 params.extend(tenant_params)
-            
+
             # Entity type filtering
             if entity_type:
                 conditions.append("entity_type = ?")
                 params.append(entity_type)
-            
+
             # Build WHERE clause
             where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
-            
+
             # Build LIMIT and OFFSET clauses
             limit_clause = ""
             if limit is not None and offset > 0:
@@ -951,7 +934,7 @@ class SQLiteGraphStore(GraphStore):
                 limit_clause = f"LIMIT {limit}"
             elif offset > 0:
                 limit_clause = f"OFFSET {offset}"
-            
+
             # Execute query
             query = f"""
                 SELECT id, tenant_id, entity_type, properties, embedding
@@ -959,10 +942,10 @@ class SQLiteGraphStore(GraphStore):
                 {where_clause}
                 {limit_clause}
             """
-            
+
             cursor = await self.conn.execute(query, params)
             rows = await cursor.fetchall()
-            
+
             # Convert rows to entities
             entities = []
             for row in rows:
@@ -1039,7 +1022,7 @@ class SQLiteGraphStore(GraphStore):
         else:
             # SHARED_SCHEMA: Filter by tenant_id
             tenant_filter, tenant_params = self._build_tenant_filter(tenant_id)
-            
+
             if entity_type:
                 where_clause = f"WHERE {tenant_filter} AND entity_type = ?"
                 params = tenant_params + [entity_type]
@@ -1085,7 +1068,7 @@ class SQLiteGraphStore(GraphStore):
 
         This overrides the default Tier 2 implementation for better performance.
         Uses recursive CTEs in SQLite for efficient graph traversal.
-        
+
         Args:
             start_entity_id: Starting entity ID
             relation_type: Optional filter by relation type
@@ -1208,12 +1191,12 @@ class SQLiteGraphStore(GraphStore):
 
         # Cosine similarity ranges from -1 to 1, normalize to 0 to 1
         similarity = dot_product / (magnitude1 * magnitude2)
-        return (similarity + 1) / 2
+        return float((similarity + 1) / 2)
 
     async def get_stats(self, context: Optional[TenantContext] = None) -> Dict[str, Any]:
         """
         Get statistics about the SQLite graph store
-        
+
         Args:
             context: Optional tenant context for tenant-scoped stats
         """
@@ -1228,12 +1211,9 @@ class SQLiteGraphStore(GraphStore):
 
         if self.isolation_mode == TenantIsolationMode.SEPARATE_SCHEMA and tenant_id:
             # Check if tenant tables exist
-            cursor = await self.conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-                (entities_table,)
-            )
+            cursor = await self.conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (entities_table,))
             table_exists = await cursor.fetchone()
-            
+
             if not table_exists:
                 entity_count = 0
                 relation_count = 0
@@ -1247,18 +1227,12 @@ class SQLiteGraphStore(GraphStore):
                 relation_count = relation_row[0] if relation_row else 0
         else:
             tenant_filter, params = self._build_tenant_filter(tenant_id)
-            
-            cursor = await self.conn.execute(
-                f"SELECT COUNT(*) FROM {entities_table} WHERE {tenant_filter}",
-                params
-            )
+
+            cursor = await self.conn.execute(f"SELECT COUNT(*) FROM {entities_table} WHERE {tenant_filter}", params)
             entity_row = await cursor.fetchone()
             entity_count = entity_row[0] if entity_row else 0
 
-            cursor = await self.conn.execute(
-                f"SELECT COUNT(*) FROM {relations_table} WHERE {tenant_filter}",
-                params
-            )
+            cursor = await self.conn.execute(f"SELECT COUNT(*) FROM {relations_table} WHERE {tenant_filter}", params)
             relation_row = await cursor.fetchone()
             relation_count = relation_row[0] if relation_row else 0
 
@@ -1284,7 +1258,7 @@ class SQLiteGraphStore(GraphStore):
     async def clear(self, context: Optional[TenantContext] = None):
         """
         Clear data from SQLite database
-        
+
         Args:
             context: Optional tenant context for multi-tenant isolation.
                     If provided, clears only data for the specified tenant.
@@ -1301,12 +1275,10 @@ class SQLiteGraphStore(GraphStore):
             # Clear all data (global and all tenants)
             await self.conn.execute("DELETE FROM relations")
             await self.conn.execute("DELETE FROM entities")
-            
+
             # Drop all tenant-specific tables for SEPARATE_SCHEMA
             if self.isolation_mode == TenantIsolationMode.SEPARATE_SCHEMA:
-                cursor = await self.conn.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'tenant_%'"
-                )
+                cursor = await self.conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'tenant_%'")
                 tables = await cursor.fetchall()
                 for (table_name,) in tables:
                     await self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
@@ -1316,7 +1288,7 @@ class SQLiteGraphStore(GraphStore):
             if self.isolation_mode == TenantIsolationMode.SEPARATE_SCHEMA:
                 entities_table = self._get_table_name("entities", tenant_id)
                 relations_table = self._get_table_name("relations", tenant_id)
-                
+
                 # Drop tenant tables
                 await self.conn.execute(f"DROP TABLE IF EXISTS {relations_table}")
                 await self.conn.execute(f"DROP TABLE IF EXISTS {entities_table}")
@@ -1324,22 +1296,16 @@ class SQLiteGraphStore(GraphStore):
             else:
                 # Delete from shared tables with tenant filter
                 tenant_filter, params = self._build_tenant_filter(tenant_id)
-                await self.conn.execute(
-                    f"DELETE FROM relations WHERE {tenant_filter}",
-                    params
-                )
-                await self.conn.execute(
-                    f"DELETE FROM entities WHERE {tenant_filter}",
-                    params
-                )
-        
+                await self.conn.execute(f"DELETE FROM relations WHERE {tenant_filter}", params)
+                await self.conn.execute(f"DELETE FROM entities WHERE {tenant_filter}", params)
+
         if not self._in_transaction:
             await self.conn.commit()
 
     async def migrate_add_tenant_id(self):
         """
         Migration script to add tenant_id column to existing databases.
-        
+
         This should be run once when upgrading an existing database to support multi-tenancy.
         """
         if not self._is_initialized:
@@ -1351,7 +1317,7 @@ class SQLiteGraphStore(GraphStore):
         cursor = await self.conn.execute("PRAGMA table_info(entities)")
         columns = await cursor.fetchall()
         column_names = [col[1] for col in columns]
-        
+
         if "tenant_id" in column_names:
             return  # Migration already applied
 
@@ -1359,14 +1325,14 @@ class SQLiteGraphStore(GraphStore):
         try:
             await self.conn.execute("ALTER TABLE entities ADD COLUMN tenant_id TEXT")
             await self.conn.execute("ALTER TABLE relations ADD COLUMN tenant_id TEXT")
-            
+
             # Create tenant indexes
             await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_entities_tenant ON entities(tenant_id)")
             await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_entities_tenant_type ON entities(tenant_id, entity_type)")
             await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_relations_tenant ON relations(tenant_id)")
             await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_relations_tenant_source ON relations(tenant_id, source_id)")
             await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_relations_tenant_target ON relations(tenant_id, target_id)")
-            
+
             await self.conn.commit()
         except Exception as e:
             await self.conn.rollback()

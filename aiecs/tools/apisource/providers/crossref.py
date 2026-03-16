@@ -239,10 +239,7 @@ class CrossRefProvider(BaseAPIProvider):
 
         # Set User-Agent header as required by CrossRef API etiquette
         # Include mailto for polite pool access (better rate limits)
-        user_agent = self.config.get(
-            "user_agent",
-            "AIECS-APISource/2.0 (https://github.com/your-org/aiecs; mailto:iretbl@gmail.com)"
-        )
+        user_agent = self.config.get("user_agent", "AIECS-APISource/2.0 (https://github.com/your-org/aiecs; mailto:iretbl@gmail.com)")
         headers = {
             "User-Agent": user_agent,
         }
@@ -260,12 +257,7 @@ class CrossRefProvider(BaseAPIProvider):
                 if mailto:
                     query_params["mailto"] = mailto
 
-                response = requests.get(
-                    url,
-                    params=query_params,
-                    headers=headers,
-                    timeout=timeout
-                )
+                response = requests.get(url, params=query_params, headers=headers, timeout=timeout)
                 response.raise_for_status()
 
                 # Extract work from response
@@ -298,12 +290,7 @@ class CrossRefProvider(BaseAPIProvider):
                 if mailto:
                     query_params["mailto"] = mailto
 
-                response = requests.get(
-                    url,
-                    params=query_params,
-                    headers=headers,
-                    timeout=timeout
-                )
+                response = requests.get(url, params=query_params, headers=headers, timeout=timeout)
                 response.raise_for_status()
 
                 # Extract works from response
@@ -342,12 +329,7 @@ class CrossRefProvider(BaseAPIProvider):
                 if mailto:
                     query_params["mailto"] = mailto
 
-                response = requests.get(
-                    url,
-                    params=query_params,
-                    headers=headers,
-                    timeout=timeout
-                )
+                response = requests.get(url, params=query_params, headers=headers, timeout=timeout)
                 response.raise_for_status()
 
                 # Extract works from response
@@ -385,12 +367,7 @@ class CrossRefProvider(BaseAPIProvider):
                 if mailto:
                     query_params["mailto"] = mailto
 
-                response = requests.get(
-                    url,
-                    params=query_params,
-                    headers=headers,
-                    timeout=timeout
-                )
+                response = requests.get(url, params=query_params, headers=headers, timeout=timeout)
                 response.raise_for_status()
 
                 # Extract funders from response
@@ -428,12 +405,7 @@ class CrossRefProvider(BaseAPIProvider):
                 if mailto:
                     query_params["mailto"] = mailto
 
-                response = requests.get(
-                    url,
-                    params=query_params,
-                    headers=headers,
-                    timeout=timeout
-                )
+                response = requests.get(url, params=query_params, headers=headers, timeout=timeout)
                 response.raise_for_status()
 
                 # Extract works from response
@@ -571,4 +543,3 @@ class CrossRefProvider(BaseAPIProvider):
         }
 
         return schemas.get(operation)
-

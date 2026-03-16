@@ -311,7 +311,7 @@ class DependencyChecker:
             status = self._check_nltk_data(data)
             # Recommend using the proper download script that handles environment-specific paths
             install_cmd = "aiecs-download-nlp-data --download  # Downloads to Poetry/virtual environment"
-            
+
             model_deps.append(
                 DependencyInfo(
                     name=f"NLTK {data}",
@@ -643,7 +643,7 @@ class DependencyChecker:
     def _check_transformers_model(self, model: str) -> DependencyStatus:
         """Check if a Transformers model is available."""
         try:
-            from transformers import pipeline  # type: ignore[import-not-found]
+            from transformers import pipeline
 
             # Try to load the model (this will download if not present)
             pipeline("summarization", model=model)  # Just checking if it loads
@@ -654,7 +654,7 @@ class DependencyChecker:
     def _check_nltk_data(self, data: str) -> DependencyStatus:
         """Check if NLTK data is available."""
         try:
-            import nltk  # type: ignore[import-untyped]
+            import nltk
 
             nltk.data.find(f"corpora/{data}")
             return DependencyStatus.AVAILABLE
@@ -666,7 +666,7 @@ class DependencyChecker:
     def _check_spacy_pkuseg_model(self) -> DependencyStatus:
         """Check if spaCy PKUSeg model is available."""
         try:
-            import spacy_pkuseg  # type: ignore[import-untyped]
+            import spacy_pkuseg
 
             # Test basic functionality
             seg = spacy_pkuseg.pkuseg()
@@ -890,7 +890,7 @@ class DependencyChecker:
 
         # Note: Document Parser Tool depends on Office Tool, Image Tool, and Scraper Tool
         # We'll check their dependencies
-        
+
         # Java Runtime Environment (from Office Tool)
         java_status = self.check_system_command("java", "-version")
         system_deps.append(
@@ -1217,7 +1217,7 @@ class DependencyChecker:
                     status=status,
                     description=f"spaCy model: {model}",
                     install_command=f"python -m spacy download {model}",
-                    impact=f"Text analysis in English will be unavailable",
+                    impact="Text analysis in English will be unavailable",
                     is_critical=True,
                 )
             )
@@ -1670,7 +1670,6 @@ class DependencyChecker:
             "apisource": self.check_apisource_tool_dependencies(),
             "search": self.check_search_tool_dependencies(),
             "research": self.check_research_tool_dependencies(),
-            
             # Document tools (7 total)
             "document_parser": self.check_document_parser_tool_dependencies(),
             "document_writer": self.check_document_writer_tool_dependencies(),
@@ -1679,7 +1678,6 @@ class DependencyChecker:
             "document_creator": self.check_document_creator_tool_dependencies(),
             "ai_document_writer_orchestrator": self.check_ai_document_writer_orchestrator_dependencies(),
             "ai_document_orchestrator": self.check_ai_document_orchestrator_dependencies(),
-            
             # Statistics tools (9 total)
             "data_loader": self.check_data_loader_tool_dependencies(),
             "data_visualizer": self.check_data_visualizer_tool_dependencies(),
@@ -1690,7 +1688,6 @@ class DependencyChecker:
             "ai_insight_generator": self.check_ai_insight_generator_tool_dependencies(),
             "ai_data_analysis_orchestrator": self.check_ai_data_analysis_orchestrator_dependencies(),
             "ai_report_orchestrator": self.check_ai_report_orchestrator_tool_dependencies(),
-            
             # Knowledge graph tools (3 total)
             "kg_builder": self.check_kg_builder_tool_dependencies(),
             "graph_search": self.check_graph_search_tool_dependencies(),

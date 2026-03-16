@@ -137,7 +137,6 @@ class ToolConfigLoader:
             Dictionary of environment variables loaded from .env files
         """
         config_dir = self.find_config_directory()
-        env_vars = {}
 
         # Determine base directory for .env files
         if config_dir:
@@ -221,7 +220,7 @@ class ToolConfigLoader:
             search_dirs.append(tools_dir)
         # Also search directly in config_dir for custom path structures
         search_dirs.append(config_dir)
-        
+
         # Try multiple naming conventions for tool config files
         # 1. {tool_name}.yaml (e.g., image.yaml)
         # 2. {tool_name}_tool.yaml (e.g., image_tool.yaml)
@@ -234,7 +233,7 @@ class ToolConfigLoader:
         if tool_name.islower():
             class_name = tool_name.replace("_", "").title() + "Tool"
             possible_names.append(f"{class_name}.yaml")
-        
+
         tool_config_path = None
         for search_dir in search_dirs:
             for name in possible_names:
@@ -244,7 +243,7 @@ class ToolConfigLoader:
                     break
             if tool_config_path:
                 break
-        
+
         if tool_config_path:
             try:
                 with open(tool_config_path, "r", encoding="utf-8") as f:
@@ -329,10 +328,7 @@ class ToolConfigLoader:
             for error in e.errors():
                 field = " -> ".join(str(loc) for loc in error["loc"])
                 error_messages.append(f"{field}: {error['msg']}")
-            raise ValidationError(
-                f"Tool configuration validation failed:\n" + "\n".join(error_messages),
-                e.model,
-            ) from e
+            raise ValueError("Tool configuration validation failed:\n" + "\n".join(error_messages)) from e
 
     def load_tool_config(
         self,
@@ -432,4 +428,3 @@ def get_tool_config_loader() -> ToolConfigLoader:
         ToolConfigLoader: Global singleton instance
     """
     return _loader
-

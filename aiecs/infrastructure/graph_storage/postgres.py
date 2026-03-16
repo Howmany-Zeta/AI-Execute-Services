@@ -14,7 +14,7 @@ Multi-tenancy Support:
 """
 
 import json
-import asyncpg  # type: ignore[import-untyped]
+import asyncpg
 import logging
 from typing import Any, Dict, List, Optional, Tuple, cast
 from contextlib import asynccontextmanager
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS graph_entities (
     PRIMARY KEY (id, tenant_id)
 );
 
--- Relations table with tenant_id for multi-tenancy  
+-- Relations table with tenant_id for multi-tenancy
 CREATE TABLE IF NOT EXISTS graph_relations (
     id TEXT NOT NULL,
     tenant_id TEXT NOT NULL DEFAULT '',       -- Empty string for global namespace
@@ -90,18 +90,18 @@ MIGRATION_SQL = """
 DO $$
 BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns 
+        SELECT 1 FROM information_schema.columns
         WHERE table_name = 'graph_entities' AND column_name = 'tenant_id'
     ) THEN
         -- Add tenant_id column with empty string default
         ALTER TABLE graph_entities ADD COLUMN tenant_id TEXT NOT NULL DEFAULT '';
-        
+
         -- Drop old primary key if exists
         ALTER TABLE graph_entities DROP CONSTRAINT IF EXISTS graph_entities_pkey;
-        
+
         -- Create new composite primary key
         ALTER TABLE graph_entities ADD PRIMARY KEY (id, tenant_id);
-        
+
         -- Create indexes
         CREATE INDEX IF NOT EXISTS idx_graph_entities_tenant ON graph_entities(tenant_id);
         CREATE INDEX IF NOT EXISTS idx_graph_entities_tenant_type ON graph_entities(tenant_id, entity_type);
@@ -112,18 +112,18 @@ END $$;
 DO $$
 BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns 
+        SELECT 1 FROM information_schema.columns
         WHERE table_name = 'graph_relations' AND column_name = 'tenant_id'
     ) THEN
         -- Add tenant_id column with empty string default
         ALTER TABLE graph_relations ADD COLUMN tenant_id TEXT NOT NULL DEFAULT '';
-        
+
         -- Drop old primary key if exists
         ALTER TABLE graph_relations DROP CONSTRAINT IF EXISTS graph_relations_pkey;
-        
+
         -- Create new composite primary key
         ALTER TABLE graph_relations ADD PRIMARY KEY (id, tenant_id);
-        
+
         -- Create indexes
         CREATE INDEX IF NOT EXISTS idx_graph_relations_tenant ON graph_relations(tenant_id);
         CREATE INDEX IF NOT EXISTS idx_graph_relations_tenant_source ON graph_relations(tenant_id, source_id);
@@ -151,7 +151,7 @@ DROP POLICY IF EXISTS tenant_isolation_relations ON graph_relations;
 -- Empty string ('') represents the global namespace
 CREATE POLICY tenant_isolation_entities ON graph_entities
     USING (
-        tenant_id = '' OR 
+        tenant_id = '' OR
         tenant_id = COALESCE(current_setting('app.current_tenant_id', true), '')
     );
 
@@ -280,7 +280,7 @@ class PostgresGraphStore(GraphStore):
             **kwargs: Additional asyncpg connection parameters
         """
         super().__init__()
-        
+
         # Multi-tenancy configuration
         self.isolation_mode = isolation_mode
         self.enable_rls = enable_rls
@@ -388,12 +388,12 @@ class PostgresGraphStore(GraphStore):
                 tables_exist = await conn.fetchval(
                     """
                     SELECT EXISTS (
-                        SELECT 1 FROM information_schema.tables 
+                        SELECT 1 FROM information_schema.tables
                         WHERE table_name = 'graph_entities'
                     )
                     """
                 )
-                
+
                 if tables_exist:
                     # Run migration for existing databases to add tenant_id
                     try:
@@ -493,7 +493,7 @@ class PostgresGraphStore(GraphStore):
     def _get_schema_name(self, tenant_id: Optional[str]) -> str:
         """
         Get schema name for SEPARATE_SCHEMA mode.
-        
+
         Returns 'public' for global namespace or 'tenant_xxx' for tenants.
         """
         if tenant_id is None:
@@ -508,13 +508,13 @@ class PostgresGraphStore(GraphStore):
         """
         if self.isolation_mode != TenantIsolationMode.SEPARATE_SCHEMA:
             return
-        
+
         if tenant_id in self._initialized_tenant_schemas:
             return
 
         schema_name = self._get_schema_name(tenant_id)
         schema_sql = TENANT_SCHEMA_SQL.format(schema_name=schema_name)
-        
+
         await conn.execute(schema_sql)
         self._initialized_tenant_schemas.add(tenant_id)
         logger.info(f"Created tenant schema: {schema_name}")
@@ -522,7 +522,7 @@ class PostgresGraphStore(GraphStore):
     async def _set_tenant_context(self, conn: asyncpg.Connection, tenant_id: str) -> None:
         """
         Set tenant context for RLS or search_path based on isolation mode.
-        
+
         For SHARED_SCHEMA with RLS: SET LOCAL app.current_tenant = 'tenant_id'
         For SEPARATE_SCHEMA: SET search_path = tenant_xxx, public
         """
@@ -542,7 +542,7 @@ class PostgresGraphStore(GraphStore):
     def _build_tenant_filter(self, tenant_id: str, table_alias: str = "") -> Tuple[str, List]:
         """
         Build SQL WHERE clause for tenant filtering in SHARED_SCHEMA mode without RLS.
-        
+
         Returns:
             Tuple of (WHERE clause fragment, parameters list)
         """
@@ -581,7 +581,7 @@ class PostgresGraphStore(GraphStore):
         """Get connection from pool or transaction"""
         if self._transaction_conn:
             return self._transaction_conn
-        return self.pool.acquire()
+        return self._ensure_pool().acquire()
 
     # =========================================================================
     # Tier 1: Basic Interface (PostgreSQL-optimized implementations)
@@ -590,7 +590,7 @@ class PostgresGraphStore(GraphStore):
     async def add_entity(self, entity: Entity, context: Optional[TenantContext] = None) -> None:
         """
         Add entity to PostgreSQL database
-        
+
         Args:
             entity: Entity to add
             context: Optional tenant context for multi-tenant isolation
@@ -600,7 +600,7 @@ class PostgresGraphStore(GraphStore):
 
         tenant_id = self._get_tenant_id(context)
         logger.debug(f"add_entity called with entity_id='{entity.id}', tenant_id='{tenant_id}', enable_rls={self.enable_rls}")
-        
+
         # Set tenant_id on entity if context provided
         if tenant_id is not None and entity.tenant_id is None:
             entity.tenant_id = tenant_id
@@ -613,7 +613,7 @@ class PostgresGraphStore(GraphStore):
             # Set tenant context (search_path or RLS)
             if self.isolation_mode == TenantIsolationMode.SEPARATE_SCHEMA and tenant_id:
                 await self._ensure_tenant_schema(conn, tenant_id)
-            
+
             if self.isolation_mode == TenantIsolationMode.SEPARATE_SCHEMA:
                 # SEPARATE_SCHEMA: No tenant_id column
                 await conn.execute(
@@ -668,7 +668,7 @@ class PostgresGraphStore(GraphStore):
     async def get_entity(self, entity_id: str, context: Optional[TenantContext] = None) -> Optional[Entity]:
         """
         Get entity from PostgreSQL database
-        
+
         Args:
             entity_id: Entity ID to retrieve
             context: Optional tenant context for multi-tenant isolation
@@ -732,7 +732,7 @@ class PostgresGraphStore(GraphStore):
         properties = json.loads(row["properties"]) if isinstance(row["properties"], str) else row["properties"]
         embedding_raw = self._deserialize_embedding(row["embedding"]) if row["embedding"] else None
         embedding: Optional[List[float]] = cast(List[float], embedding_raw.tolist()) if embedding_raw is not None else None
-        
+
         # Get tenant_id from row or context
         row_tenant_id = row.get("tenant_id") if "tenant_id" in row.keys() else tenant_id
 
@@ -747,7 +747,7 @@ class PostgresGraphStore(GraphStore):
     async def update_entity(self, entity: Entity, context: Optional[TenantContext] = None) -> None:
         """
         Update entity in PostgreSQL database
-        
+
         Args:
             entity: Entity to update
             context: Optional tenant context for multi-tenant isolation
@@ -820,7 +820,7 @@ class PostgresGraphStore(GraphStore):
     async def delete_entity(self, entity_id: str, context: Optional[TenantContext] = None) -> None:
         """
         Delete entity from PostgreSQL database
-        
+
         Args:
             entity_id: Entity ID to delete
             context: Optional tenant context for multi-tenant isolation
@@ -833,23 +833,12 @@ class PostgresGraphStore(GraphStore):
         async def _execute(conn: asyncpg.Connection):
             if self.isolation_mode == TenantIsolationMode.SEPARATE_SCHEMA or self.enable_rls:
                 # Delete relations first
-                await conn.execute(
-                    "DELETE FROM graph_relations WHERE source_id = $1 OR target_id = $1",
-                    entity_id
-                )
+                await conn.execute("DELETE FROM graph_relations WHERE source_id = $1 OR target_id = $1", entity_id)
                 return await conn.execute("DELETE FROM graph_entities WHERE id = $1", entity_id)
             else:
                 # Manual tenant filtering (tenant_id is always a string, '' for global)
-                await conn.execute(
-                    "DELETE FROM graph_relations WHERE (source_id = $1 OR target_id = $1) AND tenant_id = $2",
-                    entity_id,
-                    tenant_id
-                )
-                return await conn.execute(
-                    "DELETE FROM graph_entities WHERE id = $1 AND tenant_id = $2",
-                    entity_id,
-                    tenant_id
-                )
+                await conn.execute("DELETE FROM graph_relations WHERE (source_id = $1 OR target_id = $1) AND tenant_id = $2", entity_id, tenant_id)
+                return await conn.execute("DELETE FROM graph_entities WHERE id = $1 AND tenant_id = $2", entity_id, tenant_id)
 
         if self._transaction_conn:
             await self._set_tenant_context(self._transaction_conn, tenant_id)
@@ -872,11 +861,11 @@ class PostgresGraphStore(GraphStore):
     async def add_relation(self, relation: Relation, context: Optional[TenantContext] = None) -> None:
         """
         Add relation to PostgreSQL database
-        
+
         Args:
             relation: Relation to add
             context: Optional tenant context for multi-tenant isolation
-            
+
         Raises:
             CrossTenantRelationError: If source and target entities belong to different tenants
         """
@@ -884,11 +873,11 @@ class PostgresGraphStore(GraphStore):
             raise RuntimeError("GraphStore not initialized")
 
         tenant_id = self._get_tenant_id(context)
-        
+
         # Check entities exist and enforce same-tenant constraint
         source_entity = await self.get_entity(relation.source_id, context=context)
         target_entity = await self.get_entity(relation.target_id, context=context)
-        
+
         if not source_entity:
             raise ValueError(f"Source entity '{relation.source_id}' does not exist")
         if not target_entity:
@@ -908,7 +897,7 @@ class PostgresGraphStore(GraphStore):
         async def _execute(conn: asyncpg.Connection):
             if self.isolation_mode == TenantIsolationMode.SEPARATE_SCHEMA and tenant_id:
                 await self._ensure_tenant_schema(conn, tenant_id)
-            
+
             if self.isolation_mode == TenantIsolationMode.SEPARATE_SCHEMA:
                 await conn.execute(
                     """
@@ -969,7 +958,7 @@ class PostgresGraphStore(GraphStore):
     async def get_relation(self, relation_id: str, context: Optional[TenantContext] = None) -> Optional[Relation]:
         """
         Get relation from PostgreSQL database
-        
+
         Args:
             relation_id: Relation ID to retrieve
             context: Optional tenant context for multi-tenant isolation
@@ -1044,7 +1033,7 @@ class PostgresGraphStore(GraphStore):
     async def delete_relation(self, relation_id: str, context: Optional[TenantContext] = None) -> None:
         """
         Delete relation from PostgreSQL database
-        
+
         Args:
             relation_id: Relation ID to delete
             context: Optional tenant context for multi-tenant isolation
@@ -1059,11 +1048,7 @@ class PostgresGraphStore(GraphStore):
                 return await conn.execute("DELETE FROM graph_relations WHERE id = $1", relation_id)
             else:
                 # Manual tenant filtering (tenant_id is always a string, '' for global)
-                return await conn.execute(
-                    "DELETE FROM graph_relations WHERE id = $1 AND tenant_id = $2",
-                    relation_id,
-                    tenant_id
-                )
+                return await conn.execute("DELETE FROM graph_relations WHERE id = $1 AND tenant_id = $2", relation_id, tenant_id)
 
         if self._transaction_conn:
             await self._set_tenant_context(self._transaction_conn, tenant_id)
@@ -1092,7 +1077,7 @@ class PostgresGraphStore(GraphStore):
     ) -> List[Entity]:
         """
         Get neighboring entities (optimized with SQL)
-        
+
         Args:
             entity_id: ID of entity to get neighbors for
             relation_type: Optional filter by relation type
@@ -1107,7 +1092,7 @@ class PostgresGraphStore(GraphStore):
         async def _fetch(conn: asyncpg.Connection):
             # For SEPARATE_SCHEMA or RLS, the context handles filtering
             use_tenant_filter = not (self.isolation_mode == TenantIsolationMode.SEPARATE_SCHEMA or self.enable_rls)
-            
+
             # Build query based on direction
             if self.isolation_mode == TenantIsolationMode.SEPARATE_SCHEMA:
                 # No tenant_id column in SEPARATE_SCHEMA
@@ -1154,7 +1139,7 @@ class PostgresGraphStore(GraphStore):
                 tenant_filter = ""
                 if use_tenant_filter:
                     tenant_filter = "AND e.tenant_id = $2 AND r.tenant_id = $2"
-                
+
                 if direction == "outgoing":
                     query = f"""
                         SELECT DISTINCT e.id, e.tenant_id, e.entity_type, e.properties, e.embedding
@@ -1182,11 +1167,11 @@ class PostgresGraphStore(GraphStore):
                     """
                     if use_tenant_filter:
                         query += " AND e.tenant_id = $2"
-                
+
                 params = [entity_id]
                 if use_tenant_filter:
                     params.append(tenant_id)
-                
+
                 if relation_type:
                     param_idx = len(params) + 1
                     if direction == "both":
@@ -1201,7 +1186,7 @@ class PostgresGraphStore(GraphStore):
                     else:
                         query += f" AND r.relation_type = ${param_idx}"
                     params.append(relation_type)
-            
+
             return await conn.fetch(query, *params)
 
         if self._transaction_conn:
@@ -1241,11 +1226,12 @@ class PostgresGraphStore(GraphStore):
         self,
         entity_type: Optional[str] = None,
         limit: Optional[int] = None,
+        offset: int = 0,
         context: Optional[TenantContext] = None,
     ) -> List[Entity]:
         """
         Get all entities, optionally filtered by type
-        
+
         Args:
             entity_type: Optional filter by entity type
             limit: Optional limit on number of entities
@@ -1261,22 +1247,22 @@ class PostgresGraphStore(GraphStore):
             if self.isolation_mode == TenantIsolationMode.SEPARATE_SCHEMA:
                 query = "SELECT id, entity_type, properties, embedding FROM graph_entities"
                 params: List[Any] = []
-                
+
                 if entity_type:
                     query += " WHERE entity_type = $1"
                     params.append(entity_type)
-                
+
                 if limit:
                     query += f" LIMIT ${len(params) + 1}"
                     params.append(limit)
             elif self.enable_rls:
                 query = "SELECT id, tenant_id, entity_type, properties, embedding FROM graph_entities"
                 params = []
-                
+
                 if entity_type:
                     query += " WHERE entity_type = $1"
                     params.append(entity_type)
-                
+
                 if limit:
                     query += f" LIMIT ${len(params) + 1}"
                     params.append(limit)
@@ -1284,15 +1270,15 @@ class PostgresGraphStore(GraphStore):
                 # Manual tenant filtering (tenant_id is always a string, '' for global)
                 query = "SELECT id, tenant_id, entity_type, properties, embedding FROM graph_entities WHERE tenant_id = $1"
                 params = [tenant_id]
-                
+
                 if entity_type:
                     query += f" AND entity_type = ${len(params) + 1}"
                     params.append(entity_type)
-                
+
                 if limit:
                     query += f" LIMIT ${len(params) + 1}"
                     params.append(limit)
-            
+
             return await conn.fetch(query, *params)
 
         if self._transaction_conn:
@@ -1334,7 +1320,7 @@ class PostgresGraphStore(GraphStore):
     async def get_stats(self, context: Optional[TenantContext] = None) -> Dict[str, Any]:
         """
         Get graph statistics
-        
+
         Args:
             context: Optional tenant context for tenant-scoped stats
         """
@@ -1355,7 +1341,7 @@ class PostgresGraphStore(GraphStore):
                 relation_count = await conn.fetchval("SELECT COUNT(*) FROM graph_relations WHERE tenant_id = $1", tenant_id)
                 entity_types = await conn.fetch("SELECT entity_type, COUNT(*) as count FROM graph_entities WHERE tenant_id = $1 GROUP BY entity_type", tenant_id)
                 relation_types = await conn.fetch("SELECT relation_type, COUNT(*) as count FROM graph_relations WHERE tenant_id = $1 GROUP BY relation_type", tenant_id)
-            
+
             return entity_count, relation_count, entity_types, relation_types
 
         if self._transaction_conn:
@@ -1388,7 +1374,7 @@ class PostgresGraphStore(GraphStore):
     async def clear(self, context: Optional[TenantContext] = None) -> None:
         """
         Clear data from PostgreSQL database
-        
+
         Args:
             context: Optional tenant context for multi-tenant isolation.
                     If provided, clears only data for the specified tenant.
@@ -1406,12 +1392,10 @@ class PostgresGraphStore(GraphStore):
                 # Clear all data across all tenants
                 await conn.execute("DELETE FROM graph_relations")
                 await conn.execute("DELETE FROM graph_entities")
-                
+
                 # Drop tenant schemas for SEPARATE_SCHEMA mode
                 if self.isolation_mode == TenantIsolationMode.SEPARATE_SCHEMA:
-                    schemas = await conn.fetch(
-                        "SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'tenant_%'"
-                    )
+                    schemas = await conn.fetch("SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'tenant_%'")
                     for row in schemas:
                         await conn.execute(f"DROP SCHEMA IF EXISTS {row['schema_name']} CASCADE")
                     self._initialized_tenant_schemas.clear()
@@ -1452,10 +1436,11 @@ class PostgresGraphStore(GraphStore):
 
     async def find_paths(
         self,
-        source_id: str,
-        target_id: str,
+        source_entity_id: str,
+        target_entity_id: str,
         max_depth: int = 3,
-        limit: Optional[int] = 10,
+        max_paths: int = 10,
+        context: Optional[TenantContext] = None,
     ) -> List[Path]:
         """
         Find paths using WITH RECURSIVE CTE (PostgreSQL-optimized)
@@ -1507,11 +1492,11 @@ class PostgresGraphStore(GraphStore):
 
         if self._transaction_conn:
             conn = self._transaction_conn
-            rows = await conn.fetch(query, source_id, target_id, max_depth, limit or 10)
+            rows = await conn.fetch(query, source_entity_id, target_entity_id, max_depth, max_paths)
         else:
             pool = self._ensure_pool()
             async with pool.acquire() as conn:
-                rows = await conn.fetch(query, source_id, target_id, max_depth, limit or 10)
+                rows = await conn.fetch(query, source_entity_id, target_entity_id, max_depth, max_paths)
 
         paths = []
         for row in rows:

@@ -5,7 +5,7 @@ Provides access to GitHub's REST API for repository data, user information,
 issues, pull requests, and more.
 
 API Documentation: https://docs.github.com/en/rest
-API Rate Limits: 
+API Rate Limits:
   - Authenticated: 5,000 requests/hour
   - Unauthenticated: 60 requests/hour
 
@@ -321,10 +321,7 @@ class GitHubProvider(BaseAPIProvider):
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": self.config.get(
-                "user_agent",
-                "AIECS-APISource/2.0 (https://github.com/your-org/aiecs)"
-            ),
+            "User-Agent": self.config.get("user_agent", "AIECS-APISource/2.0 (https://github.com/your-org/aiecs)"),
         }
 
         # Add authentication if token is available
@@ -398,12 +395,7 @@ class GitHubProvider(BaseAPIProvider):
 
         # Make API request
         try:
-            response = requests.get(
-                endpoint,
-                params=query_params,
-                headers=headers,
-                timeout=timeout
-            )
+            response = requests.get(endpoint, params=query_params, headers=headers, timeout=timeout)
             response.raise_for_status()
 
             data = response.json()
@@ -616,5 +608,3 @@ class GitHubProvider(BaseAPIProvider):
         }
 
         return schemas.get(operation)
-
-

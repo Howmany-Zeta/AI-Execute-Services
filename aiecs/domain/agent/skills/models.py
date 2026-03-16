@@ -35,6 +35,7 @@ class SkillMetadata:
                     (has scripts/tools), or 'hybrid' (both). Defaults to None for
                     auto-inference during loading.
     """
+
     name: str
     description: str
     version: str = "1.0.0"  # Default version for backward compatibility
@@ -47,22 +48,16 @@ class SkillMetadata:
     def __post_init__(self):
         """Validate metadata fields."""
         # Validate name is kebab-case
-        if not re.match(r'^[a-z0-9]+(-[a-z0-9]+)*$', self.name):
-            raise ValueError(
-                f"Skill name must be kebab-case (lowercase with hyphens): {self.name}"
-            )
+        if not re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", self.name):
+            raise ValueError(f"Skill name must be kebab-case (lowercase with hyphens): {self.name}")
 
         # Validate version is semver-like
-        if not re.match(r'^\d+\.\d+\.\d+', self.version):
-            raise ValueError(
-                f"Skill version must be semantic version (e.g., '1.0.0'): {self.version}"
-            )
+        if not re.match(r"^\d+\.\d+\.\d+", self.version):
+            raise ValueError(f"Skill version must be semantic version (e.g., '1.0.0'): {self.version}")
 
         # Validate skill_type if provided
         if self.skill_type is not None and self.skill_type not in VALID_SKILL_TYPES:
-            raise ValueError(
-                f"Skill type must be one of {VALID_SKILL_TYPES}: {self.skill_type}"
-            )
+            raise ValueError(f"Skill type must be one of {VALID_SKILL_TYPES}: {self.skill_type}")
 
         # Ensure lists are not None
         if self.tags is None:
@@ -77,7 +72,7 @@ class SkillMetadata:
 class SkillResource:
     """
     Represents a skill resource (reference, example, script, or asset).
-    
+
     Attributes:
         path: Path to the resource file (relative to skill directory)
         type: Resource type ('reference', 'example', 'script', 'asset')
@@ -87,6 +82,7 @@ class SkillResource:
         description: Optional description for scripts (used for tool registration)
         parameters: Optional parameter definitions for scripts (used for tool registration)
     """
+
     path: str
     type: str  # 'reference', 'example', 'script', 'asset'
     content: Optional[str] = None
@@ -94,25 +90,21 @@ class SkillResource:
     mode: Optional[str] = None  # For scripts: 'native', 'subprocess', 'auto'
     description: Optional[str] = None  # For scripts: tool description
     parameters: Optional[Dict[str, Any]] = None  # For scripts: parameter definitions
-    
+
     def __post_init__(self):
         """Validate resource fields."""
-        valid_types = {'reference', 'example', 'script', 'asset'}
+        valid_types = {"reference", "example", "script", "asset"}
         if self.type not in valid_types:
-            raise ValueError(
-                f"Resource type must be one of {valid_types}: {self.type}"
-            )
-        
+            raise ValueError(f"Resource type must be one of {valid_types}: {self.type}")
+
         # Validate mode if provided
         if self.mode is not None:
-            valid_modes = {'native', 'subprocess', 'auto'}
+            valid_modes = {"native", "subprocess", "auto"}
             if self.mode not in valid_modes:
-                raise ValueError(
-                    f"Script mode must be one of {valid_modes}: {self.mode}"
-                )
-        
+                raise ValueError(f"Script mode must be one of {valid_modes}: {self.mode}")
+
         # Scripts should be marked as executable
-        if self.type == 'script':
+        if self.type == "script":
             self.executable = True
 
 
@@ -120,12 +112,12 @@ class SkillResource:
 class SkillDefinition:
     """
     Complete skill definition with metadata, body, and resources.
-    
+
     Supports progressive disclosure:
     - Level 1: Metadata only (always loaded)
     - Level 2: Body content (loaded when skill is triggered)
     - Level 3: Resources (loaded as needed)
-    
+
     Attributes:
         metadata: Skill metadata from YAML frontmatter
         skill_path: Path to the skill directory
@@ -136,6 +128,7 @@ class SkillDefinition:
         assets: Dictionary of asset resources
         recommended_tools: List of recommended tool names (from metadata)
     """
+
     metadata: SkillMetadata
     skill_path: Path
     body: Optional[str] = None
@@ -143,7 +136,7 @@ class SkillDefinition:
     examples: Dict[str, SkillResource] = field(default_factory=dict)
     scripts: Dict[str, SkillResource] = field(default_factory=dict)
     assets: Dict[str, SkillResource] = field(default_factory=dict)
-    
+
     @property
     def recommended_tools(self) -> List[str]:
         """Get recommended tools from metadata."""
@@ -206,4 +199,3 @@ class SkillDefinition:
             return False
         resource = resource_dict.get(resource_name)
         return resource is not None and resource.content is not None
-

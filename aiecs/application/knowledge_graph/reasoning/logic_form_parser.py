@@ -117,7 +117,7 @@ class LogicFormParser:
         # Type annotation for optional attribute
         self.query_parser: Optional[LogicQueryParser]
         if schema_manager:
-            self.query_parser = LogicQueryParser(schema_manager)  # type: ignore[assignment]
+            self.query_parser = LogicQueryParser(schema_manager)
         else:
             # Create a minimal schema manager if none provided
             self.query_parser = None

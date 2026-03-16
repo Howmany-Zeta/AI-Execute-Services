@@ -198,10 +198,7 @@ class RelationValidator:
         for prop_name, prop_schema in rel_type_schema.properties.items():
             if prop_schema.required and prop_name not in relation_properties:
                 available_props = list(rel_type_schema.properties.keys())
-                errors.append(
-                    f"Required property '{prop_name}' missing for relation type '{relation.relation_type}'. "
-                    f"Available properties: {', '.join(available_props)}"
-                )
+                errors.append(f"Required property '{prop_name}' missing for relation type '{relation.relation_type}'. " f"Available properties: {', '.join(available_props)}")
 
         # Validate each provided property
         for prop_name, prop_value in relation_properties.items():
@@ -209,10 +206,7 @@ class RelationValidator:
             if prop_name not in rel_type_schema.properties:
                 if self.strict:
                     available_props = list(rel_type_schema.properties.keys())
-                    errors.append(
-                        f"Unknown property '{prop_name}' for relation type '{relation.relation_type}'. "
-                        f"Available properties: {', '.join(available_props) if available_props else 'none'}"
-                    )
+                    errors.append(f"Unknown property '{prop_name}' for relation type '{relation.relation_type}'. " f"Available properties: {', '.join(available_props) if available_props else 'none'}")
                 # In non-strict mode, allow unknown properties
                 continue
 
@@ -228,12 +222,8 @@ class RelationValidator:
                 # Enhance error message with relation context
                 if "Property" in error_msg and "'" in error_msg:
                     # Error already includes property name, just add relation context
-                    errors.append(
-                        f"Property validation failed for relation '{relation.relation_type}': {error_msg}"
-                    )
+                    errors.append(f"Property validation failed for relation '{relation.relation_type}': {error_msg}")
                 else:
-                    errors.append(
-                        f"Property '{prop_name}' validation failed for relation '{relation.relation_type}': {error_msg}"
-                    )
+                    errors.append(f"Property '{prop_name}' validation failed for relation '{relation.relation_type}': {error_msg}")
 
         return errors

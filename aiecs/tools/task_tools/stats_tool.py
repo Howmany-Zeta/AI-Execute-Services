@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Optional, Union, Tuple
 from enum import Enum
 from dataclasses import dataclass
 
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 import numpy as np
 from pydantic import Field, BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -66,7 +66,7 @@ class StatsTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the stats tool
-        
+
         Automatically reads from environment variables with STATS_TOOL_ prefix.
         Example: STATS_TOOL_MAX_FILE_SIZE_MB -> max_file_size_mb
         """
@@ -213,7 +213,7 @@ class StatsTool(BaseTool):
         try:
             ext = os.path.splitext(file_path)[1].lower()
             if ext in [".sav", ".sas7bdat", ".por"]:
-                import pyreadstat  # type: ignore[import-untyped]
+                import pyreadstat
 
                 if ext == ".sav":
                     df, meta = pyreadstat.read_sav(file_path)
@@ -310,7 +310,7 @@ class StatsTool(BaseTool):
         """Perform t-tests (independent or paired). Also handles legacy ttest_ind."""
         df = self._load_data(file_path)
         self._validate_variables(df, [var1, var2])
-        import scipy.stats as stats  # type: ignore[import-untyped]
+        import scipy.stats as stats
 
         a = df[var1].dropna().values
         b = df[var2].dropna().values
@@ -364,7 +364,7 @@ class StatsTool(BaseTool):
             self._validate_variables(df, variables)
         if var1 and var2:
             self._validate_variables(df, [var1, var2])
-        import scipy.stats as stats  # type: ignore[import-untyped]
+        import scipy.stats as stats
 
         result = {}
         if variables:
@@ -412,8 +412,8 @@ class StatsTool(BaseTool):
         """Perform one-way ANOVA with optional post-hoc tests."""
         df = self._load_data(file_path)
         self._validate_variables(df, [dependent, factor])
-        import scipy.stats as stats  # type: ignore[import-untyped]  # type: ignore[import-untyped]
-        from statsmodels.stats.multicomp import pairwise_tukeyhsd  # type: ignore[import-untyped]
+        import scipy.stats as stats
+        from statsmodels.stats.multicomp import pairwise_tukeyhsd
 
         dependent_var = df[dependent].dropna()
         factor_var = df[factor].dropna()
@@ -470,7 +470,7 @@ class StatsTool(BaseTool):
         """Perform chi-square test of independence."""
         df = self._load_data(file_path)
         self._validate_variables(df, [var1, var2])
-        import scipy.stats as stats  # type: ignore[import-untyped]
+        import scipy.stats as stats
 
         contingency = pd.crosstab(df[var1], df[var2])
         chi2, p, dof, expected = stats.chi2_contingency(contingency, correction=correction)
@@ -499,7 +499,7 @@ class StatsTool(BaseTool):
         """Perform non-parametric statistical tests."""
         df = self._load_data(file_path)
         self._validate_variables(df, variables + ([grouping] if grouping else []))
-        import scipy.stats as stats  # type: ignore[import-untyped]
+        import scipy.stats as stats
 
         if test_type == "mann_whitney":
             if len(variables) != 2:
@@ -583,7 +583,7 @@ class StatsTool(BaseTool):
     ) -> Dict[str, Any]:
         """Perform regression analysis with various models."""
         df = self._load_data(file_path)
-        import statsmodels.formula.api as smf  # type: ignore[import-untyped]
+        import statsmodels.formula.api as smf
 
         try:
             model_map = {
@@ -640,8 +640,8 @@ class StatsTool(BaseTool):
         """Perform time series analysis."""
         df = self._load_data(file_path)
         self._validate_variables(df, [variable] + ([date_variable] if date_variable else []))
-        from statsmodels.tsa.arima.model import ARIMA  # type: ignore[import-untyped]
-        from statsmodels.tsa.statespace.sarimax import SARIMAX  # type: ignore[import-untyped]
+        from statsmodels.tsa.arima.model import ARIMA
+        from statsmodels.tsa.statespace.sarimax import SARIMAX
 
         try:
             ts_data = df[variable].dropna()
@@ -694,7 +694,7 @@ class StatsTool(BaseTool):
         data = df[variables].copy()
         result: Dict[str, Any] = {"operation": operation}
         if operation == "scale":
-            from sklearn.preprocessing import (  # type: ignore[import-untyped]
+            from sklearn.preprocessing import (
                 StandardScaler,
                 MinMaxScaler,
                 RobustScaler,

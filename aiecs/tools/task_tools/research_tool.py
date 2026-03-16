@@ -1,11 +1,11 @@
 import logging
-from typing import Dict, Any, List, Optional, Set
+from typing import Dict, Any, List, Optional, Set, cast
 import spacy
 from spacy.language import Language
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from collections import Counter
-from scipy.stats import pearsonr  # type: ignore[import-untyped]
+from scipy.stats import pearsonr
 import os
 
 from aiecs.tools.base_tool import BaseTool
@@ -42,7 +42,7 @@ class ResearchTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the research tool
-        
+
         Automatically reads from environment variables with RESEARCH_TOOL_ prefix.
         Example: RESEARCH_TOOL_SPACY_MODEL -> spacy_model
         """
@@ -131,7 +131,7 @@ class ResearchTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: ResearchTool.Config = cast(ResearchTool.Config, self._config_obj) if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
@@ -313,7 +313,7 @@ class ResearchTool(BaseTool):
                 else:
                     # Approximate p-value using t-distribution
                     t_stat = corr * np.sqrt((n - 2) / (1 - corr**2 + 1e-10))
-                    from scipy.stats import t  # type: ignore[import-untyped]
+                    from scipy.stats import t
 
                     pval = 2 * (1 - t.cdf(abs(t_stat), n - 2))
 

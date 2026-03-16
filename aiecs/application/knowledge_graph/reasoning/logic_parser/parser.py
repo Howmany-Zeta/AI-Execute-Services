@@ -28,19 +28,11 @@ try:
     LARK_AVAILABLE = True
 except ImportError:
     LARK_AVAILABLE = False
-    from typing import Any, TYPE_CHECKING
-    if TYPE_CHECKING:
-        Lark: Any  # type: ignore[assignment,no-redef]
-        LarkError: Any  # type: ignore[assignment,no-redef]
-        UnexpectedInput: Any  # type: ignore[assignment,no-redef]
-        UnexpectedToken: Any  # type: ignore[assignment,no-redef]
-        UnexpectedCharacters: Any  # type: ignore[assignment,no-redef]
-    else:
-        Lark = None  # type: ignore[assignment]
-        LarkError = Exception  # type: ignore[assignment]
-        UnexpectedInput = Exception  # type: ignore[assignment]
-        UnexpectedToken = Exception  # type: ignore[assignment]
-        UnexpectedCharacters = Exception  # type: ignore[assignment]
+    Lark = None  # type: ignore[misc, assignment]
+    LarkError = Exception  # type: ignore[misc, assignment]
+    UnexpectedInput = Exception  # type: ignore[misc, assignment]
+    UnexpectedToken = Exception  # type: ignore[misc, assignment]
+    UnexpectedCharacters = Exception  # type: ignore[misc, assignment]
 
 # AST node types imported for type hints in docstrings
 # from .ast_nodes import ASTNode, QueryNode, FindNode, TraversalNode, FilterNode
@@ -55,11 +47,7 @@ try:
     QUERY_PLAN_AVAILABLE = True
 except ImportError:
     QUERY_PLAN_AVAILABLE = False
-    from typing import TYPE_CHECKING
-    if TYPE_CHECKING:
-        QueryPlan: Any  # type: ignore[assignment,no-redef]
-    else:
-        QueryPlan = None  # type: ignore[assignment]
+    QueryPlan = None  # type: ignore[misc, assignment]
 
 
 class LogicQueryParser:
@@ -267,7 +255,7 @@ class LogicQueryParser:
         """
         if parse_tree is None:
             return "None"
-        return parse_tree.pretty()
+        return str(parse_tree.pretty())
 
     # ========================================================================
     # Multi-Query Support (Batch Processing)

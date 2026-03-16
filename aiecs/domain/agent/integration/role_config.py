@@ -5,7 +5,7 @@ Load agent configuration from role templates.
 """
 
 import logging
-import yaml  # type: ignore[import-untyped]
+import yaml
 from typing import Dict, Any, Optional
 from pathlib import Path
 
@@ -66,13 +66,13 @@ class RoleConfiguration:
         Returns:
             AgentConfiguration instance
         """
-        return AgentConfiguration(  # type: ignore[call-arg]
+        return AgentConfiguration(
             goal=self.goal,
             backstory=self.backstory,
             domain_knowledge=self.domain_knowledge,
             llm_model=self.llm_model,
             temperature=self.temperature,
-            max_tokens=self.max_tokens if self.max_tokens is not None else 4096,  # type: ignore[arg-type]
+            max_tokens=self.max_tokens if self.max_tokens is not None else 4096,
             **self.additional_config,
         )
 

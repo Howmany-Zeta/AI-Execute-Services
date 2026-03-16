@@ -10,12 +10,12 @@ This tool provides comprehensive data transformation capabilities with:
 """
 
 import logging
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Union, cast
 from enum import Enum
 
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, LabelEncoder  # type: ignore[import-untyped]
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, LabelEncoder
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -85,7 +85,7 @@ class DataTransformerTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the data transformer tool
-        
+
         Automatically reads from environment variables with DATA_TRANSFORMER_ prefix.
         Example: DATA_TRANSFORMER_OUTLIER_STD_THRESHOLD -> outlier_std_threshold
         """
@@ -127,7 +127,7 @@ class DataTransformerTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: DataTransformerTool.Config = cast(DataTransformerTool.Config, self._config_obj) if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
@@ -144,7 +144,7 @@ class DataTransformerTool(BaseTool):
 
     def _init_external_tools(self):
         """Initialize external task tools"""
-        self.external_tools = {}
+        self.external_tools: Dict[str, Any] = {}
 
         # Initialize PandasTool for data operations
         try:
