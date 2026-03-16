@@ -15,9 +15,7 @@ from .constants import (
 class ErrorHandler:
     """Formats exceptions into agent-friendly error responses."""
 
-    def format_error(
-        self, error: Exception, context: Dict = None
-    ) -> Dict[str, Any]:
+    def format_error(self, error: Exception, context: Optional[Dict] = None) -> Dict[str, Any]:
         """
         Format an exception into a structured error response.
 
@@ -46,9 +44,7 @@ class ErrorHandler:
         else:
             return self._handle_unknown(error, context)
 
-    def _handle_http_error(
-        self, error: HttpError, context: Dict
-    ) -> Dict[str, Any]:
+    def _handle_http_error(self, error: HttpError, context: Dict) -> Dict[str, Any]:
         status = error.status_code or 0
         is_server_error = 500 <= status < 600
         is_client_error = 400 <= status < 500
@@ -92,9 +88,7 @@ class ErrorHandler:
         }
         return actions.get(status, ["Check the URL and try again"])
 
-    def _handle_rate_limit(
-        self, error: RateLimitError, context: Dict
-    ) -> Dict[str, Any]:
+    def _handle_rate_limit(self, error: RateLimitError, context: Dict) -> Dict[str, Any]:
         retry_after = error.retry_after or 60
         return {
             "error_type": "rate_limit",
@@ -108,9 +102,7 @@ class ErrorHandler:
             ],
         }
 
-    def _handle_circuit_breaker(
-        self, error: CircuitBreakerOpenError, context: Dict
-    ) -> Dict[str, Any]:
+    def _handle_circuit_breaker(self, error: CircuitBreakerOpenError, context: Dict) -> Dict[str, Any]:
         return {
             "error_type": "circuit_breaker",
             "message": f"Domain temporarily unavailable: {error.message}",
@@ -123,9 +115,7 @@ class ErrorHandler:
             ],
         }
 
-    def _handle_blocked(
-        self, error: BlockedError, context: Dict
-    ) -> Dict[str, Any]:
+    def _handle_blocked(self, error: BlockedError, context: Dict) -> Dict[str, Any]:
         return {
             "error_type": "blocked",
             "message": f"Bot detection triggered: {error.message}",
@@ -139,9 +129,7 @@ class ErrorHandler:
             ],
         }
 
-    def _handle_parsing(
-        self, error: ParsingError, context: Dict
-    ) -> Dict[str, Any]:
+    def _handle_parsing(self, error: ParsingError, context: Dict) -> Dict[str, Any]:
         return {
             "error_type": "parsing_error",
             "message": f"Content parsing failed: {error.message}",
@@ -155,9 +143,7 @@ class ErrorHandler:
             ],
         }
 
-    def _handle_rendering(
-        self, error: RenderingError, context: Dict
-    ) -> Dict[str, Any]:
+    def _handle_rendering(self, error: RenderingError, context: Dict) -> Dict[str, Any]:
         return {
             "error_type": "rendering_error",
             "message": f"JavaScript rendering failed: {error.message}",
@@ -171,9 +157,7 @@ class ErrorHandler:
             ],
         }
 
-    def _handle_unknown(
-        self, error: Exception, context: Dict
-    ) -> Dict[str, Any]:
+    def _handle_unknown(self, error: Exception, context: Dict) -> Dict[str, Any]:
         return {
             "error_type": "unknown_error",
             "message": f"Unexpected error: {str(error)}",
@@ -186,4 +170,3 @@ class ErrorHandler:
                 "If the error persists, try a different approach",
             ],
         }
-

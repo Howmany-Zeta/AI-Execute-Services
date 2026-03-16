@@ -7,7 +7,7 @@ including consensus building, voting mechanisms, and conflict resolution.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Awaitable, Callable, Dict, List, Any, Optional, Tuple
 from enum import Enum
 
 from .models.community_models import (
@@ -55,7 +55,11 @@ class DecisionEngine:
         self.community_manager = community_manager
 
         # Decision algorithms configuration
-        self.consensus_algorithms = {
+        ConsensusFunc = Callable[
+            [CommunityDecision, AgentCommunity],
+            Awaitable[Tuple[bool, Dict[str, Any]]],
+        ]
+        self.consensus_algorithms: Dict[ConsensusAlgorithm, ConsensusFunc] = {
             ConsensusAlgorithm.SIMPLE_MAJORITY: self._simple_majority_consensus,
             ConsensusAlgorithm.SUPERMAJORITY: self._supermajority_consensus,
             ConsensusAlgorithm.UNANIMOUS: self._unanimous_consensus,

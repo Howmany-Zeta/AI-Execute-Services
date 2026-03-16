@@ -18,6 +18,6 @@ temp_dir: "/tmp/document_parser"
 
 # Cloud Storage Configuration
 enable_cloud_storage: true
-gcs_bucket_name: "my-documents-bucket"
+# gcs_bucket_name must be set via environment variable DOC_PARSER_GCS_BUCKET_NAME
 # gcs_project_id should be set via environment variable DOC_PARSER_GCS_PROJECT_ID
 

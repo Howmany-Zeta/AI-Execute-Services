@@ -140,7 +140,7 @@ class GraphReasoningTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the Graph Reasoning Tool
-        
+
         Automatically reads from environment variables with GRAPH_REASONING_ prefix.
         Example: GRAPH_REASONING_DEFAULT_MAX_HOPS -> default_max_hops
         """
@@ -242,10 +242,10 @@ class GraphReasoningTool(BaseTool):
 
         # Initialize components (may be None if graph_store not provided)
         self.graph_store = graph_store
-        self.query_planner = None
-        self.reasoning_engine = None
-        self.inference_engine = None
-        self.evidence_synthesizer = None
+        self.query_planner: Optional[QueryPlanner] = None
+        self.reasoning_engine: Optional[ReasoningEngine] = None
+        self.inference_engine: Optional[InferenceEngine] = None
+        self.evidence_synthesizer: Optional[EvidenceSynthesizer] = None
         self._initialized = False
 
         # If graph_store provided, initialize immediately (backward compatibility)
@@ -278,6 +278,7 @@ class GraphReasoningTool(BaseTool):
         # Use provided graph_store or create a default one
         if graph_store is None:
             from aiecs.infrastructure.graph_storage.in_memory import InMemoryGraphStore
+
             graph_store = InMemoryGraphStore()
             await graph_store.initialize()
 
@@ -285,6 +286,7 @@ class GraphReasoningTool(BaseTool):
 
     def _setup_default_rules(self):
         """Setup default inference rules"""
+        assert self.inference_engine is not None, "inference_engine not initialized"
         # Common transitive rules
         transitive_relations = [
             "KNOWS",
@@ -349,11 +351,7 @@ class GraphReasoningTool(BaseTool):
             RuntimeError: If tool is not initialized (call _initialize() first)
         """
         if not self._initialized:
-            raise RuntimeError(
-                "GraphReasoningTool is not initialized. "
-                "Call await tool._initialize(graph_store) first, or provide "
-                "graph_store in the constructor."
-            )
+            raise RuntimeError("GraphReasoningTool is not initialized. " "Call await tool._initialize(graph_store) first, or provide " "graph_store in the constructor.")
 
         mode = validated_input.mode
 
@@ -380,6 +378,7 @@ class GraphReasoningTool(BaseTool):
 
     async def _execute_query_plan(self, input_data: GraphReasoningInput) -> Dict[str, Any]:
         """Execute query planning"""
+        assert self.query_planner is not None, "query_planner not initialized"
         # Plan the query (not async)
         plan = self.query_planner.plan_query(input_data.query)
 
@@ -415,6 +414,8 @@ class GraphReasoningTool(BaseTool):
 
     async def _execute_multi_hop(self, input_data: GraphReasoningInput) -> Dict[str, Any]:
         """Execute multi-hop reasoning"""
+        assert self.reasoning_engine is not None, "reasoning_engine not initialized"
+        assert self.evidence_synthesizer is not None, "evidence_synthesizer not initialized"
         if not input_data.start_entity_id:
             raise ValueError("start_entity_id is required for multi-hop reasoning")
 
@@ -464,6 +465,7 @@ class GraphReasoningTool(BaseTool):
 
     async def _execute_inference(self, input_data: GraphReasoningInput) -> Dict[str, Any]:
         """Execute logical inference"""
+        assert self.inference_engine is not None, "inference_engine not initialized"
         if not input_data.apply_inference:
             raise ValueError("apply_inference must be True for inference mode")
 
@@ -568,6 +570,10 @@ class GraphReasoningTool(BaseTool):
 
     async def _execute_full_reasoning(self, input_data: GraphReasoningInput) -> Dict[str, Any]:
         """Execute full reasoning pipeline"""
+        assert self.query_planner is not None, "query_planner not initialized"
+        assert self.reasoning_engine is not None, "reasoning_engine not initialized"
+        assert self.inference_engine is not None, "inference_engine not initialized"
+        assert self.evidence_synthesizer is not None, "evidence_synthesizer not initialized"
         if not input_data.start_entity_id:
             raise ValueError("start_entity_id is required for full reasoning")
 

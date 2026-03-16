@@ -112,11 +112,11 @@ class DetailedMetrics:
             now = datetime.utcnow().isoformat()
 
             # Get typed references to nested dictionaries
-            requests = cast(RequestsMetrics, self.metrics["requests"])
-            timestamps = cast(TimestampsMetrics, self.metrics["timestamps"])
-            performance = cast(PerformanceMetrics, self.metrics["performance"])
-            data_volume = cast(DataVolumeMetrics, self.metrics["data_volume"])
-            errors = cast(ErrorsMetrics, self.metrics["errors"])
+            requests: RequestsMetrics = self.metrics["requests"]
+            timestamps: TimestampsMetrics = self.metrics["timestamps"]
+            performance: PerformanceMetrics = self.metrics["performance"]
+            data_volume: DataVolumeMetrics = self.metrics["data_volume"]
+            errors: ErrorsMetrics = self.metrics["errors"]
 
             # Update request counts
             requests["total"] += 1
@@ -178,7 +178,7 @@ class DetailedMetrics:
             wait_time_ms: Time waited in milliseconds
         """
         with self.lock:
-            rate_limiting = cast(RateLimitingMetrics, self.metrics["rate_limiting"])
+            rate_limiting: RateLimitingMetrics = self.metrics["rate_limiting"]
             rate_limiting["throttled_requests"] += 1
             rate_limiting["total_wait_time_ms"] += wait_time_ms
 
@@ -188,7 +188,7 @@ class DetailedMetrics:
 
     def _calculate_percentiles(self):
         """Calculate response time percentiles"""
-        performance = cast(PerformanceMetrics, self.metrics["performance"])
+        performance: PerformanceMetrics = self.metrics["performance"]
         response_times = cast(List[float], performance["response_times"])
         times = sorted(response_times)
         if not times:
@@ -207,9 +207,9 @@ class DetailedMetrics:
         Calculate health score without acquiring lock (internal use only).
         Must be called while holding self.lock.
         """
-        requests = cast(RequestsMetrics, self.metrics["requests"])
-        performance = cast(PerformanceMetrics, self.metrics["performance"])
-        errors = cast(ErrorsMetrics, self.metrics["errors"])
+        requests: RequestsMetrics = self.metrics["requests"]
+        performance: PerformanceMetrics = self.metrics["performance"]
+        errors: ErrorsMetrics = self.metrics["errors"]
 
         total = requests["total"]
         if total == 0:
@@ -265,13 +265,13 @@ class DetailedMetrics:
         """
         with self.lock:
             # Convert defaultdict to regular dict for JSON serialization
-            requests_dict: Dict[str, int] = dict(self.metrics["requests"])  # type: ignore[arg-type]
-            performance_dict: Dict[str, Any] = dict(self.metrics["performance"])  # type: ignore[arg-type]
-            data_volume_dict: Dict[str, Any] = dict(self.metrics["data_volume"])  # type: ignore[arg-type]
-            errors_by_type: Dict[str, int] = dict(self.metrics["errors"]["by_type"])  # type: ignore[arg-type]
-            recent_errors_list: List[Dict[str, Any]] = list(self.metrics["errors"]["recent_errors"])  # type: ignore[arg-type]
-            rate_limiting_dict: Dict[str, Any] = dict(self.metrics["rate_limiting"])  # type: ignore[arg-type]
-            timestamps_dict: Dict[str, Optional[str]] = dict(self.metrics["timestamps"])  # type: ignore[arg-type]
+            requests_dict: Dict[str, int] = dict(self.metrics["requests"])
+            performance_dict: Dict[str, Any] = dict(self.metrics["performance"])
+            data_volume_dict: Dict[str, Any] = dict(self.metrics["data_volume"])
+            errors_by_type: Dict[str, int] = dict(self.metrics["errors"]["by_type"])
+            recent_errors_list: List[Dict[str, Any]] = list(self.metrics["errors"]["recent_errors"])
+            rate_limiting_dict: Dict[str, Any] = dict(self.metrics["rate_limiting"])
+            timestamps_dict: Dict[str, Optional[str]] = dict(self.metrics["timestamps"])
 
             stats: Dict[str, Any] = {
                 "requests": requests_dict,
@@ -299,9 +299,9 @@ class DetailedMetrics:
             Summary dictionary with key metrics
         """
         with self.lock:
-            requests = cast(RequestsMetrics, self.metrics["requests"])
-            performance = cast(PerformanceMetrics, self.metrics["performance"])
-            errors = cast(ErrorsMetrics, self.metrics["errors"])
+            requests: RequestsMetrics = self.metrics["requests"]
+            performance: PerformanceMetrics = self.metrics["performance"]
+            errors: ErrorsMetrics = self.metrics["errors"]
 
             total = requests["total"]
             if total == 0:
@@ -327,4 +327,4 @@ class DetailedMetrics:
     def reset(self):
         """Reset all metrics"""
         with self.lock:
-            self.__init__(self.max_response_times)
+            DetailedMetrics.__init__(self, self.max_response_times)

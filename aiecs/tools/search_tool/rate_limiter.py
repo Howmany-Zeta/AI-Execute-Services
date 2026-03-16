@@ -36,7 +36,7 @@ class RateLimiter:
         """
         self.max_requests = max_requests
         self.time_window = time_window
-        self.tokens = max_requests
+        self.tokens: float = max_requests
         self.last_update = time.time()
         self.lock = Lock()
         self.request_history: deque = deque()
@@ -137,11 +137,12 @@ class CircuitBreaker:
         with self.lock:
             if self.state == CircuitState.OPEN:
                 # Check if timeout has passed
-                if time.time() - self.last_failure_time >= self.timeout:
+                if self.last_failure_time is not None and time.time() - self.last_failure_time >= self.timeout:
                     self.state = CircuitState.HALF_OPEN
                     self.failure_count = 0
                 else:
-                    raise CircuitBreakerOpenError(f"Circuit breaker is OPEN. Retry after " f"{self.timeout - (time.time() - self.last_failure_time):.1f}s")
+                    elapsed = (time.time() - self.last_failure_time) if self.last_failure_time is not None else 0.0
+                    raise CircuitBreakerOpenError(f"Circuit breaker is OPEN. Retry after " f"{self.timeout - elapsed:.1f}s")
 
         try:
             result = func(*args, **kwargs)

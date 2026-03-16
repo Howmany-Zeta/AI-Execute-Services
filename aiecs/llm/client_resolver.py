@@ -77,7 +77,7 @@ def resolve_llm_client(
     # Resolve client from factory
     try:
         client = LLMClientFactory.get_client(provider)
-        
+
         # Log resolution
         if model:
             logger.info(f"Resolved LLM client for provider: {cache_key}, model: {model}")
@@ -88,14 +88,16 @@ def resolve_llm_client(
         # Cast to LLMClientProtocol since BaseLLMClient implements the protocol
         if use_cache:
             from typing import cast
+
             _client_cache[cache_key] = cast("LLMClientProtocol", client)
             logger.debug(f"Cached client for provider: {cache_key}")
 
         # Cast return value to match return type annotation
         from typing import cast
+
         return cast("LLMClientProtocol", client)
 
-    except ValueError as e:
+    except ValueError:
         logger.error(f"Failed to resolve LLM client for provider: {cache_key}")
         raise
 
@@ -119,8 +121,6 @@ def clear_client_cache(provider: Optional[Union[str, AIProvider]] = None) -> Non
         clear_client_cache()
         ```
     """
-    global _client_cache
-
     if provider is None:
         # Clear entire cache
         count = len(_client_cache)
@@ -152,4 +152,3 @@ def get_cached_providers() -> list[str]:
         ```
     """
     return list(_client_cache.keys())
-

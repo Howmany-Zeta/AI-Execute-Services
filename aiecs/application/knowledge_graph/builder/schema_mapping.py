@@ -5,7 +5,7 @@ Maps structured data (CSV, JSON) columns to knowledge graph entity and relation 
 with support for property transformations.
 """
 
-from typing import Dict, List, Optional, Any, cast, Callable
+from typing import Dict, List, Optional, Any
 from enum import Enum
 from pydantic import BaseModel, Field, field_validator
 from aiecs.domain.knowledge_graph.schema.property_schema import PropertyType

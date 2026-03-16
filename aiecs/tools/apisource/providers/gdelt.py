@@ -13,9 +13,9 @@ API Documentation:
 """
 
 import logging
-from datetime import datetime, timedelta
+
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urlencode, quote
+
 
 from aiecs.tools.apisource.providers.base import (
     BaseAPIProvider,
@@ -107,9 +107,18 @@ class GDELTProvider(BaseAPIProvider):
             # Other operations have different valid modes
             else:
                 valid_modes = [
-                    "artlist", "artgallery", "imagecollage", "imagecollageinfo",
-                    "imagegallery", "timelinevol", "timelinevolraw", "timelinevolinfo",
-                    "timelinetone", "timelinelang", "timelinesourcecountry", "tonechart"
+                    "artlist",
+                    "artgallery",
+                    "imagecollage",
+                    "imagecollageinfo",
+                    "imagegallery",
+                    "timelinevol",
+                    "timelinevolraw",
+                    "timelinevolinfo",
+                    "timelinetone",
+                    "timelinelang",
+                    "timelinesourcecountry",
+                    "tonechart",
                 ]
                 if mode not in valid_modes:
                     return False, f"Invalid mode. Must be one of: {', '.join(valid_modes)}"
@@ -118,10 +127,7 @@ class GDELTProvider(BaseAPIProvider):
 
     # Exposed operations for AI agent visibility
 
-    @expose_operation(
-        operation_name="search_articles",
-        description="Search global news articles by keywords, themes, or advanced queries across 100+ languages"
-    )
+    @expose_operation(operation_name="search_articles", description="Search global news articles by keywords, themes, or advanced queries across 100+ languages")
     def search_articles(
         self,
         query: str,
@@ -163,10 +169,7 @@ class GDELTProvider(BaseAPIProvider):
 
         return self.execute("search_articles", params)
 
-    @expose_operation(
-        operation_name="get_timeline",
-        description="Get timeline visualization of news coverage volume over time"
-    )
+    @expose_operation(operation_name="get_timeline", description="Get timeline visualization of news coverage volume over time")
     def get_timeline(
         self,
         query: str,
@@ -200,10 +203,7 @@ class GDELTProvider(BaseAPIProvider):
 
         return self.execute("get_timeline", params)
 
-    @expose_operation(
-        operation_name="get_tone_chart",
-        description="Analyze emotional tone distribution of news coverage from negative to positive"
-    )
+    @expose_operation(operation_name="get_tone_chart", description="Analyze emotional tone distribution of news coverage from negative to positive")
     def get_tone_chart(
         self,
         query: str,
@@ -230,10 +230,7 @@ class GDELTProvider(BaseAPIProvider):
 
         return self.execute("get_tone_chart", params)
 
-    @expose_operation(
-        operation_name="search_images",
-        description="Search news images using visual recognition, captions, and metadata"
-    )
+    @expose_operation(operation_name="search_images", description="Search news images using visual recognition, captions, and metadata")
     def search_images(
         self,
         query: str,
@@ -274,10 +271,7 @@ class GDELTProvider(BaseAPIProvider):
 
         return self.execute("search_images", params)
 
-    @expose_operation(
-        operation_name="get_geo_map",
-        description="Get geographic map of locations mentioned in news coverage"
-    )
+    @expose_operation(operation_name="get_geo_map", description="Get geographic map of locations mentioned in news coverage")
     def get_geo_map(
         self,
         query: str,
@@ -310,10 +304,7 @@ class GDELTProvider(BaseAPIProvider):
 
         return self.execute("get_geo_map", params)
 
-    @expose_operation(
-        operation_name="get_source_country_map",
-        description="Map which countries are reporting on a topic in their domestic media"
-    )
+    @expose_operation(operation_name="get_source_country_map", description="Map which countries are reporting on a topic in their domestic media")
     def get_source_country_map(
         self,
         query: str,
@@ -340,10 +331,7 @@ class GDELTProvider(BaseAPIProvider):
 
         return self.execute("get_source_country_map", params)
 
-    @expose_operation(
-        operation_name="search_by_theme",
-        description="Search using GDELT's Global Knowledge Graph themes for complex topics"
-    )
+    @expose_operation(operation_name="search_by_theme", description="Search using GDELT's Global Knowledge Graph themes for complex topics")
     def search_by_theme(
         self,
         theme: str,
@@ -373,10 +361,7 @@ class GDELTProvider(BaseAPIProvider):
 
         return self.execute("search_by_theme", params)
 
-    @expose_operation(
-        operation_name="get_article_list",
-        description="Get detailed list of articles matching search criteria"
-    )
+    @expose_operation(operation_name="get_article_list", description="Get detailed list of articles matching search criteria")
     def get_article_list(
         self,
         query: str,
@@ -410,10 +395,7 @@ class GDELTProvider(BaseAPIProvider):
 
         return self.execute("get_article_list", params)
 
-    @expose_operation(
-        operation_name="get_timeline_volume",
-        description="Get volume timeline showing coverage intensity over time"
-    )
+    @expose_operation(operation_name="get_timeline_volume", description="Get volume timeline showing coverage intensity over time")
     def get_timeline_volume(
         self,
         query: str,
@@ -447,10 +429,7 @@ class GDELTProvider(BaseAPIProvider):
 
         return self.execute("get_timeline_volume", params)
 
-    @expose_operation(
-        operation_name="get_timeline_tone",
-        description="Get timeline showing average emotional tone over time"
-    )
+    @expose_operation(operation_name="get_timeline_tone", description="Get timeline showing average emotional tone over time")
     def get_timeline_tone(
         self,
         query: str,
@@ -481,10 +460,7 @@ class GDELTProvider(BaseAPIProvider):
 
         return self.execute("get_timeline_tone", params)
 
-    @expose_operation(
-        operation_name="get_timeline_lang",
-        description="Get timeline showing coverage breakdown by language"
-    )
+    @expose_operation(operation_name="get_timeline_lang", description="Get timeline showing coverage breakdown by language")
     def get_timeline_lang(
         self,
         query: str,
@@ -511,10 +487,7 @@ class GDELTProvider(BaseAPIProvider):
 
         return self.execute("get_timeline_lang", params)
 
-    @expose_operation(
-        operation_name="get_timeline_source_country",
-        description="Get timeline showing coverage breakdown by source country"
-    )
+    @expose_operation(operation_name="get_timeline_source_country", description="Get timeline showing coverage breakdown by source country")
     def get_timeline_source_country(
         self,
         query: str,
@@ -541,10 +514,7 @@ class GDELTProvider(BaseAPIProvider):
 
         return self.execute("get_timeline_source_country", params)
 
-    @expose_operation(
-        operation_name="get_top_themes",
-        description="Get top themes and topics from matching articles"
-    )
+    @expose_operation(operation_name="get_top_themes", description="Get top themes and topics from matching articles")
     def get_top_themes(
         self,
         query: str,
@@ -631,7 +601,7 @@ class GDELTProvider(BaseAPIProvider):
                             "climate change",
                             '"artificial intelligence"',
                             "(trump OR biden)",
-                            'theme:TERROR',
+                            "theme:TERROR",
                         ],
                     },
                     "timespan": {
@@ -782,4 +752,3 @@ class GDELTProvider(BaseAPIProvider):
         }
 
         return schemas.get(operation)
-

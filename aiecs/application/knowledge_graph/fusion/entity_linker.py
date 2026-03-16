@@ -115,9 +115,7 @@ class EntityLinker:
 
         # Try embedding-based search (fast, semantic)
         if self.use_embeddings and new_entity.embedding:
-            link_result = await self._link_by_embedding(
-                new_entity, candidate_limit, context
-            )
+            link_result = await self._link_by_embedding(new_entity, candidate_limit, context)
             if link_result.linked:
                 return link_result
 
@@ -258,15 +256,13 @@ class EntityLinker:
                     if text_results:
                         # Get best match from text search results
                         best_entity, best_score = text_results[0]
-                        
+
                         # Verify name similarity meets threshold (text_search may use different scoring)
                         candidate_name = self._get_entity_name(best_entity)
                         if candidate_name:
                             # Recompute similarity using our method for consistency
-                            name_similarity = self._name_similarity(
-                                new_name, candidate_name, entity_type=new_entity.entity_type
-                            )
-                            
+                            name_similarity = self._name_similarity(new_name, candidate_name, entity_type=new_entity.entity_type)
+
                             if name_similarity >= self.similarity_threshold:
                                 return LinkResult(
                                     linked=True,
@@ -281,9 +277,7 @@ class EntityLinker:
                     pass
 
             # Fallback: Get candidate entities and compare names manually
-            candidates = await self._get_candidate_entities(
-                new_entity.entity_type, candidate_limit, context
-            )
+            candidates = await self._get_candidate_entities(new_entity.entity_type, candidate_limit, context)
 
             if not candidates:
                 return LinkResult(linked=False, new_entity=new_entity)
@@ -295,9 +289,7 @@ class EntityLinker:
             for candidate in candidates:
                 candidate_name = self._get_entity_name(candidate)
                 if candidate_name:
-                    score = self._name_similarity(
-                        new_name, candidate_name, entity_type=new_entity.entity_type
-                    )
+                    score = self._name_similarity(new_name, candidate_name, entity_type=new_entity.entity_type)
                     if score > best_score:
                         best_score = score
                         best_match = candidate
@@ -317,9 +309,7 @@ class EntityLinker:
 
         return LinkResult(linked=False, new_entity=new_entity)
 
-    async def _get_candidate_entities(
-        self, entity_type: str, limit: int, context: Optional[TenantContext] = None
-    ) -> List[Entity]:
+    async def _get_candidate_entities(self, entity_type: str, limit: int, context: Optional[TenantContext] = None) -> List[Entity]:
         """
         Get candidate entities for linking
 
@@ -392,17 +382,13 @@ class EntityLinker:
         if not name1 or not name2:
             return False
 
-        return self._name_similarity(
-            name1, name2, entity_type=entity1.entity_type
-        ) >= self.similarity_threshold
+        return self._name_similarity(name1, name2, entity_type=entity1.entity_type) >= self.similarity_threshold
 
     def _get_entity_name(self, entity: Entity) -> str:
         """Extract entity name from properties"""
         return entity.properties.get("name") or entity.properties.get("title") or entity.properties.get("text") or ""
 
-    def _name_similarity(
-        self, name1: str, name2: str, entity_type: Optional[str] = None
-    ) -> float:
+    def _name_similarity(self, name1: str, name2: str, entity_type: Optional[str] = None) -> float:
         """
         Compute name similarity using fuzzy matching or SimilarityPipeline.
 
@@ -439,9 +425,7 @@ class EntityLinker:
         # Fuzzy match
         return SequenceMatcher(None, n1, n2).ratio()
 
-    async def _name_similarity_async(
-        self, name1: str, name2: str, entity_type: Optional[str] = None
-    ) -> float:
+    async def _name_similarity_async(self, name1: str, name2: str, entity_type: Optional[str] = None) -> float:
         """
         Compute name similarity using SimilarityPipeline (async version).
 

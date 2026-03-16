@@ -10,11 +10,11 @@ Version: 1.0.0
 
 import os
 import bleach
-from typing import Dict, Any, List, Optional, Union, Tuple, Set
+from typing import Dict, Any, List, Optional, Union, Tuple, Set, cast
 from jinja2 import FileSystemLoader, sandbox
 
 # from weasyprint import HTML  # TODO: Re-enable when deployment issues are resolved
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 from pptx import Presentation
 from pptx.util import Pt
 from docx import Document
@@ -95,7 +95,7 @@ class ReportTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the report tool
-        
+
         Automatically reads from environment variables with REPORT_TOOL_ prefix.
         Example: REPORT_TOOL_TEMPLATES_DIR -> templates_dir
         """
@@ -191,18 +191,22 @@ class ReportTool(BaseTool):
 
     class Generate_excelSchema(BaseModel):
         """Schema for generate_excel operation"""
-        
+
         model_config = ConfigDict(arbitrary_types_allowed=True)
 
         sheets: Dict[str, Union[Any, List[Dict[str, Any]]]] = Field(description="Dictionary mapping sheet names to sheet data. Data can be a pandas DataFrame or list of dictionaries")
         output_path: str = Field(description="Path where the generated Excel file will be saved")
-        styles: Optional[Dict[str, Dict[str, Any]]] = Field(default=None, description="Optional dictionary mapping sheet names to cell styling dictionaries. Each style dict maps cell addresses (e.g., 'A1') to style properties")
+        styles: Optional[Dict[str, Dict[str, Any]]] = Field(
+            default=None, description="Optional dictionary mapping sheet names to cell styling dictionaries. Each style dict maps cell addresses (e.g., 'A1') to style properties"
+        )
         template_variables: Optional[Dict[str, str]] = Field(default=None, description="Optional dictionary of variables for dynamic output path generation")
 
     class Generate_pptxSchema(BaseModel):
         """Schema for generate_pptx operation"""
 
-        slides: List[Dict[str, Any]] = Field(description="List of slide dictionaries. Each slide should have 'title' (str) and 'bullets' (list of strings). Optional: 'font', 'font_size', 'font_color'")
+        slides: List[Dict[str, Any]] = Field(
+            description="List of slide dictionaries. Each slide should have 'title' (str) and 'bullets' (list of strings). Optional: 'font', 'font_size', 'font_color'"
+        )
         output_path: str = Field(description="Path where the generated PowerPoint file will be saved")
         default_font: Optional[str] = Field(default=None, description="Optional default font name for all slides. Uses tool default if not specified")
         default_font_size: Optional[int] = Field(default=None, description="Optional default font size in points for all slides. Uses tool default if not specified")
@@ -232,7 +236,7 @@ class ReportTool(BaseTool):
 
     class Generate_imageSchema(BaseModel):
         """Schema for generate_image operation"""
-        
+
         model_config = ConfigDict(arbitrary_types_allowed=True)
 
         chart_type: str = Field(description="Type of chart to generate: 'bar', 'line', or 'pie'")
@@ -248,13 +252,17 @@ class ReportTool(BaseTool):
 
     class Batch_generateSchema(BaseModel):
         """Schema for batch_generate operation"""
-        
+
         model_config = ConfigDict(arbitrary_types_allowed=True)
 
         operation: str = Field(description="Operation to perform: 'generate_html', 'generate_excel', 'generate_pptx', 'generate_markdown', 'generate_word', 'generate_image', or 'generate_pdf'")
-        contexts: List[Dict[str, Any]] = Field(default=[], description="List of context dictionaries for HTML, Markdown, Word, or PDF operations. Each dict should match the corresponding operation's parameters")
+        contexts: List[Dict[str, Any]] = Field(
+            default=[], description="List of context dictionaries for HTML, Markdown, Word, or PDF operations. Each dict should match the corresponding operation's parameters"
+        )
         output_paths: List[str] = Field(description="List of output file paths, one for each report to generate")
-        datasets: Optional[List[DatasetType]] = Field(default=None, description="Optional list of dataset dictionaries for Excel or Image operations. Each dict should match the corresponding operation's parameters")
+        datasets: Optional[List[DatasetType]] = Field(
+            default=None, description="Optional list of dataset dictionaries for Excel or Image operations. Each dict should match the corresponding operation's parameters"
+        )
         slides: Optional[List[List[Dict[str, Any]]]] = Field(default=None, description="Optional list of slide lists for PPTX operations. Each inner list contains slide dictionaries")
 
     def __init__(self, config: Optional[Dict[str, Any]] = None, **kwargs):
@@ -278,7 +286,7 @@ class ReportTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: ReportTool.Config = cast(ReportTool.Config, self._config_obj) if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
@@ -675,7 +683,7 @@ class ReportTool(BaseTool):
                 raise ValueError("input_data must be a list")
             for i, output_path in enumerate(output_paths):
                 op_params: Dict[str, Any] = {"output_path": output_path}
-                
+
                 # Type narrowing: ensure input_data[i] is a dict for operations that need it
                 if operation in (
                     "generate_html",

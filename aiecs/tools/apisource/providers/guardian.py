@@ -282,10 +282,7 @@ class GuardianProvider(BaseAPIProvider):
         # Get API key
         api_key = self._get_api_key("GUARDIAN_API_KEY")
         if not api_key:
-            raise ValueError(
-                "Guardian API key not found. Set GUARDIAN_API_KEY environment variable or "
-                "provide 'api_key' in config. Get your key at https://open-platform.theguardian.com/access/"
-            )
+            raise ValueError("Guardian API key not found. Set GUARDIAN_API_KEY environment variable or " "provide 'api_key' in config. Get your key at https://open-platform.theguardian.com/access/")
 
         timeout = self.config.get("timeout", 30)
 
@@ -579,4 +576,3 @@ class GuardianProvider(BaseAPIProvider):
         }
 
         return schemas.get(operation)
-

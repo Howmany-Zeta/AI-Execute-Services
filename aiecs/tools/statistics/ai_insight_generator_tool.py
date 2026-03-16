@@ -10,13 +10,13 @@ This tool provides advanced insight generation with:
 """
 
 import logging
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Union, cast
 from enum import Enum
 from datetime import datetime
 
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 import numpy as np
-from scipy import stats as scipy_stats  # type: ignore[import-untyped]
+from scipy import stats as scipy_stats
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -59,7 +59,7 @@ class AIInsightGeneratorTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the AI insight generator tool
-        
+
         Automatically reads from environment variables with AI_INSIGHT_GENERATOR_ prefix.
         Example: AI_INSIGHT_GENERATOR_MIN_CONFIDENCE -> min_confidence
         """
@@ -100,7 +100,7 @@ class AIInsightGeneratorTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: AIInsightGeneratorTool.Config = cast(AIInsightGeneratorTool.Config, self._config_obj) if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
@@ -113,7 +113,7 @@ class AIInsightGeneratorTool(BaseTool):
 
     def _init_external_tools(self):
         """Initialize external task tools"""
-        self.external_tools = {}
+        self.external_tools: Dict[str, Any] = {}
 
         # Initialize ResearchTool for reasoning methods
         try:

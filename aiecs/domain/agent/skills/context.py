@@ -21,10 +21,13 @@ Usage:
 """
 
 import logging
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
 
-from .models import SkillDefinition, SkillResource
+from .models import SkillDefinition
+
+if TYPE_CHECKING:
+    from .matcher import SkillMatcher
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +35,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ContextOptions:
     """Options for context building."""
+
     include_body: bool = True
     include_resources: bool = True
     include_scripts: bool = True
@@ -42,6 +46,7 @@ class ContextOptions:
 @dataclass
 class SkillContextResult:
     """Result of context building for a single skill."""
+
     skill_name: str
     context: str
     matched_score: float = 0.0
@@ -118,17 +123,13 @@ class SkillContext:
 
         # If request provided and matcher available, filter by match
         if request and self._matcher:
-            matched = self._matcher.match(
-                request, skills=self._skills, threshold=0.0
-            )
+            matched = self._matcher.match(request, skills=self._skills, threshold=0.0)
             if matched:
                 skills_to_include = [skill for skill, _ in matched]
 
         context_parts = []
         for skill in skills_to_include:
-            skill_context = self._build_skill_context(
-                skill, options, include_scripts
-            )
+            skill_context = self._build_skill_context(skill, options, include_scripts)
             if skill_context:
                 context_parts.append(skill_context)
 
@@ -154,7 +155,7 @@ class SkillContext:
         if options.include_body and skill.body:
             body = skill.body
             if options.max_body_length and len(body) > options.max_body_length:
-                body = body[:options.max_body_length] + "\n\n...(truncated)"
+                body = body[: options.max_body_length] + "\n\n...(truncated)"
             parts.append("")
             parts.append(body)
 
@@ -193,15 +194,12 @@ class SkillContext:
                     lines.append(f"    - `{param_name}`: {param_type}{req_marker}")
 
         lines.append("")
-        lines.append(
-            "To execute a script, use the `execute_skill_script` tool or "
-            "call the script directly via Bash/Python."
-        )
+        lines.append("To execute a script, use the `execute_skill_script` tool or " "call the script directly via Bash/Python.")
         return "\n".join(lines)
 
     def _format_resources_section(self, skill: SkillDefinition) -> str:
         """Format the resources section for a skill."""
-        lines = []
+        lines: List[str] = []
         has_resources = False
 
         for resource_type, label in [
@@ -220,9 +218,7 @@ class SkillContext:
 
         if has_resources:
             lines.append("")
-            lines.append(
-                "To load a resource, use `load_skill_resource(skill_name, path)`."
-            )
+            lines.append("To load a resource, use `load_skill_resource(skill_name, path)`.")
             return "\n".join(lines)
         return ""
 
@@ -232,9 +228,7 @@ class SkillContext:
             return ""
 
         lines = ["\n### Recommended Tools"]
-        lines.append(
-            "The following tools are recommended when working with this skill:"
-        )
+        lines.append("The following tools are recommended when working with this skill:")
         for tool in skill.recommended_tools:
             lines.append(f"- `{tool}`")
         return "\n".join(lines)
@@ -338,9 +332,7 @@ class SkillContext:
 
         # If matcher is available, use it to filter by match score
         if self._matcher and request:
-            matched = self._matcher.match(
-                request, skills=skills_to_check, threshold=0.0
-            )
+            matched = self._matcher.match(request, skills=skills_to_check, threshold=0.0)
             matched_skills = [skill for skill, _ in matched]
         else:
             # No matcher or empty request - use all skills
@@ -350,10 +342,7 @@ class SkillContext:
             for tool in skill.recommended_tools:
                 # Filter by availability if provided
                 if available_tools is not None and tool not in available_tools:
-                    logger.debug(
-                        f"Recommended tool '{tool}' from skill "
-                        f"'{skill.metadata.name}' not in available tools"
-                    )
+                    logger.debug(f"Recommended tool '{tool}' from skill " f"'{skill.metadata.name}' not in available tools")
                     continue
 
                 # Preserve uniqueness and order
@@ -403,5 +392,5 @@ class SkillContext:
 
 class SkillContextError(Exception):
     """Raised when skill context building fails."""
-    pass
 
+    pass

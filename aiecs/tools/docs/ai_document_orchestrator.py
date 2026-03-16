@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Any, List, Optional, Callable, cast
 from enum import Enum
 from datetime import datetime
 
@@ -62,7 +62,7 @@ class AIDocumentOrchestrator(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the AI document orchestrator tool
-        
+
         Automatically reads from environment variables with AI_DOC_ORCHESTRATOR_ prefix.
         Example: AI_DOC_ORCHESTRATOR_DEFAULT_AI_PROVIDER -> default_ai_provider
         """
@@ -93,7 +93,7 @@ class AIDocumentOrchestrator(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: AIDocumentOrchestrator.Config = cast(AIDocumentOrchestrator.Config, self._config_obj) if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
 
@@ -108,6 +108,7 @@ class AIDocumentOrchestrator(BaseTool):
 
     def _init_document_parser(self):
         """Initialize document parser tool"""
+        self.document_parser: Any = None
         try:
             from aiecs.tools.docs.document_parser_tool import (
                 DocumentParserTool,
@@ -122,6 +123,7 @@ class AIDocumentOrchestrator(BaseTool):
         """Initialize AI providers"""
         self.ai_providers = {}
 
+        self.aiecs_client: Any = None
         try:
             # Initialize AIECS client for AI operations
             from aiecs import AIECS
@@ -407,7 +409,7 @@ class AIDocumentOrchestrator(BaseTool):
             raise ProcessingError("DocumentParserTool not available")
 
         try:
-            return self.document_parser.parse_document(source, **parse_params)
+            return cast(Dict[str, Any], self.document_parser.parse_document(source, **parse_params))
         except Exception as e:
             raise ProcessingError(f"Document parsing failed: {str(e)}")
 
@@ -427,7 +429,7 @@ class AIDocumentOrchestrator(BaseTool):
             # For now, truncate - could implement smart chunking
             text_content = text_content[:max_size] + "\n\n[Content truncated...]"
 
-        return text_content
+        return cast(str, text_content)
 
     def _process_with_ai(
         self,
@@ -494,7 +496,7 @@ class AIDocumentOrchestrator(BaseTool):
 
                 # This would need to be adapted based on actual AIECS API
                 result = self.aiecs_client.process_task(task_context)
-                return result.get("response", "")
+                return cast(str, result.get("response", ""))
             else:
                 # Fallback to direct AI provider calls
                 return self._direct_ai_call(prompt, ai_provider, ai_params)

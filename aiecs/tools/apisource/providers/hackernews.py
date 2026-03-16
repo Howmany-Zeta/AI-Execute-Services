@@ -224,10 +224,7 @@ class HackerNewsProvider(BaseAPIProvider):
         timeout = self.config.get("timeout", 30)
 
         # Set User-Agent header for API etiquette
-        user_agent = self.config.get(
-            "user_agent",
-            "AIECS-APISource/2.0 (https://github.com/your-org/aiecs; iretbl@gmail.com)"
-        )
+        user_agent = self.config.get("user_agent", "AIECS-APISource/2.0 (https://github.com/your-org/aiecs; iretbl@gmail.com)")
         headers = {
             "User-Agent": user_agent,
         }
@@ -282,12 +279,7 @@ class HackerNewsProvider(BaseAPIProvider):
 
         # Make API request
         try:
-            response = requests.get(
-                endpoint,
-                params=query_params,
-                headers=headers,
-                timeout=timeout
-            )
+            response = requests.get(endpoint, params=query_params, headers=headers, timeout=timeout)
             response.raise_for_status()
 
             data = response.json()
@@ -449,169 +441,3 @@ class HackerNewsProvider(BaseAPIProvider):
         }
 
         return schemas.get(operation)
-
-    @expose_operation(
-        operation_name="search_by_date",
-        description="Search Hacker News items sorted by date (most recent first)",
-    )
-    def search_by_date(
-        self,
-        query: str,
-        tags: Optional[str] = None,
-        page: Optional[int] = None,
-        hits_per_page: Optional[int] = None,
-    ) -> Dict[str, Any]:
-        """
-        Search for items sorted by date.
-
-        Args:
-            query: Search query string
-            tags: Filter by tags (e.g., 'story', 'comment', 'poll')
-            page: Page number for pagination (default: 0)
-            hits_per_page: Number of results per page (default: 20, max: 1000)
-
-        Returns:
-            Dictionary containing search results sorted by date
-        """
-        params: Dict[str, Any] = {"query": query}
-        if tags:
-            params["tags"] = tags
-        if page is not None:
-            params["page"] = page
-        if hits_per_page is not None:
-            params["hits_per_page"] = hits_per_page
-
-        return self.execute("search_by_date", params)
-
-    @expose_operation(
-        operation_name="get_item",
-        description="Get Hacker News item details by ID (story, comment, poll, etc.)",
-    )
-    def get_item(self, item_id: int) -> Dict[str, Any]:
-        """
-        Get item details by ID.
-
-        Args:
-            item_id: Hacker News item ID
-
-        Returns:
-            Dictionary containing item information
-        """
-        return self.execute("get_item", {"item_id": item_id})
-
-    @expose_operation(
-        operation_name="get_user",
-        description="Get Hacker News user information by username",
-    )
-    def get_user(self, username: str) -> Dict[str, Any]:
-        """
-        Get user information.
-
-        Args:
-            username: Hacker News username
-
-        Returns:
-            Dictionary containing user information
-        """
-        return self.execute("get_user", {"username": username})
-
-    def fetch(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Fetch data from Hacker News Algolia API"""
-
-        if not REQUESTS_AVAILABLE:
-            raise ImportError("requests library is required for Hacker News provider")
-
-        timeout = self.config.get("timeout", 30)
-
-        # Set User-Agent header for API etiquette
-        user_agent = self.config.get(
-            "user_agent",
-            "AIECS-APISource/2.0 (https://github.com/your-org/aiecs; iretbl@gmail.com)"
-        )
-        headers = {
-            "User-Agent": user_agent,
-        }
-
-        # Build endpoint and query parameters based on operation
-        if operation == "search_stories":
-            endpoint = f"{self.BASE_URL}/search"
-            query_params = {
-                "query": params["query"],
-                "tags": params.get("tags", "story"),
-            }
-            if "num_comments" in params:
-                query_params["numericFilters"] = f"num_comments>={params['num_comments']}"
-            if "page" in params:
-                query_params["page"] = params["page"]
-            if "hits_per_page" in params:
-                query_params["hitsPerPage"] = min(params["hits_per_page"], 1000)
-
-        elif operation == "search_comments":
-            endpoint = f"{self.BASE_URL}/search"
-            query_params = {
-                "query": params["query"],
-                "tags": "comment",
-            }
-            if "page" in params:
-                query_params["page"] = params["page"]
-            if "hits_per_page" in params:
-                query_params["hitsPerPage"] = min(params["hits_per_page"], 1000)
-
-        elif operation == "search_by_date":
-            endpoint = f"{self.BASE_URL}/search_by_date"
-            query_params = {
-                "query": params["query"],
-            }
-            if "tags" in params:
-                query_params["tags"] = params["tags"]
-            if "page" in params:
-                query_params["page"] = params["page"]
-            if "hits_per_page" in params:
-                query_params["hitsPerPage"] = min(params["hits_per_page"], 1000)
-
-        elif operation == "get_item":
-            endpoint = f"{self.BASE_URL}/items/{params['item_id']}"
-            query_params = {}
-
-        elif operation == "get_user":
-            endpoint = f"{self.BASE_URL}/users/{params['username']}"
-            query_params = {}
-
-        else:
-            raise ValueError(f"Unknown operation: {operation}")
-
-        # Make API request
-        try:
-            response = requests.get(
-                endpoint,
-                params=query_params,
-                headers=headers,
-                timeout=timeout
-            )
-            response.raise_for_status()
-
-            data = response.json()
-
-            # Extract relevant data based on operation
-            if operation in ["search_stories", "search_comments", "search_by_date"]:
-                result_data = {
-                    "hits": data.get("hits", []),
-                    "nb_hits": data.get("nbHits", 0),
-                    "page": data.get("page", 0),
-                    "nb_pages": data.get("nbPages", 0),
-                    "hits_per_page": data.get("hitsPerPage", 20),
-                }
-            else:
-                # get_item or get_user
-                result_data = data
-
-            return self._format_response(
-                operation=operation,
-                data=result_data,
-                source=f"Hacker News Algolia API - {endpoint}",
-            )
-
-        except requests.exceptions.RequestException as e:
-            self.logger.error(f"Hacker News API request failed: {e}")
-            raise Exception(f"Hacker News API request failed: {str(e)}")
-

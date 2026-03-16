@@ -16,7 +16,7 @@ Enhanced Features:
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Type, cast
 
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -29,6 +29,7 @@ from aiecs.tools.tool_executor import (
     measure_execution_time,
 )
 from aiecs.tools.apisource.providers import (
+    BaseAPIProvider,
     get_provider,
     list_providers,
     PROVIDER_REGISTRY,
@@ -78,10 +79,10 @@ class APISourceTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the API Source Tool
-        
+
         Automatically reads from environment variables with APISOURCE_TOOL_ prefix.
         Example: APISOURCE_TOOL_FRED_API_KEY -> fred_api_key
-        
+
         Sensitive fields (API keys) are loaded from .env files via dotenv.
         """
 
@@ -124,10 +125,7 @@ class APISourceTool(BaseTool):
         openstates_api_key: Optional[str] = Field(default=None, description="API key for OpenStates")
 
         # Provider-specific configurations
-        openstates_config: Optional[Dict[str, Any]] = Field(
-            default=None,
-            description="OpenStates provider configuration (rate_limit, max_burst, timeout, etc.)"
-        )
+        openstates_config: Optional[Dict[str, Any]] = Field(default=None, description="OpenStates provider configuration (rate_limit, max_burst, timeout, etc.)")
 
     def __init__(self, config: Optional[Dict[str, Any]] = None, **kwargs):
         """
@@ -149,7 +147,7 @@ class APISourceTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: APISourceTool.Config = cast(APISourceTool.Config, self._config_obj) if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
@@ -165,7 +163,7 @@ class APISourceTool(BaseTool):
         self.search_enhancer = SearchEnhancer(relevance_weight=0.5, popularity_weight=0.3, recency_weight=0.2)
 
         # Load providers (they auto-discover on import)
-        self._providers: Dict[str, Any] = {}
+        self._providers: Dict[str, BaseAPIProvider] = {}
         self._load_providers()
 
     def _load_providers(self):
@@ -331,7 +329,7 @@ class APISourceTool(BaseTool):
             )
 
             logger.debug(f"Created Pydantic schema: {schema_class.__name__} with {len(fields)} fields")
-            return schema_class
+            return cast(Type[BaseModel], schema_class)
 
         except Exception as e:
             logger.error(f"Error converting schema {schema_name}: {e}")
@@ -591,7 +589,7 @@ class APISourceTool(BaseTool):
             )
 
             if result["success"]:
-                return result["data"]
+                return cast(Dict[str, Any], result["data"])
             else:
                 # Build comprehensive error message
                 error_msg = f"Failed to execute {provider}.{operation}"

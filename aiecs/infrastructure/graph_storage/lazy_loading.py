@@ -6,14 +6,11 @@ and improve performance when working with large graphs.
 """
 
 import logging
-from typing import Optional, List, Dict, Any, AsyncIterator, TYPE_CHECKING
+from typing import Optional, List, Dict, Any, AsyncIterator, TYPE_CHECKING, cast
 from dataclasses import dataclass, field
 
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.relation import Relation
-
-if TYPE_CHECKING:
-    from aiecs.infrastructure.graph_storage.protocols import LazyLoadingMixinProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -126,13 +123,13 @@ class LazyRelation:
         """Get source entity (lazy loaded)"""
         if not self._store:
             return None
-        return await self._store.get_entity(self.source_id)
+        return cast(Optional[Entity], await self._store.get_entity(self.source_id))
 
     async def get_target(self) -> Optional[Entity]:
         """Get target entity (lazy loaded)"""
         if not self._store:
             return None
-        return await self._store.get_entity(self.target_id)
+        return cast(Optional[Entity], await self._store.get_entity(self.target_id))
 
     def is_loaded(self) -> bool:
         """Check if relation has been loaded"""
@@ -171,9 +168,7 @@ class LazyLoadingMixin:
             """Expected method from LazyLoadingMixinProtocol"""
             ...
 
-        async def get_all_entities(
-            self, entity_type: Optional[str] = None, limit: Optional[int] = None
-        ) -> List[Entity]:
+        async def get_all_entities(self, entity_type: Optional[str] = None, limit: Optional[int] = None) -> List[Entity]:
             """Expected method from LazyLoadingMixinProtocol"""
             ...
 

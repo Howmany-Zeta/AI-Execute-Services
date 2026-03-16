@@ -6,7 +6,7 @@ Supports alias propagation during entity merge operations.
 """
 
 import logging
-from typing import Dict, List, Optional, Set, Tuple
+from typing import List, Optional, Set
 from dataclasses import dataclass
 
 from aiecs.domain.knowledge_graph.models.entity import Entity
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AliasMatchResult:
     """Result of alias-based entity lookup"""
+
     entity_id: str
     matched_alias: str
     match_type: MatchType
@@ -31,10 +32,10 @@ class AliasMatchResult:
 class AliasMatcher:
     """
     Alias-based entity matching with O(1) lookup.
-    
+
     Uses AliasIndex for fast alias lookups and supports alias propagation
     during entity merge operations.
-    
+
     Entity `_known_aliases` Property:
     Entities can define known aliases in their properties:
     ```python
@@ -47,19 +48,19 @@ class AliasMatcher:
         }
     )
     ```
-    
+
     Example:
         ```python
         matcher = AliasMatcher()
-        
+
         # Initialize index from entities
         await matcher.build_index(entities)
-        
+
         # O(1) lookup
         match = await matcher.lookup("A. Einstein")
         if match:
             print(f"Found: {match.entity_id}")
-        
+
         # Alias propagation on merge
         await matcher.propagate_aliases(
             source_entity_id="person_456",
@@ -71,7 +72,7 @@ class AliasMatcher:
     def __init__(self, alias_index: Optional[AliasIndex] = None):
         """
         Initialize AliasMatcher.
-        
+
         Args:
             alias_index: Optional AliasIndex instance (creates new one if not provided)
         """
@@ -115,35 +116,35 @@ class AliasMatcher:
     def _extract_aliases(self, entity: Entity) -> Set[str]:
         """
         Extract all aliases from an entity.
-        
+
         Sources:
         1. Entity name
         2. _known_aliases property
         3. _aliases property (from previous merges)
-        
+
         Args:
             entity: Entity to extract aliases from
-            
+
         Returns:
             Set of alias strings
         """
         aliases = set()
-        
+
         # Get main name
         name = entity.properties.get("name") or entity.properties.get("title") or ""
         if name:
             aliases.add(name)
-        
+
         # Get known aliases
         known_aliases = entity.properties.get("_known_aliases", [])
         if isinstance(known_aliases, list):
             aliases.update(known_aliases)
-        
+
         # Get historical aliases (from merges)
         historical_aliases = entity.properties.get("_aliases", [])
         if isinstance(historical_aliases, list):
             aliases.update(historical_aliases)
-        
+
         return aliases
 
     async def lookup(self, name: str) -> Optional[AliasMatchResult]:
@@ -244,9 +245,7 @@ class AliasMatcher:
                 )
                 await tx.set(alias, entry)
 
-        logger.info(
-            f"Propagated {len(source_aliases)} aliases from {source_entity_id} to {target_entity_id}"
-        )
+        logger.info(f"Propagated {len(source_aliases)} aliases from {source_entity_id} to {target_entity_id}")
         return len(source_aliases)
 
     async def find_matching_entity(
@@ -300,7 +299,7 @@ def get_known_aliases(entity: Entity) -> List[str]:
     Returns:
         List of known aliases (empty list if none)
     """
-    return entity.properties.get("_known_aliases", [])
+    return list(entity.properties.get("_known_aliases", []))
 
 
 def set_known_aliases(entity: Entity, aliases: List[str]) -> None:
@@ -381,4 +380,3 @@ def merge_aliases(target: Entity, source: Entity) -> List[str]:
     set_known_aliases(target, list(target_aliases))
 
     return new_aliases
-

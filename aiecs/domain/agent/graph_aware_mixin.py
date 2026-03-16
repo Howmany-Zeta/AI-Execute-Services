@@ -13,7 +13,6 @@ from aiecs.domain.knowledge_graph.models.relation import Relation
 from aiecs.domain.knowledge_graph.models.path import Path
 
 if TYPE_CHECKING:
-    from aiecs.infrastructure.graph_storage.protocols import GraphAwareAgentMixinProtocol
     from aiecs.infrastructure.graph_storage.base import GraphStore
 
 logger = logging.getLogger(__name__)
@@ -547,9 +546,9 @@ class GraphAwareAgentMixin:
 
         try:
             # Use graph store's get_stats if available
-            graph_store = getattr(self, "graph_store", None)  # type: ignore[attr-defined]
+            graph_store = getattr(self, "graph_store", None)
             if graph_store is not None and hasattr(graph_store, "get_stats"):
-                stats = graph_store.get_stats()  # type: ignore[attr-defined]
+                stats = graph_store.get_stats()
                 # Normalize stats format
                 return {
                     "available": True,

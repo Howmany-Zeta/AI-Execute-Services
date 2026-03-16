@@ -10,10 +10,10 @@ This tool provides advanced data profiling capabilities with:
 """
 
 import logging
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Union, cast
 from enum import Enum
 
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 import numpy as np
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -66,7 +66,7 @@ class DataProfilerTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the data profiler tool
-        
+
         Automatically reads from environment variables with DATA_PROFILER_ prefix.
         Example: DATA_PROFILER_DEFAULT_PROFILE_LEVEL -> default_profile_level
         """
@@ -113,7 +113,7 @@ class DataProfilerTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: DataProfilerTool.Config = cast(DataProfilerTool.Config, self._config_obj) if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
@@ -127,7 +127,7 @@ class DataProfilerTool(BaseTool):
 
     def _init_external_tools(self):
         """Initialize external task tools"""
-        self.external_tools = {}
+        self.external_tools: Dict[str, Any] = {}
 
         # Initialize StatsTool for statistical operations
         try:

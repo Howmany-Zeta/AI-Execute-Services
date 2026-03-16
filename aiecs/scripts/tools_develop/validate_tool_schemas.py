@@ -357,7 +357,7 @@ def validate_schemas(
         print(f"  类型覆盖率: {overall_type_coverage:.1f}%")
         print(f"  综合评分: {overall_score:.1f}%")
         print("=" * 100)
-        
+
         # Coverage summary by tool
         print("\n覆盖率摘要:")
         tools_by_coverage = []
@@ -366,20 +366,19 @@ def validate_schemas(
             scores = metrics.get_scores()
             coverage = scores["generation_rate"]
             tools_by_coverage.append((tool_name, coverage, scores))
-        
+
         # Sort by coverage (lowest first)
         tools_by_coverage.sort(key=lambda x: x[1])
-        
+
         # Show tools below 90%
         low_coverage_tools = [t for t in tools_by_coverage if t[1] < 90]
         if low_coverage_tools:
             print(f"\n  需要改进的工具 ({len(low_coverage_tools)} 个，覆盖率 < 90%):")
             for tool_name, coverage, scores in low_coverage_tools[:10]:
-                print(f"    - {tool_name}: {coverage:.1f}% (生成率: {scores['generation_rate']:.1f}%, "
-                      f"描述: {scores['description_quality']:.1f}%, 类型: {scores['type_coverage']:.1f}%)")
+                print(f"    - {tool_name}: {coverage:.1f}% (生成率: {scores['generation_rate']:.1f}%, " f"描述: {scores['description_quality']:.1f}%, 类型: {scores['type_coverage']:.1f}%)")
             if len(low_coverage_tools) > 10:
                 print(f"    ... 还有 {len(low_coverage_tools) - 10} 个工具需要改进")
-        
+
         # Show tools at 90%+
         high_coverage_tools = [t for t in tools_by_coverage if t[1] >= 90]
         if high_coverage_tools:
@@ -402,10 +401,11 @@ def validate_schemas(
     print("          records: List of records to filter")
     print("          condition: Filter condition (pandas query syntax)")
     print('      """')
-    
+
     # Export coverage report if requested
     if export_coverage:
         from aiecs.scripts.tools_develop.schema_coverage import generate_coverage_report
+
         report_format = "json" if export_coverage.endswith(".json") else "html" if export_coverage.endswith(".html") else "text"
         generate_coverage_report(
             tool_names=tool_names,
@@ -413,7 +413,7 @@ def validate_schemas(
             output=export_coverage,
             min_coverage=min_coverage,
         )
-    
+
     return all_results
 
 
@@ -445,19 +445,10 @@ def main():
     parser.add_argument("-v", "--verbose", action="store_true", help="显示详细的改进建议")
 
     parser.add_argument("-e", "--show-examples", action="store_true", help="显示示例 Schema")
-    
-    parser.add_argument(
-        "--export-coverage",
-        type=str,
-        help="导出覆盖率报告到文件（支持 .json, .html, .txt 格式）"
-    )
-    
-    parser.add_argument(
-        "--min-coverage",
-        type=float,
-        default=0.0,
-        help="最小覆盖率阈值（0-100），用于导出报告时过滤工具"
-    )
+
+    parser.add_argument("--export-coverage", type=str, help="导出覆盖率报告到文件（支持 .json, .html, .txt 格式）")
+
+    parser.add_argument("--min-coverage", type=float, default=0.0, help="最小覆盖率阈值（0-100），用于导出报告时过滤工具")
 
     args = parser.parse_args()
 

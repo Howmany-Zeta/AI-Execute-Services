@@ -342,12 +342,7 @@ class OpenStatesProvider(BaseAPIProvider):
 
         # Make API request with proper headers
         try:
-            response = requests.get(
-                endpoint,
-                params=query_params,
-                headers=headers,
-                timeout=timeout
-            )
+            response = requests.get(endpoint, params=query_params, headers=headers, timeout=timeout)
             response.raise_for_status()
 
             data = response.json()
@@ -542,4 +537,3 @@ class OpenStatesProvider(BaseAPIProvider):
         }
 
         return schemas.get(operation)
-

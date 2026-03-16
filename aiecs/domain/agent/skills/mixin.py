@@ -10,10 +10,10 @@ The mixin offers multiple integration strategies:
 
 Usage:
     from aiecs.domain.agent.skills import SkillCapableMixin
-    
+
     class MyAgent(SkillCapableMixin, BaseAIAgent):
         pass
-    
+
     agent = MyAgent(name="assistant", llm_client=client)
     agent.attach_skills(["python-testing"])
     context = agent.get_skill_context("write unit tests")
@@ -23,7 +23,7 @@ import logging
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
-from .context import SkillContext, ContextOptions
+from .context import SkillContext
 from .executor import ExecutionMode, ScriptExecutionResult, SkillScriptExecutor
 from .models import (
     SkillDefinition,
@@ -44,19 +44,19 @@ logger = logging.getLogger(__name__)
 class SkillCapableMixin:
     """
     Mixin that adds skill support to agents.
-    
+
     Provides:
     - Skill attachment and detachment
     - Skill context injection for prompts
     - Direct script execution API
     - Optional tool registration from scripts
     - Tool recommendations from skills
-    
+
     Integration Strategies:
     1. Direct Call: Use execute_skill_script() for programmatic control
     2. Tool Registration: Set auto_register_tools=True to register scripts as tools
     3. Context Injection: Default - skills inject knowledge into prompts
-    
+
     Attributes:
         _attached_skills: List of attached SkillDefinition objects
         _skill_tools: Dict mapping tool names to tools created from skills
@@ -65,7 +65,7 @@ class SkillCapableMixin:
         _skill_registry: SkillRegistry for loading skills by name
         _tool_registry: Optional SkillScriptRegistry for loading recommended tools
     """
-    
+
     # These will be set during initialization
     _attached_skills: List[SkillDefinition]
     _skill_tools: Dict[str, "Tool"]
@@ -74,7 +74,7 @@ class SkillCapableMixin:
     _skill_registry: Optional[SkillRegistry]
     _tool_registry: Optional["SkillScriptRegistry"]
     _skill_context: SkillContext
-    
+
     def __init_skills__(
         self,
         skill_registry: Optional[SkillRegistry] = None,
@@ -83,9 +83,9 @@ class SkillCapableMixin:
     ) -> None:
         """
         Initialize skill-related state.
-        
+
         Called by agents that include this mixin to set up skill support.
-        
+
         Args:
             skill_registry: Registry for loading skills by name
             tool_registry: Optional registry for loading recommended tools
@@ -98,32 +98,32 @@ class SkillCapableMixin:
         self._skill_registry = skill_registry
         self._tool_registry = tool_registry
         self._skill_context = SkillContext()
-    
+
     @property
     def attached_skills(self) -> List[SkillDefinition]:
         """Get list of attached skills."""
         return list(self._attached_skills)
-    
+
     @property
     def skill_names(self) -> List[str]:
         """Get names of attached skills."""
         return [skill.metadata.name for skill in self._attached_skills]
-    
+
     def has_skill(self, skill_name: str) -> bool:
         """Check if a skill is attached."""
         return any(s.metadata.name == skill_name for s in self._attached_skills)
-    
+
     def get_attached_skill(self, skill_name: str) -> Optional[SkillDefinition]:
         """Get an attached skill by name."""
         for skill in self._attached_skills:
             if skill.metadata.name == skill_name:
                 return skill
         return None
-    
+
     # ==========================================================================
     # Skill Attachment Methods
     # ==========================================================================
-    
+
     def attach_skills(
         self,
         skill_names: List[str],
@@ -132,38 +132,35 @@ class SkillCapableMixin:
     ) -> List[str]:
         """
         Attach skills by name from the skill registry.
-        
+
         Args:
             skill_names: List of skill names to attach
             auto_register_tools: If True, register skill scripts as LLM-callable tools
             inject_script_paths: If True, include script paths in context injection
-            
+
         Returns:
             List of successfully attached skill names
-            
+
         Raises:
             ValueError: If skill registry is not configured
         """
         if self._skill_registry is None:
-            raise ValueError(
-                "Skill registry not configured. Pass skill_registry to __init_skills__ "
-                "or use attach_skill_instances() instead."
-            )
-        
+            raise ValueError("Skill registry not configured. Pass skill_registry to __init_skills__ " "or use attach_skill_instances() instead.")
+
         # Get skills from registry
         skills = self._skill_registry.get_skills(skill_names)
-        
+
         if not skills:
             logger.warning(f"No skills found for names: {skill_names}")
             return []
-        
+
         # Attach the skill instances
         return self.attach_skill_instances(
             skills=skills,
             auto_register_tools=auto_register_tools,
             inject_script_paths=inject_script_paths,
         )
-    
+
     def attach_skill_instances(
         self,
         skills: List[SkillDefinition],
@@ -237,10 +234,7 @@ class SkillCapableMixin:
                 continue
 
             # Remove from attached skills
-            self._attached_skills = [
-                s for s in self._attached_skills
-                if s.metadata.name != skill_name
-            ]
+            self._attached_skills = [s for s in self._attached_skills if s.metadata.name != skill_name]
 
             # Remove injection config
             if skill_name in self._skill_injection_config:
@@ -287,10 +281,7 @@ class SkillCapableMixin:
 
             # Check for naming conflicts
             if self._has_tool(tool_name):
-                raise ValueError(
-                    f"Tool '{tool_name}' already exists. Detach the conflicting "
-                    f"skill first or use different skill/script names."
-                )
+                raise ValueError(f"Tool '{tool_name}' already exists. Detach the conflicting " f"skill first or use different skill/script names.")
 
             # Create tool
             tool = Tool(
@@ -306,9 +297,7 @@ class SkillCapableMixin:
             self._skill_tools[tool_name] = tool
             logger.debug(f"Registered tool '{tool_name}' from skill '{skill.metadata.name}'")
 
-    def _get_script_description(
-        self, skill: SkillDefinition, script_name: str
-    ) -> str:
+    def _get_script_description(self, skill: SkillDefinition, script_name: str) -> str:
         """
         Get description for a script tool.
 
@@ -363,14 +352,13 @@ class SkillCapableMixin:
             "required": [],
         }
 
-    def _create_script_executor(
-        self, skill: SkillDefinition, script: SkillResource
-    ) -> Callable[[Dict[str, Any]], Any]:
+    def _create_script_executor(self, skill: SkillDefinition, script: SkillResource) -> Callable[[Dict[str, Any]], Any]:
         """
         Create an async executor function for a script tool.
 
         The executor wraps the script execution and returns a dictionary result.
         """
+
         async def executor(input_data: Dict[str, Any]) -> Dict[str, Any]:
             # Resolve mode from script metadata
             mode = ExecutionMode.AUTO
@@ -400,10 +388,7 @@ class SkillCapableMixin:
         Called when detaching a skill.
         """
         skill_name = skill.metadata.name
-        tools_to_remove = [
-            name for name, tool in self._skill_tools.items()
-            if getattr(tool, "source", None) == skill_name
-        ]
+        tools_to_remove = [name for name, tool in self._skill_tools.items() if getattr(tool, "source", None) == skill_name]
 
         for tool_name in tools_to_remove:
             self._remove_tool(tool_name)
@@ -425,10 +410,7 @@ class SkillCapableMixin:
                 tool = self._tool_registry.get_tool(tool_name)
                 if tool and not self._has_tool(tool_name):
                     self._add_tool(tool)
-                    logger.debug(
-                        f"Loaded recommended tool '{tool_name}' "
-                        f"for skill '{skill.metadata.name}'"
-                    )
+                    logger.debug(f"Loaded recommended tool '{tool_name}' " f"for skill '{skill.metadata.name}'")
 
     # ==========================================================================
     # Tool Management Hooks (to be overridden by agent classes)
@@ -512,19 +494,13 @@ class SkillCapableMixin:
         # Get skill from attached skills
         skill = self.get_attached_skill(skill_name)
         if skill is None:
-            raise ValueError(
-                f"Skill '{skill_name}' is not attached. "
-                f"Use attach_skills() or attach_skill_instances() first."
-            )
+            raise ValueError(f"Skill '{skill_name}' is not attached. " f"Use attach_skills() or attach_skill_instances() first.")
 
         # Get script from skill
         script = skill.scripts.get(script_name)
         if script is None:
             available_scripts = list(skill.scripts.keys())
-            raise ValueError(
-                f"Script '{script_name}' not found in skill '{skill_name}'. "
-                f"Available scripts: {available_scripts}"
-            )
+            raise ValueError(f"Script '{script_name}' not found in skill '{skill_name}'. " f"Available scripts: {available_scripts}")
 
         # Resolve execution mode
         resolved_mode = self._resolve_execution_mode(mode, script)
@@ -541,11 +517,7 @@ class SkillCapableMixin:
             timeout=timeout,
         )
 
-        logger.debug(
-            f"Executed script '{script_name}' from skill '{skill_name}': "
-            f"success={result.success}, mode={result.mode_used.value}, "
-            f"time={result.execution_time:.3f}s"
-        )
+        logger.debug(f"Executed script '{script_name}' from skill '{skill_name}': " f"success={result.success}, mode={result.mode_used.value}, " f"time={result.execution_time:.3f}s")
 
         return result
 
@@ -581,9 +553,7 @@ class SkillCapableMixin:
             try:
                 return ExecutionMode(script.mode)
             except ValueError:
-                logger.warning(
-                    f"Invalid script mode '{script.mode}', falling back to AUTO"
-                )
+                logger.warning(f"Invalid script mode '{script.mode}', falling back to AUTO")
                 return ExecutionMode.AUTO
 
         # No script metadata, let executor resolve based on file extension
@@ -620,10 +590,7 @@ class SkillCapableMixin:
         # Get skill from attached skills
         skill = self.get_attached_skill(skill_name)
         if skill is None:
-            raise ValueError(
-                f"Skill '{skill_name}' is not attached. "
-                f"Use attach_skills() or attach_skill_instances() first."
-            )
+            raise ValueError(f"Skill '{skill_name}' is not attached. " f"Use attach_skills() or attach_skill_instances() first.")
 
         # Build full script path
         full_script_path = Path(skill.skill_path) / script_path
@@ -637,11 +604,7 @@ class SkillCapableMixin:
             timeout=timeout,
         )
 
-        logger.debug(
-            f"Executed script '{script_path}' from skill '{skill_name}': "
-            f"success={result.success}, mode={result.mode_used.value}, "
-            f"time={result.execution_time:.3f}s"
-        )
+        logger.debug(f"Executed script '{script_path}' from skill '{skill_name}': " f"success={result.success}, mode={result.mode_used.value}, " f"time={result.execution_time:.3f}s")
 
         return result
 
@@ -660,15 +623,10 @@ class SkillCapableMixin:
         """
         skill = self.get_attached_skill(skill_name)
         if skill is None:
-            raise ValueError(
-                f"Skill '{skill_name}' is not attached. "
-                f"Use attach_skills() or attach_skill_instances() first."
-            )
+            raise ValueError(f"Skill '{skill_name}' is not attached. " f"Use attach_skills() or attach_skill_instances() first.")
         return dict(skill.scripts)
 
-    def get_script_info(
-        self, skill_name: str, script_name: str
-    ) -> Optional[SkillResource]:
+    def get_script_info(self, skill_name: str, script_name: str) -> Optional[SkillResource]:
         """
         Get information about a specific script.
 
@@ -719,9 +677,7 @@ class SkillCapableMixin:
             include_scripts = config.get("inject_script_paths", True)
 
             # Build context for this skill
-            skill_context = self._build_single_skill_context(
-                skill, include_scripts=include_scripts
-            )
+            skill_context = self._build_single_skill_context(skill, include_scripts=include_scripts)
             if skill_context:
                 context_parts.append(skill_context)
 
@@ -789,21 +745,11 @@ class SkillCapableMixin:
         skill_type = skill.skill_type
 
         if skill_type == SKILL_TYPE_KNOWLEDGE:
-            return (
-                "📚 **This is a KNOWLEDGE skill** - Use the information below to "
-                "directly generate your response. Do NOT try to call it as a tool."
-            )
+            return "📚 **This is a KNOWLEDGE skill** - Use the information below to " "directly generate your response. Do NOT try to call it as a tool."
         elif skill_type == SKILL_TYPE_EXECUTABLE:
-            return (
-                f"🔧 **This is an EXECUTABLE skill** - Call the corresponding tool "
-                f"'{skill.metadata.name}' to execute this skill's functionality."
-            )
+            return f"🔧 **This is an EXECUTABLE skill** - Call the corresponding tool " f"'{skill.metadata.name}' to execute this skill's functionality."
         elif skill_type == SKILL_TYPE_HYBRID:
-            return (
-                "🔄 **This is a HYBRID skill** - You can either use the information "
-                "directly to generate a response, or call the corresponding tool "
-                "if more complex processing is needed."
-            )
+            return "🔄 **This is a HYBRID skill** - You can either use the information " "directly to generate a response, or call the corresponding tool " "if more complex processing is needed."
         else:
             # Fallback for unknown types
             return ""
@@ -831,9 +777,7 @@ class SkillCapableMixin:
                     lines.append(f"    - `{param_name}`: {param_type}{req_marker}")
 
         lines.append("")
-        lines.append(
-            "To execute a script, use `execute_skill_script` or call directly via Bash/Python."
-        )
+        lines.append("To execute a script, use `execute_skill_script` or call directly via Bash/Python.")
         return "\n".join(lines)
 
     def _format_tool_recommendations_section(self, skill: SkillDefinition) -> str:
@@ -842,9 +786,7 @@ class SkillCapableMixin:
             return ""
 
         lines = ["\n### Recommended Tools"]
-        lines.append(
-            "The following tools are recommended when working with this skill:"
-        )
+        lines.append("The following tools are recommended when working with this skill:")
         for tool in skill.recommended_tools:
             lines.append(f"- `{tool}`")
         return "\n".join(lines)
@@ -883,14 +825,22 @@ class SkillCapableMixin:
 
         return recommended
 
-    def list_skill_tools(self) -> Dict[str, "Tool"]:
+    def list_skill_tools(
+        self,
+        tags: Optional[List[str]] = None,
+        source: Optional[str] = None,
+    ) -> List["Tool"]:
         """
         List all tools registered from skills.
 
+        Args:
+            tags: Optional list of tags to filter by (ignored in base implementation)
+            source: Optional source to filter by (ignored in base implementation)
+
         Returns:
-            Dictionary mapping tool names to Tool objects
+            List of Tool objects registered from skills
         """
-        return dict(self._skill_tools)
+        return list(self._skill_tools.values())
 
     async def load_skill_resource(
         self,
@@ -916,17 +866,12 @@ class SkillCapableMixin:
         """
         skill = self.get_attached_skill(skill_name)
         if skill is None:
-            raise ValueError(
-                f"Skill '{skill_name}' is not attached. "
-                f"Use attach_skills() or attach_skill_instances() first."
-            )
+            raise ValueError(f"Skill '{skill_name}' is not attached. " f"Use attach_skills() or attach_skill_instances() first.")
 
         # Find the resource in the skill
         resource = self._find_resource_by_path(skill, resource_path)
         if resource is None:
-            raise ValueError(
-                f"Resource '{resource_path}' not found in skill '{skill_name}'"
-            )
+            raise ValueError(f"Resource '{resource_path}' not found in skill '{skill_name}'")
 
         # Load content if not already loaded
         if resource.content is None:
@@ -937,9 +882,7 @@ class SkillCapableMixin:
 
         return resource.content
 
-    def _find_resource_by_path(
-        self, skill: SkillDefinition, resource_path: str
-    ) -> Optional[SkillResource]:
+    def _find_resource_by_path(self, skill: SkillDefinition, resource_path: str) -> Optional[SkillResource]:
         """Find a resource in a skill by its path."""
         # Check all resource collections
         for collection in [
@@ -952,4 +895,3 @@ class SkillCapableMixin:
                 if resource.path == resource_path:
                     return resource
         return None
-

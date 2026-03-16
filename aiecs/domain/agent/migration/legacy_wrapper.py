@@ -5,7 +5,7 @@ Compatibility wrapper for gradual migration from legacy agents.
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, cast
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class LegacyAgentWrapper:
         """
         # Try various legacy interfaces
         if hasattr(self.legacy_agent, "execute_task"):
-            return await self.legacy_agent.execute_task(task, context)
+            return cast(Dict[str, Any], await self.legacy_agent.execute_task(task, context))
         elif hasattr(self.legacy_agent, "run"):
             result = await self.legacy_agent.run(task.get("description", ""))
             return {"output": result, "success": True}
@@ -68,7 +68,7 @@ class LegacyAgentWrapper:
             Response dictionary
         """
         if hasattr(self.legacy_agent, "process_message"):
-            return await self.legacy_agent.process_message(message, sender_id)
+            return cast(Dict[str, Any], await self.legacy_agent.process_message(message, sender_id))
         elif hasattr(self.legacy_agent, "chat"):
             response = await self.legacy_agent.chat(message)
             return {"response": response}

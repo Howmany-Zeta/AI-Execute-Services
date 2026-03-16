@@ -33,7 +33,7 @@ class WebSocketManager:
     def __init__(self, host: str = "python-middleware-api", port: int = 8765):
         self.host = host
         self.port = port
-        self.server = None
+        self.server: Optional[Any] = None
         self.callback_registry: Dict[str, Callable] = {}
         self.active_connections: Set[ServerConnection] = set()
         self._running = False
@@ -69,7 +69,7 @@ class WebSocketManager:
             )
             self.active_connections.clear()
 
-    async def _handle_client_connection(self, websocket: ServerConnection, path: str):
+    async def _handle_client_connection(self, websocket: ServerConnection):
         """Handle client connection"""
         self.active_connections.add(websocket)
         client_addr = websocket.remote_address
@@ -78,7 +78,7 @@ class WebSocketManager:
         try:
             async for message in websocket:
                 # Decode bytes to str if needed
-                message_str = message if isinstance(message, str) else message.decode('utf-8')
+                message_str = message if isinstance(message, str) else message.decode("utf-8")
                 await self._handle_client_message(websocket, message_str)
         except websockets.exceptions.ConnectionClosed:
             logger.info(f"WebSocket connection closed: {client_addr}")

@@ -204,10 +204,7 @@ class COREProvider(BaseAPIProvider):
         # Get API key from config
         api_key = self._get_api_key()
         if not api_key:
-            raise ValueError(
-                "CORE API key is required. Set it in config or CORE_API_KEY environment variable. "
-                "Get your API key from https://core.ac.uk/services/api"
-            )
+            raise ValueError("CORE API key is required. Set it in config or CORE_API_KEY environment variable. " "Get your API key from https://core.ac.uk/services/api")
 
         timeout = self.config.get("timeout", 30)
 
@@ -264,14 +261,7 @@ class COREProvider(BaseAPIProvider):
 
         # Make API request
         try:
-            response = requests.request(
-                method,
-                url,
-                params=query_params if method == "GET" else None,
-                json=query_params if method == "POST" else None,
-                headers=headers,
-                timeout=timeout
-            )
+            response = requests.request(method, url, params=query_params if method == "GET" else None, json=query_params if method == "POST" else None, headers=headers, timeout=timeout)
             response.raise_for_status()
 
             # Parse JSON response
@@ -400,4 +390,3 @@ class COREProvider(BaseAPIProvider):
         }
 
         return schemas.get(operation)
-

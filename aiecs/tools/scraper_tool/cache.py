@@ -3,21 +3,33 @@
 import hashlib
 import time
 from collections import OrderedDict
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, cast
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 # Tracking params to remove for URL normalization
-TRACKING_PARAMS = frozenset([
-    'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
-    'fbclid', 'gclid', 'msclkid', 'ref', 'source', 'mc_eid', 'mc_cid',
-])
+TRACKING_PARAMS = frozenset(
+    [
+        "utm_source",
+        "utm_medium",
+        "utm_campaign",
+        "utm_term",
+        "utm_content",
+        "fbclid",
+        "gclid",
+        "msclkid",
+        "ref",
+        "source",
+        "mc_eid",
+        "mc_cid",
+    ]
+)
 
 # TTL strategies by content type (seconds)
 TTL_STRATEGIES = {
-    'static': 86400,    # 24 hours
-    'api': 3600,        # 1 hour
-    'news': 1800,       # 30 minutes
-    'default': 3600,    # 1 hour
+    "static": 86400,  # 24 hours
+    "api": 3600,  # 1 hour
+    "news": 1800,  # 30 minutes
+    "default": 3600,  # 1 hour
 }
 
 
@@ -41,6 +53,7 @@ class ScraperCache:
         if self.redis_url and self._redis is None:
             try:
                 import redis.asyncio as redis
+
                 self._redis = redis.from_url(self.redis_url)
             except (ImportError, Exception):
                 self._redis = None
@@ -52,15 +65,12 @@ class ScraperCache:
         params = parse_qs(parsed.query)
         filtered_params = {k: v for k, v in params.items() if k not in TRACKING_PARAMS}
         normalized_query = urlencode(sorted(filtered_params.items()), doseq=True)
-        normalized = urlunparse((
-            parsed.scheme, parsed.netloc, parsed.path.rstrip('/'),
-            parsed.params, normalized_query, ''
-        ))
+        normalized = urlunparse((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), parsed.params, normalized_query, ""))
         return hashlib.sha256(normalized.encode()).hexdigest()[:32]
 
     def _is_expired(self, entry: Dict[str, Any]) -> bool:
         """Check if cache entry has expired."""
-        return time.time() > entry.get('expires_at', 0)
+        return bool(time.time() > entry.get("expires_at", 0))
 
     def _get_ttl(self, content_type: Optional[str] = None) -> int:
         """Get TTL based on content type."""
@@ -77,7 +87,7 @@ class ScraperCache:
             entry = self._cache[key]
             if not self._is_expired(entry):
                 self._cache.move_to_end(key)
-                return entry.get('content')
+                return entry.get("content")
             del self._cache[key]
 
         # Check Redis
@@ -85,24 +95,28 @@ class ScraperCache:
         if redis_client:
             try:
                 import json
-                data = await redis_client.get(f'scraper:{key}')
+
+                data = await redis_client.get(f"scraper:{key}")
                 if data:
                     entry = json.loads(data)
                     self._cache[key] = entry
                     self._cache.move_to_end(key)
-                    return entry.get('content')
+                    return cast(Optional[Dict[str, Any]], entry.get("content"))
             except Exception:
                 pass
         return None
 
     async def set(
-        self, url: str, content: Dict[str, Any], ttl: Optional[int] = None,
+        self,
+        url: str,
+        content: Dict[str, Any],
+        ttl: Optional[int] = None,
         content_type: Optional[str] = None,
     ) -> None:
         """Cache content for URL."""
         key = self._generate_key(url)
         actual_ttl = ttl if ttl is not None else self._get_ttl(content_type)
-        entry = {'content': content, 'expires_at': time.time() + actual_ttl, 'url': url}
+        entry = {"content": content, "expires_at": time.time() + actual_ttl, "url": url}
 
         # Evict oldest if at capacity
         while len(self._cache) >= self.max_size:
@@ -116,7 +130,8 @@ class ScraperCache:
         if redis_client:
             try:
                 import json
-                await redis_client.setex(f'scraper:{key}', actual_ttl, json.dumps(entry))
+
+                await redis_client.setex(f"scraper:{key}", actual_ttl, json.dumps(entry))
             except Exception:
                 pass
 
@@ -127,7 +142,7 @@ class ScraperCache:
         redis_client = await self._get_redis()
         if redis_client:
             try:
-                await redis_client.delete(f'scraper:{key}')
+                await redis_client.delete(f"scraper:{key}")
             except Exception:
                 pass
 
@@ -142,15 +157,14 @@ class ContentDeduplicator:
 
     def get_hash(self, content: str) -> str:
         """Generate SHA256 hash of content."""
-        return hashlib.sha256(content.encode('utf-8', errors='ignore')).hexdigest()
+        return hashlib.sha256(content.encode("utf-8", errors="ignore")).hexdigest()
 
     def _get_shingles(self, content: str) -> set:
         """Generate shingles (n-grams) from content."""
         tokens = content.lower().split()
         if len(tokens) < self.shingle_size:
-            return {' '.join(tokens)} if tokens else set()
-        return {' '.join(tokens[i:i + self.shingle_size])
-                for i in range(len(tokens) - self.shingle_size + 1)}
+            return {" ".join(tokens)} if tokens else set()
+        return {" ".join(tokens[i : i + self.shingle_size]) for i in range(len(tokens) - self.shingle_size + 1)}
 
     def _jaccard_similarity(self, set1: set, set2: set) -> float:
         """Compute Jaccard similarity between two sets."""
@@ -161,7 +175,9 @@ class ContentDeduplicator:
         return intersection / union if union else 0.0
 
     def is_duplicate(
-        self, content: str, threshold: float = 0.85,
+        self,
+        content: str,
+        threshold: float = 0.85,
     ) -> Tuple[bool, Optional[str]]:
         """Check if content is duplicate. Returns (is_dup, matching_url)."""
         content_hash = self.get_hash(content)
@@ -180,4 +196,3 @@ class ContentDeduplicator:
         content_hash = self.get_hash(content)
         self._hashes[content_hash] = url
         self._index[url] = self._get_shingles(content)
-

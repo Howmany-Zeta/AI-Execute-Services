@@ -18,7 +18,7 @@ Rate Limiting: Be respectful - implement reasonable delays between requests
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from aiecs.tools.apisource.providers.base import (
     BaseAPIProvider,
@@ -458,10 +458,7 @@ class GBIFProvider(BaseAPIProvider):
         timeout = self.config.get("timeout", 30)
 
         # Set User-Agent header as best practice
-        user_agent = self.config.get(
-            "user_agent",
-            "AIECS-APISource/2.0 (https://github.com/your-org/aiecs; contact@example.com)"
-        )
+        user_agent = self.config.get("user_agent", "AIECS-APISource/2.0 (https://github.com/your-org/aiecs; contact@example.com)")
         headers = {
             "User-Agent": user_agent,
             "Accept": "application/json",
@@ -580,20 +577,14 @@ class GBIFProvider(BaseAPIProvider):
 
         # Make API request
         try:
-            response = requests.get(
-                endpoint,
-                params=query_params,
-                headers=headers,
-                timeout=timeout
-            )
+            response = requests.get(endpoint, params=query_params, headers=headers, timeout=timeout)
             response.raise_for_status()
 
             # Parse JSON response
             data = response.json()
 
             # Format response based on operation type
-            if operation in ["search_species", "search_occurrences", "search_datasets",
-                           "search_organizations", "get_species_children"]:
+            if operation in ["search_species", "search_occurrences", "search_datasets", "search_organizations", "get_species_children"]:
                 # These return paginated results with 'results' array
                 result_data = data.get("results", [])
 
@@ -912,5 +903,4 @@ class GBIFProvider(BaseAPIProvider):
             },
         }
 
-        return schemas.get(operation)
-
+        return cast(Optional[Dict[str, Any]], schemas.get(operation))

@@ -1,5 +1,5 @@
 from aiecs.domain.execution.model import TaskStatus
-from celery import Celery  # type: ignore[import-untyped]
+from celery import Celery
 from aiecs.config.config import get_settings
 from aiecs.ws.socket_server import push_progress
 from aiecs.core.registry import get_ai_service

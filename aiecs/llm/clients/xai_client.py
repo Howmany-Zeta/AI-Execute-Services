@@ -9,7 +9,6 @@ from aiecs.llm.clients.base_client import (
 )
 from aiecs.llm.clients.openai_compatible_mixin import (
     OpenAICompatibleFunctionCallingMixin,
-    StreamChunk,
 )
 from tenacity import (
     retry,
@@ -18,7 +17,7 @@ from tenacity import (
     retry_if_exception_type,
 )
 import logging
-from typing import Dict, Optional, List, AsyncGenerator, cast, Any
+from typing import Dict, Optional, List, AsyncGenerator, Any
 
 # Lazy import to avoid circular dependency
 
@@ -59,7 +58,7 @@ class XAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
         api_key = getattr(self.settings, "xai_api_key", None) or getattr(self.settings, "grok_api_key", None)
         if not api_key:
             raise ProviderNotAvailableError("xAI API key not configured")
-        return api_key
+        return str(api_key)
 
     def _get_model_map(self) -> Dict[str, str]:
         """Get model mappings from configuration"""
@@ -144,12 +143,12 @@ class XAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
                 tool_choice=tool_choice,
                 **kwargs,
             )
-            
+
             # Override provider and model name for xAI
             response.provider = self.provider_name
             response.model = selected_model
             response.cost_estimate = 0.0  # xAI pricing not available yet
-            
+
             return response
 
         except Exception as e:

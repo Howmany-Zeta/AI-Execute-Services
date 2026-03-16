@@ -1,7 +1,7 @@
 import functools
 import logging
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, cast
 import jaeger_client
 import jaeger_client.config
 from opentracing import Span
@@ -27,7 +27,7 @@ class TracingManager:
         self.jaeger_host = jaeger_host or os.getenv("JAEGER_AGENT_HOST", "jaeger")
         self.jaeger_port = jaeger_port or int(os.getenv("JAEGER_AGENT_PORT", "6831"))
         self.enable_tracing = enable_tracing if enable_tracing is not None else os.getenv("JAEGER_ENABLE_TRACING", "true").lower() == "true"
-        self.tracer = None
+        self.tracer: Optional[Any] = None
 
         if self.enable_tracing:
             self._init_tracer()
@@ -89,7 +89,7 @@ class TracingManager:
             span.set_tag("service.name", self.service_name)
             span.set_tag("span.kind", "server")
 
-            return span
+            return cast(Optional[Span], span)
         except Exception as e:
             logger.error(f"Error starting span '{operation_name}': {e}")
             return None
@@ -166,7 +166,7 @@ class TracingManager:
                     self.finish_span(span, error=e)
                     raise
                 finally:
-                    if span and not span.finished:
+                    if span and not span.finished:  # type: ignore[attr-defined]
                         self.finish_span(span)
 
             @functools.wraps(func)
@@ -191,7 +191,7 @@ class TracingManager:
                     self.finish_span(span, error=e)
                     raise
                 finally:
-                    if span and not span.finished:
+                    if span and not span.finished:  # type: ignore[attr-defined]
                         self.finish_span(span)
 
             # Return appropriate wrapper based on function type
@@ -260,7 +260,7 @@ class TracingManager:
                     self.finish_span(span, error=e)
                     raise
                 finally:
-                    if span and not span.finished:
+                    if span and not span.finished:  # type: ignore[attr-defined]
                         self.finish_span(span)
 
             return wrapper
@@ -295,7 +295,7 @@ class TracingManager:
                     self.finish_span(span, error=e)
                     raise
                 finally:
-                    if span and not span.finished:
+                    if span and not span.finished:  # type: ignore[attr-defined]
                         self.finish_span(span)
 
             return wrapper
@@ -329,7 +329,7 @@ class TracingManager:
                     self.finish_span(span, error=e)
                     raise
                 finally:
-                    if span and not span.finished:
+                    if span and not span.finished:  # type: ignore[attr-defined]
                         self.finish_span(span)
 
             return wrapper
@@ -379,7 +379,7 @@ class TracingManager:
             return None
 
         try:
-            return self.tracer.active_span
+            return cast(Optional[Span], self.tracer.active_span)
         except Exception as e:
             logger.error(f"Error getting active span: {e}")
             return None

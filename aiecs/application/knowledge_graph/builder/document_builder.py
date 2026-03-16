@@ -266,7 +266,7 @@ class DocumentGraphBuilder:
             )
 
             if isinstance(parse_result, dict):
-                return parse_result.get("content", "")
+                return str(parse_result.get("content", ""))
             elif isinstance(parse_result, str):
                 return parse_result
             else:

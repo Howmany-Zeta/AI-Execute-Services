@@ -91,11 +91,13 @@ def process_user_data(
         if filter_active and not user.is_active:
             continue
 
-        result.append({
-            "id": user.user_id,
-            "name": user.username,
-            "email": user.email,
-        })
+        result.append(
+            {
+                "id": user.user_id,
+                "name": user.username,
+                "email": user.email,
+            }
+        )
 
         if limit is not None and len(result) >= limit:
             break
@@ -186,4 +188,3 @@ def validate_and_process(data: dict[str, Any]) -> dict[str, Any]:
         }
     except Exception as e:
         raise DataProcessingError(f"Processing failed: {e}") from e
-

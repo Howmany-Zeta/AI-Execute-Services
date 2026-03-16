@@ -8,7 +8,7 @@ into the community system. Supports heterogeneous agent types and extensibility.
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional, Type
+from typing import Dict, List, Any, Optional, Type, cast
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -324,9 +324,9 @@ class CustomAgentAdapter(AgentAdapter):
         if hasattr(self.agent_instance, "send_message"):
             send_func = self.agent_instance.send_message
             if asyncio.iscoroutinefunction(send_func):
-                return await send_func(message, recipient_id, message_type, **kwargs)
+                return cast(Dict[str, Any], await send_func(message, recipient_id, message_type, **kwargs))
             else:
-                return send_func(message, recipient_id, message_type, **kwargs)
+                return cast(Dict[str, Any], send_func(message, recipient_id, message_type, **kwargs))
 
         # Default message formatting
         return {
@@ -348,9 +348,9 @@ class CustomAgentAdapter(AgentAdapter):
         if hasattr(self.agent_instance, "health_check"):
             health_func = self.agent_instance.health_check
             if asyncio.iscoroutinefunction(health_func):
-                return await health_func()
+                return cast(Dict[str, Any], await health_func())
             else:
-                return health_func()
+                return cast(Dict[str, Any], health_func())
 
         return {
             "status": "healthy" if self._initialized else "not_initialized",

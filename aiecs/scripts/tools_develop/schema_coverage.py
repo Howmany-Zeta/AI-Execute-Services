@@ -25,18 +25,17 @@ Usage:
 import json
 import sys
 from datetime import datetime
-from pathlib import Path
 from typing import Dict, List, Any, Optional
 import argparse
 
-from aiecs.tools import discover_tools, TOOL_CLASSES, get_tool
+from aiecs.tools import discover_tools, TOOL_CLASSES
 from aiecs.scripts.tools_develop.validate_tool_schemas import (
     analyze_tool_schemas,
-    SchemaQualityMetrics,
 )
 
 # Ensure we can import aiecs
 import os
+
 sys.path.insert(
     0,
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
@@ -51,18 +50,18 @@ def generate_coverage_report(
 ) -> Dict[str, Any]:
     """
     Generate schema coverage report for tools.
-    
+
     Args:
         tool_names: List of tool names to report on, None for all tools
         format: Output format ('text', 'json', 'html')
         output: Output file path (None for stdout)
         min_coverage: Minimum coverage threshold (0-100)
-    
+
     Returns:
         Dictionary with coverage data
     """
     discover_tools()
-    
+
     # Determine tools to check
     if tool_names:
         tools_to_check = {}
@@ -76,21 +75,21 @@ def generate_coverage_report(
             return {}
     else:
         tools_to_check = TOOL_CLASSES
-    
+
     # Analyze all tools
     all_results = {}
     for tool_name in sorted(tools_to_check.keys()):
         tool_class = tools_to_check[tool_name]
         result = analyze_tool_schemas(tool_name, tool_class)
         all_results[tool_name] = result
-    
+
     # Calculate overall statistics
     total_methods = sum(r["metrics"].total_methods for r in all_results.values())
     total_generated = sum(r["metrics"].schemas_generated for r in all_results.values())
     total_fields = sum(r["metrics"].total_fields for r in all_results.values())
     total_meaningful = sum(r["metrics"].fields_with_meaningful_descriptions for r in all_results.values())
     total_with_types = sum(r["metrics"].fields_with_types for r in all_results.values())
-    
+
     # Count manual vs auto schemas
     total_manual = 0
     total_auto = 0
@@ -98,14 +97,14 @@ def generate_coverage_report(
         methods = result["methods"]
         total_manual += len([m for m in methods if m.get("schema_type") == "manual"])
         total_auto += len([m for m in methods if m.get("schema_type") == "auto"])
-    
+
     overall_generation = (total_generated / total_methods * 100) if total_methods > 0 else 0
     overall_description = (total_meaningful / total_fields * 100) if total_fields > 0 else 0
     overall_type_coverage = (total_with_types / total_fields * 100) if total_fields > 0 else 0
     overall_score = (overall_generation + overall_description + overall_type_coverage) / 3
-    
+
     # Build report data
-    report_data = {
+    report_data: Dict[str, Any] = {
         "timestamp": datetime.now().isoformat(),
         "summary": {
             "total_tools": len(all_results),
@@ -121,16 +120,16 @@ def generate_coverage_report(
         },
         "tools": {},
     }
-    
+
     # Add tool details
     for tool_name, result in all_results.items():
         metrics = result["metrics"]
         methods = result["methods"]
         scores = metrics.get_scores()
-        
+
         manual_count = len([m for m in methods if m.get("schema_type") == "manual"])
         auto_count = len([m for m in methods if m.get("schema_type") == "auto"])
-        
+
         report_data["tools"][tool_name] = {
             "total_methods": metrics.total_methods,
             "schemas_generated": metrics.schemas_generated,
@@ -151,17 +150,13 @@ def generate_coverage_report(
                 for m in methods
             ],
         }
-    
+
     # Filter by minimum coverage if specified
     if min_coverage > 0:
-        filtered_tools = {
-            name: data
-            for name, data in report_data["tools"].items()
-            if data["coverage_percentage"] >= min_coverage
-        }
+        filtered_tools = {name: data for name, data in report_data["tools"].items() if data["coverage_percentage"] >= min_coverage}
         report_data["tools"] = filtered_tools
         report_data["summary"]["tools_meeting_threshold"] = len(filtered_tools)
-    
+
     # Generate output based on format
     if format == "json":
         output_text = json.dumps(report_data, indent=2, ensure_ascii=False)
@@ -169,7 +164,7 @@ def generate_coverage_report(
         output_text = generate_html_report(report_data)
     else:  # text format
         output_text = generate_text_report(report_data, min_coverage)
-    
+
     # Write output
     if output:
         with open(output, "w", encoding="utf-8") as f:
@@ -177,7 +172,7 @@ def generate_coverage_report(
         print(f"Report written to {output}", file=sys.stderr)
     else:
         print(output_text)
-    
+
     return report_data
 
 
@@ -185,14 +180,14 @@ def generate_text_report(report_data: Dict[str, Any], min_coverage: float) -> st
     """Generate text format report."""
     summary = report_data["summary"]
     tools = report_data["tools"]
-    
+
     lines = []
     lines.append("=" * 100)
     lines.append("Schema Coverage Report")
     lines.append("=" * 100)
     lines.append(f"Generated: {report_data['timestamp']}")
     lines.append("")
-    
+
     # Summary section
     lines.append("SUMMARY")
     lines.append("-" * 100)
@@ -206,22 +201,18 @@ def generate_text_report(report_data: Dict[str, Any], min_coverage: float) -> st
     lines.append(f"Type Coverage: {summary['type_coverage']:.1f}%")
     lines.append(f"Overall Score: {summary['overall_score']:.1f}%")
     lines.append("")
-    
+
     # Tools section
     lines.append("TOOLS DETAILS")
     lines.append("-" * 100)
-    
+
     # Sort tools by coverage
-    sorted_tools = sorted(
-        tools.items(),
-        key=lambda x: x[1]["coverage_percentage"],
-        reverse=True
-    )
-    
+    sorted_tools = sorted(tools.items(), key=lambda x: x[1]["coverage_percentage"], reverse=True)
+
     for tool_name, tool_data in sorted_tools:
         coverage = tool_data["coverage_percentage"]
         status = "✅" if coverage >= 90 else "⚠️" if coverage >= 70 else "❌"
-        
+
         lines.append(f"\n{status} {tool_name}")
         lines.append(f"  Methods: {tool_data['total_methods']}")
         lines.append(f"  Coverage: {coverage:.1f}% ({tool_data['schemas_generated']}/{tool_data['total_methods']})")
@@ -231,18 +222,15 @@ def generate_text_report(report_data: Dict[str, Any], min_coverage: float) -> st
         lines.append(f"  Description Quality: {tool_data['description_quality']:.1f}%")
         lines.append(f"  Type Coverage: {tool_data['type_coverage']:.1f}%")
         lines.append(f"  Overall Score: {tool_data['overall_score']:.1f}%")
-        
+
         # List methods without schemas
-        missing_methods = [
-            m["name"] for m in tool_data["methods"]
-            if not m["has_schema"]
-        ]
+        missing_methods = [m["name"] for m in tool_data["methods"] if not m["has_schema"]]
         if missing_methods:
             lines.append(f"  Missing Schemas: {', '.join(missing_methods)}")
-    
+
     lines.append("")
     lines.append("=" * 100)
-    
+
     return "\n".join(lines)
 
 
@@ -250,7 +238,7 @@ def generate_html_report(report_data: Dict[str, Any]) -> str:
     """Generate HTML format report."""
     summary = report_data["summary"]
     tools = report_data["tools"]
-    
+
     html = """<!DOCTYPE html>
 <html>
 <head>
@@ -357,7 +345,7 @@ def generate_html_report(report_data: Dict[str, Any]) -> str:
     <div class="container">
         <h1>Schema Coverage Report</h1>
         <p>Generated: {timestamp}</p>
-        
+
         <div class="summary">
             <h2>Summary</h2>
             <div class="summary-grid">
@@ -379,7 +367,7 @@ def generate_html_report(report_data: Dict[str, Any]) -> str:
                 </div>
             </div>
         </div>
-        
+
         <h2>Tools Details</h2>
         <table>
             <thead>
@@ -397,19 +385,15 @@ def generate_html_report(report_data: Dict[str, Any]) -> str:
             </thead>
             <tbody>
 """
-    
+
     # Sort tools by coverage
-    sorted_tools = sorted(
-        tools.items(),
-        key=lambda x: x[1]["coverage_percentage"],
-        reverse=True
-    )
-    
+    sorted_tools = sorted(tools.items(), key=lambda x: x[1]["coverage_percentage"], reverse=True)
+
     for tool_name, tool_data in sorted_tools:
         coverage = tool_data["coverage_percentage"]
         status_class = "status-good" if coverage >= 90 else "status-warning" if coverage >= 70 else "status-bad"
         progress_class = "" if coverage >= 90 else "warning" if coverage >= 70 else "bad"
-        
+
         html += f"""
                 <tr>
                     <td><strong>{tool_name}</strong></td>
@@ -428,7 +412,7 @@ def generate_html_report(report_data: Dict[str, Any]) -> str:
                     <td>{tool_data['overall_score']:.1f}%</td>
                 </tr>
 """
-    
+
     html += """
             </tbody>
         </table>
@@ -436,7 +420,7 @@ def generate_html_report(report_data: Dict[str, Any]) -> str:
 </body>
 </html>
 """
-    
+
     return html.format(
         timestamp=report_data["timestamp"],
         total_tools=summary["total_tools"],
@@ -469,34 +453,17 @@ Examples:
   aiecs tools schema-coverage --min-coverage 90
         """,
     )
-    
-    parser.add_argument(
-        "tools",
-        nargs="*",
-        help="Tool names to report on (default: all tools)"
-    )
-    
-    parser.add_argument(
-        "-f", "--format",
-        choices=["text", "json", "html"],
-        default="text",
-        help="Output format (default: text)"
-    )
-    
-    parser.add_argument(
-        "-o", "--output",
-        help="Output file path (default: stdout)"
-    )
-    
-    parser.add_argument(
-        "-m", "--min-coverage",
-        type=float,
-        default=0.0,
-        help="Minimum coverage threshold (0-100, default: 0)"
-    )
-    
+
+    parser.add_argument("tools", nargs="*", help="Tool names to report on (default: all tools)")
+
+    parser.add_argument("-f", "--format", choices=["text", "json", "html"], default="text", help="Output format (default: text)")
+
+    parser.add_argument("-o", "--output", help="Output file path (default: stdout)")
+
+    parser.add_argument("-m", "--min-coverage", type=float, default=0.0, help="Minimum coverage threshold (0-100, default: 0)")
+
     args = parser.parse_args()
-    
+
     tool_names = args.tools if args.tools else None
     generate_coverage_report(
         tool_names=tool_names,
@@ -508,4 +475,3 @@ Examples:
 
 if __name__ == "__main__":
     main()
-

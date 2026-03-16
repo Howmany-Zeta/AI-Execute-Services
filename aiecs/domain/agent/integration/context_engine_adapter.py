@@ -6,7 +6,7 @@ Adapter for integrating agent persistence with AIECS ContextEngine.
 
 import logging
 import uuid
-from typing import Dict, Any, Optional, List, TYPE_CHECKING
+from typing import Dict, Any, Optional, List, TYPE_CHECKING, cast
 from datetime import datetime
 
 if TYPE_CHECKING:
@@ -99,7 +99,7 @@ class ContextEngineAdapter:
             checkpoint_data = checkpoint["data"]
             if isinstance(checkpoint_data, dict) and "state" in checkpoint_data:
                 logger.debug(f"Loaded agent {agent_id} state version {version or 'latest'}")
-                return checkpoint_data["state"]
+                return cast(Dict[str, Any], checkpoint_data["state"])
 
         logger.debug(f"No state found for agent {agent_id} version {version or 'latest'}")
         return None
@@ -348,15 +348,15 @@ class ContextEngineAdapter:
                 return session
             # Convert SessionMetrics to dict if it's a dataclass
             elif hasattr(session, "to_dict"):
-                return session.to_dict()  # type: ignore[attr-defined]
+                return session.to_dict()
             else:
                 # Fallback for dataclass
                 from dataclasses import asdict, is_dataclass
 
                 if is_dataclass(session):
-                    return asdict(session)  # type: ignore[arg-type]
+                    return asdict(session)
                 # If it's already a dict or other type, return as-is
-                return session  # type: ignore[return-value]
+                return session
 
         logger.debug(f"Session {session_id} not found in ContextEngine")
         return None

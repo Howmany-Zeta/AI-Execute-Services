@@ -19,7 +19,7 @@ import uuid
 import tempfile
 import logging
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, cast
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -124,7 +124,7 @@ class DocumentLayoutTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the document layout tool
-        
+
         Automatically reads from environment variables with DOC_LAYOUT_ prefix.
         Example: DOC_LAYOUT_TEMP_DIR -> temp_dir
         """
@@ -167,7 +167,7 @@ class DocumentLayoutTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: DocumentLayoutTool.Config = cast(DocumentLayoutTool.Config, self._config_obj) if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
 

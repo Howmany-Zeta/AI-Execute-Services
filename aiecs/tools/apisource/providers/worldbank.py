@@ -226,7 +226,7 @@ class WorldBankProvider(BaseAPIProvider):
         elif operation == "search_indicators":
             # World Bank doesn't have direct search, so we list and filter
             endpoint = f"{self.BASE_URL}/indicator"
-            query_params = {"format": "json", "per_page": "1000"}  # type: ignore[no-redef]
+            query_params = {"format": "json", "per_page": "1000"}
 
         else:
             raise ValueError(f"Unknown operation: {operation}")

@@ -18,7 +18,7 @@ import asyncio
 import logging
 import os
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Callable, Dict, List, Optional
 
 from .loader import SkillLoadError, SkillLoader
 from .models import SkillDefinition
@@ -42,6 +42,7 @@ def _get_skills_config():
     """
     try:
         from aiecs.config.skills_config import get_skills_config
+
         return get_skills_config()
     except ImportError:
         return None
@@ -49,56 +50,54 @@ def _get_skills_config():
 
 class SkillDiscoveryError(Exception):
     """Raised when skill discovery fails."""
+
     pass
 
 
 class SkillDiscoveryResult:
     """Result of a skill discovery operation."""
-    
+
     def __init__(self):
         self.discovered: List[SkillDefinition] = []
         self.failed: Dict[Path, str] = {}  # path -> error message
         self.skipped: List[Path] = []  # paths skipped (already registered)
-    
+
     @property
     def success_count(self) -> int:
         """Number of successfully discovered skills."""
         return len(self.discovered)
-    
+
     @property
     def failure_count(self) -> int:
         """Number of failed skill discoveries."""
         return len(self.failed)
-    
+
     @property
     def skip_count(self) -> int:
         """Number of skipped skills (already registered)."""
         return len(self.skipped)
-    
+
     def __repr__(self) -> str:
-        return (
-            f"SkillDiscoveryResult(discovered={self.success_count}, "
-            f"failed={self.failure_count}, skipped={self.skip_count})"
-        )
+        return f"SkillDiscoveryResult(discovered={self.success_count}, " f"failed={self.failure_count}, skipped={self.skip_count})"
 
 
 class SkillDiscovery:
     """
     Discovers and loads skills from configured directories.
-    
+
     Supports:
     - Async concurrent scanning of multiple directories
     - Automatic skill validation during loading
     - Configurable paths via environment variables
     - Error handling with detailed reporting
     - Skip already-registered skills option
-    
+
     Usage:
         discovery = SkillDiscovery()
         result = await discovery.discover()
         print(f"Discovered {result.success_count} skills")
     """
-    
+
     def __init__(
         self,
         loader: Optional[SkillLoader] = None,
@@ -106,7 +105,7 @@ class SkillDiscovery:
         directories: Optional[List[Path]] = None,
         auto_register: bool = True,
         skip_registered: bool = True,
-        max_concurrent: Optional[int] = None
+        max_concurrent: Optional[int] = None,
     ):
         """
         Initialize skill discovery.
@@ -132,9 +131,9 @@ class SkillDiscovery:
         """Get max concurrent from config or default."""
         skills_config = _get_skills_config()
         if skills_config is not None:
-            return skills_config.skill_max_concurrent_discovery
+            return int(skills_config.skill_max_concurrent_discovery)
         return 10  # Default
-    
+
     def _get_configured_directories(self) -> List[Path]:
         """
         Get skill directories from configuration.
@@ -152,18 +151,14 @@ class SkillDiscovery:
         if skills_config is not None:
             directories = skills_config.get_skill_directories()
             if directories:
-                return directories
+                return list(directories)
 
         # Fall back to direct environment variable (backward compatibility)
         env_dirs = os.environ.get(SKILL_DIRECTORIES_ENV, "")
 
         if env_dirs:
             # Parse comma-separated paths from environment
-            paths = [
-                Path(p.strip()).expanduser()
-                for p in env_dirs.split(",")
-                if p.strip()
-            ]
+            paths = [Path(p.strip()).expanduser() for p in env_dirs.split(",") if p.strip()]
             return [p for p in paths if p.exists()]
 
         # Use default directory if no environment config
@@ -172,16 +167,16 @@ class SkillDiscovery:
             return [default_path]
 
         return []
-    
+
     def set_directories(self, directories: List[Path]) -> None:
         """Set directories to scan for skills."""
         self._directories = directories
-    
+
     def add_directory(self, directory: Path) -> None:
         """Add a directory to scan for skills."""
         if directory not in self._directories:
             self._directories.append(directory)
-    
+
     def on_discovered(self, callback: Callable[[SkillDefinition], None]) -> None:
         """Set callback for when a skill is discovered."""
         self._on_skill_discovered = callback
@@ -190,11 +185,7 @@ class SkillDiscovery:
         """Set callback for when a skill fails to load."""
         self._on_skill_failed = callback
 
-    async def discover(
-        self,
-        directories: Optional[List[Path]] = None,
-        load_body: bool = True
-    ) -> SkillDiscoveryResult:
+    async def discover(self, directories: Optional[List[Path]] = None, load_body: bool = True) -> SkillDiscoveryResult:
         """
         Discover and load skills from directories.
 
@@ -232,19 +223,11 @@ class SkillDiscovery:
 
         # Load skills concurrently with semaphore
         semaphore = asyncio.Semaphore(self._max_concurrent)
-        tasks = [
-            self._load_skill_with_semaphore(
-                path, semaphore, result, load_body
-            )
-            for path in skill_paths
-        ]
+        tasks = [self._load_skill_with_semaphore(path, semaphore, result, load_body) for path in skill_paths]
 
         await asyncio.gather(*tasks, return_exceptions=True)
 
-        logger.info(
-            f"Discovery complete: {result.success_count} discovered, "
-            f"{result.failure_count} failed, {result.skip_count} skipped"
-        )
+        logger.info(f"Discovery complete: {result.success_count} discovered, " f"{result.failure_count} failed, {result.skip_count} skipped")
 
         return result
 
@@ -266,23 +249,12 @@ class SkillDiscovery:
 
         return skill_dirs
 
-    async def _load_skill_with_semaphore(
-        self,
-        skill_path: Path,
-        semaphore: asyncio.Semaphore,
-        result: SkillDiscoveryResult,
-        load_body: bool
-    ) -> None:
+    async def _load_skill_with_semaphore(self, skill_path: Path, semaphore: asyncio.Semaphore, result: SkillDiscoveryResult, load_body: bool) -> None:
         """Load a skill with semaphore for concurrency control."""
         async with semaphore:
             await self._load_skill(skill_path, result, load_body)
 
-    async def _load_skill(
-        self,
-        skill_path: Path,
-        result: SkillDiscoveryResult,
-        load_body: bool
-    ) -> None:
+    async def _load_skill(self, skill_path: Path, result: SkillDiscoveryResult, load_body: bool) -> None:
         """Load a single skill and update result."""
         try:
             # Load skill using loader
@@ -321,11 +293,7 @@ class SkillDiscovery:
             if self._on_skill_failed:
                 self._on_skill_failed(skill_path, str(e))
 
-    async def discover_single(
-        self,
-        skill_path: Path,
-        load_body: bool = True
-    ) -> SkillDefinition:
+    async def discover_single(self, skill_path: Path, load_body: bool = True) -> SkillDefinition:
         """
         Discover and load a single skill.
 
@@ -374,4 +342,3 @@ class SkillDiscovery:
             return await self.discover()
         finally:
             self._skip_registered = original_skip
-

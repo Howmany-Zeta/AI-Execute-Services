@@ -3,8 +3,8 @@ import logging
 import time
 import uuid
 from typing import Dict, List, Any, Optional
-from celery import Celery  # type: ignore[import-untyped]
-from celery.exceptions import TimeoutError as CeleryTimeoutError  # type: ignore[import-untyped]
+from celery import Celery
+from celery.exceptions import TimeoutError as CeleryTimeoutError
 from asyncio import TimeoutError as AsyncioTimeoutError
 
 # Removed direct import to avoid circular dependency

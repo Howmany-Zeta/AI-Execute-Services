@@ -16,6 +16,7 @@ def _to_text(result: Any) -> str:
         return result
     if isinstance(result, dict):
         import json
+
         return json.dumps(result, ensure_ascii=False)
     return str(result)
 

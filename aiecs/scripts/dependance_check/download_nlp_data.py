@@ -152,7 +152,7 @@ def download_nltk_data(logger: logging.Logger) -> bool:
         logger.info("No virtual environment detected. Using default NLTK data location (~/nltk_data)")
 
     try:
-        import nltk  # type: ignore[import-untyped]
+        import nltk
 
         # Ensure nltk.data.path includes our environment-specific path
         if nltk_data_path and str(nltk_data_path) not in nltk.data.path:
@@ -280,7 +280,7 @@ def download_spacy_pkuseg_model(logger: logging.Logger) -> bool:
 
         # Verify the package can be imported
         try:
-            import spacy_pkuseg  # type: ignore[import-untyped]
+            import spacy_pkuseg
 
             logger.info("Verified spacy_pkuseg can be imported")
 
@@ -314,7 +314,7 @@ def download_rake_nltk_data(logger: logging.Logger) -> bool:
         return True  # Not critical, return True
 
     try:
-        from rake_nltk import Rake  # type: ignore[import-untyped]
+        from rake_nltk import Rake
 
         # Test RAKE functionality
         rake = Rake()
@@ -350,7 +350,7 @@ def verify_installation(logger: logging.Logger) -> bool:
             if nltk_data_path.exists():
                 os.environ["NLTK_DATA"] = str(nltk_data_path)
 
-        from nltk.corpus import stopwords  # type: ignore[import-untyped]
+        from nltk.corpus import stopwords
 
         english_stopwords = stopwords.words("english")
         logger.info(f"NLTK verification successful. Loaded {len(english_stopwords)} English stopwords")

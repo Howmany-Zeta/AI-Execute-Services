@@ -66,11 +66,11 @@ class BaseTool:
         """
         # Detect Config class if it exists
         config_class = self._detect_config_class()
-        
+
         # Determine tool name (for config file discovery)
         if tool_name is None:
             tool_name = self.__class__.__name__
-        
+
         # Load configuration using ToolConfigLoader
         if config_class:
             # Tool has Config class - use loader to load and validate config
@@ -82,7 +82,7 @@ class BaseTool:
                     explicit_config=config,
                 )
                 # Instantiate Config class with loaded config
-                self._config_obj = config_class(**loaded_config)
+                self._config_obj: Optional[BaseModel] = config_class(**loaded_config)
                 self._config = loaded_config
             except ValidationError as e:
                 logger.error(f"Configuration validation failed for {tool_name}: {e}")
@@ -115,7 +115,7 @@ class BaseTool:
                     logger.debug(f"Could not load config for {tool_name}: {e}. Using empty config.")
                     self._config = {}
             self._config_obj = None
-        
+
         # Extract only executor-related config fields to avoid passing tool-specific
         # fields (e.g., user_agent, temp_dir) to ExecutorConfig
         executor_config = self._extract_executor_config(self._config)
@@ -138,30 +138,26 @@ class BaseTool:
     def _extract_executor_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Extract only executor-related configuration fields from the full config.
-        
+
         This prevents tool-specific fields (e.g., user_agent, temp_dir) from being
         passed to ExecutorConfig, which would cause validation issues or be silently
         ignored.
-        
+
         Args:
             config (Dict[str, Any]): Full configuration dictionary.
-            
+
         Returns:
             Dict[str, Any]: Filtered configuration containing only ExecutorConfig fields.
         """
         if not config:
             return {}
-        
+
         # Get all valid field names from ExecutorConfig
         executor_fields = set(ExecutorConfig.model_fields.keys())
-        
+
         # Filter config to only include executor-related fields
-        executor_config = {
-            key: value
-            for key, value in config.items()
-            if key in executor_fields
-        }
-        
+        executor_config = {key: value for key, value in config.items() if key in executor_fields}
+
         return executor_config
 
     def _detect_config_class(self) -> Optional[Type[BaseModel]]:
@@ -182,6 +178,7 @@ class BaseTool:
                     # Import BaseSettings here to avoid circular imports
                     try:
                         from pydantic_settings import BaseSettings
+
                         if issubclass(config_attr, (BaseModel, BaseSettings)):
                             return config_attr
                     except ImportError:
@@ -223,12 +220,12 @@ class BaseTool:
         # Second pass: Auto-generate schemas for methods without manual schemas
         public_methods = self._get_public_methods()
         self._schema_coverage["total_methods"] = len(public_methods)
-        
+
         for method_name in public_methods:
             # Skip if already has manual schema
             if method_name in self._schemas:
                 continue
-            
+
             # Skip async wrappers (they share schemas with sync methods)
             if method_name.endswith("_async"):
                 sync_method_name = method_name[:-6]  # Remove "_async"
@@ -236,7 +233,7 @@ class BaseTool:
                     self._schemas[method_name] = self._schemas[sync_method_name]
                     logger.debug(f"Reusing schema for async method {method_name} from {sync_method_name}")
                     continue
-            
+
             # Try to auto-generate schema
             method = getattr(self.__class__, method_name)
             if callable(method) and not isinstance(method, type):
@@ -256,15 +253,15 @@ class BaseTool:
     def _normalize_schema_name_to_method(self, schema_base_name: str) -> str:
         """
         Convert schema name to method name.
-        
+
         Handles conventions like:
         - Read_csvSchema -> read_csv
         - ReadCsvSchema -> readcsv (fallback, but should use Read_csvSchema)
         - ReadSchema -> read
-        
+
         Args:
             schema_base_name: Schema name without "Schema" suffix
-            
+
         Returns:
             Normalized method name
         """
@@ -274,7 +271,7 @@ class BaseTool:
             if schema_base_name:
                 return schema_base_name[0].lower() + schema_base_name[1:]
             return schema_base_name.lower()
-        
+
         # Convert CamelCase to snake_case
         # Insert underscore before uppercase letters (except first)
         result = []
@@ -287,7 +284,7 @@ class BaseTool:
     def _get_public_methods(self) -> List[str]:
         """
         Get list of public methods that should have schemas.
-        
+
         Returns:
             List of method names
         """
@@ -296,23 +293,23 @@ class BaseTool:
             # Skip private methods
             if attr_name.startswith("_"):
                 continue
-            
+
             # Skip base class methods
             if attr_name in ["run", "run_async", "run_batch"]:
                 continue
-            
+
             attr = getattr(self.__class__, attr_name)
-            
+
             # Skip non-method attributes
             if not callable(attr):
                 continue
-            
+
             # Skip classes (like Config, Schema, etc.)
             if isinstance(attr, type):
                 continue
-            
+
             methods.append(attr_name)
-        
+
         return methods
 
     def _log_schema_coverage(self) -> None:
@@ -323,26 +320,22 @@ class BaseTool:
         total = coverage["total_methods"]
         if total == 0:
             return
-        
+
         manual = coverage["manual_schemas"]
         auto = coverage["auto_generated_schemas"]
         missing = coverage["missing_schemas"]
-        
+
         coverage_pct = ((manual + auto) / total * 100) if total > 0 else 0
-        
-        logger.info(
-            f"Schema coverage for {self.__class__.__name__}: "
-            f"{coverage_pct:.1f}% ({manual + auto}/{total}) - "
-            f"Manual: {manual}, Auto: {auto}, Missing: {missing}"
-        )
-        
+
+        logger.info(f"Schema coverage for {self.__class__.__name__}: " f"{coverage_pct:.1f}% ({manual + auto}/{total}) - " f"Manual: {manual}, Auto: {auto}, Missing: {missing}")
+
         if missing > 0:
             logger.debug(f"{missing} methods without schemas in {self.__class__.__name__}")
 
     def get_schema_coverage(self) -> Dict[str, Any]:
         """
         Get schema coverage metrics for this tool.
-        
+
         Returns:
             Dictionary with coverage metrics:
             - total_methods: Total number of public methods
@@ -356,12 +349,12 @@ class BaseTool:
         manual = self._schema_coverage["manual_schemas"]
         auto = self._schema_coverage["auto_generated_schemas"]
         missing = self._schema_coverage["missing_schemas"]
-        
+
         coverage_pct = ((manual + auto) / total * 100) if total > 0 else 0
-        
+
         # Calculate quality metrics
         quality_metrics = self._calculate_schema_quality()
-        
+
         return {
             "total_methods": total,
             "manual_schemas": manual,
@@ -374,7 +367,7 @@ class BaseTool:
     def _calculate_schema_quality(self) -> Dict[str, float]:
         """
         Calculate schema quality metrics.
-        
+
         Returns:
             Dictionary with quality scores:
             - description_quality: Percentage of fields with meaningful descriptions
@@ -384,27 +377,27 @@ class BaseTool:
         total_fields = 0
         fields_with_descriptions = 0
         fields_with_types = 0
-        
+
         for schema in self._schemas.values():
             if not hasattr(schema, "model_fields"):
                 continue
-            
+
             for field_name, field_info in schema.model_fields.items():
                 total_fields += 1
-                
+
                 # Check for meaningful description (not just "Parameter {name}")
                 desc = field_info.description
                 if desc and desc != f"Parameter {field_name}":
                     fields_with_descriptions += 1
-                
+
                 # Check for type annotation
                 if field_info.annotation is not None and field_info.annotation != Any:
                     fields_with_types += 1
-        
+
         description_quality = (fields_with_descriptions / total_fields * 100) if total_fields > 0 else 0
         type_coverage = (fields_with_types / total_fields * 100) if total_fields > 0 else 0
         overall_score = (description_quality + type_coverage) / 2 if total_fields > 0 else 0
-        
+
         return {
             "description_quality": description_quality,
             "type_coverage": type_coverage,
@@ -527,7 +520,7 @@ class BaseTool:
             schema_type = "manual" if self._is_manual_schema(method_name, schema) else "auto-generated"
             logger.debug(f"Retrieved {schema_type} schema for method {method_name}")
             return schema
-        
+
         # Try to find manual schema by convention
         # Convert method_name to schema name (e.g., read_csv -> Read_csvSchema)
         schema_name = self._method_name_to_schema_name(method_name)
@@ -540,7 +533,7 @@ class BaseTool:
                     self._schema_coverage["manual_schemas"] += 1
                     logger.debug(f"Found and registered manual schema {schema_name} for method {method_name}")
                     return attr
-        
+
         # Fallback to auto-generation if method exists
         if hasattr(self.__class__, method_name):
             method = getattr(self.__class__, method_name)
@@ -554,20 +547,20 @@ class BaseTool:
                         return auto_schema
                 except Exception as e:
                     logger.debug(f"Could not auto-generate schema for {method_name}: {e}")
-        
+
         return None
 
     def _method_name_to_schema_name(self, method_name: str) -> str:
         """
         Convert method name to schema name following convention.
-        
+
         Examples:
         - read_csv -> Read_csvSchema
         - read -> ReadSchema
-        
+
         Args:
             method_name: Method name in snake_case
-            
+
         Returns:
             Schema class name
         """
@@ -579,11 +572,11 @@ class BaseTool:
     def _is_manual_schema(self, method_name: str, schema: Type[BaseModel]) -> bool:
         """
         Check if a schema was manually defined (not auto-generated).
-        
+
         Args:
             method_name: Method name
             schema: Schema class
-            
+
         Returns:
             True if schema is manually defined, False if auto-generated
         """

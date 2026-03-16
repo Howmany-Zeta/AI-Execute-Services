@@ -8,7 +8,7 @@ API Documentation: https://docs.coingecko.com/
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from aiecs.tools.apisource.providers.base import (
     BaseAPIProvider,
@@ -66,44 +66,25 @@ class CoinGeckoProvider(BaseAPIProvider):
 
         if operation == "get_coin_price":
             if "ids" not in params:
-                return False, (
-                    "Missing required parameter: ids\n"
-                    "Example: {'ids': 'bitcoin,ethereum', 'vs_currencies': 'usd'}\n"
-                    "Use search_coins operation to find valid coin IDs"
-                )
+                return False, ("Missing required parameter: ids\n" "Example: {'ids': 'bitcoin,ethereum', 'vs_currencies': 'usd'}\n" "Use search_coins operation to find valid coin IDs")
             if "vs_currencies" not in params:
-                return False, (
-                    "Missing required parameter: vs_currencies\n"
-                    "Example: {'ids': 'bitcoin', 'vs_currencies': 'usd,eur'}"
-                )
+                return False, ("Missing required parameter: vs_currencies\n" "Example: {'ids': 'bitcoin', 'vs_currencies': 'usd,eur'}")
 
         elif operation == "get_coin_data":
             if "id" not in params:
-                return False, (
-                    "Missing required parameter: id\n"
-                    "Example: {'id': 'bitcoin'}"
-                )
+                return False, ("Missing required parameter: id\n" "Example: {'id': 'bitcoin'}")
 
         elif operation == "get_coin_market_chart":
             if "id" not in params or "vs_currency" not in params or "days" not in params:
-                return False, (
-                    "Missing required parameters: id, vs_currency, and days\n"
-                    "Example: {'id': 'bitcoin', 'vs_currency': 'usd', 'days': '7'}"
-                )
+                return False, ("Missing required parameters: id, vs_currency, and days\n" "Example: {'id': 'bitcoin', 'vs_currency': 'usd', 'days': '7'}")
 
         elif operation == "search_coins":
             if "query" not in params:
-                return False, (
-                    "Missing required parameter: query\n"
-                    "Example: {'query': 'bitcoin'}"
-                )
+                return False, ("Missing required parameter: query\n" "Example: {'query': 'bitcoin'}")
 
         elif operation == "get_coins_markets":
             if "vs_currency" not in params:
-                return False, (
-                    "Missing required parameter: vs_currency\n"
-                    "Example: {'vs_currency': 'usd', 'order': 'market_cap_desc', 'per_page': 100}"
-                )
+                return False, ("Missing required parameter: vs_currency\n" "Example: {'vs_currency': 'usd', 'order': 'market_cap_desc', 'per_page': 100}")
 
         return True, None
 
@@ -350,7 +331,7 @@ class CoinGeckoProvider(BaseAPIProvider):
 
             data = response.json()
             logger.info(f"CoinGecko API response: {operation} successful")
-            return data
+            return cast(Dict[str, Any], data)
 
         except requests.exceptions.RequestException as e:
             error_msg = f"CoinGecko API request failed: {str(e)}"
@@ -376,4 +357,3 @@ class CoinGeckoProvider(BaseAPIProvider):
             API response data
         """
         return self.execute(operation, params)
-

@@ -1,5 +1,6 @@
 import yaml
 import os
+from typing import cast
 
 
 def get_prompt(mode: str, service: str) -> str:
@@ -11,4 +12,4 @@ def get_prompt(mode: str, service: str) -> str:
         return "[Default prompt]"
     with open(path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
-    return data.get(service, "[No specific prompt found]")
+    return cast(str, data.get(service, "[No specific prompt found]"))

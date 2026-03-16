@@ -27,7 +27,7 @@ try:
 except ImportError:
     # If langchain is not installed, create simple base class for type checking
     # Use different name to avoid redefinition error
-    class _LangchainBaseToolFallback:  # type: ignore[no-redef]
+    class _LangchainBaseToolFallback:
         pass
 
     LangchainBaseTool = _LangchainBaseToolFallback  # type: ignore[assignment,misc]

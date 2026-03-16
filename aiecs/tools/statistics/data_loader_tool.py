@@ -11,11 +11,11 @@ This tool provides comprehensive data loading capabilities with:
 
 import os
 import logging
-from typing import Dict, Any, List, Optional, Union, Iterator
+from typing import Dict, Any, List, Optional, Union, Iterator, cast
 from enum import Enum
 from pathlib import Path
 
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -79,7 +79,7 @@ class DataLoaderTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the data loader tool
-        
+
         Automatically reads from environment variables with DATA_LOADER_ prefix.
         Example: DATA_LOADER_MAX_FILE_SIZE_MB -> max_file_size_mb
         """
@@ -120,7 +120,7 @@ class DataLoaderTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: "DataLoaderTool.Config" = cast("DataLoaderTool.Config", self._config_obj) if self._config_obj is not None else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
@@ -134,7 +134,7 @@ class DataLoaderTool(BaseTool):
 
     def _init_external_tools(self):
         """Initialize external task tools"""
-        self.external_tools = {}
+        self.external_tools: Dict[str, Any] = {}
 
         # Initialize PandasTool for data operations
         try:
@@ -445,7 +445,7 @@ class DataLoaderTool(BaseTool):
             return pd.read_sas(source)
         elif source_type == DataSourceType.SPSS:
             try:
-                import pyreadstat  # type: ignore[import-untyped]
+                import pyreadstat
 
                 df, meta = pyreadstat.read_sav(source)
                 return df
@@ -487,9 +487,9 @@ class DataLoaderTool(BaseTool):
         encoding = encoding or self.config.default_encoding
 
         if source_type == DataSourceType.CSV:
-            return pd.read_csv(source, chunksize=chunk_size, encoding=encoding)
+            return cast(Iterator[pd.DataFrame], pd.read_csv(source, chunksize=chunk_size, encoding=encoding))
         elif source_type == DataSourceType.JSON:
-            return pd.read_json(source, lines=True, chunksize=chunk_size, encoding=encoding)
+            return cast(Iterator[pd.DataFrame], pd.read_json(source, lines=True, chunksize=chunk_size, encoding=encoding))
         else:
             raise FileFormatError(f"Streaming not supported for: {source_type}")
 

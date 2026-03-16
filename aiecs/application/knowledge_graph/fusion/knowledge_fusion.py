@@ -7,10 +7,7 @@ High-level orchestrator for cross-document entity merging and knowledge fusion.
 from typing import List, Dict, Set, Tuple, Any, Optional
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.infrastructure.graph_storage.base import GraphStore
-from aiecs.infrastructure.graph_storage.tenant import (
-    TenantContext,
-    CrossTenantFusionError,
-)
+from aiecs.infrastructure.graph_storage.tenant import TenantContext
 from aiecs.application.knowledge_graph.fusion.entity_deduplicator import (
     EntityDeduplicator,
 )
@@ -108,11 +105,11 @@ class KnowledgeFusion:
 
         # Step 1: Query all entities from graph (with tenant context)
         entities = await self._query_entities(entity_types, context)
-        
+
         # Step 2: Filter entities by tenant_id when context provided (defense-in-depth)
         if context:
             entities = self._filter_entities_by_tenant(entities, context.tenant_id)
-        
+
         stats["entities_analyzed"] = len(entities)
 
         if len(entities) < 2:
@@ -367,13 +364,9 @@ class KnowledgeFusion:
                 for entity_type in entity_types:
                     # Pass context to ensure tenant filtering at storage layer
                     if context:
-                        type_entities = await self.graph_store.get_all_entities(
-                            entity_type=entity_type, context=context
-                        )
+                        type_entities = await self.graph_store.get_all_entities(entity_type=entity_type, context=context)
                     else:
-                        type_entities = await self.graph_store.get_all_entities(
-                            entity_type=entity_type
-                        )
+                        type_entities = await self.graph_store.get_all_entities(entity_type=entity_type)
                     entities.extend(type_entities)
             else:
                 # Query all entities
@@ -390,9 +383,7 @@ class KnowledgeFusion:
 
         return entities
 
-    def _filter_entities_by_tenant(
-        self, entities: List[Entity], tenant_id: str
-    ) -> List[Entity]:
+    def _filter_entities_by_tenant(self, entities: List[Entity], tenant_id: str) -> List[Entity]:
         """
         Filter entities to only those belonging to the specified tenant.
 

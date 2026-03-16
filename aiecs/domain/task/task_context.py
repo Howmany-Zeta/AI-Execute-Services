@@ -195,7 +195,7 @@ class TaskContext:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Synchronous context exit with cleanup."""
-        duration = time.time() - self.start_time
+        duration = time.time() - (self.start_time or 0.0)
         logger.debug(f"Completed task context in {duration:.2f}s for user {self.user_id}")
         for resource_name, resource in self.resources.items():
             try:
@@ -216,7 +216,7 @@ class TaskContext:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Asynchronous context exit with cleanup."""
-        duration = time.time() - self.start_time
+        duration = time.time() - (self.start_time or 0.0)
         logger.debug(f"Completed async task context in {duration:.2f}s for user {self.user_id}")
         for resource_name, resource in self.resources.items():
             try:

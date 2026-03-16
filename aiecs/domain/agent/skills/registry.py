@@ -7,7 +7,6 @@ and lookup capabilities. Implements singleton pattern with thread-safe access.
 
 import logging
 import threading
-from pathlib import Path
 from typing import Dict, List, Optional
 
 from .models import SkillDefinition, SkillMetadata
@@ -17,26 +16,27 @@ logger = logging.getLogger(__name__)
 
 class SkillRegistryError(Exception):
     """Raised when skill registry operations fail."""
+
     pass
 
 
 class SkillRegistry:
     """
     Central registry for managing available skills.
-    
+
     Implements singleton pattern with thread-safe access for concurrent usage.
     Supports skill registration, lookup, listing, and filtering by tags.
-    
+
     Usage:
         registry = SkillRegistry.get_instance()
         registry.register_skill(skill)
         skill = registry.get_skill("python-coding")
         skills = registry.list_skills(tags=["python"])
     """
-    
+
     _instance: Optional["SkillRegistry"] = None
     _lock = threading.Lock()
-    
+
     def __new__(cls) -> "SkillRegistry":
         """Create or return singleton instance."""
         if cls._instance is None:
@@ -46,61 +46,58 @@ class SkillRegistry:
                     cls._instance = super().__new__(cls)
                     cls._instance._initialized = False
         return cls._instance
-    
+
     def __init__(self):
         """Initialize registry if not already initialized."""
         if getattr(self, "_initialized", False):
             return
-        
+
         self._skills: Dict[str, SkillDefinition] = {}
         self._metadata_cache: Dict[str, SkillMetadata] = {}
         self._access_lock = threading.RLock()
         self._initialized = True
-    
+
     @classmethod
     def get_instance(cls) -> "SkillRegistry":
         """Get the singleton instance of the registry."""
         return cls()
-    
+
     @classmethod
     def reset_instance(cls) -> None:
         """
         Reset the singleton instance (primarily for testing).
-        
+
         Warning: This clears all registered skills. Use with caution.
         """
         with cls._lock:
             cls._instance = None
-    
+
     def register_skill(self, skill: SkillDefinition) -> None:
         """
         Register a skill in the registry.
-        
+
         Args:
             skill: SkillDefinition to register
-            
+
         Raises:
             SkillRegistryError: If skill with same name already exists
         """
         with self._access_lock:
             name = skill.metadata.name
             if name in self._skills:
-                raise SkillRegistryError(
-                    f"Skill '{name}' is already registered. "
-                    f"Use unregister_skill() first to replace it."
-                )
-            
+                raise SkillRegistryError(f"Skill '{name}' is already registered. " f"Use unregister_skill() first to replace it.")
+
             self._skills[name] = skill
             self._metadata_cache[name] = skill.metadata
             logger.info(f"Registered skill: {name} v{skill.metadata.version}")
-    
+
     def unregister_skill(self, name: str) -> bool:
         """
         Unregister a skill from the registry.
-        
+
         Args:
             name: Name of the skill to unregister
-            
+
         Returns:
             True if skill was unregistered, False if not found
         """
@@ -111,36 +108,33 @@ class SkillRegistry:
                 logger.info(f"Unregistered skill: {name}")
                 return True
             return False
-    
+
     def get_skill(self, name: str) -> Optional[SkillDefinition]:
         """
         Get a skill by name.
-        
+
         Args:
             name: Name of the skill
-            
+
         Returns:
             SkillDefinition if found, None otherwise
         """
         with self._access_lock:
             return self._skills.get(name)
-    
+
     def get_skills(self, names: List[str]) -> List[SkillDefinition]:
         """
         Get multiple skills by name.
-        
+
         Args:
             names: List of skill names
-            
+
         Returns:
             List of found SkillDefinitions (missing skills are skipped)
         """
         with self._access_lock:
-            return [
-                self._skills[name] for name in names 
-                if name in self._skills
-            ]
-    
+            return [self._skills[name] for name in names if name in self._skills]
+
     def has_skill(self, name: str) -> bool:
         """
         Check if a skill is registered.
@@ -154,11 +148,7 @@ class SkillRegistry:
         with self._access_lock:
             return name in self._skills
 
-    def list_skills(
-        self,
-        tags: Optional[List[str]] = None,
-        dependencies: Optional[List[str]] = None
-    ) -> List[SkillMetadata]:
+    def list_skills(self, tags: Optional[List[str]] = None, dependencies: Optional[List[str]] = None) -> List[SkillMetadata]:
         """
         List available skills with optional filtering.
 
@@ -242,10 +232,7 @@ class SkillRegistry:
             List of SkillDefinitions with the tag
         """
         with self._access_lock:
-            return [
-                skill for skill in self._skills.values()
-                if tag in (skill.metadata.tags or [])
-            ]
+            return [skill for skill in self._skills.values() if tag in (skill.metadata.tags or [])]
 
     def get_skill_metadata(self, name: str) -> Optional[SkillMetadata]:
         """
@@ -273,8 +260,4 @@ class SkillRegistry:
             List of SkillDefinitions that recommend the tool
         """
         with self._access_lock:
-            return [
-                skill for skill in self._skills.values()
-                if tool_name in (skill.metadata.recommended_tools or [])
-            ]
-
+            return [skill for skill in self._skills.values() if tool_name in (skill.metadata.recommended_tools or [])]

@@ -16,7 +16,7 @@ Version: 1.0
 """
 
 from dataclasses import dataclass
-from typing import Optional, List, Any, Type, cast
+from typing import Optional, List, Any
 
 try:
     from lark import (
@@ -30,7 +30,6 @@ try:
 except ImportError:
     LARK_AVAILABLE = False
     # When Lark is not available, use Exception as fallback
-    # Use different names to avoid redefinition errors
     LarkError = Exception  # type: ignore[misc,assignment]
     UnexpectedInput = Exception  # type: ignore[misc,assignment]
     UnexpectedToken = Exception  # type: ignore[misc,assignment]
@@ -44,21 +43,22 @@ try:
     colorama_init(autoreset=True)
 except ImportError:
     COLORAMA_AVAILABLE = False
+
     # Fallback: no colors
     # Create fallback classes with same interface but different implementation
-    class _ForeFallback:  # type: ignore[no-redef]
+    class _ForeFallback:
         RED = ""
         YELLOW = ""
         GREEN = ""
         CYAN = ""
         RESET = ""
 
-    class _StyleFallback:  # type: ignore[no-redef]
+    class _StyleFallback:
         BRIGHT = ""
         RESET_ALL = ""
 
-    Fore = _ForeFallback  # type: ignore[assignment,misc]
-    Style = _StyleFallback  # type: ignore[assignment,misc]
+    Fore = _ForeFallback  # type: ignore[assignment]
+    Style = _StyleFallback  # type: ignore[assignment]
 
 
 @dataclass
@@ -399,7 +399,7 @@ class ErrorHandler:
         """
         try:
             # Try to use python-Levenshtein if available
-            import Levenshtein  # type: ignore[import-not-found]
+            import Levenshtein
 
             best_match = None
             best_ratio = 0.0

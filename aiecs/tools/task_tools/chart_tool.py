@@ -3,15 +3,15 @@ import json
 import csv
 import tempfile
 import logging
-from typing import Dict, Any, List, Optional, Union, Tuple
+from typing import Dict, Any, List, Optional, Union, Tuple, cast
 from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import numpy as np
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns  # type: ignore[import-untyped]
+import seaborn as sns
 
 from aiecs.tools import register_tool
 from aiecs.tools.base_tool import BaseTool
@@ -45,7 +45,7 @@ class ChartTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the chart tool
-        
+
         Automatically reads from environment variables with CHART_TOOL_ prefix.
         Example: CHART_TOOL_EXPORT_DIR -> export_dir
         """
@@ -177,7 +177,7 @@ class ChartTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: "ChartTool.Config" = cast("ChartTool.Config", self._config_obj) if self._config_obj is not None else self.Config()
 
         # Create export directory if it doesn't exist
         os.makedirs(self.config.export_dir, exist_ok=True)
@@ -210,17 +210,17 @@ class ChartTool(BaseTool):
 
         try:
             if ext == ".sav":
-                import pyreadstat  # type: ignore[import-untyped]
+                import pyreadstat
 
                 df, meta = pyreadstat.read_sav(file_path)
                 return df
             elif ext == ".sas7bdat":
-                import pyreadstat  # type: ignore[import-untyped]
+                import pyreadstat
 
                 df, meta = pyreadstat.read_sas7bdat(file_path)
                 return df
             elif ext == ".por":
-                import pyreadstat  # type: ignore[import-untyped]
+                import pyreadstat
 
                 df, meta = pyreadstat.read_por(file_path)
                 return df
@@ -462,11 +462,11 @@ class ChartTool(BaseTool):
             # Handle datetime columns
             for col in result.select_dtypes(include=["datetime64"]).columns:
                 result[col] = result[col].dt.strftime("%Y-%m-%d %H:%M:%S")
-            return result.to_dict(orient="records")
+            return cast(List[Dict[Any, Any]], result.to_dict(orient="records"))
         elif isinstance(result, pd.Series):
             if pd.api.types.is_datetime64_any_dtype(result):
                 result = result.dt.strftime("%Y-%m-%d %H:%M:%S")
-            return result.to_dict()
+            return cast(Dict[Any, Any], result.to_dict())
         elif isinstance(result, dict):
             # Handle numpy types and datetime objects
             def convert_value(v):
@@ -483,7 +483,7 @@ class ChartTool(BaseTool):
                 return v
 
             return {k: convert_value(v) for k, v in result.items()}
-        return result
+        return cast(Dict[Any, Any], result)
 
     @measure_execution_time
     def read_data(

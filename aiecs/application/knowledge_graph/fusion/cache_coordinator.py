@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class InvalidationResult:
     """Result of cache invalidation operation."""
+
     affected_names: Set[str]
     alias_entries_removed: int
     embeddings_invalidated: int
@@ -104,7 +105,7 @@ class CacheCoordinator:
     def _get_entity_name(self, entity: Entity) -> str:
         """Get the primary name of an entity."""
         # Entity stores name in properties, not as a direct attribute
-        return entity.properties.get("name", "")
+        return str(entity.properties.get("name", ""))
 
     def _get_entity_aliases(self, entity: Entity) -> Set[str]:
         """Get all aliases for an entity."""
@@ -211,9 +212,7 @@ class CacheCoordinator:
 
             return await self._invalidate_names(affected_names)
 
-    async def invalidate_for_names(
-        self, names: List[str]
-    ) -> InvalidationResult:
+    async def invalidate_for_names(self, names: List[str]) -> InvalidationResult:
         """
         Directly invalidate cache entries for given names.
 
@@ -228,9 +227,7 @@ class CacheCoordinator:
             affected_names.discard("")
             return await self._invalidate_names(affected_names)
 
-    async def _invalidate_names(
-        self, names: Set[str]
-    ) -> InvalidationResult:
+    async def _invalidate_names(self, names: Set[str]) -> InvalidationResult:
         """
         Internal method to invalidate cache entries for names.
 
@@ -270,11 +267,7 @@ class CacheCoordinator:
             self._invalidation_count += 1
             self._names_invalidated += len(names)
 
-            logger.debug(
-                f"Cache invalidation: {len(names)} names, "
-                f"{alias_removed} alias entries removed, "
-                f"{embeddings_invalidated} embeddings invalidated"
-            )
+            logger.debug(f"Cache invalidation: {len(names)} names, " f"{alias_removed} alias entries removed, " f"{embeddings_invalidated} embeddings invalidated")
 
             return InvalidationResult(
                 affected_names=names,
@@ -319,10 +312,7 @@ class CacheCoordinator:
                 still_cached.append(name)
 
         if still_cached:
-            logger.error(
-                f"INVARIANT VIOLATION in {operation}: "
-                f"{len(still_cached)} names still in embedding cache: {still_cached[:5]}"
-            )
+            logger.error(f"INVARIANT VIOLATION in {operation}: " f"{len(still_cached)} names still in embedding cache: {still_cached[:5]}")
             return False
 
         return True

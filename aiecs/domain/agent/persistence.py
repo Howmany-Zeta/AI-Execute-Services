@@ -6,7 +6,7 @@ Interfaces and implementations for saving/loading agent state.
 
 import logging
 import json
-from typing import Dict, Any, Optional, Protocol
+from typing import Dict, Any, Optional, Protocol, cast
 from datetime import datetime
 from collections import ChainMap
 import asyncio
@@ -106,7 +106,7 @@ class InMemoryPersistence:
 
         data = self._storage[agent_id]
         logger.debug(f"Agent {agent_id} loaded from memory")
-        return data["state"]
+        return cast(Dict[str, Any], data["state"])
 
     async def exists(self, agent_id: str) -> bool:
         """Check if agent exists in memory."""
@@ -191,7 +191,7 @@ class FilePersistence:
                 data = json.load(f)
 
             logger.debug(f"Agent {agent_id} loaded from {file_path}")
-            return data["state"]
+            return cast(Dict[str, Any], data["state"])
         except FileNotFoundError:
             raise KeyError(f"Agent {agent_id} not found in storage")
         except Exception as e:

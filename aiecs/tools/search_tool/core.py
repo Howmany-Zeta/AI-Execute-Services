@@ -8,7 +8,7 @@ intelligent caching, and comprehensive metrics.
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -18,15 +18,15 @@ from aiecs.tools.tool_executor import cache_result_with_strategy
 
 # Import Google API with graceful fallback
 try:
-    from googleapiclient.discovery import build  # type: ignore[import-untyped]
-    from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
+    from googleapiclient.discovery import build
+    from googleapiclient.errors import HttpError
     from google.auth.exceptions import GoogleAuthError
     from google.oauth2 import service_account
 
     GOOGLE_API_AVAILABLE = True
 except ImportError:
     GOOGLE_API_AVAILABLE = False
-    HttpError = Exception  # type: ignore[assignment,misc]
+    HttpError = Exception
     GoogleAuthError = Exception  # type: ignore[assignment,misc]
 
 # Import search tool components
@@ -49,7 +49,7 @@ from .context import SearchContext
 from .cache import IntelligentCache
 from .metrics import EnhancedMetrics
 from .error_handler import AgentFriendlyErrorHandler
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator
 
 
 class SearchTool(BaseTool):
@@ -69,10 +69,10 @@ class SearchTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the search tool
-        
+
         Automatically reads from environment variables with SEARCH_TOOL_ prefix.
         Example: SEARCH_TOOL_GOOGLE_API_KEY -> google_api_key
-        
+
         Sensitive fields (API keys, credentials) are loaded from .env files via dotenv.
         """
 
@@ -244,7 +244,7 @@ class SearchTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: SearchTool.Config = self._config_obj if self._config_obj else self.Config()  # type: ignore[assignment]
 
         # Initialize logger
         self.logger = logging.getLogger(__name__)
@@ -255,8 +255,8 @@ class SearchTool(BaseTool):
         self.logger.setLevel(logging.INFO)
 
         # Initialize API client
-        self._service = None
-        self._credentials = None
+        self._service: Optional[Any] = None
+        self._credentials: Optional[Any] = None
         self._init_credentials()
 
         # Initialize core components
@@ -403,6 +403,7 @@ class SearchTool(BaseTool):
 
         # Execute with circuit breaker
         def _do_search():
+            assert self._service is not None
             try:
                 result = self._service.cse().list(**search_params).execute()
                 return result
@@ -416,7 +417,7 @@ class SearchTool(BaseTool):
             except Exception as e:
                 raise SearchAPIError(f"Unexpected error: {e}")
 
-        return self.circuit_breaker.call(_do_search)
+        return cast(Dict[str, Any], self.circuit_breaker.call(_do_search))
 
     def _retry_with_backoff(self, func, *args, **kwargs) -> Any:
         """Execute with exponential backoff retry"""

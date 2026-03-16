@@ -67,7 +67,7 @@ class ToolSchemaGenerator:
 
         # Try to get Pydantic schema from BaseTool first
         schema_class = None
-        if isinstance(tool, BaseTool) and hasattr(tool, "_schemas"):
+        if isinstance(tool, BaseTool) and hasattr(tool, "_schemas") and operation is not None:
             schema_class = tool._schemas.get(operation)
 
         # Extract parameters - prefer Pydantic schema if available
@@ -201,8 +201,8 @@ class ToolSchemaGenerator:
         Returns:
             Tuple of (properties dict, required fields list)
         """
-        properties = {}
-        required = []
+        properties: Dict[str, Dict[str, Any]] = {}
+        required: List[str] = []
 
         if not hasattr(schema_class, "model_fields"):
             return properties, required
@@ -211,7 +211,7 @@ class ToolSchemaGenerator:
         try:
             from pydantic_core import PydanticUndefined
         except ImportError:
-            PydanticUndefined = type(None)  # Fallback for Pydantic v1
+            PydanticUndefined = type(None)  # type: ignore[assignment]  # Fallback for Pydantic v1
 
         for field_name, field_info in schema_class.model_fields.items():
             # Build property schema
@@ -251,7 +251,7 @@ class ToolSchemaGenerator:
             # Extract first line of docstring
             doc_lines = method.__doc__.strip().split("\n")
             if doc_lines:
-                return doc_lines[0]
+                return str(doc_lines[0])
         return None
 
     @staticmethod
@@ -330,7 +330,7 @@ class ToolSchemaGenerator:
 
                     # Try to get Pydantic schema from BaseTool
                     schema_class = None
-                    if hasattr(tool, "_schemas"):
+                    if hasattr(tool, "_schemas") and op is not None:
                         schema_class = tool._schemas.get(op)
 
                     # Extract parameters

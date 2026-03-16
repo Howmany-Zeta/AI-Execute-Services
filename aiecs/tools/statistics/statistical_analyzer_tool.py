@@ -10,12 +10,12 @@ This tool provides comprehensive statistical analysis with:
 """
 
 import logging
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Union, cast
 from enum import Enum
 
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 import numpy as np
-from scipy import stats as scipy_stats  # type: ignore[import-untyped]
+from scipy import stats as scipy_stats
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -59,7 +59,7 @@ class StatisticalAnalyzerTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the statistical analyzer tool
-        
+
         Automatically reads from environment variables with STATISTICAL_ANALYZER_ prefix.
         Example: STATISTICAL_ANALYZER_SIGNIFICANCE_LEVEL -> significance_level
         """
@@ -96,7 +96,7 @@ class StatisticalAnalyzerTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: StatisticalAnalyzerTool.Config = cast(StatisticalAnalyzerTool.Config, self._config_obj) if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
@@ -109,7 +109,7 @@ class StatisticalAnalyzerTool(BaseTool):
 
     def _init_external_tools(self):
         """Initialize external task tools"""
-        self.external_tools = {}
+        self.external_tools: Dict[str, Any] = {}
 
         try:
             from aiecs.tools.task_tools.stats_tool import StatsTool
@@ -386,8 +386,8 @@ class StatisticalAnalyzerTool(BaseTool):
         params: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Perform linear regression"""
-        from sklearn.linear_model import LinearRegression  # type: ignore[import-untyped]
-        from sklearn.metrics import r2_score, mean_squared_error  # type: ignore[import-untyped]
+        from sklearn.linear_model import LinearRegression
+        from sklearn.metrics import r2_score, mean_squared_error
 
         dependent = variables.get("dependent")
         independent = variables.get("independent", [])

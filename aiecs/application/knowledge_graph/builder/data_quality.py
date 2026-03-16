@@ -6,7 +6,7 @@ including range validation, outlier detection, completeness checks, and
 type consistency validation.
 """
 
-from typing import Dict, List, Optional, Any, Set, Union
+from typing import Dict, List, Optional, Any, Set
 from dataclasses import dataclass, field
 from enum import Enum
 import logging
@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 try:
     import pandas as pd
     import numpy as np
+
     PANDAS_AVAILABLE = True
 except ImportError:
     PANDAS_AVAILABLE = False
@@ -24,6 +25,7 @@ except ImportError:
 
 class ViolationType(Enum):
     """Types of data quality violations"""
+
     RANGE_VIOLATION = "range_violation"
     OUTLIER = "outlier"
     MISSING_VALUE = "missing_value"
@@ -34,7 +36,7 @@ class ViolationType(Enum):
 class ValidationViolation:
     """
     Represents a single data quality violation
-    
+
     Attributes:
         violation_type: Type of violation
         property_name: Property that violated the rule
@@ -43,6 +45,7 @@ class ValidationViolation:
         expected: Expected value or constraint
         message: Human-readable description
     """
+
     violation_type: ViolationType
     property_name: str
     row_id: Any
@@ -55,7 +58,7 @@ class ValidationViolation:
 class QualityReport:
     """
     Data quality validation report
-    
+
     Attributes:
         total_rows: Total number of rows validated
         violations: List of all violations found
@@ -65,6 +68,7 @@ class QualityReport:
         type_violations: Number of type violations per property
         passed: Whether validation passed (no critical violations)
     """
+
     total_rows: int
     violations: List[ValidationViolation] = field(default_factory=list)
     completeness: Dict[str, float] = field(default_factory=dict)
@@ -72,22 +76,19 @@ class QualityReport:
     range_violations: Dict[str, int] = field(default_factory=dict)
     type_violations: Dict[str, int] = field(default_factory=dict)
     passed: bool = True
-    
+
     def add_violation(self, violation: ValidationViolation):
         """Add a violation to the report"""
         self.violations.append(violation)
-        
+
         # Update counts
         if violation.violation_type == ViolationType.RANGE_VIOLATION:
-            self.range_violations[violation.property_name] = \
-                self.range_violations.get(violation.property_name, 0) + 1
+            self.range_violations[violation.property_name] = self.range_violations.get(violation.property_name, 0) + 1
         elif violation.violation_type == ViolationType.OUTLIER:
-            self.outlier_count[violation.property_name] = \
-                self.outlier_count.get(violation.property_name, 0) + 1
+            self.outlier_count[violation.property_name] = self.outlier_count.get(violation.property_name, 0) + 1
         elif violation.violation_type == ViolationType.TYPE_MISMATCH:
-            self.type_violations[violation.property_name] = \
-                self.type_violations.get(violation.property_name, 0) + 1
-    
+            self.type_violations[violation.property_name] = self.type_violations.get(violation.property_name, 0) + 1
+
     def get_summary(self) -> Dict[str, Any]:
         """Get a summary of the quality report"""
         return {
@@ -97,13 +98,14 @@ class QualityReport:
             "outliers": sum(self.outlier_count.values()),
             "type_violations": sum(self.type_violations.values()),
             "completeness": self.completeness,
-            "passed": self.passed
+            "passed": self.passed,
         }
 
 
 @dataclass
 class RangeRule:
     """Range validation rule for numeric properties"""
+
     min_value: Optional[float] = None
     max_value: Optional[float] = None
 
@@ -112,7 +114,7 @@ class RangeRule:
 class ValidationConfig:
     """
     Configuration for data quality validation
-    
+
     Attributes:
         range_rules: Range validation rules per property
         required_properties: Set of required properties
@@ -120,6 +122,7 @@ class ValidationConfig:
         fail_on_violations: Whether to fail import on violations
         max_violation_rate: Maximum allowed violation rate (0.0-1.0)
     """
+
     range_rules: Dict[str, RangeRule] = field(default_factory=dict)
     required_properties: Set[str] = field(default_factory=set)
     detect_outliers: bool = False
@@ -145,7 +148,7 @@ class DataQualityValidator:
         self.config = config or ValidationConfig()
         self._property_stats: Dict[str, Dict[str, float]] = {}
 
-    def validate_dataframe(self, df: 'pd.DataFrame', id_column: Optional[str] = None) -> QualityReport:
+    def validate_dataframe(self, df: "pd.DataFrame", id_column: Optional[str] = None) -> QualityReport:
         """
         Validate a pandas DataFrame
 
@@ -184,14 +187,14 @@ class DataQualityValidator:
 
         return report
 
-    def _check_completeness(self, df: 'pd.DataFrame', report: QualityReport):
+    def _check_completeness(self, df: "pd.DataFrame", report: QualityReport):
         """Check completeness of properties"""
         for col in df.columns:
             non_null_count = df[col].notna().sum()
             completeness = non_null_count / len(df) if len(df) > 0 else 0.0
             report.completeness[col] = completeness
 
-    def _check_required_properties(self, df: 'pd.DataFrame', row_ids: Any, report: QualityReport):
+    def _check_required_properties(self, df: "pd.DataFrame", row_ids: Any, report: QualityReport):
         """Check that required properties are present and non-null"""
         for prop in self.config.required_properties:
             if prop not in df.columns:
@@ -202,25 +205,25 @@ class DataQualityValidator:
                     row_id="ALL",
                     value=None,
                     expected="required property",
-                    message=f"Required property '{prop}' is missing from dataset"
+                    message=f"Required property '{prop}' is missing from dataset",
                 )
                 report.add_violation(violation)
             else:
                 # Check for null values in required property
                 null_mask = df[prop].isna()
                 for idx in df[null_mask].index:
-                    row_id = row_ids.iloc[idx] if hasattr(row_ids, 'iloc') else row_ids[idx]
+                    row_id = row_ids.iloc[idx] if hasattr(row_ids, "iloc") else row_ids[idx]
                     violation = ValidationViolation(
                         violation_type=ViolationType.MISSING_VALUE,
                         property_name=prop,
                         row_id=row_id,
                         value=None,
                         expected="non-null value",
-                        message=f"Required property '{prop}' is null in row {row_id}"
+                        message=f"Required property '{prop}' is null in row {row_id}",
                     )
                     report.add_violation(violation)
 
-    def _validate_ranges(self, df: 'pd.DataFrame', row_ids: Any, report: QualityReport):
+    def _validate_ranges(self, df: "pd.DataFrame", row_ids: Any, report: QualityReport):
         """Validate numeric properties are within specified ranges"""
         for prop, rule in self.config.range_rules.items():
             if prop not in df.columns:
@@ -234,7 +237,7 @@ class DataQualityValidator:
             if rule.min_value is not None:
                 violations_mask = df[prop] < rule.min_value
                 for idx in df[violations_mask].index:
-                    row_id = row_ids.iloc[idx] if hasattr(row_ids, 'iloc') else row_ids[idx]
+                    row_id = row_ids.iloc[idx] if hasattr(row_ids, "iloc") else row_ids[idx]
                     value = df[prop].iloc[idx]
                     violation = ValidationViolation(
                         violation_type=ViolationType.RANGE_VIOLATION,
@@ -242,7 +245,7 @@ class DataQualityValidator:
                         row_id=row_id,
                         value=value,
                         expected=f">= {rule.min_value}",
-                        message=f"Value {value} is below minimum {rule.min_value} for property '{prop}' in row {row_id}"
+                        message=f"Value {value} is below minimum {rule.min_value} for property '{prop}' in row {row_id}",
                     )
                     report.add_violation(violation)
 
@@ -250,7 +253,7 @@ class DataQualityValidator:
             if rule.max_value is not None:
                 violations_mask = df[prop] > rule.max_value
                 for idx in df[violations_mask].index:
-                    row_id = row_ids.iloc[idx] if hasattr(row_ids, 'iloc') else row_ids[idx]
+                    row_id = row_ids.iloc[idx] if hasattr(row_ids, "iloc") else row_ids[idx]
                     value = df[prop].iloc[idx]
                     violation = ValidationViolation(
                         violation_type=ViolationType.RANGE_VIOLATION,
@@ -258,11 +261,11 @@ class DataQualityValidator:
                         row_id=row_id,
                         value=value,
                         expected=f"<= {rule.max_value}",
-                        message=f"Value {value} is above maximum {rule.max_value} for property '{prop}' in row {row_id}"
+                        message=f"Value {value} is above maximum {rule.max_value} for property '{prop}' in row {row_id}",
                     )
                     report.add_violation(violation)
 
-    def _detect_outliers(self, df: 'pd.DataFrame', row_ids: Any, report: QualityReport):
+    def _detect_outliers(self, df: "pd.DataFrame", row_ids: Any, report: QualityReport):
         """Detect outliers using 3 standard deviations rule"""
         numeric_cols = df.select_dtypes(include=[np.number]).columns
 
@@ -288,7 +291,7 @@ class DataQualityValidator:
             outliers_mask = (df[col] < lower_bound) | (df[col] > upper_bound)
 
             for idx in df[outliers_mask].index:
-                row_id = row_ids.iloc[idx] if hasattr(row_ids, 'iloc') else row_ids[idx]
+                row_id = row_ids.iloc[idx] if hasattr(row_ids, "iloc") else row_ids[idx]
                 value = df[col].iloc[idx]
                 violation = ValidationViolation(
                     violation_type=ViolationType.OUTLIER,
@@ -296,7 +299,6 @@ class DataQualityValidator:
                     row_id=row_id,
                     value=value,
                     expected=f"within [{lower_bound:.2f}, {upper_bound:.2f}]",
-                    message=f"Value {value} is an outlier (>3 std devs) for property '{col}' in row {row_id}"
+                    message=f"Value {value} is an outlier (>3 std devs) for property '{col}' in row {row_id}",
                 )
                 report.add_violation(violation)
-

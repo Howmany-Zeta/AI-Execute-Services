@@ -531,8 +531,7 @@ class ASTValidator:
                     ValidationError(
                         line=line,
                         column=column,
-                        message=f"Cannot validate nested path '{full_path}.{remaining_path}': "
-                        f"property '{current_property}' type unknown",
+                        message=f"Cannot validate nested path '{full_path}.{remaining_path}': " f"property '{current_property}' type unknown",
                         suggestion="Ensure property schema defines property_type",
                     )
                 )
@@ -561,8 +560,7 @@ class ASTValidator:
                         ValidationError(
                             line=line,
                             column=column,
-                            message=f"Cannot validate nested path '{full_path}.{remaining_path}': "
-                            f"property '{current_property}' is DICT type but nested schema not defined",
+                            message=f"Cannot validate nested path '{full_path}.{remaining_path}': " f"property '{current_property}' is DICT type but nested schema not defined",
                             suggestion=f"Define nested schema for '{current_property}' or use flat property path",
                         )
                     )
@@ -585,8 +583,7 @@ class ASTValidator:
                     ValidationError(
                         line=line,
                         column=column,
-                        message=f"Cannot access nested path '{full_path}.{remaining_path}': "
-                        f"property '{current_property}' is {type_value} type, not DICT",
+                        message=f"Cannot access nested path '{full_path}.{remaining_path}': " f"property '{current_property}' is {type_value} type, not DICT",
                         suggestion=f"Use '{full_path}' directly or change property type to DICT",
                     )
                 )
@@ -725,8 +722,7 @@ class ASTValidator:
                             ValidationError(
                                 line=line,
                                 column=column,
-                                message=f"Property '{property_path}' expects {expected_type.__name__} values, "
-                                f"but list contains {type(item).__name__}",
+                                message=f"Property '{property_path}' expects {expected_type.__name__} values, " f"but list contains {type(item).__name__}",
                                 suggestion=f"Ensure all list values are {expected_type.__name__}",
                             )
                         )
@@ -739,8 +735,7 @@ class ASTValidator:
                 ValidationError(
                     line=line,
                     column=column,
-                    message=f"Property '{property_path}' expects {expected_type.__name__} value, "
-                    f"got {type(value).__name__}",
+                    message=f"Property '{property_path}' expects {expected_type.__name__} value, " f"got {type(value).__name__}",
                     suggestion=f"Use a {expected_type.__name__} value",
                 )
             )

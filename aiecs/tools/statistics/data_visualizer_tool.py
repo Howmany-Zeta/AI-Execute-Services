@@ -11,10 +11,10 @@ This tool provides intelligent visualization capabilities with:
 import os
 import logging
 import tempfile
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Union, cast
 from enum import Enum
 
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 import numpy as np
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -83,7 +83,7 @@ class DataVisualizerTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the data visualizer tool
-        
+
         Automatically reads from environment variables with DATA_VISUALIZER_ prefix.
         Example: DATA_VISUALIZER_DEFAULT_STYLE -> default_style
         """
@@ -123,7 +123,7 @@ class DataVisualizerTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: DataVisualizerTool.Config = cast(DataVisualizerTool.Config, self._config_obj) if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
@@ -137,7 +137,7 @@ class DataVisualizerTool(BaseTool):
 
     def _init_external_tools(self):
         """Initialize external task tools"""
-        self.external_tools = {}
+        self.external_tools: Dict[str, Any] = {}
 
         # Initialize ChartTool for visualization operations
         try:
@@ -432,7 +432,7 @@ class DataVisualizerTool(BaseTool):
 
         try:
             result = chart_tool.run("create_chart", **chart_config)
-            return result
+            return cast(Dict[str, Any], result)
         except Exception as e:
             self.logger.warning(f"chart_tool failed, falling back to matplotlib: {e}")
             return self._create_chart_matplotlib(df, chart_type, x, y, hue, title, output_path)

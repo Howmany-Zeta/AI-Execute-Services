@@ -37,6 +37,7 @@ _AVAILABLE_TOOLS = [
 # Check environment variable via settings (preferred) or direct check
 try:
     from aiecs.config.config import get_settings
+
     settings = get_settings()
     skip_office_tool = getattr(settings, "skip_office_tool", False)
 except Exception:

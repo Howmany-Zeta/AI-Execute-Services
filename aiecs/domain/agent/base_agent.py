@@ -6,7 +6,7 @@ Abstract base class for all AI agents in the AIECS system.
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Callable, Union, TYPE_CHECKING, AsyncIterator, Set
+from typing import Dict, List, Any, Optional, Callable, Union, TYPE_CHECKING, AsyncIterator, Set, cast
 from dataclasses import dataclass
 import logging
 import time
@@ -29,6 +29,7 @@ from .exceptions import (
     ConfigurationError,
     AgentInitializationError,
     SerializationError,
+    TaskExecutionError,
 )
 
 # Import protocols for type hints
@@ -222,8 +223,7 @@ class CacheConfig:
         return self.tool_specific_ttl.get(tool_name, self.default_ttl)
 
 
-# Import SkillCapableMixin for skill support
-from .skills.mixin import SkillCapableMixin
+from .skills.mixin import SkillCapableMixin  # noqa: E402
 
 
 class BaseAIAgent(SkillCapableMixin, ABC):
@@ -971,10 +971,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
             agent.add_tool(tool)
         """
         if self._skill_script_registry is None:
-            raise RuntimeError(
-                "Cannot add tool: no SkillScriptRegistry configured. "
-                "Pass skill_script_registry to agent constructor."
-            )
+            raise RuntimeError("Cannot add tool: no SkillScriptRegistry configured. " "Pass skill_script_registry to agent constructor.")
         self._skill_script_registry.register_tool(tool, replace=replace)
         logger.debug(f"Agent {self.agent_id}: Added tool '{tool.name}'")
 
@@ -1006,10 +1003,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
             RuntimeError: If no SkillScriptRegistry is configured
         """
         if self._skill_script_registry is None:
-            raise RuntimeError(
-                "Cannot remove tool: no SkillScriptRegistry configured. "
-                "Pass skill_script_registry to agent constructor."
-            )
+            raise RuntimeError("Cannot remove tool: no SkillScriptRegistry configured. " "Pass skill_script_registry to agent constructor.")
         result = self._skill_script_registry.unregister_tool(tool_name)
         if result:
             logger.debug(f"Agent {self.agent_id}: Removed tool '{tool_name}'")
@@ -1148,20 +1142,20 @@ class BaseAIAgent(SkillCapableMixin, ABC):
     def _build_system_prompts(self) -> List[Dict[str, Any]]:
         """
         Build multiple system prompts from configuration.
-        
+
         Returns a list of system prompt dictionaries, each with:
         - content: str - The prompt content
         - cache_control: Optional[bool] - Whether to enable caching (None = use global setting)
-        
+
         Precedence order:
         1. config.system_prompts - Multiple prompts with individual cache control (highest priority)
         2. config.system_prompt - Single prompt (backward compatibility)
         3. Assembled from goal/backstory/domain_knowledge/reasoning_guidance
         4. Default fallback: "You are a helpful AI assistant."
-        
+
         Returns:
             List of dictionaries with 'content' and optional 'cache_control' keys
-            
+
         Example:
             ```python
             prompts = agent._build_system_prompts()
@@ -1177,29 +1171,20 @@ class BaseAIAgent(SkillCapableMixin, ABC):
             for prompt in self._config.system_prompts:
                 if isinstance(prompt, str):
                     # Simple string - use global cache setting
-                    result.append({
-                        "content": prompt,
-                        "cache_control": None  # None means use global enable_prompt_caching
-                    })
+                    result.append({"content": prompt, "cache_control": None})  # None means use global enable_prompt_caching
                 elif isinstance(prompt, dict):
                     # Dict with content and optional cache_control
                     content = prompt.get("content", "")
                     cache_control = prompt.get("cache_control")
                     if cache_control is None:
                         cache_control = None  # Use global setting
-                    result.append({
-                        "content": content,
-                        "cache_control": cache_control
-                    })
+                    result.append({"content": content, "cache_control": cache_control})
             return result
-        
+
         # 2. Single system_prompt (backward compatibility)
         if self._config.system_prompt:
-            return [{
-                "content": self._config.system_prompt,
-                "cache_control": None  # Use global setting
-            }]
-        
+            return [{"content": self._config.system_prompt, "cache_control": None}]  # Use global setting
+
         # 3. Assemble from individual fields
         parts = []
         if self._config.goal:
@@ -1210,18 +1195,12 @@ class BaseAIAgent(SkillCapableMixin, ABC):
             parts.append(f"Domain Knowledge: {self._config.domain_knowledge}")
         if self._config.reasoning_guidance:
             parts.append(f"Reasoning Approach: {self._config.reasoning_guidance}")
-        
+
         if parts:
-            return [{
-                "content": "\n\n".join(parts),
-                "cache_control": None  # Use global setting
-            }]
-        
+            return [{"content": "\n\n".join(parts), "cache_control": None}]  # Use global setting
+
         # 4. Default fallback
-        return [{
-            "content": "You are a helpful AI assistant.",
-            "cache_control": None  # Use global setting
-        }]
+        return [{"content": "You are a helpful AI assistant.", "cache_control": None}]  # Use global setting
 
     def _initialize_tools_from_config(self) -> Dict[str, "BaseTool"]:
         """
@@ -1251,10 +1230,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
 
         if base_tool_instances:
             # Tool instances were provided - use them directly
-            logger.debug(
-                f"Agent {self.agent_id}: Using {len(base_tool_instances)} "
-                "pre-configured tool instances"
-            )
+            logger.debug(f"Agent {self.agent_id}: Using {len(base_tool_instances)} " "pre-configured tool instances")
             return base_tool_instances
 
         # Tool names were provided - load them
@@ -1267,9 +1243,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
                 except Exception as e:
                     logger.warning(f"Failed to load tool {tool_name}: {e}")
 
-            logger.debug(
-                f"Agent {self.agent_id}: Initialized {len(tool_instances)} tools"
-            )
+            logger.debug(f"Agent {self.agent_id}: Initialized {len(tool_instances)} tools")
 
         return tool_instances
 
@@ -1302,7 +1276,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
                 "Task must contain 'description', 'prompt', or 'task' field",
                 agent_id=self.agent_id,
             )
-        return description
+        return str(description)
 
     def get_config_manager(self) -> Optional["ConfigManagerProtocol"]:
         """
@@ -1735,11 +1709,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
             self._metrics.total_cache_creation_tokens += cache_creation_tokens
 
         self._metrics.updated_at = datetime.utcnow()
-        logger.debug(
-            f"Agent {self.agent_id} cache metrics updated: "
-            f"hit_rate={self._metrics.cache_hit_rate:.2%}, "
-            f"read_tokens={cache_read_tokens}, creation_tokens={cache_creation_tokens}"
-        )
+        logger.debug(f"Agent {self.agent_id} cache metrics updated: " f"hit_rate={self._metrics.cache_hit_rate:.2%}, " f"read_tokens={cache_read_tokens}, creation_tokens={cache_creation_tokens}")
 
     def update_session_metrics(
         self,
@@ -2157,7 +2127,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
             SerializationError: If serialization fails
         """
         try:
-            result = {
+            result: Dict[str, Any] = {
                 "agent_id": self.agent_id,
                 "name": self.name,
                 "agent_type": self.agent_type.value,
@@ -2476,7 +2446,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         valid_results = [r for r in results_unordered if not isinstance(r, Exception) and isinstance(r, dict) and "index" in r]
         results_sorted = sorted(
             valid_results,
-            key=lambda x: x["index"],  # type: ignore[index]
+            key=lambda x: x["index"],
         )
 
         # Remove index from results
@@ -2967,7 +2937,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         try:
             result = await target_agent.execute_task(task, context={"delegated_by": self.agent_id})
             logger.info(f"Task delegation successful: {self.agent_id} -> {target_agent.agent_id}")
-            return result
+            return cast(Dict[str, Any], result)
         except Exception as e:
             logger.error(f"Task delegation failed: {e}")
             raise
@@ -3070,7 +3040,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
                 }
 
             logger.info(f"Review received from {reviewer.agent_id}")
-            return review
+            return cast(Dict[str, Any], review)
         except Exception as e:
             logger.error(f"Peer review failed: {e}")
             raise
@@ -3851,7 +3821,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         """
         # Check explicit type
         if "type" in task:
-            return task["type"]
+            return str(task["type"])
 
         # Simple keyword-based classification
         description = task.get("description", "").lower()
@@ -4138,7 +4108,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
                     # Retry with exponential backoff (using existing retry mechanism)
                     result = await self._execute_with_retry(self.execute_task, task, context)
                     logger.info(f"Recovery successful with strategy: {strategy}")
-                    return result
+                    return cast(Dict[str, Any], result)
 
                 elif strategy == RecoveryStrategy.SIMPLIFY:
                     # Simplify task and retry
@@ -4331,7 +4301,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         target_agent = capable_agents[0]
         logger.info(f"Delegating task to {target_agent.agent_id} for recovery")
 
-        result = await target_agent.execute_task(task, context={**context, "delegated_by": self.agent_id, "recovery_delegation": True})
+        result: Dict[str, Any] = cast(Dict[str, Any], await target_agent.execute_task(task, context={**context, "delegated_by": self.agent_id, "recovery_delegation": True}))
 
         result["delegated_to"] = target_agent.agent_id
         result["recovery_delegation"] = True

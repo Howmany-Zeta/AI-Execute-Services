@@ -56,10 +56,7 @@ class TenantContext:
         return f"TenantContext(tenant_id={self.tenant_id}, mode={self.isolation_mode.value})"
 
     def __repr__(self) -> str:
-        return (
-            f"TenantContext(tenant_id='{self.tenant_id}', "
-            f"isolation_mode=TenantIsolationMode.{self.isolation_mode.name})"
-        )
+        return f"TenantContext(tenant_id='{self.tenant_id}', " f"isolation_mode=TenantIsolationMode.{self.isolation_mode.name})"
 
 
 class InvalidTenantIdError(ValueError):
@@ -86,10 +83,7 @@ class CrossTenantRelationError(ValueError):
     """
 
     def __init__(self, source_tenant: Optional[str], target_tenant: Optional[str]):
-        message = (
-            f"Cannot create relation across tenants: "
-            f"source_tenant={source_tenant}, target_tenant={target_tenant}"
-        )
+        message = f"Cannot create relation across tenants: " f"source_tenant={source_tenant}, target_tenant={target_tenant}"
         super().__init__(message)
         self.source_tenant = source_tenant
         self.target_tenant = target_tenant
@@ -103,10 +97,7 @@ class CrossTenantFusionError(ValueError):
     """
 
     def __init__(self, tenant_ids: set):
-        message = (
-            f"Cannot fuse entities across tenants. "
-            f"Found entities from multiple tenants: {sorted(tenant_ids)}"
-        )
+        message = f"Cannot fuse entities across tenants. " f"Found entities from multiple tenants: {sorted(tenant_ids)}"
         super().__init__(message)
         self.tenant_ids = tenant_ids
 
@@ -119,10 +110,7 @@ class TenantContextRequiredError(ValueError):
     """
 
     def __init__(self, operation: str = "operation"):
-        message = (
-            f"TenantContext is required for {operation} in multi-tenant mode. "
-            f"Please provide a TenantContext with tenant_id."
-        )
+        message = f"TenantContext is required for {operation} in multi-tenant mode. " f"Please provide a TenantContext with tenant_id."
         super().__init__(message)
         self.operation = operation
 
@@ -159,14 +147,10 @@ def validate_tenant_id(tenant_id: str) -> str:
         ```
     """
     if not isinstance(tenant_id, str):
-        raise InvalidTenantIdError(
-            str(tenant_id), reason="tenant_id must be a string"
-        )
+        raise InvalidTenantIdError(str(tenant_id), reason="tenant_id must be a string")
 
     if not tenant_id:
-        raise InvalidTenantIdError(
-            tenant_id, reason="tenant_id cannot be empty"
-        )
+        raise InvalidTenantIdError(tenant_id, reason="tenant_id cannot be empty")
 
     if len(tenant_id) < TENANT_ID_MIN_LENGTH:
         raise InvalidTenantIdError(
@@ -215,136 +199,128 @@ def normalize_tenant_id(tenant_id: Optional[str]) -> Optional[str]:
 class TenantAwareStorageResolver:
     """
     Resolves storage targets based on tenant context and isolation mode.
-    
+
     This class provides unified path resolution for all GraphStore implementations,
     ensuring consistent tenant routing regardless of backend storage type.
-    
+
     The resolver handles:
     - Table name resolution (base table, prefixed tables for separate-schema mode)
     - Connection/schema routing (PostgreSQL schemas, SQLite database files)
     - Tenant validation and normalization
-    
+
     Example:
         ```python
         resolver = TenantAwareStorageResolver()
-        
+
         # SHARED_SCHEMA mode: returns base table name
         context = TenantContext(tenant_id="acme", isolation_mode=TenantIsolationMode.SHARED_SCHEMA)
         table = resolver.resolve_table_name("entities", context)  # "entities"
-        
+
         # SEPARATE_SCHEMA mode: returns prefixed table name (for SQLite)
         context = TenantContext(tenant_id="acme", isolation_mode=TenantIsolationMode.SEPARATE_SCHEMA)
         table = resolver.resolve_table_name("entities", context)  # "tenant_acme_entities"
-        
+
         # Schema name resolution for PostgreSQL SEPARATE_SCHEMA mode
         schema = resolver.resolve_schema_name(context)  # "tenant_acme"
         ```
     """
-    
+
     def __init__(self, table_prefix: str = "tenant", schema_prefix: str = "tenant"):
         """
         Initialize storage resolver.
-        
+
         Args:
             table_prefix: Prefix for tenant-specific tables in SEPARATE_SCHEMA mode (default: "tenant")
             schema_prefix: Prefix for tenant-specific PostgreSQL schemas (default: "tenant")
         """
         self.table_prefix = table_prefix
         self.schema_prefix = schema_prefix
-    
-    def resolve_table_name(
-        self, 
-        base_table: str, 
-        context: Optional[TenantContext] = None
-    ) -> str:
+
+    def resolve_table_name(self, base_table: str, context: Optional[TenantContext] = None) -> str:
         """
         Resolve table name based on tenant context and isolation mode.
-        
+
         Resolution logic:
         - DISABLED or None context: returns base_table
         - SHARED_SCHEMA: returns base_table (filtering by tenant_id column)
         - SEPARATE_SCHEMA: returns "{prefix}_{tenant_id}_{base_table}"
-        
+
         Args:
             base_table: Base table name (e.g., "entities", "relations")
             context: Optional tenant context
-        
+
         Returns:
             Resolved table name
-            
+
         Example:
             ```python
             resolver.resolve_table_name("entities", None)  # "entities"
-            
+
             ctx = TenantContext("acme", TenantIsolationMode.SHARED_SCHEMA)
             resolver.resolve_table_name("entities", ctx)  # "entities"
-            
+
             ctx = TenantContext("acme", TenantIsolationMode.SEPARATE_SCHEMA)
             resolver.resolve_table_name("entities", ctx)  # "tenant_acme_entities"
             ```
         """
         if context is None or context.isolation_mode == TenantIsolationMode.DISABLED:
             return base_table
-        
+
         if context.isolation_mode == TenantIsolationMode.SHARED_SCHEMA:
             # Use base table with tenant_id column filtering
             return base_table
-        
+
         if context.isolation_mode == TenantIsolationMode.SEPARATE_SCHEMA:
             # Use tenant-prefixed table name
             return f"{self.table_prefix}_{context.tenant_id}_{base_table}"
-        
+
         return base_table
-    
+
     def resolve_schema_name(self, context: Optional[TenantContext] = None) -> Optional[str]:
         """
         Resolve PostgreSQL schema name for SEPARATE_SCHEMA mode.
-        
+
         Returns schema name for PostgreSQL search_path configuration.
-        
+
         Args:
             context: Optional tenant context
-        
+
         Returns:
             Schema name (e.g., "tenant_acme") or None if not in SEPARATE_SCHEMA mode
-            
+
         Example:
             ```python
             ctx = TenantContext("acme", TenantIsolationMode.SEPARATE_SCHEMA)
             schema = resolver.resolve_schema_name(ctx)  # "tenant_acme"
-            
+
             ctx = TenantContext("acme", TenantIsolationMode.SHARED_SCHEMA)
             schema = resolver.resolve_schema_name(ctx)  # None
             ```
         """
         if context is None or context.isolation_mode != TenantIsolationMode.SEPARATE_SCHEMA:
             return None
-        
+
         return f"{self.schema_prefix}_{context.tenant_id}"
-    
-    def resolve_database_path(
-        self, 
-        base_path: str, 
-        context: Optional[TenantContext] = None
-    ) -> str:
+
+    def resolve_database_path(self, base_path: str, context: Optional[TenantContext] = None) -> str:
         """
         Resolve SQLite database file path for SEPARATE_SCHEMA mode.
-        
+
         In SEPARATE_SCHEMA mode, each tenant gets its own SQLite database file.
-        
+
         Args:
             base_path: Base database path (e.g., "/data/graph.db")
             context: Optional tenant context
-        
+
         Returns:
             Resolved database path
-            
+
         Example:
             ```python
             ctx = TenantContext("acme", TenantIsolationMode.SEPARATE_SCHEMA)
             path = resolver.resolve_database_path("/data/graph.db", ctx)
             # "/data/tenant_acme.db"
-            
+
             ctx = TenantContext("acme", TenantIsolationMode.SHARED_SCHEMA)
             path = resolver.resolve_database_path("/data/graph.db", ctx)
             # "/data/graph.db"
@@ -352,58 +328,59 @@ class TenantAwareStorageResolver:
         """
         if context is None or context.isolation_mode != TenantIsolationMode.SEPARATE_SCHEMA:
             return base_path
-        
+
         # Extract directory and base name from path
         import os
+
         directory = os.path.dirname(base_path)
         # Generate tenant-specific database file
         tenant_db = f"{self.table_prefix}_{context.tenant_id}.db"
-        
+
         if directory:
             return os.path.join(directory, tenant_db)
         return tenant_db
-    
+
     def should_filter_by_tenant_id(self, context: Optional[TenantContext] = None) -> bool:
         """
         Determine if queries should include tenant_id column filter.
-        
+
         Returns True for SHARED_SCHEMA mode, False for SEPARATE_SCHEMA or DISABLED.
-        
+
         Args:
             context: Optional tenant context
-        
+
         Returns:
             True if queries should filter by tenant_id column, False otherwise
-            
+
         Example:
             ```python
             ctx = TenantContext("acme", TenantIsolationMode.SHARED_SCHEMA)
             resolver.should_filter_by_tenant_id(ctx)  # True
-            
+
             ctx = TenantContext("acme", TenantIsolationMode.SEPARATE_SCHEMA)
             resolver.should_filter_by_tenant_id(ctx)  # False (separate storage)
             ```
         """
         if context is None or context.isolation_mode == TenantIsolationMode.DISABLED:
             return False
-        
+
         return context.isolation_mode == TenantIsolationMode.SHARED_SCHEMA
-    
+
     def validate_context(self, context: Optional[TenantContext]) -> None:
         """
         Validate tenant context format and configuration.
-        
+
         Args:
             context: Tenant context to validate
-        
+
         Raises:
             InvalidTenantIdError: If tenant_id format is invalid
-            
+
         Example:
             ```python
             ctx = TenantContext("acme-corp", TenantIsolationMode.SHARED_SCHEMA)
             resolver.validate_context(ctx)  # OK
-            
+
             ctx = TenantContext("acme@corp", TenantIsolationMode.SHARED_SCHEMA)
             resolver.validate_context(ctx)  # Raises InvalidTenantIdError
             ```

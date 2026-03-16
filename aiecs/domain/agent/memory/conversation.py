@@ -935,7 +935,7 @@ class ConversationMemory:
                                     created_at_val = datetime.utcnow()
                             elif created_at_val is None:
                                 created_at_val = datetime.utcnow()
-                            
+
                             last_activity_val = session_metrics.get("last_activity")
                             if isinstance(last_activity_val, str):
                                 try:
@@ -944,7 +944,7 @@ class ConversationMemory:
                                     last_activity_val = datetime.utcnow()
                             elif last_activity_val is None:
                                 last_activity_val = datetime.utcnow()
-                            
+
                             session = Session(
                                 session_id=session_id,
                                 agent_id=self.agent_id,

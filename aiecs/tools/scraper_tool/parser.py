@@ -14,6 +14,7 @@ from .constants import ParsingError
 # Try to use lxml for better performance
 try:
     import lxml  # noqa: F401
+
     DEFAULT_PARSER = "lxml"
 except ImportError:
     DEFAULT_PARSER = "html.parser"
@@ -63,14 +64,16 @@ class HtmlParser:
         soup = self.parse(html)
         links = []
         for a in soup.find_all("a", href=True):
-            href = a["href"]
+            href = str(a["href"])
             if base_url:
                 href = urljoin(base_url, href)
-            links.append({
-                "url": href,
-                "text": a.get_text(strip=True),
-                "title": a.get("title", ""),
-            })
+            links.append(
+                {
+                    "url": href,
+                    "text": a.get_text(strip=True),
+                    "title": a.get("title", ""),
+                }
+            )
         return links
 
     def extract_metadata(self, html: str) -> Dict:
@@ -90,9 +93,9 @@ class HtmlParser:
 
         # Open Graph tags
         for og in soup.find_all("meta", attrs={"property": re.compile(r"^og:")}):
-            prop = og.get("property", "").replace("og:", "")
+            prop = str(og.get("property", "")).replace("og:", "")
             if prop and og.get("content"):
-                metadata["og"][prop] = og["content"]
+                metadata["og"][prop] = og["content"]  # type: ignore[index]
 
         return metadata
 
@@ -167,4 +170,3 @@ class JsonParser:
             else:
                 return None
         return result
-

@@ -16,7 +16,7 @@ from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING, AsyncIterato
 from datetime import datetime
 
 from aiecs.llm import BaseLLMClient, CacheControl, LLMMessage
-from aiecs.tools import get_tool, BaseTool
+from aiecs.tools import BaseTool
 from aiecs.domain.agent.tools.schema_generator import ToolSchemaGenerator
 
 from .base_agent import BaseAIAgent
@@ -266,7 +266,7 @@ class HybridAgent(BaseAIAgent):
 
         # Store LLM client reference (from BaseAIAgent or local)
         self.llm_client = self._llm_client if self._llm_client else llm_client
-        
+
         # Use config.max_iterations if constructor parameter is None
         # This makes max_iterations consistent with max_tokens (both configurable via config)
         # If max_iterations is explicitly provided, it takes precedence over config
@@ -276,7 +276,7 @@ class HybridAgent(BaseAIAgent):
         else:
             # Constructor parameter explicitly provided, use it
             self._max_iterations = max_iterations
-        
+
         self._system_prompt: Optional[str] = None
         self._conversation_history: List[LLMMessage] = []
         self._tool_schemas: List[Dict[str, Any]] = []
@@ -291,10 +291,7 @@ class HybridAgent(BaseAIAgent):
 
         # Load tools using shared method from BaseAIAgent
         self._tool_instances = self._initialize_tools_from_config()
-        logger.info(
-            f"HybridAgent {self.agent_id} initialized with "
-            f"{len(self._tool_instances)} tools"
-        )
+        logger.info(f"HybridAgent {self.agent_id} initialized with " f"{len(self._tool_instances)} tools")
 
         # Generate tool schemas for Function Calling
         self._generate_tool_schemas()
@@ -334,25 +331,21 @@ class HybridAgent(BaseAIAgent):
         """
         prompts = super()._build_system_prompts()
 
-        has_custom_system_prompt = (
-            self._config.system_prompt is not None or
-            self._config.system_prompts is not None
-        )
+        has_custom_system_prompt = self._config.system_prompt is not None or self._config.system_prompts is not None
 
         parts = []
         if not has_custom_system_prompt:
-            parts.append(
-                "You are a highly intelligent, responsive, and accurate reasoning agent that can use tools to complete tasks. "
-                "Use the available tools when needed to accomplish the task."
-            )
+            parts.append("You are a highly intelligent, responsive, and accurate reasoning agent that can use tools to complete tasks. " "Use the available tools when needed to accomplish the task.")
         if self._available_tools:
             parts.append(f"Available tools: {', '.join(self._available_tools)}")
 
         if parts:
-            prompts.append({
-                "content": "\n\n".join(parts),
-                "cache_control": False,
-            })
+            prompts.append(
+                {
+                    "content": "\n\n".join(parts),
+                    "cache_control": False,
+                }
+            )
 
         return prompts
 
@@ -669,7 +662,7 @@ class HybridAgent(BaseAIAgent):
             # THINK: Stream LLM reasoning
             thought_tokens = []
             tool_calls_from_stream = None
-            
+
             # Require Function Calling when tools are configured
             if self._tool_schemas and not self._use_function_calling:
                 provider = getattr(self.llm_client, "provider_name", "unknown")
@@ -678,7 +671,7 @@ class HybridAgent(BaseAIAgent):
                     f"Current client ({provider}) does not support tools. "
                     "Use OpenAI-compatible clients: OpenAI, xAI, Anthropic, or Google Vertex."
                 )
-            kwargs = dict(
+            kwargs: Dict[str, Any] = dict(
                 messages=messages,
                 model=self._config.llm_model,
                 temperature=self._config.temperature,
@@ -689,11 +682,11 @@ class HybridAgent(BaseAIAgent):
                 kwargs["tools"] = [{"type": "function", "function": s} for s in self._tool_schemas]
                 kwargs["tool_choice"] = "auto"
                 kwargs["return_chunks"] = True
-            stream_gen = self.llm_client.stream_text(**kwargs)  # type: ignore[attr-defined]
+            stream_gen = await self.llm_client.stream_text(**kwargs)
 
             # Stream tokens and collect tool calls
             from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
-            
+
             async for chunk in stream_gen:
                 # Handle StreamChunk objects (Function Calling mode)
                 if isinstance(chunk, StreamChunk):
@@ -729,7 +722,7 @@ class HybridAgent(BaseAIAgent):
                     }
 
             thought_raw = "".join(thought_tokens)
-            
+
             # Store raw output in steps (no format processing)
             steps.append(
                 {
@@ -738,7 +731,7 @@ class HybridAgent(BaseAIAgent):
                     "iteration": iteration + 1,
                 }
             )
-            
+
             # Process tool_calls if received from stream
             if tool_calls_from_stream:
                 # Add assistant message with BOTH content and tool_calls (align with Claude)
@@ -815,14 +808,8 @@ class HybridAgent(BaseAIAgent):
                         }
 
                         # Check tool result stop conditions: end loop if matched
-                        if self._config.tool_result_stop_conditions and matches_stop_condition(
-                            tool_result, self._config.tool_result_stop_conditions
-                        ):
-                            final_output = (
-                                json.dumps(tool_result, ensure_ascii=False)
-                                if isinstance(tool_result, dict)
-                                else str(tool_result)
-                            )
+                        if self._config.tool_result_stop_conditions and matches_stop_condition(tool_result, self._config.tool_result_stop_conditions):
+                            final_output = json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result)
                             yield {
                                 "type": "result",
                                 "success": True,
@@ -932,7 +919,7 @@ class HybridAgent(BaseAIAgent):
                     f"Current client ({provider}) does not support tools. "
                     "Use OpenAI-compatible clients: OpenAI, xAI, Anthropic, or Google Vertex."
                 )
-            kwargs = dict(
+            kwargs: Dict[str, Any] = dict(
                 messages=messages,
                 model=self._config.llm_model,
                 temperature=self._config.temperature,
@@ -1044,14 +1031,8 @@ class HybridAgent(BaseAIAgent):
                         )
 
                         # Check tool result stop conditions: end loop if matched
-                        if self._config.tool_result_stop_conditions and matches_stop_condition(
-                            tool_result, self._config.tool_result_stop_conditions
-                        ):
-                            final_output = (
-                                json.dumps(tool_result, ensure_ascii=False)
-                                if isinstance(tool_result, dict)
-                                else str(tool_result)
-                            )
+                        if self._config.tool_result_stop_conditions and matches_stop_condition(tool_result, self._config.tool_result_stop_conditions):
+                            final_output = json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result)
                             return {
                                 "final_response": final_output,
                                 "steps": steps,
@@ -1125,24 +1106,16 @@ class HybridAgent(BaseAIAgent):
             content = prompt_dict.get("content", "")
             if not content:
                 continue
-            
+
             # Determine cache control: use prompt-specific setting if provided, else use global setting
             prompt_cache_control = prompt_dict.get("cache_control")
             if prompt_cache_control is None:
                 # Use global setting
-                cache_control = (
-                    CacheControl(type="ephemeral")
-                    if self._config.enable_prompt_caching
-                    else None
-                )
+                cache_control = CacheControl(type="ephemeral") if self._config.enable_prompt_caching else None
             else:
                 # Use prompt-specific setting
-                cache_control = (
-                    CacheControl(type="ephemeral")
-                    if prompt_cache_control
-                    else None
-                )
-            
+                cache_control = CacheControl(type="ephemeral") if prompt_cache_control else None
+
             messages.append(
                 LLMMessage(
                     role="system",
@@ -1180,7 +1153,7 @@ class HybridAgent(BaseAIAgent):
                     elif isinstance(msg, LLMMessage):
                         # Already an LLMMessage instance (may already have images)
                         messages.append(msg)
-            
+
             # Extract images from context if present
             context_images = context.get("images")
             if context_images:
@@ -1188,12 +1161,9 @@ class HybridAgent(BaseAIAgent):
                     task_images.extend(context_images)
                 else:
                     task_images.append(context_images)
-            
+
             # Format remaining context fields (excluding history and images) as Additional Context
-            context_without_history = {
-                k: v for k, v in context.items()
-                if k not in ("history", "images")
-            }
+            context_without_history = {k: v for k, v in context.items() if k not in ("history", "images")}
             if context_without_history:
                 context_str = self._format_context(context_without_history)
                 if context_str:
@@ -1352,9 +1322,7 @@ class HybridAgent(BaseAIAgent):
 
         try:
             # Use ToolSchemaGenerator to generate schemas from tool instances
-            self._tool_schemas = ToolSchemaGenerator.generate_schemas_for_tool_instances(
-                self._tool_instances
-            )
+            self._tool_schemas = ToolSchemaGenerator.generate_schemas_for_tool_instances(self._tool_instances)
             logger.info(f"HybridAgent {self.agent_id} generated {len(self._tool_schemas)} tool schemas")
         except Exception as e:
             logger.warning(f"Failed to generate tool schemas: {e}")
@@ -1376,12 +1344,13 @@ class HybridAgent(BaseAIAgent):
         # OpenAI, xAI (OpenAI-compatible), Google Vertex AI, and some other providers support it
         provider_name = getattr(self.llm_client, "provider_name", "").lower()
         supported_providers = ["openai", "xai", "anthropic", "vertex"]
-        
+
         # Note: Google Vertex AI uses FunctionDeclaration format, but it's handled via GoogleFunctionCallingMixin
         # The mixin converts OpenAI format to Google format internally
 
         # Also check if generate_text method accepts 'tools' or 'functions' parameter
         import inspect
+
         try:
             sig = inspect.signature(self.llm_client.generate_text)
             params = sig.parameters

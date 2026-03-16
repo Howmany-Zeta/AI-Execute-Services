@@ -6,7 +6,7 @@ based on query patterns and workload analysis.
 """
 
 import logging
-import asyncpg  # type: ignore[import-untyped]
+import asyncpg
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 

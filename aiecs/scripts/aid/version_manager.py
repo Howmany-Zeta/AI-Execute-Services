@@ -123,35 +123,35 @@ class VersionManager:
         # Update project version (only in [project] section, not in [project.scripts])
         # Use a more specific pattern that only matches within [project] section
         # Pattern: match [project] section, then find version line before next [section]
-        lines = content.split('\n')
+        lines = content.split("\n")
         in_project_section = False
         updated = False
-        
+
         for i, line in enumerate(lines):
             # Check if we're entering [project] section
-            if line.strip() == '[project]':
+            if line.strip() == "[project]":
                 in_project_section = True
                 continue
-            
+
             # Check if we're leaving [project] section (entering another section)
-            if in_project_section and line.strip().startswith('[') and line.strip() != '[project]':
+            if in_project_section and line.strip().startswith("[") and line.strip() != "[project]":
                 in_project_section = False
                 break
-            
+
             # Update version line if we're in [project] section
             if in_project_section and re.match(r'^\s*version\s*=\s*"', line):
                 lines[i] = re.sub(
                     r'^(\s*version\s*=\s*")([^"]+)(")',
-                    rf'\g<1>{new_version}\g<3>',
+                    rf"\g<1>{new_version}\g<3>",
                     line,
                 )
                 updated = True
                 break
-        
+
         if not updated:
             raise ValueError("Could not find version in [project] section of pyproject.toml")
-        
-        content = '\n'.join(lines)
+
+        content = "\n".join(lines)
         pyproject_file.write_text(content, encoding="utf-8")
         print(f"✓ Updated {pyproject_file.relative_to(self.project_root)}: project version")
 
@@ -186,7 +186,7 @@ def main():
     # Always use 'aiecs-version' as program name for consistent help text
     # regardless of how the script is invoked (module or entry point)
     parser = argparse.ArgumentParser(
-        prog='aiecs-version',
+        prog="aiecs-version",
         description="AIECS Version Manager - Update version numbers across project files",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""

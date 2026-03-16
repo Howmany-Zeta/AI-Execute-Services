@@ -213,10 +213,7 @@ class GraphBuilder:
                     provider=settings.kg_embedding_provider,
                     model=settings.kg_embedding_model,
                 )
-                logger.info(
-                    f"Using embedding provider: {settings.kg_embedding_provider} "
-                    f"with model: {settings.kg_embedding_model}"
-                )
+                logger.info(f"Using embedding provider: {settings.kg_embedding_provider} " f"with model: {settings.kg_embedding_model}")
             except Exception as e:
                 logger.warning(f"Failed to resolve embedding client from config: {e}")
 
@@ -446,9 +443,7 @@ class GraphBuilder:
             result.duration_seconds = (result.end_time - result.start_time).total_seconds()
         return result
 
-    async def _generate_embeddings_for_entities(
-        self, entities: List[Any], model: Optional[str] = None
-    ) -> None:
+    async def _generate_embeddings_for_entities(self, entities: List[Any], model: Optional[str] = None) -> None:
         """
         Generate embeddings for entities using the configured embedding client
 

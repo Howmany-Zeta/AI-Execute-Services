@@ -16,7 +16,7 @@ Task: 2.2 - Implement AST Builder
 Version: 1.0
 """
 
-from typing import Any, List, Union
+from typing import Any, List, Union, cast
 from lark import Transformer, Token
 
 from .ast_nodes import (
@@ -229,7 +229,7 @@ class ASTBuilder(Transformer):
         Returns:
             IDENTIFIER token (passed through for line/column info)
         """
-        return items[0]
+        return cast(Token, items[0])
 
     def incoming(self, items: List[Any]) -> str:
         """Transform INCOMING direction"""
@@ -279,7 +279,7 @@ class ASTBuilder(Transformer):
             or single FilterNode (if one item)
         """
         if len(items) == 1:
-            return items[0]
+            return cast(FilterNode, items[0])
 
         # Multiple items: create OR node
         first_item = items[0]
@@ -302,7 +302,7 @@ class ASTBuilder(Transformer):
             or single FilterNode (if one item)
         """
         if len(items) == 1:
-            return items[0]
+            return cast(FilterNode, items[0])
 
         # Multiple items: create AND node
         first_item = items[0]
@@ -326,7 +326,7 @@ class ASTBuilder(Transformer):
         Returns:
             FilterNode (passed through)
         """
-        return items[0]
+        return cast(FilterNode, items[0])
 
     def primary_condition(self, items: List[Any]) -> FilterNode:
         """
@@ -338,7 +338,7 @@ class ASTBuilder(Transformer):
         Returns:
             FilterNode
         """
-        return items[0]
+        return cast(FilterNode, items[0])
 
     # ========================================================================
     # Simple Condition Transformation

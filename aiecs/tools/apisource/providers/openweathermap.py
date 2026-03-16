@@ -8,7 +8,7 @@ API Documentation: https://openweathermap.org/api
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from aiecs.tools.apisource.providers.base import (
     BaseAPIProvider,
@@ -35,7 +35,7 @@ class OpenWeatherMapProvider(BaseAPIProvider):
     - 5-day / 3-hour forecast
     - Air pollution data
     - Geocoding for location lookup
-    
+
     Note: Requires an API key from https://openweathermap.org/api
     """
 
@@ -64,11 +64,7 @@ class OpenWeatherMapProvider(BaseAPIProvider):
 
         # API key is required for all operations
         if "appid" not in params:
-            return False, (
-                "Missing required parameter: appid (API key)\n"
-                "Get your API key from: https://openweathermap.org/api\n"
-                "Example: {'appid': 'your_api_key_here', ...}"
-            )
+            return False, ("Missing required parameter: appid (API key)\n" "Get your API key from: https://openweathermap.org/api\n" "Example: {'appid': 'your_api_key_here', ...}")
 
         if operation in ["get_current_weather", "get_forecast", "get_air_pollution"]:
             # Need either city name or coordinates
@@ -85,10 +81,7 @@ class OpenWeatherMapProvider(BaseAPIProvider):
 
         elif operation == "geocode_location":
             if "q" not in params:
-                return False, (
-                    "Missing required parameter: q (location query)\n"
-                    "Example: {'q': 'London,UK', 'appid': '...'}"
-                )
+                return False, ("Missing required parameter: q (location query)\n" "Example: {'q': 'London,UK', 'appid': '...'}")
 
         return True, None
 
@@ -271,7 +264,7 @@ class OpenWeatherMapProvider(BaseAPIProvider):
 
             data = response.json()
             logger.info(f"OpenWeatherMap API response: {operation} successful")
-            return data
+            return cast(Dict[str, Any], data)
 
         except requests.exceptions.RequestException as e:
             error_msg = f"OpenWeatherMap API request failed: {str(e)}"
@@ -297,4 +290,3 @@ class OpenWeatherMapProvider(BaseAPIProvider):
             API response data
         """
         return self.execute(operation, params)
-

@@ -7,11 +7,11 @@ Supports LLM + Function Calling mode for intelligent tool selection and executio
 
 import json
 import logging
-from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING, AsyncIterator
+from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING, AsyncIterator, cast
 from datetime import datetime
 
 from aiecs.llm import BaseLLMClient, CacheControl, LLMMessage
-from aiecs.tools import get_tool, BaseTool
+from aiecs.tools import BaseTool
 from aiecs.domain.agent.tools.schema_generator import ToolSchemaGenerator
 
 from .base_agent import BaseAIAgent
@@ -238,10 +238,7 @@ class ToolAgent(BaseAIAgent):
 
         # Load tools using shared method from BaseAIAgent
         self._tool_instances = self._initialize_tools_from_config()
-        logger.info(
-            f"ToolAgent {self.agent_id} initialized with "
-            f"{len(self._tool_instances)} tools"
-        )
+        logger.info(f"ToolAgent {self.agent_id} initialized with " f"{len(self._tool_instances)} tools")
 
         # Generate tool schemas for Function Calling
         if self.llm_client:
@@ -299,10 +296,7 @@ class ToolAgent(BaseAIAgent):
         # Add tool instructions as a separate system message (not cached, as tools may change)
         if tool_parts:
             tool_content = "\n\n".join(tool_parts)
-            prompts.append({
-                "content": tool_content,
-                "cache_control": False  # Don't cache tool instructions
-            })
+            prompts.append({"content": tool_content, "cache_control": False})  # Don't cache tool instructions
 
         return prompts
 
@@ -325,9 +319,7 @@ class ToolAgent(BaseAIAgent):
             return
 
         try:
-            self._tool_schemas = ToolSchemaGenerator.generate_schemas_for_tool_instances(
-                self._tool_instances
-            )
+            self._tool_schemas = ToolSchemaGenerator.generate_schemas_for_tool_instances(self._tool_instances)
             logger.info(f"ToolAgent {self.agent_id} generated {len(self._tool_schemas)} tool schemas")
         except Exception as e:
             logger.warning(f"Failed to generate tool schemas: {e}. Function calling disabled.")
@@ -377,12 +369,7 @@ class ToolAgent(BaseAIAgent):
         try:
             # Check if we should use LLM mode
             task_description = task.get("description") or task.get("prompt") or task.get("task")
-            use_llm_mode = (
-                self.llm_client is not None
-                and self._tool_schemas
-                and task_description
-                and not task.get("tool")  # Not explicit tool specification
-            )
+            use_llm_mode = self.llm_client is not None and self._tool_schemas and task_description and not task.get("tool")  # Not explicit tool specification
 
             if use_llm_mode:
                 # Extract images from task dict and merge into context
@@ -473,9 +460,7 @@ class ToolAgent(BaseAIAgent):
                 task_id=task.get("task_id"),
             )
 
-    async def _execute_with_llm(
-        self, task: Dict[str, Any], context: Dict[str, Any], start_time: datetime
-    ) -> Dict[str, Any]:
+    async def _execute_with_llm(self, task: Dict[str, Any], context: Dict[str, Any], start_time: datetime) -> Dict[str, Any]:
         """Execute task using LLM Function Calling mode."""
         task_description = self._extract_task_description(task)
         tool_calls_count = 0
@@ -513,14 +498,16 @@ class ToolAgent(BaseAIAgent):
             # Process tool calls
             calls_to_process = response_tool_calls or []
             if function_call:
-                calls_to_process = [{
-                    "id": "call_0",
-                    "type": "function",
-                    "function": {
-                        "name": function_call["name"],
-                        "arguments": function_call["arguments"],
-                    },
-                }]
+                calls_to_process = [
+                    {
+                        "id": "call_0",
+                        "type": "function",
+                        "function": {
+                            "name": function_call["name"],
+                            "arguments": function_call["arguments"],
+                        },
+                    }
+                ]
 
             for tool_call in calls_to_process:
                 try:
@@ -541,21 +528,25 @@ class ToolAgent(BaseAIAgent):
                     tool_calls_count += 1
                     self._update_tool_stats(tool_name, success=True)
 
-                    tool_results.append({
-                        "tool": tool_name,
-                        "operation": operation,
-                        "parameters": parameters,
-                        "result": tool_result,
-                        "success": True,
-                    })
+                    tool_results.append(
+                        {
+                            "tool": tool_name,
+                            "operation": operation,
+                            "parameters": parameters,
+                            "result": tool_result,
+                            "success": True,
+                        }
+                    )
 
                 except Exception as e:
                     logger.error(f"Tool execution error: {e}")
-                    tool_results.append({
-                        "tool": func_name if "func_name" in locals() else "unknown",
-                        "error": str(e),
-                        "success": False,
-                    })
+                    tool_results.append(
+                        {
+                            "tool": func_name if "func_name" in locals() else "unknown",
+                            "error": str(e),
+                            "success": False,
+                        }
+                    )
 
         # Calculate execution time
         execution_time = (datetime.utcnow() - start_time).total_seconds()
@@ -614,27 +605,17 @@ class ToolAgent(BaseAIAgent):
             content = prompt_dict.get("content", "")
             if not content:
                 continue
-            
+
             # Determine cache control: use prompt-specific setting if provided, else use global setting
             prompt_cache_control = prompt_dict.get("cache_control")
             if prompt_cache_control is None:
                 # Use global setting
-                cache_control = (
-                    CacheControl(type="ephemeral")
-                    if self._config.enable_prompt_caching
-                    else None
-                )
+                cache_control = CacheControl(type="ephemeral") if self._config.enable_prompt_caching else None
             else:
                 # Use prompt-specific setting
-                cache_control = (
-                    CacheControl(type="ephemeral")
-                    if prompt_cache_control
-                    else None
-                )
-            
-            messages.append(
-                LLMMessage(role="system", content=content, cache_control=cache_control)
-            )
+                cache_control = CacheControl(type="ephemeral") if prompt_cache_control else None
+
+            messages.append(LLMMessage(role="system", content=content, cache_control=cache_control))
 
         # Collect images from context to attach to user message
         user_message_images = []
@@ -679,10 +660,7 @@ class ToolAgent(BaseAIAgent):
                     user_message_images.append(context_images)
 
             # Format remaining context fields (excluding history and images) as Additional Context
-            context_without_history = {
-                k: v for k, v in context.items()
-                if k not in ("history", "images")
-            }
+            context_without_history = {k: v for k, v in context.items() if k not in ("history", "images")}
             if context_without_history:
                 context_str = self._format_context(context_without_history)
                 if context_str:
@@ -754,16 +732,11 @@ class ToolAgent(BaseAIAgent):
         # Direct mode - return available tools info
         available_tools_str = ", ".join(self._available_tools) if self._available_tools else "none"
         return {
-            "response": (
-                f"ToolAgent {self.name} received message but requires explicit tool tasks. "
-                f"Available tools: {available_tools_str}"
-            ),
+            "response": (f"ToolAgent {self.name} received message but requires explicit tool tasks. " f"Available tools: {available_tools_str}"),
             "available_tools": self._available_tools or [],
         }
 
-    async def execute_task_streaming(
-        self, task: Dict[str, Any], context: Dict[str, Any]
-    ) -> AsyncIterator[Dict[str, Any]]:
+    async def execute_task_streaming(self, task: Dict[str, Any], context: Dict[str, Any]) -> AsyncIterator[Dict[str, Any]]:
         """
         Execute a task with streaming tokens, tool calls, and tool results.
 
@@ -801,12 +774,7 @@ class ToolAgent(BaseAIAgent):
         try:
             # Check if we should use LLM mode
             task_description = task.get("description") or task.get("prompt") or task.get("task")
-            use_llm_mode = (
-                self.llm_client is not None
-                and self._tool_schemas
-                and task_description
-                and not task.get("tool")
-            )
+            use_llm_mode = self.llm_client is not None and self._tool_schemas and task_description and not task.get("tool")
 
             if not use_llm_mode:
                 # Direct mode - execute and yield result
@@ -856,9 +824,7 @@ class ToolAgent(BaseAIAgent):
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
-    async def _execute_with_llm_streaming(
-        self, task: Dict[str, Any], context: Dict[str, Any], start_time: datetime
-    ) -> AsyncIterator[Dict[str, Any]]:
+    async def _execute_with_llm_streaming(self, task: Dict[str, Any], context: Dict[str, Any], start_time: datetime) -> AsyncIterator[Dict[str, Any]]:
         """Execute task using LLM Function Calling with streaming."""
         task_description = self._extract_task_description(task)
         tool_calls_count = 0
@@ -886,7 +852,7 @@ class ToolAgent(BaseAIAgent):
         # Import StreamChunk for type checking
         from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
 
-        stream_gen = self.llm_client.stream_text(  # type: ignore[union-attr]
+        stream_gen = await self.llm_client.stream_text(  # type: ignore[union-attr]
             messages=messages,
             model=self._config.llm_model,
             temperature=self._config.temperature,
@@ -958,13 +924,15 @@ class ToolAgent(BaseAIAgent):
                     tool_calls_count += 1
                     self._update_tool_stats(tool_name, success=True)
 
-                    tool_results.append({
-                        "tool": tool_name,
-                        "operation": operation,
-                        "parameters": parameters,
-                        "result": tool_result,
-                        "success": True,
-                    })
+                    tool_results.append(
+                        {
+                            "tool": tool_name,
+                            "operation": operation,
+                            "parameters": parameters,
+                            "result": tool_result,
+                            "success": True,
+                        }
+                    )
 
                     # Yield tool result event
                     yield {
@@ -982,11 +950,13 @@ class ToolAgent(BaseAIAgent):
                         "error": str(e),
                         "timestamp": datetime.utcnow().isoformat(),
                     }
-                    tool_results.append({
-                        "tool": func_name if "func_name" in locals() else "unknown",
-                        "error": str(e),
-                        "success": False,
-                    })
+                    tool_results.append(
+                        {
+                            "tool": func_name if "func_name" in locals() else "unknown",
+                            "error": str(e),
+                            "success": False,
+                        }
+                    )
 
         # Calculate execution time
         execution_time = (datetime.utcnow() - start_time).total_seconds()
@@ -1031,9 +1001,7 @@ class ToolAgent(BaseAIAgent):
             "timestamp": datetime.utcnow().isoformat(),
         }
 
-    async def process_message_streaming(
-        self, message: str, sender_id: Optional[str] = None
-    ) -> AsyncIterator[str]:
+    async def process_message_streaming(self, message: str, sender_id: Optional[str] = None) -> AsyncIterator[str]:
         """
         Process a message with streaming response.
 
@@ -1102,23 +1070,14 @@ class ToolAgent(BaseAIAgent):
         required_methods = ["generate_text"]
         for method in required_methods:
             if not hasattr(self.llm_client, method):
-                raise ValueError(
-                    f"LLM client must have '{method}' method. "
-                    f"Got: {type(self.llm_client).__name__}"
-                )
+                raise ValueError(f"LLM client must have '{method}' method. " f"Got: {type(self.llm_client).__name__}")
 
     def _extract_task_description(self, task: Dict[str, Any]) -> str:
         """Extract task description from various task formats."""
-        description = (
-            task.get("description")
-            or task.get("prompt")
-            or task.get("task")
-            or task.get("query")
-            or task.get("message")
-        )
+        description = task.get("description") or task.get("prompt") or task.get("task") or task.get("query") or task.get("message")
         if not description:
             raise ValueError("Task must contain 'description', 'prompt', 'task', 'query', or 'message'")
-        return description
+        return cast(str, description)
 
     def _update_tool_stats(self, tool_name: str, success: bool) -> None:
         """Update tool usage statistics."""

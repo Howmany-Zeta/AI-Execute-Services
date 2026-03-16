@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, List, Dict, AsyncGenerator, cast, Any
+from typing import Optional, List, Dict, AsyncGenerator, Any
 from openai import AsyncOpenAI
 from tenacity import (
     retry,
@@ -18,7 +18,6 @@ from aiecs.llm.clients.base_client import (
 )
 from aiecs.llm.clients.openai_compatible_mixin import (
     OpenAICompatibleFunctionCallingMixin,
-    StreamChunk,
 )
 from aiecs.config.config import get_settings
 

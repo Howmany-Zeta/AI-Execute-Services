@@ -37,21 +37,11 @@ try:
     QUERY_PLAN_AVAILABLE = True
 except ImportError:
     QUERY_PLAN_AVAILABLE = False
-    # Use TYPE_CHECKING to avoid redefinition errors
-    if TYPE_CHECKING:
-        from typing import Any
-        QueryPlan: Any  # type: ignore[assignment,no-redef]
-        QueryStep: Any  # type: ignore[assignment,no-redef]
-        QueryOperation: Any  # type: ignore[assignment,no-redef]
-        GraphQuery: Any  # type: ignore[assignment,no-redef]
-        QueryType: Any  # type: ignore[assignment,no-redef]
-    else:
-        from typing import Any
-        QueryPlan = None  # type: ignore[assignment]
-        QueryStep = None  # type: ignore[assignment]
-        QueryOperation = None  # type: ignore[assignment]
-        GraphQuery = None  # type: ignore[assignment]
-        QueryType = None  # type: ignore[assignment]
+    QueryPlan = None  # type: ignore[misc, assignment]
+    QueryStep = None  # type: ignore[misc, assignment]
+    QueryOperation = None  # type: ignore[misc, assignment]
+    GraphQuery = None  # type: ignore[misc, assignment]
+    QueryType = None  # type: ignore[misc, assignment]
 
 # Placeholder for ValidationError (will be defined in error_handler.py)
 
@@ -121,9 +111,9 @@ class QueryNode(ASTNode):
     find: "FindNode"
     traversals: List["TraversalNode"] = field(default_factory=list)
 
-    def validate(self, schema: Any) -> List[ValidationError]:
+    def validate(self, schema: Any, entity_type: Optional[str] = None) -> List[ValidationError]:
         """Validate all parts of the query"""
-        errors = []
+        errors: List[ValidationError] = []
         errors.extend(self.find.validate(schema))
         for traversal in self.traversals:
             errors.extend(traversal.validate(schema))
@@ -250,7 +240,7 @@ class FindNode(ASTNode):
     def validate(self, schema: Any, entity_type: Optional[str] = None) -> List[ValidationError]:
         """
         Validate entity type and all filters
-        
+
         Args:
             schema: Schema object for validation
             entity_type: Optional entity type (uses self.entity_type if not provided)
@@ -381,7 +371,7 @@ class TraversalNode(ASTNode):
     def validate(self, schema: Any, entity_type: Optional[str] = None) -> List[ValidationError]:
         """
         Validate relation type exists
-        
+
         Args:
             schema: Schema object for validation
             entity_type: Optional entity type (not used for traversal validation)
@@ -535,7 +525,7 @@ class PropertyFilterNode(FilterNode):
     def validate(self, schema: Any, entity_type: Optional[str] = None) -> List[ValidationError]:
         """
         Validate property exists and type matches
-        
+
         Args:
             schema: Schema object for validation
             entity_type: Optional entity type context for property validation
@@ -577,42 +567,33 @@ class PropertyFilterNode(FilterNode):
         if entity_type:
             errors.extend(self._validate_property_in_schema(schema, entity_type))
         else:
-            logger.debug(
-                f"PropertyFilterNode.validate: "
-                f"FALLBACK - No entity_type provided, skipping property validation for '{self.property_path}'"
-            )
+            logger.debug(f"PropertyFilterNode.validate: " f"FALLBACK - No entity_type provided, skipping property validation for '{self.property_path}'")
 
         return errors
 
     def _validate_property_in_schema(self, schema: Any, entity_type: str) -> List[ValidationError]:
         """
         Validate that property exists in entity type schema
-        
+
         Args:
             schema: Schema object for validation
             entity_type: Entity type to validate against
-            
+
         Returns:
             List of validation errors
         """
-        errors = []
+        errors: List[ValidationError] = []
 
         # Check if schema has required methods
         if not hasattr(schema, "get_entity_type"):
-            logger.debug(
-                f"PropertyFilterNode._validate_property_in_schema: "
-                f"FALLBACK - schema missing 'get_entity_type' method, skipping property validation"
-            )
+            logger.debug("PropertyFilterNode._validate_property_in_schema: FALLBACK - schema missing 'get_entity_type' method, skipping property validation")
             return errors
 
         # Get entity type schema
         entity_schema = schema.get_entity_type(entity_type)
         if entity_schema is None:
             # Entity type doesn't exist - error already reported by FindNode
-            logger.debug(
-                f"PropertyFilterNode._validate_property_in_schema: "
-                f"FALLBACK - entity type '{entity_type}' not found in schema, skipping property validation"
-            )
+            logger.debug(f"PropertyFilterNode._validate_property_in_schema: " f"FALLBACK - entity type '{entity_type}' not found in schema, skipping property validation")
             return errors
 
         # Validate nested property path recursively
@@ -646,7 +627,7 @@ class PropertyFilterNode(FilterNode):
         Returns:
             List of validation errors
         """
-        errors = []
+        errors: List[ValidationError] = []
 
         # Split property path into parts
         property_parts = property_path.split(".")
@@ -672,17 +653,10 @@ class PropertyFilterNode(FilterNode):
             available_props = []
             if hasattr(entity_schema, "properties"):
                 available_props = list(entity_schema.properties.keys())
-                logger.debug(
-                    f"PropertyFilterNode._validate_nested_property_path: "
-                    f"Using 'properties' attribute to get available properties for '{entity_type}'"
-                )
+                logger.debug(f"PropertyFilterNode._validate_nested_property_path: " f"Using 'properties' attribute to get available properties for '{entity_type}'")
             elif hasattr(entity_schema, "get_property_names"):
                 available_props = entity_schema.get_property_names()
-                logger.debug(
-                    f"PropertyFilterNode._validate_nested_property_path: "
-                    f"FALLBACK - Using 'get_property_names()' method instead of 'properties' attribute "
-                    f"for '{entity_type}'"
-                )
+                logger.debug(f"PropertyFilterNode._validate_nested_property_path: " f"FALLBACK - Using 'get_property_names()' method instead of 'properties' attribute " f"for '{entity_type}'")
 
             suggestion = None
             if available_props:
@@ -710,8 +684,7 @@ class PropertyFilterNode(FilterNode):
                     ValidationError(
                         self.line,
                         self.column,
-                        f"Cannot validate nested path '{full_path}.{remaining_path}': "
-                        f"property '{current_property}' type unknown",
+                        f"Cannot validate nested path '{full_path}.{remaining_path}': " f"property '{current_property}' type unknown",
                         suggestion="Ensure property schema defines property_type",
                     )
                 )
@@ -739,8 +712,7 @@ class PropertyFilterNode(FilterNode):
                         ValidationError(
                             self.line,
                             self.column,
-                            f"Cannot validate nested path '{full_path}.{remaining_path}': "
-                            f"property '{current_property}' is DICT type but nested schema not defined",
+                            f"Cannot validate nested path '{full_path}.{remaining_path}': " f"property '{current_property}' is DICT type but nested schema not defined",
                             suggestion=f"Define nested schema for '{current_property}' or use flat property path",
                         )
                     )
@@ -761,8 +733,7 @@ class PropertyFilterNode(FilterNode):
                     ValidationError(
                         self.line,
                         self.column,
-                        f"Cannot access nested path '{full_path}.{remaining_path}': "
-                        f"property '{current_property}' is {type_value} type, not DICT",
+                        f"Cannot access nested path '{full_path}.{remaining_path}': " f"property '{current_property}' is {type_value} type, not DICT",
                         suggestion=f"Use '{full_path}' directly or change property type to DICT",
                     )
                 )
@@ -874,7 +845,7 @@ class BooleanFilterNode(FilterNode):
     def validate(self, schema: Any, entity_type: Optional[str] = None) -> List[ValidationError]:
         """
         Validate all operands
-        
+
         Args:
             schema: Schema object for validation
             entity_type: Optional entity type context for property validation

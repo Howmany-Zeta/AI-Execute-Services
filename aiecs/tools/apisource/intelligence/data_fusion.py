@@ -90,7 +90,7 @@ class DataFusionEngine:
             """Extract quality score from result"""
             metadata = result.get("metadata", {})
             quality = metadata.get("quality", {})
-            return quality.get("score", 0.5)
+            return float(quality.get("score", 0.5))
 
         best_result = max(results, key=get_quality_score)
 
@@ -210,11 +210,7 @@ class DataFusionEngine:
                         enriched_item["_quality"] = quality_score
                         all_data_points.append(enriched_item)
                     else:
-                        all_data_points.append({
-                            "value": item,
-                            "_provider": provider,
-                            "_quality": quality_score
-                        })
+                        all_data_points.append({"value": item, "_provider": provider, "_quality": quality_score})
             elif isinstance(data, dict):
                 enriched_data = data.copy()
                 enriched_data["_provider"] = provider
@@ -231,12 +227,7 @@ class DataFusionEngine:
         # Build consensus result
         consensus_data = []
         total_confidence = 0.0
-        agreement_stats = {
-            "full_agreement": 0,
-            "partial_agreement": 0,
-            "conflicts": 0,
-            "single_source": 0
-        }
+        agreement_stats = {"full_agreement": 0, "partial_agreement": 0, "conflicts": 0, "single_source": 0}
 
         for group in data_groups:
             if len(group) == 0:
@@ -265,7 +256,7 @@ class DataFusionEngine:
                     "data_points_analyzed": len(all_data_points),
                     "consensus_groups": len(data_groups),
                 }
-            }
+            },
         }
 
         return consensus_result
@@ -294,7 +285,7 @@ class DataFusionEngine:
             processed.add(i)
 
             # Find matching data points
-            for j, other_point in enumerate(data_points[i + 1:], start=i + 1):
+            for j, other_point in enumerate(data_points[i + 1 :], start=i + 1):
                 if j in processed:
                     continue
 
@@ -307,9 +298,7 @@ class DataFusionEngine:
 
         return groups
 
-    def _build_consensus_item(
-        self, group: List[Dict[str, Any]]
-    ) -> Tuple[Dict[str, Any], float, str]:
+    def _build_consensus_item(self, group: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], float, str]:
         """
         Build a consensus item from a group of matching data points.
 
@@ -348,7 +337,7 @@ class DataFusionEngine:
 
         for field, value_quality_pairs in field_agreements.items():
             # Detect agreement
-            unique_values = {}
+            unique_values: Dict[str, Any] = {}
             for value, quality in value_quality_pairs:
                 value_key = str(value)  # Use string for comparison
                 if value_key not in unique_values:
@@ -365,12 +354,10 @@ class DataFusionEngine:
                 full_agreement_count += 1
             else:
                 # Conflict - resolve using majority voting or quality weighting
-                consensus_value, field_confidence = self._resolve_field_conflict(
-                    unique_values, len(group)
-                )
+                consensus_value, field_confidence = self._resolve_field_conflict(unique_values, len(group))
                 consensus_item[field] = consensus_value
                 field_confidences[field] = field_confidence
-                
+
                 # Check if majority agrees (>= 50%)
                 max_agreement = max(len(vals) for vals in unique_values.values())
                 if max_agreement >= len(group) * 0.5:
@@ -403,9 +390,7 @@ class DataFusionEngine:
 
         return consensus_item, overall_confidence, agreement_type
 
-    def _resolve_field_conflict(
-        self, unique_values: Dict[str, List[Tuple[Any, float]]], total_sources: int
-    ) -> Tuple[Any, float]:
+    def _resolve_field_conflict(self, unique_values: Dict[str, List[Tuple[Any, float]]], total_sources: int) -> Tuple[Any, float]:
         """
         Resolve conflict for a single field using majority voting and quality weighting.
 
@@ -425,7 +410,7 @@ class DataFusionEngine:
             avg_quality = sum(q for _, q in value_quality_pairs) / count
             support_ratio = count / total_sources
             quality_weighted_score = avg_quality * support_ratio
-            
+
             # Get original value (not string)
             original_value = value_quality_pairs[0][0]
             value_scores.append((original_value, quality_weighted_score, count))
@@ -435,7 +420,7 @@ class DataFusionEngine:
 
         # Use majority voting: if majority agrees (>50%), use that value
         best_value, best_score, best_count = value_scores[0]
-        
+
         # Check if majority agrees
         if best_count > total_sources / 2:
             # Majority vote wins

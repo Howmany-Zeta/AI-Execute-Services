@@ -455,4 +455,3 @@ class OpenLibraryProvider(BaseAPIProvider):
         }
 
         return schemas.get(operation)
-

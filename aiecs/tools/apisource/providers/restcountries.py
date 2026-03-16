@@ -65,46 +65,27 @@ class RESTCountriesProvider(BaseAPIProvider):
 
         if operation == "get_country_by_name":
             if "name" not in params:
-                return False, (
-                    "Missing required parameter: name\n"
-                    "Example: {'name': 'United States'}"
-                )
+                return False, ("Missing required parameter: name\n" "Example: {'name': 'United States'}")
 
         elif operation == "get_country_by_code":
             if "code" not in params:
-                return False, (
-                    "Missing required parameter: code\n"
-                    "Example: {'code': 'USA'} or {'code': 'US'}"
-                )
+                return False, ("Missing required parameter: code\n" "Example: {'code': 'USA'} or {'code': 'US'}")
 
         elif operation == "get_countries_by_region":
             if "region" not in params:
-                return False, (
-                    "Missing required parameter: region\n"
-                    "Example: {'region': 'Europe'}\n"
-                    "Valid regions: Africa, Americas, Asia, Europe, Oceania"
-                )
+                return False, ("Missing required parameter: region\n" "Example: {'region': 'Europe'}\n" "Valid regions: Africa, Americas, Asia, Europe, Oceania")
 
         elif operation == "get_countries_by_subregion":
             if "subregion" not in params:
-                return False, (
-                    "Missing required parameter: subregion\n"
-                    "Example: {'subregion': 'Western Europe'}"
-                )
+                return False, ("Missing required parameter: subregion\n" "Example: {'subregion': 'Western Europe'}")
 
         elif operation == "get_countries_by_language":
             if "language" not in params:
-                return False, (
-                    "Missing required parameter: language\n"
-                    "Example: {'language': 'spanish'}"
-                )
+                return False, ("Missing required parameter: language\n" "Example: {'language': 'spanish'}")
 
         elif operation == "get_countries_by_currency":
             if "currency" not in params:
-                return False, (
-                    "Missing required parameter: currency\n"
-                    "Example: {'currency': 'USD'}"
-                )
+                return False, ("Missing required parameter: currency\n" "Example: {'currency': 'USD'}")
 
         return True, None
 
@@ -228,10 +209,7 @@ class RESTCountriesProvider(BaseAPIProvider):
         """Fetch data from REST Countries API"""
 
         if not REQUESTS_AVAILABLE:
-            raise ImportError(
-                "requests library is required for REST Countries provider. "
-                "Install with: pip install requests"
-            )
+            raise ImportError("requests library is required for REST Countries provider. " "Install with: pip install requests")
 
         # Build endpoint based on operation
         if operation == "get_all_countries":
@@ -454,7 +432,7 @@ class RESTCountriesProvider(BaseAPIProvider):
     def assess_data_quality(self, operation: str, data: Any) -> Dict[str, Any]:
         """Assess quality of returned data"""
 
-        quality = {
+        quality: Dict[str, Any] = {
             "completeness": 0.0,
             "freshness": 1.0,  # REST Countries data is relatively static
             "accuracy": 1.0,  # Assumed high accuracy from official source
@@ -493,9 +471,7 @@ class RESTCountriesProvider(BaseAPIProvider):
             has_required = all(field in data for field in required_fields)
             has_optional = sum(1 for field in optional_fields if field in data)
 
-            quality["completeness"] = (
-                1.0 if has_required and has_optional >= 3 else 0.5
-            )
+            quality["completeness"] = 1.0 if has_required and has_optional >= 3 else 0.5
 
         return quality
 
@@ -536,4 +512,3 @@ class RESTCountriesProvider(BaseAPIProvider):
             cleaned_data.append(cleaned_country)
 
         return cleaned_data
-

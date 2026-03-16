@@ -31,13 +31,8 @@ try:
     LOGIC_PARSER_AVAILABLE = True
 except ImportError:
     LOGIC_PARSER_AVAILABLE = False
-    from typing import Any, TYPE_CHECKING
-    if TYPE_CHECKING:
-        LogicQueryParser: Any  # type: ignore[assignment,no-redef]
-        ParserError: Any  # type: ignore[assignment,no-redef]
-    else:
-        LogicQueryParser = None  # type: ignore[assignment]
-        ParserError = None  # type: ignore[assignment]
+    LogicQueryParser = None  # type: ignore[misc, assignment]
+    ParserError = None  # type: ignore[misc, assignment]
 
 
 class QueryPlanner:
@@ -94,7 +89,7 @@ class QueryPlanner:
         self._optimizer: Optional[QueryOptimizer]
         self._statistics_collector: Optional[QueryStatisticsCollector]
         self._logic_parser: Optional[LogicQueryParser]
-        
+
         if enable_advanced_optimization:
             # Collect statistics from graph store
             collector = QueryStatisticsCollector()
@@ -109,7 +104,7 @@ class QueryPlanner:
 
         # Logic query parser (if available)
         if LOGIC_PARSER_AVAILABLE and schema is not None:
-            self._logic_parser = LogicQueryParser(schema=schema)  # type: ignore[assignment]
+            self._logic_parser = LogicQueryParser(schema=schema)
         else:
             self._logic_parser = None
 
@@ -843,7 +838,7 @@ class QueryPlanner:
             raise ValueError("Logic parser not initialized. Provide schema to QueryPlanner.")
 
         # Parse logic query to QueryPlan
-        return self._logic_parser.parse_to_query_plan(logic_query)
+        return self._logic_parser.parse_to_query_plan(logic_query)  # type: ignore[no-any-return]
 
     def supports_logic_queries(self) -> bool:
         """

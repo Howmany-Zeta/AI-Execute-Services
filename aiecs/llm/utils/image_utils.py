@@ -49,15 +49,17 @@ class ImageContent:
         # Check if it's a URL
         if source.startswith(("http://", "https://")):
             parsed = urlparse(source)
-            mime_type, _ = mimetypes.guess_type(parsed.path)
-            if mime_type and mime_type.startswith("image/"):
-                return mime_type
+            url_mime_type: Optional[str]
+            url_mime_type, _ = mimetypes.guess_type(parsed.path)
+            if url_mime_type and url_mime_type.startswith("image/"):
+                return url_mime_type
 
         # Check if it's a file path
         if os.path.exists(source):
-            mime_type, _ = mimetypes.guess_type(source)
-            if mime_type and mime_type.startswith("image/"):
-                return mime_type
+            file_mime_type: Optional[str]
+            file_mime_type, _ = mimetypes.guess_type(source)
+            if file_mime_type and file_mime_type.startswith("image/"):
+                return file_mime_type
 
         # Default to jpeg if cannot detect
         logger.warning(f"Could not detect MIME type for {source}, defaulting to image/jpeg")

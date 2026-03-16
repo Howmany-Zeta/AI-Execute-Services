@@ -163,11 +163,11 @@ class HybridSearchStrategy:
                 else:
                     logger.warning("No seed entities provided and no query embedding available for graph search")
                     seed_entity_ids = []
-            
+
             if not seed_entity_ids:
                 logger.warning("No seed entities available for graph-only search, returning empty results")
                 return []
-            
+
             return await self._graph_search(seed_entity_ids, config)
         else:  # HYBRID
             return await self._hybrid_search(query_embedding, config, seed_entity_ids)
@@ -297,10 +297,7 @@ class HybridSearchStrategy:
             vector_scores = {entity.id: score for entity, score in vector_results}
 
         except Exception as e:
-            logger.warning(
-                f"Vector search failed, falling back to graph-only search: {e}",
-                exc_info=True
-            )
+            logger.warning(f"Vector search failed, falling back to graph-only search: {e}", exc_info=True)
             # Fallback to graph-only search if vector search fails
             if seed_entity_ids:
                 logger.info("Using graph-only search with provided seed entities")
@@ -321,10 +318,7 @@ class HybridSearchStrategy:
                 graph_scores = {entity.id: score for entity, score in graph_results}
 
             except Exception as e:
-                logger.warning(
-                    f"Graph expansion failed, continuing with vector results only: {e}",
-                    exc_info=True
-                )
+                logger.warning(f"Graph expansion failed, continuing with vector results only: {e}", exc_info=True)
                 # Continue with vector results only if graph expansion fails
 
         # Step 3: Combine scores

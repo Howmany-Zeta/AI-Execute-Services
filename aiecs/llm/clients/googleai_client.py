@@ -15,7 +15,7 @@ from aiecs.llm.clients.base_client import (
     RateLimitError,
 )
 from aiecs.config.config import get_settings
-from aiecs.llm.utils.image_utils import parse_image_source, ImageContent
+from aiecs.llm.utils.image_utils import parse_image_source
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +45,7 @@ class GoogleAIClient(BaseLLMClient):
 
         return self._client
 
-    def _convert_messages_to_contents(
-        self, messages: List[LLMMessage]
-    ) -> List[types.Content]:
+    def _convert_messages_to_contents(self, messages: List[LLMMessage]) -> List[types.Content]:
         """
         Convert LLMMessage list to Google GenAI Content objects.
 
@@ -70,7 +68,7 @@ class GoogleAIClient(BaseLLMClient):
 
                 # Parse content as the function response
                 try:
-                    if msg.content and msg.content.strip().startswith('{'):
+                    if msg.content and msg.content.strip().startswith("{"):
                         response_data = json.loads(msg.content)
                     else:
                         response_data = {"result": msg.content}
@@ -78,48 +76,37 @@ class GoogleAIClient(BaseLLMClient):
                     response_data = {"result": msg.content}
 
                 # Create FunctionResponse part
-                func_response_part = types.Part.from_function_response(
-                    name=func_name,
-                    response=response_data
-                )
+                func_response_part = types.Part.from_function_response(name=func_name, response=response_data)
 
-                contents.append(types.Content(
-                    role="user",  # Function responses are sent as "user" role
-                    parts=[func_response_part]
-                ))
+                contents.append(types.Content(role="user", parts=[func_response_part]))  # Function responses are sent as "user" role
 
             # Handle assistant messages with tool calls
             elif msg.role == "assistant" and msg.tool_calls:
                 parts = []
                 if msg.content:
                     parts.append(types.Part(text=msg.content))
-                
+
                 # Add images if present
                 if msg.images:
                     for image_source in msg.images:
                         image_content = parse_image_source(image_source)
-                        
+
                         if image_content.is_url():
                             # For URLs, use inline_data with downloaded content
                             # Note: Google AI SDK may support URL directly, but we'll use base64 for compatibility
                             try:
                                 import urllib.request
+
                                 with urllib.request.urlopen(image_content.get_url()) as response:
                                     image_bytes = response.read()
-                                parts.append(types.Part.from_bytes(
-                                    data=image_bytes,
-                                    mime_type=image_content.mime_type
-                                ))
+                                parts.append(types.Part.from_bytes(data=image_bytes, mime_type=image_content.mime_type))
                             except Exception as e:
                                 logger.warning(f"Failed to download image from URL: {e}")
                         else:
                             # Convert to bytes for inline_data
                             base64_data = image_content.get_base64_data()
                             image_bytes = base64.b64decode(base64_data)
-                            parts.append(types.Part.from_bytes(
-                                data=image_bytes,
-                                mime_type=image_content.mime_type
-                            ))
+                            parts.append(types.Part.from_bytes(data=image_bytes, mime_type=image_content.mime_type))
 
                 sanitized_tool_calls = self._sanitize_tool_calls(msg.tool_calls)
                 if sanitized_tool_calls:
@@ -135,57 +122,43 @@ class GoogleAIClient(BaseLLMClient):
                             args_dict = {}
 
                         # Create FunctionCall part using types.FunctionCall
-                        function_call = types.FunctionCall(
-                            name=func_name,
-                            args=args_dict
-                        )
+                        function_call = types.FunctionCall(name=func_name, args=args_dict)
                         parts.append(types.Part(function_call=function_call))
 
-                contents.append(types.Content(
-                    role="model",
-                    parts=parts
-                ))
+                contents.append(types.Content(role="model", parts=parts))
 
             # Handle regular messages (user, assistant without tool_calls)
             else:
                 role = "model" if msg.role == "assistant" else msg.role
                 parts = []
-                
+
                 # Add text content if present
                 if msg.content:
                     parts.append(types.Part(text=msg.content))
-                
+
                 # Add images if present
                 if msg.images:
                     for image_source in msg.images:
                         image_content = parse_image_source(image_source)
-                        
+
                         if image_content.is_url():
                             # Download URL and convert to bytes
                             try:
                                 import urllib.request
+
                                 with urllib.request.urlopen(image_content.get_url()) as response:
                                     image_bytes = response.read()
-                                parts.append(types.Part.from_bytes(
-                                    data=image_bytes,
-                                    mime_type=image_content.mime_type
-                                ))
+                                parts.append(types.Part.from_bytes(data=image_bytes, mime_type=image_content.mime_type))
                             except Exception as e:
                                 logger.warning(f"Failed to download image from URL: {e}")
                         else:
                             # Convert to bytes for inline_data
                             base64_data = image_content.get_base64_data()
                             image_bytes = base64.b64decode(base64_data)
-                            parts.append(types.Part.from_bytes(
-                                data=image_bytes,
-                                mime_type=image_content.mime_type
-                            ))
-                
+                            parts.append(types.Part.from_bytes(data=image_bytes, mime_type=image_content.mime_type))
+
                 if parts:
-                    contents.append(types.Content(
-                        role=role,
-                        parts=parts
-                    ))
+                    contents.append(types.Content(role=role, parts=parts))
 
         return contents
 
@@ -274,20 +247,20 @@ class GoogleAIClient(BaseLLMClient):
                 top_k=kwargs.get("top_k", 40),
                 safety_settings=[
                     types.SafetySetting(
-                        category="HARM_CATEGORY_HARASSMENT",
-                        threshold="OFF",
+                        category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        threshold=types.HarmBlockThreshold.OFF,
                     ),
                     types.SafetySetting(
-                        category="HARM_CATEGORY_HATE_SPEECH",
-                        threshold="OFF",
+                        category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        threshold=types.HarmBlockThreshold.OFF,
                     ),
                     types.SafetySetting(
-                        category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                        threshold="OFF",
+                        category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        threshold=types.HarmBlockThreshold.OFF,
                     ),
                     types.SafetySetting(
-                        category="HARM_CATEGORY_DANGEROUS_CONTENT",
-                        threshold="OFF",
+                        category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        threshold=types.HarmBlockThreshold.OFF,
                     ),
                 ],
             )
@@ -295,20 +268,21 @@ class GoogleAIClient(BaseLLMClient):
             # Use async client for async operations
             response = await client.aio.models.generate_content(
                 model=model_name,
-                contents=contents,
+                contents=contents,  # type: ignore[arg-type]
                 config=config,
             )
 
-            content = response.text
-            prompt_tokens = response.usage_metadata.prompt_token_count
-            completion_tokens = response.usage_metadata.candidates_token_count
-            total_tokens = response.usage_metadata.total_token_count
+            content = response.text or ""
+            usage = response.usage_metadata
+            prompt_tokens: int = (usage.prompt_token_count or 0) if usage is not None else 0
+            completion_tokens: int = (usage.candidates_token_count or 0) if usage is not None else 0
+            total_tokens: Optional[int] = (usage.total_token_count or 0) if usage is not None else None
 
             # Extract cache metadata from Google AI response
             cache_read_tokens = None
             cache_hit = None
-            if hasattr(response.usage_metadata, "cached_content_token_count"):
-                cache_read_tokens = response.usage_metadata.cached_content_token_count
+            if usage is not None and hasattr(usage, "cached_content_token_count"):
+                cache_read_tokens = usage.cached_content_token_count
                 cache_hit = cache_read_tokens is not None and cache_read_tokens > 0
 
             # Use config-based cost estimation
@@ -417,28 +391,28 @@ class GoogleAIClient(BaseLLMClient):
                 top_k=kwargs.get("top_k", 40),
                 safety_settings=[
                     types.SafetySetting(
-                        category="HARM_CATEGORY_HARASSMENT",
-                        threshold="OFF",
+                        category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        threshold=types.HarmBlockThreshold.OFF,
                     ),
                     types.SafetySetting(
-                        category="HARM_CATEGORY_HATE_SPEECH",
-                        threshold="OFF",
+                        category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        threshold=types.HarmBlockThreshold.OFF,
                     ),
                     types.SafetySetting(
-                        category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                        threshold="OFF",
+                        category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        threshold=types.HarmBlockThreshold.OFF,
                     ),
                     types.SafetySetting(
-                        category="HARM_CATEGORY_DANGEROUS_CONTENT",
-                        threshold="OFF",
+                        category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        threshold=types.HarmBlockThreshold.OFF,
                     ),
                 ],
             )
 
             # Use async streaming with the new SDK
-            async for chunk in client.aio.models.generate_content_stream(
+            async for chunk in await client.aio.models.generate_content_stream(
                 model=model_name,
-                contents=contents,
+                contents=contents,  # type: ignore[arg-type]
                 config=config,
             ):
                 if chunk.text:

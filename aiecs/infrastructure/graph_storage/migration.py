@@ -112,7 +112,7 @@ class GraphStorageMigrator:
     async def _migrate_entities(self, batch_size: int, show_progress: bool) -> int:
         """Migrate all entities from source to target"""
         # Get all entities from source (available via PaginationMixinProtocol)
-        entities = await self.source.get_all_entities()  # type: ignore[attr-defined]
+        entities = await self.source.get_all_entities()
         total = len(entities)
 
         if total == 0:
@@ -136,7 +136,7 @@ class GraphStorageMigrator:
                         try:
                             await self.target.add_entity(entity)
                             migrated += 1
-                            if show_progress:
+                            if isinstance(iterator, tqdm):
                                 iterator.update(1)
                         except Exception as e:
                             error_msg = f"Failed to migrate entity {entity.id}: {e}"
@@ -156,7 +156,7 @@ class GraphStorageMigrator:
         # Get all relations by getting all entities and their neighbors
         # This is a workaround since we don't have a direct get_all_relations
         # method (available via PaginationMixinProtocol)
-        all_entities = await self.source.get_all_entities()  # type: ignore[attr-defined]
+        all_entities = await self.source.get_all_entities()
         relations = []
 
         # Collect all unique relations

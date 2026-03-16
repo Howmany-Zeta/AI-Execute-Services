@@ -239,7 +239,7 @@ class HealthChecker:
                     free = pool.get_idle_size()
 
                     # Pool is healthy if not completely exhausted
-                    return free > 0 or size < pool.get_max_size()
+                    return bool(free > 0 or size < pool.get_max_size())
 
                 # If we can't check, assume OK
                 return True

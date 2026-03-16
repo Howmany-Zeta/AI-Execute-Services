@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import os
@@ -8,11 +7,11 @@ from typing import Dict, Any, Optional, List, AsyncGenerator, Union
 from google import genai
 from google.genai import types
 
-from aiecs.llm.utils.image_utils import parse_image_source, ImageContent
+from aiecs.llm.utils.image_utils import parse_image_source
 
 logger = logging.getLogger(__name__)
 
-from aiecs.llm.clients.base_client import (
+from aiecs.llm.clients.base_client import (  # noqa: E402
     BaseLLMClient,
     LLMMessage,
     LLMResponse,
@@ -20,25 +19,25 @@ from aiecs.llm.clients.base_client import (
     RateLimitError,
     SafetyBlockError,
 )
-from aiecs.llm.clients.google_function_calling_mixin import GoogleFunctionCallingMixin
-from aiecs.config.config import get_settings
-
-logger = logging.getLogger(__name__)
+from aiecs.llm.clients.google_function_calling_mixin import GoogleFunctionCallingMixin  # noqa: E402
+from aiecs.config.config import get_settings  # noqa: E402
 
 # Finish-reason values (as returned by str() on FinishReason in Python 3.11+)
 # that indicate the response was blocked or filtered by safety / content policies.
 # Extends the old-SDK set of {SAFETY, RECITATION} with values introduced in
 # the google-genai SDK: BLOCKLIST, PROHIBITED_CONTENT, SPII, IMAGE_SAFETY,
 # IMAGE_PROHIBITED_CONTENT.
-_SAFETY_BLOCKING_FINISH_REASONS: frozenset[str] = frozenset({
-    "SAFETY",
-    "RECITATION",
-    "BLOCKLIST",
-    "PROHIBITED_CONTENT",
-    "SPII",
-    "IMAGE_SAFETY",
-    "IMAGE_PROHIBITED_CONTENT",
-})
+_SAFETY_BLOCKING_FINISH_REASONS: frozenset[str] = frozenset(
+    {
+        "SAFETY",
+        "RECITATION",
+        "BLOCKLIST",
+        "PROHIBITED_CONTENT",
+        "SPII",
+        "IMAGE_SAFETY",
+        "IMAGE_PROHIBITED_CONTENT",
+    }
+)
 
 
 def _extract_safety_ratings(safety_ratings: Any) -> List[Dict[str, Any]]:
@@ -60,9 +59,7 @@ def _extract_safety_ratings(safety_ratings: Any) -> List[Dict[str, Any]]:
 
     for rating in ratings_iter:
         if not isinstance(rating, dict) and not hasattr(rating, "category"):
-            logger.debug(
-                f"Skipping non-dict/non-object rating element: type={type(rating).__name__}"
-            )
+            logger.debug(f"Skipping non-dict/non-object rating element: type={type(rating).__name__}")
             continue
         rating_dict: Dict[str, Any] = {}
 
@@ -112,18 +109,18 @@ def _build_safety_block_error(
 ) -> SafetyBlockError:
     """
     Build a detailed SafetyBlockError from Vertex AI response.
-    
+
     Args:
         response: Vertex AI response object
         block_type: "prompt" or "response"
         default_message: Default error message
-        
+
     Returns:
         SafetyBlockError with detailed information
     """
     block_reason = None
     safety_ratings = []
-    
+
     if block_type == "prompt":
         # Check prompt_feedback for prompt blocks
         if hasattr(response, "prompt_feedback"):
@@ -146,14 +143,14 @@ def _build_safety_block_error(
                 safety_ratings = _extract_safety_ratings(candidate.safety_ratings)
             elif isinstance(candidate, dict):
                 safety_ratings = _extract_safety_ratings(candidate.get("safety_ratings", []))
-            
+
             # Check finish_reason against all blocking values defined by the
             # new google-genai SDK (supersedes old {SAFETY, RECITATION} pair).
             if hasattr(candidate, "finish_reason"):
                 finish_reason = str(candidate.finish_reason)
                 if finish_reason in _SAFETY_BLOCKING_FINISH_REASONS:
                     block_reason = finish_reason
-    
+
     # Build detailed error message
     error_parts = [default_message]
     if block_reason:
@@ -174,18 +171,12 @@ def _build_safety_block_error(
             continue
         if rating.get("blocked"):
             if "severity" in rating:
-                error_parts.append(
-                    f"{rating.get('category', 'UNKNOWN')}: severity={rating.get('severity')}, "
-                    f"score={rating.get('severity_score', 'N/A')}"
-                )
+                error_parts.append(f"{rating.get('category', 'UNKNOWN')}: severity={rating.get('severity')}, " f"score={rating.get('severity_score', 'N/A')}")
             elif "probability" in rating:
-                error_parts.append(
-                    f"{rating.get('category', 'UNKNOWN')}: probability={rating.get('probability')}, "
-                    f"score={rating.get('probability_score', 'N/A')}"
-                )
-    
+                error_parts.append(f"{rating.get('category', 'UNKNOWN')}: probability={rating.get('probability')}, " f"score={rating.get('probability_score', 'N/A')}")
+
     error_message = " | ".join(error_parts)
-    
+
     return SafetyBlockError(
         message=error_message,
         block_reason=block_reason,
@@ -203,7 +194,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
         self._initialized = False
         self._client: Optional[genai.Client] = None
         # Track part count statistics for monitoring
-        self._part_count_stats = {
+        self._part_count_stats: Dict[str, Any] = {
             "total_responses": 0,
             "part_counts": {},  # {part_count: frequency}
             "last_part_count": None,
@@ -253,9 +244,10 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
         if tools:
             # Include tools in the hash so different tool configurations get different cached contents
             import json
+
             tools_str = json.dumps([str(t) for t in tools], sort_keys=True)
             hash_input = f"{content}|tools:{tools_str}"
-        return hashlib.md5(hash_input.encode('utf-8')).hexdigest()
+        return hashlib.md5(hash_input.encode("utf-8")).hexdigest()
 
     async def _create_or_get_cached_content(
         self,
@@ -295,12 +287,12 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             return existing_cached_id
 
         try:
-            self._init_client()
+            client = self._init_client()
 
             if tools:
                 self.logger.debug(f"Including {len(tools)} tools in cached content")
 
-            cache = await self._client.aio.caches.create(
+            cache = await client.aio.caches.create(
                 model=model_name,
                 config=types.CreateCachedContentConfig(
                     system_instruction=content,
@@ -316,15 +308,10 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             return cached_content_id
 
         except Exception as e:
-            self.logger.warning(
-                f"Failed to create CachedContent (prompt caching disabled, "
-                f"falling back to system_instruction): {str(e)}"
-            )
+            self.logger.warning(f"Failed to create CachedContent (prompt caching disabled, " f"falling back to system_instruction): {str(e)}")
             return None
 
-    def _convert_messages_to_contents(
-        self, messages: List[LLMMessage]
-    ) -> List[types.Content]:
+    def _convert_messages_to_contents(self, messages: List[LLMMessage]) -> List[types.Content]:
         """
         Convert LLMMessage list to Vertex AI Content objects.
 
@@ -362,15 +349,11 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             if msg.role == "tool":
                 # Resolve the function *declaration* name from the mapping built
                 # when the preceding assistant turn was processed.
-                func_name = (
-                    tool_call_id_to_name.get(msg.tool_call_id or "")
-                    or msg.tool_call_id
-                    or "unknown_function"
-                )
+                func_name = tool_call_id_to_name.get(msg.tool_call_id or "") or msg.tool_call_id or "unknown_function"
 
                 # Parse content as the function response payload
                 try:
-                    if msg.content and msg.content.strip().startswith('{'):
+                    if msg.content and msg.content.strip().startswith("{"):
                         response_data = json.loads(msg.content)
                     else:
                         response_data = {"result": msg.content}
@@ -411,17 +394,21 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                     for image_source in msg.images:
                         image_content = parse_image_source(image_source)
                         if image_content.is_url():
-                            parts.append(types.Part.from_uri(
-                                file_uri=image_content.get_url(),
-                                mime_type=image_content.mime_type,
-                            ))
+                            parts.append(
+                                types.Part.from_uri(
+                                    file_uri=image_content.get_url(),
+                                    mime_type=image_content.mime_type,
+                                )
+                            )
                         else:
                             base64_data = image_content.get_base64_data()
                             image_bytes = base64.b64decode(base64_data)
-                            parts.append(types.Part.from_bytes(
-                                data=image_bytes,
-                                mime_type=image_content.mime_type,
-                            ))
+                            parts.append(
+                                types.Part.from_bytes(
+                                    data=image_bytes,
+                                    mime_type=image_content.mime_type,
+                                )
+                            )
 
                 if sanitized_tool_calls:
                     for tool_call in sanitized_tool_calls:
@@ -434,9 +421,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                             args_dict = {}
                         # Create FunctionCall part using types.Part + types.FunctionCall
                         # (Part.from_dict is deprecated in the new SDK)
-                        function_call_part = types.Part(
-                            function_call=types.FunctionCall(name=func_name, args=args_dict)
-                        )
+                        function_call_part = types.Part(function_call=types.FunctionCall(name=func_name, args=args_dict))
                         parts.append(function_call_part)
 
                 contents.append(types.Content(role="model", parts=parts))
@@ -459,17 +444,21 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                     for image_source in msg.images:
                         image_content = parse_image_source(image_source)
                         if image_content.is_url():
-                            parts.append(types.Part.from_uri(
-                                file_uri=image_content.get_url(),
-                                mime_type=image_content.mime_type,
-                            ))
+                            parts.append(
+                                types.Part.from_uri(
+                                    file_uri=image_content.get_url(),
+                                    mime_type=image_content.mime_type,
+                                )
+                            )
                         else:
                             base64_data = image_content.get_base64_data()
                             image_bytes = base64.b64decode(base64_data)
-                            parts.append(types.Part.from_bytes(
-                                data=image_bytes,
-                                mime_type=image_content.mime_type,
-                            ))
+                            parts.append(
+                                types.Part.from_bytes(
+                                    data=image_bytes,
+                                    mime_type=image_content.mime_type,
+                                )
+                            )
 
                 if parts:
                     contents.append(types.Content(role=role, parts=parts))
@@ -516,7 +505,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
         Returns:
             LLMResponse with generated text and metadata
         """
-        self._init_client()
+        client = self._init_client()
 
         # Get model name from config if not provided
         model_name = model or self._get_default_model() or "gemini-2.5-pro"
@@ -581,7 +570,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             if final_system_instruction and system_cache_control:
                 # Create or get CachedContent for the system instruction (and tools if provided)
                 # Extract TTL from cache_control if available (defaults to 3600 seconds)
-                ttl_seconds = getattr(system_cache_control, 'ttl_seconds', None) or 3600
+                ttl_seconds = getattr(system_cache_control, "ttl_seconds", None) or 3600
                 cached_content_id = await self._create_or_get_cached_content(
                     content=final_system_instruction,
                     model_name=model_name,
@@ -605,20 +594,20 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             else:
                 safety_settings = [
                     types.SafetySetting(
-                        category="HARM_CATEGORY_HARASSMENT",
-                        threshold="OFF",
+                        category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        threshold=types.HarmBlockThreshold.OFF,
                     ),
                     types.SafetySetting(
-                        category="HARM_CATEGORY_HATE_SPEECH",
-                        threshold="OFF",
+                        category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        threshold=types.HarmBlockThreshold.OFF,
                     ),
                     types.SafetySetting(
-                        category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                        threshold="OFF",
+                        category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        threshold=types.HarmBlockThreshold.OFF,
                     ),
                     types.SafetySetting(
-                        category="HARM_CATEGORY_DANGEROUS_CONTENT",
-                        threshold="OFF",
+                        category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        threshold=types.HarmBlockThreshold.OFF,
                     ),
                 ]
 
@@ -631,7 +620,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 top_p=kwargs.pop("top_p", 0.95),
                 top_k=kwargs.pop("top_k", 40),
                 system_instruction=final_system_instruction if not cached_content_id else None,
-                tools=tools_for_api if not cached_content_id else None,
+                tools=tools_for_api if not cached_content_id else None,  # type: ignore[arg-type]
                 cached_content=cached_content_id,
                 safety_settings=safety_settings,
             )
@@ -639,9 +628,9 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             if cached_content_id:
                 self.logger.debug(f"Using CachedContent for prompt caching: {cached_content_id}")
 
-            response = await self._client.aio.models.generate_content(
+            response = await client.aio.models.generate_content(
                 model=model_name,
-                contents=contents,
+                contents=contents,  # type: ignore[arg-type]
                 config=config,
             )
 
@@ -649,7 +638,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             if hasattr(response, "prompt_feedback"):
                 pf = response.prompt_feedback
                 # Check if prompt was blocked
-                if hasattr(pf, "block_reason") and pf.block_reason:
+                if pf is not None and hasattr(pf, "block_reason") and pf.block_reason:
                     block_reason = str(pf.block_reason)
                     if block_reason not in ["BLOCKED_REASON_UNSPECIFIED", "OTHER"]:
                         # Prompt was blocked by safety filters
@@ -672,7 +661,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             content = None
             try:
                 # First try to get text directly
-                content = response.text
+                content = response.text or ""
                 self.logger.debug(f"Vertex AI response received: {content[:100]}...")
             except (ValueError, AttributeError) as ve:
                 # Handle multi-part responses and other issues
@@ -685,11 +674,11 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                     self.logger.debug(f"Candidate finish_reason: {getattr(candidate, 'finish_reason', 'unknown')}")
 
                     # Handle multi-part content
-                    if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
+                    if hasattr(candidate, "content") and candidate.content is not None and hasattr(candidate.content, "parts"):
                         try:
                             # Extract text from all parts
                             text_parts: List[str] = []
-                            for part in candidate.content.parts:
+                            for part in candidate.content.parts or []:
                                 if hasattr(part, "text") and part.text:
                                     text_parts.append(str(part.text))
 
@@ -725,13 +714,13 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                                         # Ensure part is a string (use different name to avoid redefinition)
                                         part_str: str = str(part_raw) if not isinstance(part_raw, str) else part_raw
 
-                                        if "<thinking>" in part_str and "</thinking>" not in part_str:  # type: ignore[operator]
+                                        if "<thinking>" in part_str and "</thinking>" not in part_str:
                                             # Incomplete <thinking> tag: add
                                             # closing tag
-                                            part_str = part_str + "\n</thinking>"  # type: ignore[operator]
+                                            part_str = part_str + "\n</thinking>"
                                             needs_thinking_format = True
                                             self.logger.debug(f"  Part {i+1}: Incomplete <thinking> tag fixed")
-                                        elif isinstance(part_str, str) and part_str.startswith("thinking") and "</thinking>" not in part_str:  # type: ignore[operator]
+                                        elif isinstance(part_str, str) and part_str.startswith("thinking") and "</thinking>" not in part_str:
                                             # thinking\n format: convert to
                                             # <thinking>...</thinking>
                                             if part_str.startswith("thinking\n"):
@@ -793,7 +782,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                     # Check prompt_feedback for block reason
                     if hasattr(response, "prompt_feedback"):
                         pf = response.prompt_feedback
-                        if hasattr(pf, "block_reason") and pf.block_reason:
+                        if pf is not None and hasattr(pf, "block_reason") and pf.block_reason:
                             block_reason = str(pf.block_reason)
                             if block_reason not in ["BLOCKED_REASON_UNSPECIFIED", "OTHER"]:
                                 raise _build_safety_block_error(
@@ -809,9 +798,9 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                                     block_type="prompt",
                                     default_message="No candidates found - prompt blocked by safety filters",
                                 )
-                    
+
                     # If not a safety block, raise generic error with details
-                    error_msg = f"Response error: No candidates found - Response has no candidates (and thus no text)."
+                    error_msg = "Response error: No candidates found - Response has no candidates (and thus no text)."
                     if hasattr(response, "prompt_feedback"):
                         error_msg += " Check prompt_feedback for details."
                     raise ValueError(error_msg)
@@ -852,7 +841,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             function_calls = self._extract_function_calls_from_google_response(response)
 
             llm_response = LLMResponse(
-                content=content,
+                content=content or "",
                 provider=self.provider_name,
                 model=model_name,
                 tokens_used=tokens_used,
@@ -939,7 +928,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
         Yields:
             str or GoogleStreamChunk: Text tokens or StreamChunk objects
         """
-        self._init_client()
+        client = self._init_client()
 
         # Get model name from config if not provided
         model_name = model or self._get_default_model() or "gemini-2.5-pro"
@@ -1009,7 +998,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             if final_system_instruction and system_cache_control:
                 # Create or get CachedContent for the system instruction (and tools if provided)
                 # Extract TTL from cache_control if available (defaults to 3600 seconds)
-                ttl_seconds = getattr(system_cache_control, 'ttl_seconds', None) or 3600
+                ttl_seconds = getattr(system_cache_control, "ttl_seconds", None) or 3600
                 cached_content_id = await self._create_or_get_cached_content(
                     content=final_system_instruction,
                     model_name=model_name,
@@ -1033,20 +1022,20 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             else:
                 safety_settings = [
                     types.SafetySetting(
-                        category="HARM_CATEGORY_HARASSMENT",
-                        threshold="OFF",
+                        category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        threshold=types.HarmBlockThreshold.OFF,
                     ),
                     types.SafetySetting(
-                        category="HARM_CATEGORY_HATE_SPEECH",
-                        threshold="OFF",
+                        category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        threshold=types.HarmBlockThreshold.OFF,
                     ),
                     types.SafetySetting(
-                        category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                        threshold="OFF",
+                        category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        threshold=types.HarmBlockThreshold.OFF,
                     ),
                     types.SafetySetting(
-                        category="HARM_CATEGORY_DANGEROUS_CONTENT",
-                        threshold="OFF",
+                        category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        threshold=types.HarmBlockThreshold.OFF,
                     ),
                 ]
 
@@ -1059,7 +1048,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 top_p=kwargs.pop("top_p", 0.95),
                 top_k=kwargs.pop("top_k", 40),
                 system_instruction=final_system_instruction if not cached_content_id else None,
-                tools=tools_for_api if not cached_content_id else None,
+                tools=tools_for_api if not cached_content_id else None,  # type: ignore[arg-type]
                 cached_content=cached_content_id,
                 safety_settings=safety_settings,
             )
@@ -1068,7 +1057,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 self.logger.debug(f"Using CachedContent for prompt caching in streaming: {cached_content_id}")
 
             async for chunk in self._stream_text_with_function_calling(
-                client=self._client,
+                client=client,
                 model_name=model_name,
                 contents=stream_contents,
                 config=config,
@@ -1160,14 +1149,14 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
         Returns:
             List of embedding vectors (each is a list of floats)
         """
-        self._init_client()
+        client = self._init_client()
 
         embedding_model_name = model or "gemini-embedding-001"
 
         try:
-            result = await self._client.aio.models.embed_content(
+            result = await client.aio.models.embed_content(
                 model=embedding_model_name,
-                contents=texts,
+                contents=texts,  # type: ignore[arg-type]
             )
 
             embeddings = []

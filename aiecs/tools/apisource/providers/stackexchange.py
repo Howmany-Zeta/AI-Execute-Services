@@ -17,8 +17,8 @@ IMPORTANT - Stack Exchange API Rules:
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urlencode
+from typing import Any, Dict, List, Optional, Tuple, cast
+
 
 from aiecs.tools.apisource.providers.base import (
     BaseAPIProvider,
@@ -396,7 +396,7 @@ class StackExchangeProvider(BaseAPIProvider):
                 params=query_params,
                 timeout=timeout,
                 # Stack Exchange API returns gzip compressed responses
-                headers={"Accept-Encoding": "gzip"}
+                headers={"Accept-Encoding": "gzip"},
             )
             response.raise_for_status()
 
@@ -490,10 +490,7 @@ class StackExchangeProvider(BaseAPIProvider):
                     },
                 },
                 "required": ["site"],
-                "anyOf": [
-                    {"required": ["intitle"]},
-                    {"required": ["tagged"]}
-                ],
+                "anyOf": [{"required": ["intitle"]}, {"required": ["tagged"]}],
             },
             "get_question": {
                 "type": "object",
@@ -637,5 +634,4 @@ class StackExchangeProvider(BaseAPIProvider):
             },
         }
 
-        return schemas.get(operation)
-
+        return cast(Optional[Dict[str, Any]], schemas.get(operation))

@@ -16,23 +16,21 @@ from typing import List
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from aiecs.application.knowledge_graph.fusion.ab_testing import (
+from aiecs.application.knowledge_graph.fusion.ab_testing import (  # noqa: E402
     ABTestingFramework,
     ExperimentResult,
 )
-from aiecs.application.knowledge_graph.fusion.evaluation_dataset import (
+from aiecs.application.knowledge_graph.fusion.evaluation_dataset import (  # noqa: E402
     create_default_evaluation_dataset,
 )
-from aiecs.application.knowledge_graph.fusion.matching_config import (
+from aiecs.application.knowledge_graph.fusion.matching_config import (  # noqa: E402
     FusionMatchingConfig,
 )
-from aiecs.application.knowledge_graph.fusion.similarity_pipeline import (
+from aiecs.application.knowledge_graph.fusion.similarity_pipeline import (  # noqa: E402
     SimilarityPipeline,
 )
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -98,9 +96,7 @@ async def run_threshold_sweeps(
     logger.info(f"Saved comparison results to {comparison_file}")
 
     # Validate default thresholds
-    is_valid, validation = framework.validate_thresholds(
-        default_result, min_recall=0.90, min_precision=0.75
-    )
+    is_valid, validation = framework.validate_thresholds(default_result, min_recall=0.90, min_precision=0.75)
     validation_file = output_dir / "validation.json"
     with open(validation_file, "w") as f:
         json.dump(validation, f, indent=2)
@@ -111,7 +107,7 @@ async def run_threshold_sweeps(
     print("\n" + "=" * 80)
     print("EXPERIMENT SUMMARY")
     print("=" * 80)
-    print(f"\nDefault Configuration Metrics:")
+    print("\nDefault Configuration Metrics:")
     print(f"  Recall:    {default_result.metrics.recall:.3f}")
     print(f"  Precision: {default_result.metrics.precision:.3f}")
     print(f"  F1 Score:  {default_result.metrics.f1_score:.3f}")
@@ -149,9 +145,7 @@ async def run_domain_specific_experiments(
 
         # Evaluate default config on domain dataset
         default_config = FusionMatchingConfig()
-        result = await domain_framework.evaluate_config(
-            f"default_{domain}", default_config
-        )
+        result = await domain_framework.evaluate_config(f"default_{domain}", default_config)
 
         domain_results[domain] = {
             "dataset_size": len(domain_dataset),
@@ -170,9 +164,7 @@ async def main():
     """Main entry point."""
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Run threshold sweep experiments for knowledge fusion"
-    )
+    parser = argparse.ArgumentParser(description="Run threshold sweep experiments for knowledge fusion")
     parser.add_argument(
         "--output-dir",
         type=str,

@@ -15,7 +15,6 @@ from aiecs.domain.knowledge_graph.schema.relation_type import RelationType
 from aiecs.domain.knowledge_graph.schema.property_schema import PropertySchema
 from aiecs.domain.knowledge_graph.schema.type_enums import TypeEnumGenerator
 from aiecs.infrastructure.graph_storage.schema_cache import LRUCache
-from aiecs.infrastructure.graph_storage.tenant import TenantContext
 
 
 class SchemaManager:
@@ -157,11 +156,11 @@ class SchemaManager:
             can exist in both global and tenant schemas with different definitions.
         """
         schema = self._ensure_tenant_schema(tenant_id) if tenant_id else self.schema
-        
+
         # Safety check: ensure tenant schema is not the global schema
         if tenant_id is not None and schema is self.schema:
             raise RuntimeError(f"Internal error: tenant schema for '{tenant_id}' is referencing global schema")
-        
+
         schema.add_entity_type(entity_type)
 
         # Cache the new entity type with tenant-scoped key

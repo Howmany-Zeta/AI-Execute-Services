@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 import logging
 import os
 from typing import Optional
-import socketio  # type: ignore[import-untyped]
+import socketio
 
 # Import configuration
 from aiecs.config.config import get_settings
@@ -219,7 +219,6 @@ async def execute_task(request: Request):
         data = await request.json()
 
         # Extract required fields
-        task_type = data.get("type", "task")
         user_id = data.get("userId", "anonymous")
         context_data = data.get("context", {})
 
@@ -233,7 +232,7 @@ async def execute_task(request: Request):
         # Add tools to task_data if needed
         if "tools" in context_data:
             task_data["tools"] = context_data["tools"]
-        task_context = TaskContext(
+        TaskContext(
             data=task_data,
             task_dir="./tasks",
         )
@@ -248,6 +247,7 @@ async def execute_task(request: Request):
         # CeleryTaskManager doesn't have submit_task, use execute_task instead
         # For now, generate a task_id and execute asynchronously
         import uuid
+
         task_id = str(uuid.uuid4())
         # Note: This is a placeholder - actual implementation should queue the task
         # task_manager.execute_task(...)  # type: ignore[attr-defined]
@@ -275,7 +275,7 @@ async def get_task_status(task_id: str):
             )
 
         # CeleryTaskManager doesn't have get_task_status, use get_task_result instead
-        task_status = task_manager.get_task_result(task_id)  # type: ignore[attr-defined]
+        task_status = task_manager.get_task_result(task_id)
 
         if not task_status:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")

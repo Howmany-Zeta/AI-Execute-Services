@@ -8,7 +8,6 @@ from .clients.vertex_client import VertexAIClient
 from .clients.googleai_client import GoogleAIClient
 from .clients.xai_client import XAIClient
 from .clients.openrouter_client import OpenRouterClient
-from .clients.openai_compatible_mixin import StreamChunk
 from .callbacks.custom_callbacks import CustomAsyncCallbackHandler
 
 if TYPE_CHECKING:
@@ -64,19 +63,12 @@ class LLMClientFactory:
 
         # Validate protocol compliance
         if not isinstance(client, LLMClientProtocol):
-            raise ValueError(
-                f"Client must implement LLMClientProtocol. "
-                f"Required methods: generate_text, stream_text, close, get_embeddings. "
-                f"Required attribute: provider_name"
-            )
+            raise ValueError("Client must implement LLMClientProtocol. " "Required methods: generate_text, stream_text, close, get_embeddings. " "Required attribute: provider_name")
 
         # Prevent conflicts with standard provider names
         try:
             AIProvider(name)
-            raise ValueError(
-                f"Custom provider name '{name}' conflicts with standard AIProvider enum. "
-                f"Please use a different name."
-            )
+            raise ValueError(f"Custom provider name '{name}' conflicts with standard AIProvider enum. " f"Please use a different name.")
         except ValueError as e:
             # If ValueError is raised because name is not in enum, that's good
             if "conflicts with standard AIProvider" in str(e):
@@ -152,9 +144,9 @@ class LLMClientFactory:
         cls._clients.clear()
 
         # Close custom clients
-        for name, client in cls._custom_clients.items():
+        for name, custom_client in cls._custom_clients.items():
             try:
-                await client.close()
+                await custom_client.close()
             except Exception as e:
                 logger.error(f"Error closing custom client {name}: {e}")
         cls._custom_clients.clear()
@@ -407,17 +399,16 @@ class LLMClientManager:
             collected_content = ""
 
             # Stream text
-            # Note: stream_text is an async generator, not a coroutine,
-            # so we iterate directly without await
-            async for chunk in client.stream_text(
+            stream_gen = await client.stream_text(
                 messages=messages,
                 model=final_model,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 **kwargs,
-            ):
+            )
+            async for chunk in stream_gen:
                 # Handle StreamChunk objects (when return_chunks=True or function calling)
-                if hasattr(chunk, 'content') and chunk.content:
+                if hasattr(chunk, "content") and chunk.content:
                     collected_content += chunk.content
                 elif isinstance(chunk, str):
                     collected_content += chunk

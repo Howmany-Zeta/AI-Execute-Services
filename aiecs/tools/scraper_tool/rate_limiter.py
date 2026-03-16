@@ -161,12 +161,9 @@ class DomainCircuitBreaker:
         """Get or create a circuit breaker for the domain."""
         with self._lock:
             if domain not in self._breakers:
-                self._breakers[domain] = CircuitBreaker(
-                    self.failure_threshold, self.reset_timeout
-                )
+                self._breakers[domain] = CircuitBreaker(self.failure_threshold, self.reset_timeout)
             return self._breakers[domain]
 
     def is_domain_available(self, domain: str) -> bool:
         """Check if the domain's circuit breaker allows requests."""
         return self.get_breaker(domain).is_available()
-

@@ -55,14 +55,12 @@ class ClickHouseClient:
                 host=self._host,
                 port=self._port,
                 username=self._username,
-                password=self._password if self._password else None,
+                password=self._password or "",
                 database=self._database,
             )
             # Test connection
             await asyncio.to_thread(self._client.command, "SELECT 1")
-            logger.info(
-                f"ClickHouse client initialized: {self._host}:{self._port}/{self._database}"
-            )
+            logger.info(f"ClickHouse client initialized: {self._host}:{self._port}/{self._database}")
             return True
         except Exception as e:
             logger.error(f"Failed to connect to ClickHouse: {e}")
@@ -210,7 +208,5 @@ async def get_clickhouse_client() -> ClickHouseClient:
         RuntimeError: If client not initialized. Call initialize_clickhouse_client() first.
     """
     if _clickhouse_client is None:
-        raise RuntimeError(
-            "ClickHouse client not initialized. Call initialize_clickhouse_client() first."
-        )
+        raise RuntimeError("ClickHouse client not initialized. Call initialize_clickhouse_client() first.")
     return _clickhouse_client

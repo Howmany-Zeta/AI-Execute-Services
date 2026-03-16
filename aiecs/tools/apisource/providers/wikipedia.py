@@ -193,10 +193,7 @@ class WikipediaProvider(BaseAPIProvider):
 
         # Set User-Agent header as required by Wikipedia API rules
         # See: https://www.mediawiki.org/wiki/API:Etiquette
-        user_agent = self.config.get(
-            "user_agent",
-            "AIECS-APISource/2.0 (https://github.com/your-org/aiecs; iretbl@gmail.com)"
-        )
+        user_agent = self.config.get("user_agent", "AIECS-APISource/2.0 (https://github.com/your-org/aiecs; iretbl@gmail.com)")
         headers = {
             "User-Agent": user_agent,
             "Api-User-Agent": user_agent,
@@ -254,12 +251,7 @@ class WikipediaProvider(BaseAPIProvider):
 
         # Make API request with proper headers
         try:
-            response = requests.get(
-                endpoint,
-                params=query_params,
-                headers=headers,
-                timeout=timeout
-            )
+            response = requests.get(endpoint, params=query_params, headers=headers, timeout=timeout)
             response.raise_for_status()
 
             data = response.json()
@@ -354,4 +346,3 @@ class WikipediaProvider(BaseAPIProvider):
         }
 
         return schemas.get(operation)
-

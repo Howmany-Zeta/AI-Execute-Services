@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 # Check for pandas availability
 try:
     import pandas as pd
+
     PANDAS_AVAILABLE = True
 except ImportError:
     PANDAS_AVAILABLE = False
@@ -23,7 +24,7 @@ except ImportError:
 class ReshapeResult:
     """
     Result of data reshaping operation
-    
+
     Attributes:
         data: Reshaped DataFrame
         original_shape: Original (rows, cols) shape
@@ -33,14 +34,15 @@ class ReshapeResult:
         value_column: Name of value column (for melt)
         warnings: List of warnings
     """
-    data: 'pd.DataFrame'
+
+    data: "pd.DataFrame"
     original_shape: tuple
     new_shape: tuple
     id_columns: List[str]
     variable_column: Optional[str] = None
     value_column: Optional[str] = None
-    warnings: List[str] = None
-    
+    warnings: Optional[List[str]] = None
+
     def __post_init__(self):
         if self.warnings is None:
             self.warnings = []
@@ -49,26 +51,26 @@ class ReshapeResult:
 class DataReshaping:
     """
     Utility class for reshaping structured data
-    
+
     Provides methods to convert between wide and long formats,
     enabling normalized graph structures from wide datasets.
     """
-    
+
     @staticmethod
     def melt(
-        df: 'pd.DataFrame',
+        df: "pd.DataFrame",
         id_vars: List[str],
         value_vars: Optional[List[str]] = None,
-        var_name: str = 'variable',
-        value_name: str = 'value',
+        var_name: str = "variable",
+        value_name: str = "value",
         dropna: bool = True,
     ) -> ReshapeResult:
         """
         Convert wide format to long format (melt operation)
-        
+
         Transforms data from wide format (many columns) to long format
         (fewer columns, more rows), which is ideal for normalized graph structures.
-        
+
         Args:
             df: DataFrame to reshape
             id_vars: Columns to use as identifier variables
@@ -76,15 +78,15 @@ class DataReshaping:
             var_name: Name for the variable column (default: 'variable')
             value_name: Name for the value column (default: 'value')
             dropna: Whether to drop rows with missing values (default: True)
-        
+
         Returns:
             ReshapeResult with reshaped data and metadata
-        
+
         Example:
             ```python
             # Wide format: sample_id, option1, option2, option3
             # Long format: sample_id, variable, value
-            
+
             result = DataReshaping.melt(
                 df,
                 id_vars=['sample_id'],
@@ -96,15 +98,15 @@ class DataReshaping:
         """
         if not PANDAS_AVAILABLE:
             raise ImportError("pandas is required for data reshaping")
-        
+
         original_shape = df.shape
         warnings = []
-        
+
         # If value_vars not specified, use all columns except id_vars
         if value_vars is None:
             value_vars = [col for col in df.columns if col not in id_vars]
             warnings.append(f"Auto-detected {len(value_vars)} value columns")
-        
+
         # Perform melt operation
         melted = pd.melt(
             df,
@@ -113,7 +115,7 @@ class DataReshaping:
             var_name=var_name,
             value_name=value_name,
         )
-        
+
         # Drop NA values if requested
         if dropna:
             rows_before = len(melted)
@@ -121,9 +123,9 @@ class DataReshaping:
             rows_dropped = rows_before - len(melted)
             if rows_dropped > 0:
                 warnings.append(f"Dropped {rows_dropped} rows with missing values")
-        
+
         new_shape = melted.shape
-        
+
         return ReshapeResult(
             data=melted,
             original_shape=original_shape,
@@ -136,11 +138,11 @@ class DataReshaping:
 
     @staticmethod
     def pivot(
-        df: 'pd.DataFrame',
+        df: "pd.DataFrame",
         index: Union[str, List[str]],
         columns: str,
         values: str,
-        aggfunc: str = 'first',
+        aggfunc: str = "first",
         fill_value: Optional[Any] = None,
     ) -> ReshapeResult:
         """
@@ -194,7 +196,7 @@ class DataReshaping:
 
             # Flatten column names if multi-level
             if isinstance(pivoted.columns, pd.MultiIndex):
-                pivoted.columns = ['_'.join(map(str, col)).strip('_') for col in pivoted.columns.values]
+                pivoted.columns = ["_".join(map(str, col)).strip("_") for col in pivoted.columns.values]
                 warnings.append("Flattened multi-level column names")
 
         except Exception as e:
@@ -218,7 +220,7 @@ class DataReshaping:
 
     @staticmethod
     def detect_wide_format(
-        df: 'pd.DataFrame',
+        df: "pd.DataFrame",
         threshold_columns: int = 50,
     ) -> bool:
         """
@@ -248,7 +250,7 @@ class DataReshaping:
 
     @staticmethod
     def suggest_melt_config(
-        df: 'pd.DataFrame',
+        df: "pd.DataFrame",
         id_column_patterns: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
@@ -267,7 +269,7 @@ class DataReshaping:
             raise ImportError("pandas is required for data reshaping")
 
         if id_column_patterns is None:
-            id_column_patterns = ['id', 'key', 'name', 'sample', 'subject']
+            id_column_patterns = ["id", "key", "name", "sample", "subject"]
 
         # Identify potential ID columns
         id_vars = []
@@ -284,10 +286,9 @@ class DataReshaping:
         value_vars = [col for col in df.columns if col not in id_vars]
 
         return {
-            'id_vars': id_vars,
-            'value_vars': value_vars,
-            'var_name': 'variable',
-            'value_name': 'value',
-            'confidence': 0.8 if id_vars else 0.5,
+            "id_vars": id_vars,
+            "value_vars": value_vars,
+            "var_name": "variable",
+            "value_name": "value",
+            "confidence": 0.8 if id_vars else 0.5,
         }
-

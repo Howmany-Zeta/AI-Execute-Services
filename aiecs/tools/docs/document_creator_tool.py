@@ -19,7 +19,7 @@ import uuid
 import tempfile
 import logging
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, cast
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -120,7 +120,7 @@ class DocumentCreatorTool(BaseTool):
     # Configuration schema
     class Config(BaseSettings):
         """Configuration for the document creator tool
-        
+
         Automatically reads from environment variables with DOC_CREATOR_ prefix.
         Example: DOC_CREATOR_TEMPLATES_DIR -> templates_dir
         """
@@ -167,7 +167,7 @@ class DocumentCreatorTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: DocumentCreatorTool.Config = cast(DocumentCreatorTool.Config, self._config_obj) if self._config_obj else self.Config()
 
         self.logger = logging.getLogger(__name__)
 
@@ -204,6 +204,7 @@ class DocumentCreatorTool(BaseTool):
 
     def _init_office_tool(self):
         """Initialize office tool for PPTX/DOCX creation"""
+        self.office_tool: Any = None
         try:
             from aiecs.tools.task_tools.office_tool import OfficeTool
 
@@ -1178,7 +1179,7 @@ class DocumentCreatorTool(BaseTool):
             metadata_header = self._generate_metadata_header(metadata, output_format)
             content = metadata_header + "\n\n" + content
 
-        return content
+        return cast(str, content)
 
     def _generate_metadata_header(self, metadata: Dict[str, Any], output_format: DocumentFormat) -> str:
         """Generate metadata header for document"""
@@ -1218,9 +1219,7 @@ class DocumentCreatorTool(BaseTool):
             # Refusing here prevents a text file with a .pdf extension from
             # being silently produced and passed to downstream consumers.
             raise DocumentCreationError(
-                "PDF output is not yet implemented. "
-                "Please choose a supported format such as 'markdown', 'html', or 'docx'. "
-                "PDF support will be added in a future release."
+                "PDF output is not yet implemented. " "Please choose a supported format such as 'markdown', 'html', or 'docx'. " "PDF support will be added in a future release."
             )
         else:
             # For other formats, write as text for now
@@ -1275,14 +1274,14 @@ class DocumentCreatorTool(BaseTool):
 
     def _parse_content_to_slides(self, content: str) -> List[str]:
         """Parse content string into list of slide contents
-        
+
         Supports multiple slide separation formats:
         - "---" separator (markdown style)
         - "## Slide X:" headers
         - Empty lines between slides
         """
         slides = []
-        
+
         # Split by "---" separator (common in markdown presentations)
         if "---" in content:
             parts = content.split("---")
@@ -1320,7 +1319,7 @@ class DocumentCreatorTool(BaseTool):
             else:
                 # Fallback: split by double newlines (paragraph breaks)
                 parts = content.split("\n\n")
-                current_slide = []
+                current_slide: List[str] = []
                 for part in parts:
                     part = part.strip()
                     if part:
@@ -1330,7 +1329,7 @@ class DocumentCreatorTool(BaseTool):
                                 slides.append("\n".join(current_slide))
                                 current_slide = []
                         current_slide.append(part)
-                
+
                 if current_slide:
                     slides.append("\n".join(current_slide))
 

@@ -2,7 +2,7 @@ import os
 import re
 import logging
 import asyncio
-from typing import Dict, Any, List, Optional, Union, Tuple
+from typing import Dict, Any, List, Optional, Union, Tuple, cast
 from enum import Enum
 from urllib.parse import urlparse
 from pathlib import Path
@@ -161,10 +161,18 @@ class DocumentParserTool(BaseTool):
 
         # Configuration is automatically loaded by BaseTool into self._config_obj
         # Access config via self._config_obj (BaseSettings instance)
-        self.config = self._config_obj if self._config_obj else self.Config()
+        self.config: DocumentParserTool.Config = cast(
+            DocumentParserTool.Config,
+            self._config_obj if self._config_obj is not None else self.Config(),
+        )
 
         self.logger = logging.getLogger(__name__)
         os.makedirs(self.config.temp_dir, exist_ok=True)
+
+        # Pre-declare dependent tool attrs with Optional[Any] to allow None assignment
+        self.scraper_tool: Optional[Any] = None
+        self.office_tool: Optional[Any] = None
+        self.image_tool: Optional[Any] = None
 
         # Initialize dependent tools
         self._init_dependent_tools()
@@ -786,7 +794,7 @@ class DocumentParserTool(BaseTool):
                 text_content = self.office_tool.extract_text(file_path)
 
                 if strategy == ParsingStrategy.TEXT_ONLY:
-                    return text_content
+                    return cast(str, text_content)
                 elif strategy == ParsingStrategy.STRUCTURED:
                     # Try to extract structure from PDF
                     return {
@@ -813,7 +821,7 @@ class DocumentParserTool(BaseTool):
             text_content = self.office_tool.extract_text(file_path)
 
             if strategy == ParsingStrategy.TEXT_ONLY:
-                return text_content
+                return cast(str, text_content)
             elif strategy == ParsingStrategy.STRUCTURED:
                 return {
                     "text": text_content,
@@ -835,7 +843,7 @@ class DocumentParserTool(BaseTool):
             ocr_text = self.image_tool.ocr(file_path=file_path)
 
             if strategy == ParsingStrategy.TEXT_ONLY:
-                return ocr_text
+                return cast(str, ocr_text)
             else:
                 # Return structured result for other strategies
                 return {
@@ -926,7 +934,7 @@ class DocumentParserTool(BaseTool):
         """Format result as plain text"""
         content = result.get("content", "")
         if isinstance(content, dict):
-            return content.get("text", str(content))
+            return cast(str, content.get("text", str(content)))
         return str(content)
 
     def _format_as_markdown(self, result: Dict[str, Any]) -> str:

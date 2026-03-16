@@ -5,17 +5,14 @@ Provides efficient batch operations for bulk inserts, updates, and deletes.
 Uses PostgreSQL COPY and multi-row INSERT for optimal performance.
 """
 
-import asyncpg  # type: ignore[import-untyped]
+import asyncpg
 import logging
 import io
-from typing import List, TYPE_CHECKING, Optional
+from typing import List, Optional, TYPE_CHECKING
 import json
 
 from aiecs.domain.knowledge_graph.models.entity import Entity
 from aiecs.domain.knowledge_graph.models.relation import Relation
-
-if TYPE_CHECKING:
-    from aiecs.infrastructure.graph_storage.protocols import BatchOperationsMixinProtocol
 
 logger = logging.getLogger(__name__)
 
