@@ -10,6 +10,7 @@ Uses OpenAI Function Calling for tool use (BetaToolRunner-style loop).
     tools (OpenAI, xAI, Anthropic, Vertex).
 """
 
+import asyncio
 import json
 import logging
 from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING, AsyncIterator
@@ -404,8 +405,8 @@ class HybridAgent(BaseAIAgent):
             self._transition_state(self.state.__class__.BUSY)
             self._current_task_id = task.get("task_id")
 
-            # Execute tool loop (BetaToolRunner-style)
-            result = await self._tool_loop(task_description, context)
+            # Execute tool loop with exponential backoff retry (handles 429 / transient errors)
+            result = await self._execute_with_retry(self._tool_loop, task_description, context)
 
             # Calculate execution time
             execution_time = (datetime.utcnow() - start_time).total_seconds()
@@ -545,9 +546,30 @@ class HybridAgent(BaseAIAgent):
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
-            # Execute streaming tool loop (BetaToolRunner-style)
-            async for event in self._tool_loop_streaming(task_description, context):
-                yield event
+            # Execute streaming tool loop with exponential backoff retry.
+            # _execute_with_retry cannot wrap async generators, so retry is inlined here.
+            from .integration.retry_policy import EnhancedRetryPolicy, ErrorClassifier
+
+            _retry_cfg = self._config.retry_policy
+            _policy = EnhancedRetryPolicy(
+                max_retries=_retry_cfg.max_retries,
+                base_delay=_retry_cfg.base_delay,
+                max_delay=_retry_cfg.max_delay,
+                exponential_base=_retry_cfg.exponential_factor,
+                jitter_factor=_retry_cfg.jitter_factor,
+            )
+            for _attempt in range(_policy.max_retries + 1):
+                try:
+                    async for event in self._tool_loop_streaming(task_description, context):
+                        yield event
+                    break  # success – exit retry loop
+                except Exception as _exc:
+                    _error_type = ErrorClassifier.classify(_exc)
+                    if _attempt >= _policy.max_retries or not ErrorClassifier.is_retryable(_error_type):
+                        raise
+                    _delay = _policy.calculate_delay(_attempt, _error_type)
+                    logger.warning(f"Streaming attempt {_attempt + 1} failed " f"({_error_type.value}). Retrying in {_delay:.2f}s…")
+                    await asyncio.sleep(_delay)
 
             # Get final result from last event
             if event.get("type") == "result":

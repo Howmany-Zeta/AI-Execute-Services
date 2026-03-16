@@ -26,6 +26,9 @@ class ClickHouseClient:
     Async-friendly ClickHouse client wrapper.
 
     Uses asyncio.to_thread() for non-blocking sync operations.
+    A per-instance asyncio.Lock serializes concurrent calls because
+    clickhouse-connect clients are not thread-safe for simultaneous queries
+    on the same session.
     """
 
     def __init__(
@@ -42,6 +45,7 @@ class ClickHouseClient:
         self._username = username or os.getenv("CLICKHOUSE_USER", "default")
         self._password = password or os.getenv("CLICKHOUSE_PASSWORD", "")
         self._database = database or os.getenv("CLICKHOUSE_DATABASE", "default")
+        self._lock = asyncio.Lock()
 
     async def initialize(self) -> bool:
         """Initialize ClickHouse connection."""
@@ -108,12 +112,13 @@ class ClickHouseClient:
                 columns = list(data[0].keys())
                 rows = [[row[c] for c in columns] for row in data]
 
-            await asyncio.to_thread(
-                self._client.insert,
-                table,
-                rows,
-                column_names=columns,
-            )
+            async with self._lock:
+                await asyncio.to_thread(
+                    self._client.insert,
+                    table,
+                    rows,
+                    column_names=columns,
+                )
             return True
         except Exception as e:
             logger.error(f"ClickHouse insert failed for table {table}: {e}")
@@ -130,11 +135,12 @@ class ClickHouseClient:
             return False
 
         try:
-            await asyncio.to_thread(
-                self._client.command,
-                sql,
-                parameters=parameters or {},
-            )
+            async with self._lock:
+                await asyncio.to_thread(
+                    self._client.command,
+                    sql,
+                    parameters=parameters or {},
+                )
             return True
         except Exception as e:
             logger.error(f"ClickHouse command failed: {e}")
@@ -146,11 +152,12 @@ class ClickHouseClient:
             return None
 
         try:
-            return await asyncio.to_thread(
-                self._client.query,
-                sql,
-                parameters=parameters or {},
-            )
+            async with self._lock:
+                return await asyncio.to_thread(
+                    self._client.query,
+                    sql,
+                    parameters=parameters or {},
+                )
         except Exception as e:
             logger.error(f"ClickHouse query failed: {e}")
             return None
