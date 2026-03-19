@@ -13,7 +13,7 @@ Uses OpenAI Function Calling for tool use (BetaToolRunner-style loop).
 import asyncio
 import json
 import logging
-from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING, AsyncIterator
+from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING, AsyncGenerator
 from datetime import datetime
 
 from aiecs.llm import BaseLLMClient, CacheControl, LLMMessage
@@ -281,7 +281,7 @@ class HybridAgent(BaseAIAgent):
         self._system_prompt: Optional[str] = None
         self._conversation_history: List[LLMMessage] = []
         self._tool_schemas: List[Dict[str, Any]] = []
-        self._use_function_calling: bool = False  # Will be determined during initialization
+        self._use_function_calling: bool = False  # Set in _initialize() via _check_function_calling_support()
 
         logger.info(f"HybridAgent initialized: {agent_id} with LLM ({self.llm_client.provider_name}) " f"and {len(tools) if isinstance(tools, (list, dict)) else 0} tools")
 
@@ -383,23 +383,8 @@ class HybridAgent(BaseAIAgent):
             # Extract task description using shared method
             task_description = self._extract_task_description(task)
 
-            # Extract images from task dict and merge into context
-            task_images = task.get("images")
-            if task_images:
-                # Merge images from task into context
-                # If context already has images, combine them
-                if "images" in context:
-                    existing_images = context["images"]
-                    if isinstance(existing_images, list) and isinstance(task_images, list):
-                        context["images"] = existing_images + task_images
-                    elif isinstance(existing_images, list):
-                        context["images"] = existing_images + [task_images]
-                    elif isinstance(task_images, list):
-                        context["images"] = [existing_images] + task_images
-                    else:
-                        context["images"] = [existing_images, task_images]
-                else:
-                    context["images"] = task_images
+            # Merge images from task payload into context (deduplicates merge logic).
+            self._merge_task_images(task, context)
 
             # Transition to busy state
             self._transition_state(self.state.__class__.BUSY)
@@ -483,7 +468,7 @@ class HybridAgent(BaseAIAgent):
             logger.error(f"Message processing failed for {self.agent_id}: {e}")
             raise
 
-    async def execute_task_streaming(self, task: Dict[str, Any], context: Dict[str, Any]) -> AsyncIterator[Dict[str, Any]]:
+    async def execute_task_streaming(self, task: Dict[str, Any], context: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Execute a task with streaming tokens and tool calls.
 
@@ -518,23 +503,8 @@ class HybridAgent(BaseAIAgent):
                 }
                 return
 
-            # Extract images from task dict and merge into context
-            task_images = task.get("images")
-            if task_images:
-                # Merge images from task into context
-                # If context already has images, combine them
-                if "images" in context:
-                    existing_images = context["images"]
-                    if isinstance(existing_images, list) and isinstance(task_images, list):
-                        context["images"] = existing_images + task_images
-                    elif isinstance(existing_images, list):
-                        context["images"] = existing_images + [task_images]
-                    elif isinstance(task_images, list):
-                        context["images"] = [existing_images] + task_images
-                    else:
-                        context["images"] = [existing_images, task_images]
-                else:
-                    context["images"] = task_images
+            # Merge images from task payload into context (deduplicates merge logic).
+            self._merge_task_images(task, context)
 
             # Transition to busy state
             self._transition_state(self.state.__class__.BUSY)
@@ -620,7 +590,7 @@ class HybridAgent(BaseAIAgent):
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
-    async def process_message_streaming(self, message: str, sender_id: Optional[str] = None) -> AsyncIterator[str]:
+    async def process_message_streaming(self, message: str, sender_id: Optional[str] = None) -> AsyncGenerator[str, None]:
         """
         Process a message with streaming response.
 
@@ -653,7 +623,7 @@ class HybridAgent(BaseAIAgent):
             logger.error(f"Streaming message processing failed for {self.agent_id}: {e}")
             raise
 
-    async def _tool_loop_streaming(self, task: str, context: Dict[str, Any]) -> AsyncIterator[Dict[str, Any]]:
+    async def _tool_loop_streaming(self, task: str, context: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Execute tool loop with streaming (BetaToolRunner-style).
         Append-only messages; native tool_use/tool_result; no iteration labels.
@@ -778,24 +748,10 @@ class HybridAgent(BaseAIAgent):
                         func_name = tool_call["function"]["name"]
                         func_args = tool_call["function"]["arguments"]
 
-                        # Parse function name to extract tool and operation
-                        # CRITICAL: Try exact match first, then fall back to underscore parsing
-                        if self._tool_instances and func_name in self._tool_instances:
-                            # Exact match found - use full function name as tool name
-                            tool_name = func_name
-                            operation = None
-                        elif self._available_tools and func_name in self._available_tools:
-                            # Exact match in available tools list
-                            tool_name = func_name
-                            operation = None
-                        else:
-                            # Fallback: try underscore parsing for legacy compatibility
-                            parts = func_name.split("_", 1)
-                            if len(parts) == 2:
-                                tool_name, operation = parts
-                            else:
-                                tool_name = parts[0]
-                                operation = None
+                        # Resolve tool name and operation via shared helper.
+                        # Raises ValueError with a clear message if the name
+                        # cannot be matched even after the underscore-split fallback.
+                        tool_name, operation = self._parse_function_name(func_name)
 
                         # Parse arguments JSON
                         if isinstance(func_args, str):
@@ -1023,24 +979,10 @@ class HybridAgent(BaseAIAgent):
                         func_name = tool_call["function"]["name"]
                         func_args = tool_call["function"]["arguments"]
 
-                        # Parse function name to extract tool and operation
-                        # CRITICAL: Try exact match first, then fall back to underscore parsing
-                        if self._tool_instances and func_name in self._tool_instances:
-                            # Exact match found - use full function name as tool name
-                            tool_name = func_name
-                            operation = None
-                        elif self._available_tools and func_name in self._available_tools:
-                            # Exact match in available tools list
-                            tool_name = func_name
-                            operation = None
-                        else:
-                            # Fallback: try underscore parsing for legacy compatibility
-                            parts = func_name.split("_", 1)
-                            if len(parts) == 2:
-                                tool_name, operation = parts
-                            else:
-                                tool_name = parts[0]
-                                operation = None
+                        # Resolve tool name and operation via shared helper.
+                        # Raises ValueError with a clear message if the name
+                        # cannot be matched even after the underscore-split fallback.
+                        tool_name, operation = self._parse_function_name(func_name)
 
                         # Parse arguments JSON
                         if isinstance(func_args, str):
@@ -1171,14 +1113,23 @@ class HybridAgent(BaseAIAgent):
                     if isinstance(msg, dict) and "role" in msg and ("content" in msg or "tool_calls" in msg):
                         # Valid message format - add as separate message
                         # Extract optional fields
-                        msg_images = msg.get("images", [])
+                        _raw_images = msg.get("images")
+                        # Normalise: keep only non-None/non-empty image values so we
+                        # never end up passing [None] to LLMMessage when the key is
+                        # explicitly set to None in the history entry.
+                        if isinstance(_raw_images, list):
+                            msg_images: List[Any] = [img for img in _raw_images if img is not None]
+                        elif _raw_images is not None:
+                            msg_images = [_raw_images]
+                        else:
+                            msg_images = []
                         msg_tool_calls = msg.get("tool_calls")
                         msg_tool_call_id = msg.get("tool_call_id")
                         messages.append(
                             LLMMessage(
                                 role=msg["role"],
                                 content=msg.get("content"),
-                                images=msg_images if isinstance(msg_images, list) else [msg_images],
+                                images=msg_images,
                                 tool_calls=msg_tool_calls,
                                 tool_call_id=msg_tool_call_id,
                             )
@@ -1358,21 +1309,21 @@ class HybridAgent(BaseAIAgent):
             self._tool_schemas = ToolSchemaGenerator.generate_schemas_for_tool_instances(self._tool_instances)
             logger.info(f"HybridAgent {self.agent_id} generated {len(self._tool_schemas)} tool schemas")
         except Exception as e:
-            logger.warning(f"Failed to generate tool schemas: {e}")
-            self._tool_schemas = []
+            tool_names = list(self._tool_instances.keys())
+            raise RuntimeError(f"Failed to generate tool schemas for tools {tool_names}: {e}. " "Check that all tools have valid type annotations and docstrings.") from e
 
     def _check_function_calling_support(self) -> bool:
         """
-        Check if LLM client supports Function Calling.
-        When False with tools configured, agent fails at init or first tool use.
+        Check if the LLM client itself supports Function Calling.
+
+        This method is solely responsible for detecting LLM capability — it does
+        NOT check whether tools are configured. Tool availability is a separate
+        concern handled by callers via ``self._tool_instances`` / ``self._tool_schemas``
+        guards, keeping the two concerns cleanly separated.
 
         Returns:
-            True if Function Calling is supported, False otherwise
+            True if the LLM client supports Function Calling, False otherwise.
         """
-        # Check if we have tools and schemas
-        if not self._tool_instances or not self._tool_schemas:
-            return False
-
         # Check if LLM client supports Function Calling
         # OpenAI, xAI (OpenAI-compatible), Google Vertex AI, and some other providers support it
         provider_name = getattr(self.llm_client, "provider_name", "").lower()
@@ -1393,6 +1344,41 @@ class HybridAgent(BaseAIAgent):
             has_tools_param = False
 
         return provider_name in supported_providers or has_tools_param
+
+    def _parse_function_name(self, func_name: str) -> tuple:
+        """Parse a function name returned by the LLM into (tool_name, operation).
+
+        Tries an exact match against registered tool names first.  Only if that
+        fails does it fall back to splitting on the first underscore (legacy
+        ``tool_operation`` naming convention).  When the fallback candidate is
+        also not a known tool the method raises a :class:`ValueError` with an
+        actionable message so that callers see the real cause of the failure
+        rather than a cryptic "Tool X not loaded" error from ``_execute_tool``.
+        """
+        # Exact match has highest priority – handles tool names that contain
+        # underscores (e.g. "web_search" registered as a single tool).
+        if self._tool_instances and func_name in self._tool_instances:
+            return func_name, None
+        if self._available_tools and func_name in self._available_tools:
+            return func_name, None
+
+        # Fallback: split on the first underscore for legacy "tool_operation"
+        # naming (e.g. schema name "pandas_filter" → tool="pandas", op="filter").
+        parts = func_name.split("_", 1)
+        candidate_tool = parts[0]
+        candidate_op = parts[1] if len(parts) == 2 else None
+
+        known_tools: set = set(self._tool_instances or {}) | set(self._available_tools or [])
+        if known_tools and candidate_tool not in known_tools:
+            raise ValueError(
+                f"Cannot resolve function name '{func_name}' to a registered tool. "
+                f"Exact match failed, and the underscore-split fallback produced "
+                f"tool='{candidate_tool}' (operation='{candidate_op}') which is "
+                f"also not registered. Available tools: {sorted(known_tools)}. "
+                "Ensure the LLM is using a tool name that appears in the schema."
+            )
+
+        return candidate_tool, candidate_op
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "HybridAgent":

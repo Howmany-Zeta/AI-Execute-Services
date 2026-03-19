@@ -7,7 +7,7 @@ Supports LLM + Function Calling mode for intelligent tool selection and executio
 
 import json
 import logging
-from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING, AsyncIterator, cast
+from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING, AsyncGenerator, cast
 from datetime import datetime
 
 from aiecs.llm import BaseLLMClient, CacheControl, LLMMessage
@@ -322,12 +322,27 @@ class ToolAgent(BaseAIAgent):
             self._tool_schemas = ToolSchemaGenerator.generate_schemas_for_tool_instances(self._tool_instances)
             logger.info(f"ToolAgent {self.agent_id} generated {len(self._tool_schemas)} tool schemas")
         except Exception as e:
-            logger.warning(f"Failed to generate tool schemas: {e}. Function calling disabled.")
-            self._tool_schemas = []
+            tool_names = list(self._tool_instances.keys())
+            raise RuntimeError(f"Failed to generate tool schemas for tools {tool_names}: {e}. " "Check that all tools have valid type annotations and docstrings.") from e
 
     def _check_function_calling_support(self) -> bool:
-        """Check if LLM client supports Function Calling."""
-        if not self.llm_client or not self._tool_schemas:
+        """
+        Check if the LLM client itself supports Function Calling.
+
+        This method is solely responsible for detecting LLM capability — it does
+        NOT check whether tool schemas have been generated. Tool availability is
+        a separate concern; callers should guard with ``self._tool_schemas``
+        independently, keeping the two concerns cleanly separated.
+
+        Note: ToolAgent resolves LLM-mode eligibility inline in ``execute_task``
+        (``self.llm_client is not None and self._tool_schemas``). This helper
+        exists for explicit capability queries and potential subclass overrides.
+
+        Returns:
+            True if the LLM client supports Function Calling, False if no
+            client is configured or the client does not advertise support.
+        """
+        if not self.llm_client:
             return False
 
         import inspect
@@ -372,23 +387,8 @@ class ToolAgent(BaseAIAgent):
             use_llm_mode = self.llm_client is not None and self._tool_schemas and task_description and not task.get("tool")  # Not explicit tool specification
 
             if use_llm_mode:
-                # Extract images from task dict and merge into context
-                task_images = task.get("images")
-                if task_images:
-                    # Merge images from task into context
-                    # If context already has images, combine them
-                    if "images" in context:
-                        existing_images = context["images"]
-                        if isinstance(existing_images, list) and isinstance(task_images, list):
-                            context["images"] = existing_images + task_images
-                        elif isinstance(existing_images, list):
-                            context["images"] = existing_images + [task_images]
-                        elif isinstance(task_images, list):
-                            context["images"] = [existing_images] + task_images
-                        else:
-                            context["images"] = [existing_images, task_images]
-                    else:
-                        context["images"] = task_images
+                # Merge images from task payload into context (deduplicates merge logic).
+                self._merge_task_images(task, context)
 
                 # LLM-powered Function Calling mode
                 return await self._execute_with_llm(task, context, start_time)
@@ -579,18 +579,39 @@ class ToolAgent(BaseAIAgent):
         }
 
     def _parse_function_name(self, func_name: str) -> tuple:
-        """Parse function name to extract tool and operation."""
-        # Try exact match first
+        """Parse function name to extract tool and operation.
+
+        Tries an exact match against registered tool names first.  Only if that
+        fails does it fall back to splitting on the first underscore (legacy
+        ``tool_operation`` naming convention).  When the fallback candidate is
+        also not a known tool the method raises a :class:`ValueError` with an
+        actionable message so that callers see the real cause of the failure
+        rather than a cryptic "Tool X not loaded" error from ``_execute_tool``.
+        """
+        # Exact match has highest priority – handles tool names that contain
+        # underscores (e.g. "web_search" registered as a single tool).
         if self._tool_instances and func_name in self._tool_instances:
             return func_name, None
         if self._available_tools and func_name in self._available_tools:
             return func_name, None
 
-        # Fallback: underscore parsing
+        # Fallback: split on the first underscore for legacy "tool_operation"
+        # naming (e.g. schema name "pandas_filter" → tool="pandas", op="filter").
         parts = func_name.split("_", 1)
-        if len(parts) == 2:
-            return parts[0], parts[1]
-        return parts[0], None
+        candidate_tool = parts[0]
+        candidate_op = parts[1] if len(parts) == 2 else None
+
+        known_tools: set = set(self._tool_instances or {}) | set(self._available_tools or [])
+        if known_tools and candidate_tool not in known_tools:
+            raise ValueError(
+                f"Cannot resolve function name '{func_name}' to a registered tool. "
+                f"Exact match failed, and the underscore-split fallback produced "
+                f"tool='{candidate_tool}' (operation='{candidate_op}') which is "
+                f"also not registered. Available tools: {sorted(known_tools)}. "
+                "Ensure the LLM is using a tool name that appears in the schema."
+            )
+
+        return candidate_tool, candidate_op
 
     def _build_messages(self, user_message: str, context: Dict[str, Any]) -> List[LLMMessage]:
         """Build LLM messages for function calling.
@@ -740,7 +761,7 @@ class ToolAgent(BaseAIAgent):
             "available_tools": self._available_tools or [],
         }
 
-    async def execute_task_streaming(self, task: Dict[str, Any], context: Dict[str, Any]) -> AsyncIterator[Dict[str, Any]]:
+    async def execute_task_streaming(self, task: Dict[str, Any], context: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Execute a task with streaming tokens, tool calls, and tool results.
 
@@ -793,23 +814,8 @@ class ToolAgent(BaseAIAgent):
                 }
                 return
 
-            # Extract images from task dict and merge into context
-            task_images = task.get("images")
-            if task_images:
-                # Merge images from task into context
-                # If context already has images, combine them
-                if "images" in context:
-                    existing_images = context["images"]
-                    if isinstance(existing_images, list) and isinstance(task_images, list):
-                        context["images"] = existing_images + task_images
-                    elif isinstance(existing_images, list):
-                        context["images"] = existing_images + [task_images]
-                    elif isinstance(task_images, list):
-                        context["images"] = [existing_images] + task_images
-                    else:
-                        context["images"] = [existing_images, task_images]
-                else:
-                    context["images"] = task_images
+            # Merge images from task payload into context (deduplicates merge logic).
+            self._merge_task_images(task, context)
 
             # LLM streaming mode
             async for event in self._execute_with_llm_streaming(task, context, start_time):
@@ -828,7 +834,7 @@ class ToolAgent(BaseAIAgent):
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
-    async def _execute_with_llm_streaming(self, task: Dict[str, Any], context: Dict[str, Any], start_time: datetime) -> AsyncIterator[Dict[str, Any]]:
+    async def _execute_with_llm_streaming(self, task: Dict[str, Any], context: Dict[str, Any], start_time: datetime) -> AsyncGenerator[Dict[str, Any], None]:
         """Execute task using LLM Function Calling with streaming."""
         task_description = self._extract_task_description(task)
         tool_calls_count = 0
@@ -1009,7 +1015,7 @@ class ToolAgent(BaseAIAgent):
             "timestamp": datetime.utcnow().isoformat(),
         }
 
-    async def process_message_streaming(self, message: str, sender_id: Optional[str] = None) -> AsyncIterator[str]:
+    async def process_message_streaming(self, message: str, sender_id: Optional[str] = None) -> AsyncGenerator[str, None]:
         """
         Process a message with streaming response.
 
