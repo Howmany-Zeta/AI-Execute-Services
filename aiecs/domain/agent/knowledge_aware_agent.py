@@ -7,7 +7,7 @@ Extends the standard HybridAgent with graph reasoning capabilities.
 
 import logging
 import time
-from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING, Callable, Awaitable, AsyncIterator
+from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING, Callable, Awaitable, AsyncGenerator
 from datetime import datetime
 
 from aiecs.llm import BaseLLMClient
@@ -626,7 +626,7 @@ Use graph reasoning proactively when questions involve:
 
         return await super().execute_task(augmented_task, context)
 
-    async def execute_task_streaming(self, task: Dict[str, Any], context: Dict[str, Any]) -> AsyncIterator[Dict[str, Any]]:
+    async def execute_task_streaming(self, task: Dict[str, Any], context: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Execute task with streaming knowledge graph events.
 
@@ -686,7 +686,7 @@ Use graph reasoning proactively when questions involve:
 
         return await super()._tool_loop(augmented_task, context)
 
-    async def _tool_loop_streaming(self, task: str, context: Dict[str, Any]) -> AsyncIterator[Dict[str, Any]]:
+    async def _tool_loop_streaming(self, task: str, context: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Execute knowledge-augmented tool loop with streaming: RETRIEVE once, then delegate to parent.
         """

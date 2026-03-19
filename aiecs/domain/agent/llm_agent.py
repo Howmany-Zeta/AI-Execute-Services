@@ -5,7 +5,7 @@ Agent implementation powered by LLM for text generation and reasoning.
 """
 
 import logging
-from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING, AsyncIterator
+from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING, AsyncGenerator
 from datetime import datetime
 
 from aiecs.llm import BaseLLMClient, CacheControl, LLMMessage
@@ -438,7 +438,7 @@ class LLMAgent(BaseAIAgent):
             logger.error(f"Message processing failed for {self.agent_id}: {e}")
             raise
 
-    async def execute_task_streaming(self, task: Dict[str, Any], context: Dict[str, Any]) -> AsyncIterator[Dict[str, Any]]:
+    async def execute_task_streaming(self, task: Dict[str, Any], context: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Execute a task with streaming LLM tokens.
 
@@ -551,7 +551,7 @@ class LLMAgent(BaseAIAgent):
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
-    async def process_message_streaming(self, message: str, sender_id: Optional[str] = None) -> AsyncIterator[str]:
+    async def process_message_streaming(self, message: str, sender_id: Optional[str] = None) -> AsyncGenerator[str, None]:
         """
         Process a message with streaming response.
 

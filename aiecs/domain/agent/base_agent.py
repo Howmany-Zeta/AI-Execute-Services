@@ -6,7 +6,7 @@ Abstract base class for all AI agents in the AIECS system.
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Callable, Union, TYPE_CHECKING, AsyncIterator, Set, cast
+from typing import Dict, List, Any, Optional, Callable, Union, TYPE_CHECKING, AsyncGenerator, Set, cast
 from dataclasses import dataclass
 import logging
 import time
@@ -1222,16 +1222,13 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         """
         from aiecs.tools import get_tool
 
-        # First, call _load_tools to process the tools input
+        # Process tools input: sets _tool_instances (dict) or _available_tools (list)
         self._load_tools()
 
-        # Get tool instances from BaseAIAgent (if provided as instances)
-        base_tool_instances = self._get_tool_instances()
-
-        if base_tool_instances:
-            # Tool instances were provided - use them directly
-            logger.debug(f"Agent {self.agent_id}: Using {len(base_tool_instances)} " "pre-configured tool instances")
-            return base_tool_instances
+        # Dict case: _load_tools() already populated _tool_instances directly
+        if self._tool_instances:
+            logger.debug(f"Agent {self.agent_id}: Using {len(self._tool_instances)} pre-configured tool instances")
+            return self._tool_instances
 
         # Tool names were provided - load them
         tool_instances: Dict[str, "BaseTool"] = {}
@@ -2787,9 +2784,38 @@ class BaseAIAgent(SkillCapableMixin, ABC):
 
             logger.debug(f"Cleaned up {entries_to_remove} cache entries (size limit)")
 
+    # ==================== Image Helpers ====================
+
+    @staticmethod
+    def _merge_task_images(task: Dict[str, Any], context: Dict[str, Any]) -> None:
+        """Merge images from *task* dict into *context*, normalising to a flat list.
+
+        Images may be provided in two places:
+        * ``task["images"]`` – attached directly to the task payload.
+        * ``context["images"]`` – passed by the caller as part of the execution
+          context (e.g. a previous multimodal message).
+
+        Both sources are merged into ``context["images"]`` so that
+        ``_build_initial_messages`` (and equivalent methods in sub-classes) has a
+        single, canonical location to read images from.  Scalar values are promoted
+        to single-element lists so that downstream code can always iterate safely.
+        """
+        task_images = task.get("images")
+        if not task_images:
+            return
+
+        task_list: List[Any] = task_images if isinstance(task_images, list) else [task_images]
+
+        existing = context.get("images")
+        if existing is None:
+            context["images"] = task_list
+        else:
+            existing_list: List[Any] = existing if isinstance(existing, list) else [existing]
+            context["images"] = existing_list + task_list
+
     # ==================== Streaming Support (Phase 7 - Tasks 1.15.11-1.15.12) ====================
 
-    async def execute_task_streaming(self, task: Dict[str, Any], context: Dict[str, Any]) -> AsyncIterator[Dict[str, Any]]:
+    async def execute_task_streaming(self, task: Dict[str, Any], context: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Execute a task with streaming results.
 
@@ -2845,7 +2871,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
             }
             raise
 
-    async def process_message_streaming(self, message: str, sender_id: Optional[str] = None) -> AsyncIterator[str]:
+    async def process_message_streaming(self, message: str, sender_id: Optional[str] = None) -> AsyncGenerator[str, None]:
         """
         Process a message with streaming response.
 
