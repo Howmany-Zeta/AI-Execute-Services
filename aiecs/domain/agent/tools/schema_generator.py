@@ -67,8 +67,15 @@ class ToolSchemaGenerator:
 
         # Try to get Pydantic schema from BaseTool first
         schema_class = None
-        if isinstance(tool, BaseTool) and hasattr(tool, "_schemas") and operation is not None:
-            schema_class = tool._schemas.get(operation)
+        if isinstance(tool, BaseTool) and hasattr(tool, "_schemas"):
+            if operation is not None:
+                schema_class = tool._schemas.get(operation)
+            else:
+                # op=None: try canonical key "run" for tools using the RunSchema
+                # pattern (WriteFileTool, WebSearchTool, etc.).
+                # Note: None is never stored as a key in _schemas (all keys are
+                # method-name strings), so .get(None) was dead code and is removed.
+                schema_class = tool._schemas.get("run")
 
         # Extract parameters - prefer Pydantic schema if available
         if schema_class:
@@ -105,6 +112,13 @@ class ToolSchemaGenerator:
         for param_name, param in sig.parameters.items():
             # Skip 'self' and 'op' parameters
             if param_name in ["self", "op", "cls"]:
+                continue
+
+            # Skip *args and **kwargs - they carry no useful type/name info for LLM schemas
+            if param.kind in (
+                inspect.Parameter.VAR_KEYWORD,
+                inspect.Parameter.VAR_POSITIONAL,
+            ):
                 continue
 
             param_schema = ToolSchemaGenerator._param_to_schema(param_name, param)
@@ -182,6 +196,13 @@ class ToolSchemaGenerator:
         for param_name, param in sig.parameters.items():
             # Skip 'self' and 'op' parameters
             if param_name in ["self", "op", "cls"]:
+                continue
+
+            # Skip *args and **kwargs - VAR_KEYWORD/VAR_POSITIONAL are never individually required
+            if param.kind in (
+                inspect.Parameter.VAR_KEYWORD,
+                inspect.Parameter.VAR_POSITIONAL,
+            ):
                 continue
 
             # Required if no default value
@@ -330,8 +351,13 @@ class ToolSchemaGenerator:
 
                     # Try to get Pydantic schema from BaseTool
                     schema_class = None
-                    if hasattr(tool, "_schemas") and op is not None:
-                        schema_class = tool._schemas.get(op)
+                    if hasattr(tool, "_schemas"):
+                        if op is not None:
+                            schema_class = tool._schemas.get(op)
+                        else:
+                            # op=None: try canonical key "run" for tools using the
+                            # RunSchema pattern. None is never a stored key in _schemas.
+                            schema_class = tool._schemas.get("run")
 
                     # Extract parameters
                     if schema_class:
