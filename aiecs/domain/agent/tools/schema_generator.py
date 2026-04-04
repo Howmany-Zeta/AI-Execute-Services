@@ -6,7 +6,7 @@ Generate OpenAI-style function schemas from AIECS tools.
 
 import inspect
 import logging
-from typing import Dict, Any, List, Optional, Type, Tuple
+from typing import Dict, Any, List, Optional, Type, Tuple, Union, get_args
 from pydantic import BaseModel
 from aiecs.tools import get_tool, BaseTool
 
@@ -176,12 +176,18 @@ class ToolSchemaGenerator:
         elif type_hint == bool:
             return {"type": "boolean"}
         elif hasattr(type_hint, "__origin__"):
-            # Generic types (List, Dict, etc.)
+            # Generic types (List, Dict, Optional, Union, etc.)
             origin = type_hint.__origin__
             if origin == list:
                 return {"type": "array"}
             elif origin == dict:
                 return {"type": "object"}
+            elif origin is Union:
+                # Handle Optional[X] = Union[X, None] by unwrapping to X
+                non_none = [a for a in get_args(type_hint) if a is not type(None)]
+                if len(non_none) == 1:
+                    return ToolSchemaGenerator._type_to_schema(non_none[0])
+                return {"type": "string"}
             else:
                 return {"type": "string"}
         else:
@@ -358,6 +364,22 @@ class ToolSchemaGenerator:
                             # op=None: try canonical key "run" for tools using the
                             # RunSchema pattern. None is never a stored key in _schemas.
                             schema_class = tool._schemas.get("run")
+
+                    # Fallback: use tool.parameters if it provides an authoritative
+                    # JSON Schema (e.g. TaskListManagerTool which deliberately avoids
+                    # registering "run" in _schemas to bypass the broken _type_to_schema
+                    # Optional/Union path).
+                    if schema_class is None and hasattr(tool, "parameters"):
+                        raw = tool.parameters
+                        if isinstance(raw, dict) and raw.get("properties"):
+                            description = getattr(tool, "description", None) or f"{tool_name} tool"
+                            schema = {
+                                "name": function_name,
+                                "description": description,
+                                "parameters": raw,
+                            }
+                            schemas.append(schema)
+                            continue
 
                     # Extract parameters
                     if schema_class:

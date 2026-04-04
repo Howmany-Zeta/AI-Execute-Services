@@ -15,6 +15,25 @@ from .base_client import LLMMessage, LLMResponse
 
 logger = logging.getLogger(__name__)
 
+# JSON Schema keywords that the Google genai SDK's Schema type does not support.
+# The SDK coerces raw parameter dicts to Schema objects via pydantic; unknown
+# keywords cause validation errors or silent misbehaviour at call time.
+_GOOGLE_SCHEMA_UNSUPPORTED_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "oneOf",  # schema composition – not in Google Schema
+        "anyOf",  # schema composition – not in Google Schema
+        "allOf",  # schema composition – not in Google Schema
+        "not",  # schema negation   – not in Google Schema
+        "if",  # conditional       – not in Google Schema
+        "then",  # conditional       – not in Google Schema
+        "else",  # conditional       – not in Google Schema
+        "examples",  # annotation      – not in Google Schema
+        "$schema",  # meta-schema     – not in Google Schema
+        "$defs",  # definitions     – not in Google Schema
+        "$ref",  # references      – not in Google Schema
+    }
+)
+
 # Finish-reason values that indicate the response was blocked / filtered.
 # Mirrors the constant in vertex_client.py and covers all blocking values
 # introduced in the google-genai SDK beyond the original {SAFETY, RECITATION}.
@@ -97,6 +116,40 @@ class GoogleFunctionCallingMixin:
         """Provided by BaseLLMClient; declared here for mypy's benefit."""
         raise NotImplementedError  # pragma: no cover
 
+    @staticmethod
+    def _sanitize_parameters_for_google(schema: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Recursively strip JSON Schema keywords unsupported by Google's Schema type.
+
+        Google's genai SDK coerces raw parameter dicts to Schema objects via
+        pydantic.  Fields such as ``oneOf``, ``examples``, ``$schema``, etc. are
+        not part of Google's Schema model and cause validation errors or silent
+        misbehaviour when the FunctionDeclaration is sent to the API.
+
+        This method walks the full schema tree (``properties``, ``items``,
+        nested dicts) so that unsupported keywords are removed at every level.
+
+        Args:
+            schema: Raw JSON Schema dict, potentially containing unsupported keywords.
+
+        Returns:
+            A new dict with all unsupported keywords removed recursively.
+        """
+        if not isinstance(schema, dict):
+            return schema
+
+        cleaned: Dict[str, Any] = {}
+        for key, value in schema.items():
+            if key in _GOOGLE_SCHEMA_UNSUPPORTED_KEYWORDS:
+                continue
+            if key == "properties" and isinstance(value, dict):
+                cleaned[key] = {prop: GoogleFunctionCallingMixin._sanitize_parameters_for_google(prop_schema) for prop, prop_schema in value.items()}
+            elif key == "items" and isinstance(value, dict):
+                cleaned[key] = GoogleFunctionCallingMixin._sanitize_parameters_for_google(value)
+            else:
+                cleaned[key] = value
+        return cleaned
+
     def _convert_openai_to_google_format(self, tools: List[Dict[str, Any]]) -> List[types.Tool]:
         """
         Convert OpenAI tools format to Google FunctionDeclaration format.
@@ -120,12 +173,19 @@ class GoogleFunctionCallingMixin:
                 logger.warning(f"Skipping tool without name: {tool_dict}")
                 continue
 
-            # Create FunctionDeclaration with raw dict parameters
-            # The new SDK coerces dict → Schema via pydantic automatically
+            # Strip JSON Schema keywords unsupported by Google's Schema type
+            # (oneOf, examples, $schema, etc.) before constructing the Schema object.
+            clean_params = self._sanitize_parameters_for_google(func_parameters)
+
+            # Explicitly construct a Schema object so mypy (and the SDK's own
+            # pydantic validation) is satisfied — FunctionDeclaration.parameters
+            # expects Schema | None, not a raw dict.
+            parameters: Optional[types.Schema] = types.Schema.model_validate(clean_params) if clean_params else None
+
             function_declaration = types.FunctionDeclaration(
                 name=func_name,
                 description=func_description,
-                parameters=func_parameters,
+                parameters=parameters,
             )
 
             function_declarations.append(function_declaration)
