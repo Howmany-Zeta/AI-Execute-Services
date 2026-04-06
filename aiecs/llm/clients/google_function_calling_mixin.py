@@ -62,6 +62,7 @@ except ImportError:
         content: Optional[str] = None
         tool_call: Optional[Dict[str, Any]] = None
         tool_calls: Optional[List[Dict[str, Any]]] = None
+        usage: Optional[Dict[str, Any]] = None
 
 
 def _serialize_function_args(args) -> str:
@@ -361,6 +362,8 @@ class GoogleFunctionCallingMixin:
         tool_calls_accumulator: Dict[str, Dict[str, Any]] = {}
 
         first_chunk_checked = False
+        # Track the last seen usage_metadata; the final chunk carries exact counts.
+        last_usage_metadata: Optional[Any] = None
 
         async for chunk in await client.aio.models.generate_content_stream(
             model=model_name,
@@ -381,6 +384,11 @@ class GoogleFunctionCallingMixin:
                             block_type="prompt",
                         )
                 first_chunk_checked = True
+
+            # Capture usage_metadata from every chunk; the final chunk carries
+            # the accurate prompt_token_count / candidates_token_count values.
+            if hasattr(chunk, "usage_metadata") and chunk.usage_metadata is not None:
+                last_usage_metadata = chunk.usage_metadata
 
             # Extract text content and function calls
             if hasattr(chunk, "candidates") and chunk.candidates:
@@ -469,3 +477,19 @@ class GoogleFunctionCallingMixin:
                 type="tool_calls",
                 tool_calls=complete_tool_calls,
             )
+
+        # Yield token-usage statistics captured from the final chunk's usage_metadata.
+        # The Vertex AI streaming API delivers accurate prompt_token_count and
+        # candidates_token_count only on the last chunk; emitting them here lets
+        # callers record real (not estimated) billing/observability numbers.
+        if last_usage_metadata is not None and return_chunks:
+            usage: Dict[str, Any] = {
+                "prompt_tokens": getattr(last_usage_metadata, "prompt_token_count", 0) or 0,
+                "completion_tokens": getattr(last_usage_metadata, "candidates_token_count", 0) or 0,
+                "total_tokens": getattr(last_usage_metadata, "total_token_count", 0) or 0,
+            }
+            # Include cached-content token count when prompt caching was active.
+            cached_tokens = getattr(last_usage_metadata, "cached_content_token_count", None)
+            if cached_tokens is not None:
+                usage["cache_read_tokens"] = cached_tokens
+            yield StreamChunk(type="usage", usage=usage)

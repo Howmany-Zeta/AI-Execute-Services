@@ -24,10 +24,11 @@ class StreamChunk:
     Can contain either a text token or tool call information.
     """
 
-    type: str  # "token" or "tool_call"
+    type: str  # "token", "tool_call", "tool_calls", or "usage"
     content: Optional[str] = None  # Text token content
     tool_call: Optional[Dict[str, Any]] = None  # Tool call information
     tool_calls: Optional[List[Dict[str, Any]]] = None  # Complete tool calls (when stream ends)
+    usage: Optional[Dict[str, Any]] = None  # Token usage metadata (when type="usage")
 
 
 class OpenAICompatibleFunctionCallingMixin:
