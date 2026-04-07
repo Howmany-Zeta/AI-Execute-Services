@@ -80,9 +80,9 @@ class ToolSchemaGenerator:
         # Extract parameters - prefer Pydantic schema if available
         if schema_class:
             parameters, required = ToolSchemaGenerator._extract_from_pydantic_schema(schema_class)
-            # Get description from schema class docstring or method docstring
+            # Prefer tool.description (full text); fall back to schema/method docstring
             if not description:
-                description = ToolSchemaGenerator._get_description(schema_class, method)
+                description = ToolSchemaGenerator._get_description(schema_class, method, tool)
         else:
             # Fallback to method signature inspection
             parameters = ToolSchemaGenerator._extract_parameters(method)
@@ -179,6 +179,10 @@ class ToolSchemaGenerator:
             # Generic types (List, Dict, Optional, Union, etc.)
             origin = type_hint.__origin__
             if origin == list:
+                args = get_args(type_hint)
+                if args:
+                    item_schema = ToolSchemaGenerator._type_to_schema(args[0])
+                    return {"type": "array", "items": item_schema}
                 return {"type": "array"}
             elif origin == dict:
                 return {"type": "object"}
@@ -191,6 +195,16 @@ class ToolSchemaGenerator:
             else:
                 return {"type": "string"}
         else:
+            # Handle BaseModel subclasses → emit inline object schema
+            try:
+                if isinstance(type_hint, type) and issubclass(type_hint, BaseModel):
+                    nested_props, nested_req = ToolSchemaGenerator._extract_from_pydantic_schema(type_hint)
+                    nested_schema: Dict[str, Any] = {"type": "object", "properties": nested_props}
+                    if nested_req:
+                        nested_schema["required"] = nested_req
+                    return nested_schema
+            except Exception:
+                pass
             return {"type": "string"}
 
     @staticmethod
@@ -270,12 +284,28 @@ class ToolSchemaGenerator:
         return properties, required
 
     @staticmethod
-    def _get_description(schema_class: Optional[Type[BaseModel]], method) -> Optional[str]:
-        """Get description from schema class docstring or method docstring."""
+    def _get_description(
+        schema_class: Optional[Type[BaseModel]],
+        method,
+        tool: Optional[object] = None,
+    ) -> Optional[str]:
+        """Get description, preferring tool.description over schema/method docstrings.
+
+        Priority order:
+          1. tool.description  – authoritative full description set by the tool author
+          2. schema_class docstring first line – concise fallback from the Pydantic schema
+          3. method docstring first line       – last-resort fallback
+        """
+        # 1. Tool's own description property (may contain rich parameter guidance)
+        if tool is not None:
+            tool_desc = getattr(tool, "description", None)
+            if tool_desc:
+                return str(tool_desc)
+        # 2. Schema class docstring (first line)
         if schema_class and schema_class.__doc__:
             return schema_class.__doc__.strip().split("\n")[0]
+        # 3. Method docstring (first line)
         if method and method.__doc__:
-            # Extract first line of docstring
             doc_lines = method.__doc__.strip().split("\n")
             if doc_lines:
                 return str(doc_lines[0])
@@ -384,7 +414,8 @@ class ToolSchemaGenerator:
                     # Extract parameters
                     if schema_class:
                         parameters, required = ToolSchemaGenerator._extract_from_pydantic_schema(schema_class)
-                        description = ToolSchemaGenerator._get_description(schema_class, method)
+                        # Prefer tool.description (full text); fall back to schema/method docstring
+                        description = ToolSchemaGenerator._get_description(schema_class, method, tool)
                     else:
                         parameters = ToolSchemaGenerator._extract_parameters(method)
                         required = ToolSchemaGenerator._get_required_params(method)
