@@ -810,11 +810,17 @@ class HybridAgent(BaseAIAgent):
 
                         # Add tool result to messages (for LLM consumption)
                         # Only add the tool result message, assistant message already added above
+                        # Extract inline image data if the tool returned _image_b64 / _image_media_type
+                        tool_images: List[Union[str, Dict[str, Any]]] = []
+                        if isinstance(tool_result, dict) and tool_result.get("_image_b64"):
+                            media_type = tool_result.get("_image_media_type", "image/png")
+                            tool_images = [f"data:{media_type};base64,{tool_result['_image_b64']}"]
                         messages.append(
                             LLMMessage(
                                 role="tool",
                                 content=json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result),
                                 tool_call_id=tool_call_id,
+                                images=tool_images,
                             )
                         )
 
@@ -1020,11 +1026,17 @@ class HybridAgent(BaseAIAgent):
 
                         # Add tool result to messages (for LLM consumption)
                         # Only add the tool result message, assistant message already added above
+                        # Extract inline image data if the tool returned _image_b64 / _image_media_type
+                        tool_images_sync: List[Union[str, Dict[str, Any]]] = []
+                        if isinstance(tool_result, dict) and tool_result.get("_image_b64"):
+                            media_type = tool_result.get("_image_media_type", "image/png")
+                            tool_images_sync = [f"data:{media_type};base64,{tool_result['_image_b64']}"]
                         messages.append(
                             LLMMessage(
                                 role="tool",
                                 content=json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result),
                                 tool_call_id=tool_call_id,
+                                images=tool_images_sync,
                             )
                         )
 

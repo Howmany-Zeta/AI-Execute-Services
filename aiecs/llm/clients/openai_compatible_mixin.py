@@ -98,8 +98,10 @@ class OpenAICompatibleFunctionCallingMixin:
         for msg in other_messages:
             msg_dict: Dict[str, Any] = {"role": msg.role}
 
-            # Handle multimodal content (text + images)
-            if msg.images:
+            # Handle multimodal content (text + images).
+            # OpenAI protocol does not support image content in tool-role messages;
+            # silently skip images for tool messages to avoid API errors.
+            if msg.images and msg.role != "tool":
                 # Build content array with text and images
                 content_array: List[Dict[str, Any]] = []
 

@@ -78,7 +78,25 @@ class GoogleAIClient(BaseLLMClient):
                 # Create FunctionResponse part
                 func_response_part = types.Part.from_function_response(name=func_name, response=response_data)
 
-                contents.append(types.Content(role="user", parts=[func_response_part]))  # Function responses are sent as "user" role
+                # Build parts list: FunctionResponse first, then any inline images from the tool result.
+                tool_parts = [func_response_part]
+                if msg.images:
+                    for image_source in msg.images:
+                        image_content = parse_image_source(image_source)
+                        if image_content.is_url():
+                            try:
+                                import urllib.request
+
+                                with urllib.request.urlopen(image_content.get_url()) as resp:
+                                    image_bytes = resp.read()
+                                tool_parts.append(types.Part.from_bytes(data=image_bytes, mime_type=image_content.mime_type))
+                            except Exception as e:
+                                logger.warning(f"Failed to download tool image from URL: {e}")
+                        else:
+                            image_bytes = base64.b64decode(image_content.get_base64_data())
+                            tool_parts.append(types.Part.from_bytes(data=image_bytes, mime_type=image_content.mime_type))
+
+                contents.append(types.Content(role="user", parts=tool_parts))  # Function responses are sent as "user" role
 
             # Handle assistant messages with tool calls
             elif msg.role == "assistant" and msg.tool_calls:
