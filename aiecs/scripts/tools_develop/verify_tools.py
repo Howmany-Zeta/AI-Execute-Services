@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /*---------------------------------------------------------------------------------------------
+#  *  Copyright (c) IRETBL Corporation. All rights reserved.
+#  *  Licensed under the Apache-2.0. See License.txt in the project root for license information.
+#  *--------------------------------------------------------------------------------------------*/
 """
 快速验证脚本：展示 aiecs.tools 注册的所有工具和功能
 

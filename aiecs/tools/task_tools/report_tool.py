@@ -1,3 +1,7 @@
+# /*---------------------------------------------------------------------------------------------
+#  *  Copyright (c) IRETBL Corporation. All rights reserved.
+#  *  Licensed under the Apache-2.0. See License.txt in the project root for license information.
+#  *--------------------------------------------------------------------------------------------*/
 """
 Report Tool - A multi-format report generation tool supporting HTML, PDF, Excel, PowerPoint, Markdown, Word, and image-based reports.
 

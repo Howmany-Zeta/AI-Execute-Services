@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /*---------------------------------------------------------------------------------------------
+#  *  Copyright (c) IRETBL Corporation. All rights reserved.
+#  *  Licensed under the Apache-2.0. See License.txt in the project root for license information.
+#  *--------------------------------------------------------------------------------------------*/
 """
 FastAPI 集成模式示例
 展示如何将 AIECS 功能集成到现有的 FastAPI 应用中

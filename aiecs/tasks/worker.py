@@ -1,3 +1,7 @@
+# /*---------------------------------------------------------------------------------------------
+#  *  Copyright (c) IRETBL Corporation. All rights reserved.
+#  *  Licensed under the Apache-2.0. See License.txt in the project root for license information.
+#  *--------------------------------------------------------------------------------------------*/
 from aiecs.domain.execution.model import TaskStatus
 from celery import Celery
 from aiecs.config.config import get_settings
