@@ -465,6 +465,26 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 # Accumulate – do NOT append a new Content yet.
                 pending_tool_parts.append(func_response_part)
 
+                # Append any inline images returned by the tool alongside the FunctionResponse.
+                if msg.images:
+                    for image_source in msg.images:
+                        image_content = parse_image_source(image_source)
+                        if image_content.is_url():
+                            pending_tool_parts.append(
+                                types.Part.from_uri(
+                                    file_uri=image_content.get_url(),
+                                    mime_type=image_content.mime_type,
+                                )
+                            )
+                        else:
+                            image_bytes = base64.b64decode(image_content.get_base64_data())
+                            pending_tool_parts.append(
+                                types.Part.from_bytes(
+                                    data=image_bytes,
+                                    mime_type=image_content.mime_type,
+                                )
+                            )
+
             # ------------------------------------------------------------------
             # Assistant messages that carry tool / function calls
             # ------------------------------------------------------------------
