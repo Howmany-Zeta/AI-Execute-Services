@@ -539,7 +539,7 @@ Use graph reasoning proactively when questions involve:
                         self.created_at = None
                         if data.get("timestamp"):
                             try:
-                                from dateutil import parser  # type: ignore[import-untyped]
+                                from dateutil import parser
 
                                 self.created_at = parser.parse(data["timestamp"])
                             except Exception:
