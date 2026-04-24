@@ -3,6 +3,24 @@
 # Run manually: poetry run pre-commit run --all-files
 
 repos:
+  # -------------------------------------------------------------------------
+  # insert-license — copyright header compliance
+  # Inserts / verifies the IRETBL license header in every Python source file
+  # under aiecs/ and examples/. Uses # comment style so output is valid Python.
+  # -------------------------------------------------------------------------
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.5.6
+    hooks:
+      - id: insert-license
+        name: insert-license (copyright header)
+        files: '^(aiecs|examples)/.*\.py$'
+        args:
+          - --license-filepath
+          - LICENSE_HEADER.txt
+          - --comment-style
+          - "#"
+          - --no-extra-eol
+
   - repo: local
     hooks:
       # -----------------------------------------------------------------------

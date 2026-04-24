@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /*---------------------------------------------------------------------------------------------
+#  *  Copyright (c) IRETBL Corporation. All rights reserved.
+#  *  Licensed under the Apache-2.0. See License.txt in the project root for license information.
+#  *--------------------------------------------------------------------------------------------*/
 """
 运行时测试：验证所有工具的配置加载是否正确
 
