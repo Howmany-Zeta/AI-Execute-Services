@@ -28,7 +28,7 @@ packages = [{include = "aiecs"}]
 
 [project]
 name = "aiecs"
-version = "1.10.11"
+version = "1.10.12"
 description = "AI Execute Services - A middleware framework for AI-powered task execution and tool orchestration"
 authors = [
     {name = "AIECS Team", email = "iretbl@gmail.com"}
@@ -314,5 +314,6 @@ exclude = [
 
 [dependency-groups]
 dev = [
-    "pre-commit (>=4.5.1,<5.0.0)"
+    "pre-commit (>=4.5.1,<5.0.0)",
+    "types-python-dateutil (>=2.9.0.20260408,<3.0.0.0)"
 ]

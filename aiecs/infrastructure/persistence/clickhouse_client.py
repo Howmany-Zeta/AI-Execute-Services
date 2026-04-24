@@ -17,7 +17,7 @@ try:
 
     CLICKHOUSE_AVAILABLE = True
 except ImportError:
-    clickhouse_connect = None  # type: ignore[assignment]
+    clickhouse_connect = None
     CLICKHOUSE_AVAILABLE = False
 
 
