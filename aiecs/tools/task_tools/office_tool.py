@@ -1,3 +1,7 @@
+# /*---------------------------------------------------------------------------------------------
+#  *  Copyright (c) IRETBL Corporation. All rights reserved.
+#  *  Licensed under the Apache-2.0. See License.txt in the project root for license information.
+#  *--------------------------------------------------------------------------------------------*/
 from aiecs.tools import register_tool
 from aiecs.tools.base_tool import BaseTool
 from pydantic import BaseModel, field_validator, Field
