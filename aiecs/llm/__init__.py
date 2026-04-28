@@ -28,6 +28,7 @@ from .clients import (
     VertexAIClient,
     GoogleAIClient,
     XAIClient,
+    AnthropicVertexClient,
 )
 
 from .protocols import LLMClientProtocol
@@ -83,6 +84,7 @@ __all__ = [
     "VertexAIClient",
     "GoogleAIClient",
     "XAIClient",
+    "AnthropicVertexClient",
     # Convenience functions
     "generate_text",
     "stream_text",
