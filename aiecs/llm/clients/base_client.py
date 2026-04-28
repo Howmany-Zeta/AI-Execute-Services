@@ -72,6 +72,8 @@ class LLMResponse:
         cache_creation_tokens: Tokens used to create a new cache entry
         cache_read_tokens: Tokens read from cache (indicates cache hit)
         cache_hit: Whether the request hit a cached prompt prefix
+        thinking_tokens: Tokens consumed by extended thinking / reasoning
+            (e.g. Vertex AI thinking models, OpenAI o-series reasoning models)
     """
 
     content: str
@@ -87,6 +89,8 @@ class LLMResponse:
     cache_creation_tokens: Optional[int] = None
     cache_read_tokens: Optional[int] = None
     cache_hit: Optional[bool] = None
+    # Extended thinking / reasoning token usage
+    thinking_tokens: Optional[int] = None
 
     def __post_init__(self):
         """Ensure consistency of token data"""

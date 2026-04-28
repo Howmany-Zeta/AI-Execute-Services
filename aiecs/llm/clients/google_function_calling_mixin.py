@@ -496,4 +496,8 @@ class GoogleFunctionCallingMixin:
             cached_tokens = getattr(last_usage_metadata, "cached_content_token_count", None)
             if cached_tokens is not None:
                 usage["cache_read_tokens"] = cached_tokens
+            # Include thinking-token count for Gemini Thinking models.
+            thinking_tokens = getattr(last_usage_metadata, "thinking_token_count", None)
+            if thinking_tokens is not None:
+                usage["thinking_tokens"] = thinking_tokens
             yield StreamChunk(type="usage", usage=usage)

@@ -337,11 +337,12 @@ async def test_tool_agent_streaming_with_tool_calls(calculator_tool, agent_confi
     ):
         events.append(event)
 
-    # Verify events
+    # Verify events — ToolAgent emits the lifecycle/streaming event types
+    # documented on `ToolAgent.execute_task_streaming` (see tool_agent.py).
     event_types = [e["type"] for e in events]
-    assert "status" in event_types
+    assert "started" in event_types
     assert "token" in event_types
-    assert "tool_calls" in event_types
+    assert "tool_calls_ready" in event_types
     assert "tool_call" in event_types
     assert "tool_result" in event_types
     assert "result" in event_types

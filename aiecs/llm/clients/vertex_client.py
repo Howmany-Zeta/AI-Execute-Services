@@ -733,6 +733,12 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                     ),
                 ]
 
+            # Extended thinking / reasoning support for Gemini Thinking models
+            # (gemini-2.5-pro, gemini-2.0-flash-thinking-exp, ...). When unset,
+            # GenerateContentConfig.thinking_config defaults to None and behaviour
+            # is unchanged.
+            thinking_config = kwargs.pop("thinking_config", None)
+
             # Build unified GenerateContentConfig.
             # When cached_content is set, system_instruction and tools must be omitted
             # because they are already baked into the cached content object.
@@ -745,6 +751,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 tools=tools_for_api if not cached_content_id else None,  # type: ignore[arg-type]
                 cached_content=cached_content_id,
                 safety_settings=safety_settings,
+                thinking_config=thinking_config,
             )
 
             if cached_content_id:
@@ -773,6 +780,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                         tools=tools_for_api,  # type: ignore[arg-type]
                         cached_content=None,
                         safety_settings=config.safety_settings,
+                        thinking_config=config.thinking_config,
                     )
                     response = await client.aio.models.generate_content(
                         model=model_name,
@@ -973,14 +981,17 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 completion_tokens = self._count_tokens_estimate(content or "")
                 tokens_used = prompt_tokens + completion_tokens
 
-            # Extract cache metadata from response
+            # Extract cache metadata and thinking-token usage from response
             cache_read_tokens = None
             cache_hit = None
+            thinking_tokens = None
             if hasattr(response, "usage_metadata") and response.usage_metadata:
                 usage = response.usage_metadata
                 if hasattr(usage, "cached_content_token_count"):
                     cache_read_tokens = usage.cached_content_token_count
                     cache_hit = cache_read_tokens is not None and cache_read_tokens > 0
+                # Gemini Thinking models report internal reasoning cost separately.
+                thinking_tokens = getattr(usage, "thinking_token_count", None)
 
             # Use config-based cost estimation
             cost = self._estimate_cost_from_config(model_name, prompt_tokens, completion_tokens)
@@ -998,6 +1009,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 cost_estimate=cost,
                 cache_read_tokens=cache_read_tokens,
                 cache_hit=cache_hit,
+                thinking_tokens=thinking_tokens,
             )
 
             # Attach function call info if present
@@ -1206,6 +1218,9 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                     ),
                 ]
 
+            # Extended thinking / reasoning support for Gemini Thinking models.
+            thinking_config = kwargs.pop("thinking_config", None)
+
             # Build unified GenerateContentConfig.
             # When cached_content is set, system_instruction and tools must be omitted
             # because they are already baked into the cached content object.
@@ -1218,6 +1233,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 tools=tools_for_api if not cached_content_id else None,  # type: ignore[arg-type]
                 cached_content=cached_content_id,
                 safety_settings=safety_settings,
+                thinking_config=thinking_config,
             )
 
             if cached_content_id:
@@ -1251,6 +1267,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                         tools=tools_for_api,  # type: ignore[arg-type]
                         cached_content=None,
                         safety_settings=config.safety_settings,
+                        thinking_config=config.thinking_config,
                     )
                     async for chunk in self._stream_text_with_function_calling(
                         client=client,
