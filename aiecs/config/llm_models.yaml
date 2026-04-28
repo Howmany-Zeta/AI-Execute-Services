@@ -463,6 +463,111 @@ providers:
           top_p: 1.0
           top_k: 0
 
+  # Anthropic on Vertex AI Provider (Claude models served through Google Cloud)
+  anthropicvertex:
+    provider_name: "AnthropicVertex"
+    default_model: "claude-sonnet-4@20250514"
+    model_mappings:
+      "claude-3.5-sonnet": "claude-3-5-sonnet-v2@20241022"
+      "claude-3-5-sonnet": "claude-3-5-sonnet-v2@20241022"
+      "claude-3.5-haiku": "claude-3-5-haiku@20241022"
+      "claude-3-5-haiku": "claude-3-5-haiku@20241022"
+      "claude-3.7-sonnet": "claude-3-7-sonnet@20250219"
+      "claude-3-7-sonnet": "claude-3-7-sonnet@20250219"
+      "claude-opus-4": "claude-opus-4@20250514"
+      "claude-sonnet-4": "claude-sonnet-4@20250514"
+
+    models:
+      - name: "claude-3-5-sonnet-v2@20241022"
+        display_name: "Claude 3.5 Sonnet v2 (Vertex)"
+        description: "Anthropic Claude 3.5 Sonnet (October 2024) via Vertex AI"
+        costs:
+          input: 0.003
+          output: 0.015
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 8192
+          context_window: 200000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+
+      - name: "claude-3-5-haiku@20241022"
+        display_name: "Claude 3.5 Haiku (Vertex)"
+        description: "Anthropic Claude 3.5 Haiku via Vertex AI"
+        costs:
+          input: 0.0008
+          output: 0.004
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 8192
+          context_window: 200000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+
+      - name: "claude-3-7-sonnet@20250219"
+        display_name: "Claude 3.7 Sonnet (Vertex)"
+        description: "Anthropic Claude 3.7 Sonnet with extended thinking via Vertex AI"
+        costs:
+          input: 0.003
+          output: 0.015
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 64000
+          context_window: 200000
+        default_params:
+          temperature: 0.7
+          max_tokens: 8192
+          top_p: 1.0
+          top_k: 0
+
+      - name: "claude-opus-4@20250514"
+        display_name: "Claude Opus 4 (Vertex)"
+        description: "Anthropic Claude Opus 4 with extended thinking via Vertex AI"
+        costs:
+          input: 0.015
+          output: 0.075
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 32000
+          context_window: 200000
+        default_params:
+          temperature: 0.7
+          max_tokens: 8192
+          top_p: 1.0
+          top_k: 0
+
+      - name: "claude-sonnet-4@20250514"
+        display_name: "Claude Sonnet 4 (Vertex)"
+        description: "Anthropic Claude Sonnet 4 with extended thinking via Vertex AI"
+        costs:
+          input: 0.003
+          output: 0.015
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 64000
+          context_window: 200000
+        default_params:
+          temperature: 0.7
+          max_tokens: 8192
+          top_p: 1.0
+          top_k: 0
+
   # OpenRouter Provider
   openrouter:
     provider_name: "OpenRouter"

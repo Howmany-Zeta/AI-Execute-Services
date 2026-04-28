@@ -12,6 +12,7 @@ from .clients.vertex_client import VertexAIClient
 from .clients.googleai_client import GoogleAIClient
 from .clients.xai_client import XAIClient
 from .clients.openrouter_client import OpenRouterClient
+from .clients.anthropic_client import AnthropicVertexClient
 from .callbacks.custom_callbacks import CustomAsyncCallbackHandler
 
 if TYPE_CHECKING:
@@ -26,6 +27,7 @@ class AIProvider(str, Enum):
     GOOGLEAI = "GoogleAI"
     XAI = "xAI"
     OPENROUTER = "OpenRouter"
+    ANTHROPIC_VERTEX = "AnthropicVertex"
 
 
 class LLMClientFactory:
@@ -133,6 +135,8 @@ class LLMClientFactory:
             return XAIClient()
         elif provider == AIProvider.OPENROUTER:
             return OpenRouterClient()
+        elif provider == AIProvider.ANTHROPIC_VERTEX:
+            return AnthropicVertexClient()
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
