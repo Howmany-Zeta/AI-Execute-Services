@@ -285,13 +285,20 @@ class OpenAICompatibleFunctionCallingMixin:
         # Convert messages to OpenAI format
         openai_messages = self._convert_messages_to_openai_format(messages)
 
+        # o-series reasoning models (o1, o3-mini, o3, o4-mini, ...) reject
+        # `temperature` when `reasoning_effort` is set, so suppress it here.
+        reasoning_effort = kwargs.pop("reasoning_effort", None)
+
         # Prepare API call parameters
         api_params: Dict[str, Any] = {
             "model": model,
             "messages": cast(Any, openai_messages),
-            "temperature": temperature,
             "max_tokens": max_tokens,
         }
+        if reasoning_effort is None:
+            api_params["temperature"] = temperature
+        else:
+            api_params["reasoning_effort"] = reasoning_effort
 
         # Add function calling support
         fc_params = self._prepare_function_calling_params(functions, tools, tool_choice)
@@ -384,14 +391,21 @@ class OpenAICompatibleFunctionCallingMixin:
         # Convert messages to OpenAI format
         openai_messages = self._convert_messages_to_openai_format(messages)
 
+        # o-series reasoning models (o1, o3-mini, o3, o4-mini, ...) reject
+        # `temperature` when `reasoning_effort` is set, so suppress it here.
+        reasoning_effort = kwargs.pop("reasoning_effort", None)
+
         # Prepare API call parameters
         api_params: Dict[str, Any] = {
             "model": model,
             "messages": cast(Any, openai_messages),
-            "temperature": temperature,
             "max_tokens": max_tokens,
             "stream": True,
         }
+        if reasoning_effort is None:
+            api_params["temperature"] = temperature
+        else:
+            api_params["reasoning_effort"] = reasoning_effort
 
         # Add function calling support
         fc_params = self._prepare_function_calling_params(functions, tools, tool_choice)
