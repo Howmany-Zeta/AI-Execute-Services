@@ -407,6 +407,13 @@ class OpenAICompatibleFunctionCallingMixin:
         else:
             api_params["reasoning_effort"] = reasoning_effort
 
+        # Request per-stream usage stats so we can emit a terminal usage
+        # StreamChunk that mirrors the behaviour of Vertex / Anthropic clients.
+        # Only set when return_chunks=True to avoid overhead for callers that
+        # only care about text tokens.
+        if return_chunks:
+            api_params["stream_options"] = {"include_usage": True}
+
         # Add function calling support
         fc_params = self._prepare_function_calling_params(functions, tools, tool_choice)
         api_params.update(fc_params)
@@ -419,9 +426,17 @@ class OpenAICompatibleFunctionCallingMixin:
 
         # Accumulator for tool calls
         tool_calls_accumulator: Dict[str, Dict[str, Any]] = {}
+        last_usage: Optional[Any] = None
 
         if hasattr(stream, "__aiter__"):
             async for chunk in stream:
+                # The final chunk sent when stream_options.include_usage=True
+                # has an empty choices list and carries usage data only.
+                if not chunk.choices:
+                    if return_chunks and chunk.usage is not None:
+                        last_usage = chunk.usage
+                    continue
+
                 delta = chunk.choices[0].delta
 
                 # Yield text tokens
@@ -465,3 +480,20 @@ class OpenAICompatibleFunctionCallingMixin:
                     type="tool_calls",
                     tool_calls=complete_tool_calls,
                 )
+
+            # Yield terminal usage StreamChunk (mirrors Vertex / Anthropic).
+            if return_chunks and last_usage is not None:
+                prompt_tokens = getattr(last_usage, "prompt_tokens", 0) or 0
+                completion_tokens = getattr(last_usage, "completion_tokens", 0) or 0
+                usage_payload: Dict[str, Any] = {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": getattr(last_usage, "total_tokens", None) or (prompt_tokens + completion_tokens),
+                }
+                # Surface cached-token count when available (GPT-4o and later).
+                details = getattr(last_usage, "prompt_tokens_details", None)
+                if details is not None:
+                    cached = getattr(details, "cached_tokens", None)
+                    if cached is not None:
+                        usage_payload["cache_read_tokens"] = cached
+                yield StreamChunk(type="usage", usage=usage_payload)
