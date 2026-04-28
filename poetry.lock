@@ -8284,4 +8284,4 @@ docs = ["myst-parser", "sphinx", "sphinx-autodoc-typehints", "sphinx-copybutton"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.13"
-content-hash = "03da0d016ac61d45b5db7066378bf1c2fc73ab1269b4177e502148abe2a2fda1"
+content-hash = "053aefb4d1b2d5996e0011100d363b5065b0c6ca74b711cecba60526fc19edae"
