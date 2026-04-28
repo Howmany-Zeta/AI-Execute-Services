@@ -359,6 +359,7 @@ class LLMAgent(BaseAIAgent):
                 temperature=self._config.temperature,
                 max_tokens=self._config.max_tokens,
                 context=context,
+                **self._config.extra_llm_kwargs,
             )
 
             # Extract result
@@ -497,6 +498,7 @@ class LLMAgent(BaseAIAgent):
                 temperature=self._config.temperature,
                 max_tokens=self._config.max_tokens,
                 context=context,
+                **self._config.extra_llm_kwargs,
             ):
                 output_tokens.append(token)
                 yield {
