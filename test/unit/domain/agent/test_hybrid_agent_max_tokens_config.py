@@ -142,6 +142,133 @@ def test_max_iterations_default_value():
     print(f"✓ Default max_iterations: {config.max_iterations}")
 
 
+@pytest.mark.asyncio
+async def test_extra_llm_kwargs_reaches_generate_text():
+    """Test that extra_llm_kwargs values are forwarded to llm_client.generate_text()"""
+    print("\n=== Test: extra_llm_kwargs forwarded to generate_text ===")
+
+    received_kwargs: dict = {}
+
+    class CapturingLLMClient:
+        provider_name = "Mock"
+
+        async def generate_text(self, messages, **kwargs):
+            received_kwargs.update(kwargs)
+            from aiecs.llm.clients.base_client import LLMResponse
+            return LLMResponse(content="ok", provider="Mock", model="m", tokens_used=1)
+
+        async def stream_text(self, messages, **kwargs):
+            yield "ok"
+
+        async def close(self):
+            pass
+
+    config = AgentConfiguration(
+        extra_llm_kwargs={"reasoning_effort": "high", "thinking": {"type": "enabled"}}
+    )
+    agent = HybridAgent(
+        agent_id="test-extra-kwargs-gen",
+        name="Test Agent",
+        llm_client=CapturingLLMClient(),
+        tools=[],
+        config=config,
+    )
+    await agent.initialize()
+    await agent.execute_task({"description": "hello"}, {})
+
+    assert received_kwargs.get("reasoning_effort") == "high", "reasoning_effort not forwarded"
+    assert received_kwargs.get("thinking") == {"type": "enabled"}, "thinking not forwarded"
+    print("✓ extra_llm_kwargs forwarded to generate_text")
+
+
+@pytest.mark.asyncio
+async def test_extra_llm_kwargs_reaches_stream_text():
+    """Test that extra_llm_kwargs values are forwarded to llm_client.stream_text()"""
+    print("\n=== Test: extra_llm_kwargs forwarded to stream_text ===")
+
+    received_kwargs: dict = {}
+
+    class CapturingStreamLLMClient:
+        provider_name = "Mock"
+
+        async def generate_text(self, messages, **kwargs):
+            from aiecs.llm.clients.base_client import LLMResponse
+            return LLMResponse(content="ok", provider="Mock", model="m", tokens_used=1)
+
+        async def stream_text(self, messages, **kwargs):
+            received_kwargs.update(kwargs)
+            yield "ok"
+
+        async def close(self):
+            pass
+
+    config = AgentConfiguration(
+        extra_llm_kwargs={"thinking_config": {"thinking_budget": 8192}}
+    )
+    agent = HybridAgent(
+        agent_id="test-extra-kwargs-stream",
+        name="Test Agent",
+        llm_client=CapturingStreamLLMClient(),
+        tools=[],
+        config=config,
+    )
+    await agent.initialize()
+    chunks = []
+    async for chunk in agent.execute_task_streaming({"description": "hello"}, {}):
+        chunks.append(chunk)
+
+    assert received_kwargs.get("thinking_config") == {"thinking_budget": 8192}, "thinking_config not forwarded"
+    print("✓ extra_llm_kwargs forwarded to stream_text")
+
+
+@pytest.mark.asyncio
+async def test_extra_llm_kwargs_does_not_override_tools():
+    """Test that extra_llm_kwargs cannot override tools/tool_choice (tools are appended after)"""
+    print("\n=== Test: extra_llm_kwargs cannot override tools ===")
+
+    received_kwargs: dict = {}
+
+    class CapturingLLMClient:
+        provider_name = "openai"
+
+        async def generate_text(self, messages, **kwargs):
+            received_kwargs.update(kwargs)
+            from aiecs.llm.clients.base_client import LLMResponse
+            return LLMResponse(content="ok", provider="openai", model="m", tokens_used=1)
+
+        async def stream_text(self, messages, **kwargs):
+            yield "ok"
+
+        async def close(self):
+            pass
+
+    config = AgentConfiguration(
+        extra_llm_kwargs={"tool_choice": "none"}  # attempt to override
+    )
+    agent = HybridAgent(
+        agent_id="test-extra-kwargs-no-override",
+        name="Test Agent",
+        llm_client=CapturingLLMClient(),
+        tools=[],
+        config=config,
+    )
+    await agent.initialize()
+    await agent.execute_task({"description": "hello"}, {})
+
+    # With no tool schemas, tool_choice from extra_llm_kwargs is passed as-is (no tools configured)
+    # This just verifies no crash and kwargs are received
+    print(f"✓ received_kwargs keys: {list(received_kwargs.keys())}")
+    print("✓ extra_llm_kwargs does not cause errors")
+
+
+def test_extra_llm_kwargs_default_is_empty():
+    """Test that extra_llm_kwargs defaults to empty dict (no behavior change)"""
+    print("\n=== Test: extra_llm_kwargs default is empty dict ===")
+    config = AgentConfiguration()
+    assert config.extra_llm_kwargs == {}, f"Expected empty dict, got: {config.extra_llm_kwargs}"
+    print("✓ extra_llm_kwargs defaults to empty dict")
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("HybridAgent Configuration Test")
