@@ -481,15 +481,18 @@ class ToolAgent(BaseAIAgent):
         tools = [{"type": "function", "function": schema} for schema in self._tool_schemas]
 
         # Call LLM with Function Calling
-        response = await self.llm_client.generate_text(  # type: ignore[union-attr]
+        call_kwargs: Dict[str, Any] = dict(
             messages=messages,
             model=self._config.llm_model,
             temperature=self._config.temperature,
             max_tokens=self._config.max_tokens,
             context=context,
-            tools=tools,
-            tool_choice="auto",
         )
+        # Merge provider-specific parameters (thinking_config, reasoning_effort, etc.)
+        call_kwargs.update(self._config.extra_llm_kwargs)
+        call_kwargs["tools"] = tools
+        call_kwargs["tool_choice"] = "auto"
+        response = await self.llm_client.generate_text(**call_kwargs)  # type: ignore[union-attr]
 
         # Get LLM response content
         llm_response = response.content or ""
@@ -866,16 +869,19 @@ class ToolAgent(BaseAIAgent):
         # Import StreamChunk for type checking
         from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
 
-        stream_gen = self.llm_client.stream_text(  # type: ignore[union-attr]
+        stream_kwargs: Dict[str, Any] = dict(
             messages=messages,
             model=self._config.llm_model,
             temperature=self._config.temperature,
             max_tokens=self._config.max_tokens,
             context=context,
-            tools=tools,
-            tool_choice="auto",
-            return_chunks=True,
         )
+        # Merge provider-specific parameters (thinking_config, reasoning_effort, etc.)
+        stream_kwargs.update(self._config.extra_llm_kwargs)
+        stream_kwargs["tools"] = tools
+        stream_kwargs["tool_choice"] = "auto"
+        stream_kwargs["return_chunks"] = True
+        stream_gen = self.llm_client.stream_text(**stream_kwargs)  # type: ignore[union-attr]
 
         async for chunk in stream_gen:
             if isinstance(chunk, StreamChunk):

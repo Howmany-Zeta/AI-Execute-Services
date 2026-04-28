@@ -125,6 +125,8 @@ class MockLLMClient(BaseLLMClient):
         model: str = None,
         temperature: float = None,
         max_tokens: int = None,
+        tools=None,
+        **kwargs,
     ) -> LLMResponse:
         return LLMResponse(
             content="Mock response",
