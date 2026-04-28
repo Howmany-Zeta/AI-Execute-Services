@@ -316,13 +316,25 @@ class AnthropicVertexClient(BaseLLMClient):
 
     @staticmethod
     def _extract_text(content_blocks: Any) -> str:
-        """Concatenate the text from all ``text`` content blocks in a response."""
+        """Concatenate content from all response blocks in order.
+
+        * ``thinking`` blocks are wrapped in ``<thinking>\\n…\\n</thinking>\\n``
+          so that the reasoning process is visible in ``LLMResponse.content``,
+          matching the format produced by ``VertexAIClient`` for Gemini Thinking
+          models.
+        * ``text`` blocks are appended as-is.
+        * All other block types (e.g. ``tool_use``) are skipped.
+        """
         if not content_blocks:
             return ""
         parts: List[str] = []
         for block in content_blocks:
             btype = getattr(block, "type", None) if not isinstance(block, dict) else block.get("type")
-            if btype == "text":
+            if btype == "thinking":
+                thinking_val = getattr(block, "thinking", None) if not isinstance(block, dict) else block.get("thinking")
+                if thinking_val:
+                    parts.append(f"<thinking>\n{thinking_val}\n</thinking>\n")
+            elif btype == "text":
                 text_val = getattr(block, "text", None) if not isinstance(block, dict) else block.get("text")
                 if text_val:
                     parts.append(text_val)
@@ -424,9 +436,33 @@ class AnthropicVertexClient(BaseLLMClient):
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         context: Optional[Dict[str, Any]] = None,
+        functions: Optional[List[Dict[str, Any]]] = None,
+        system_instruction: Optional[str] = None,
         **kwargs,
     ) -> LLMResponse:
-        """Generate a single completion via the Anthropic Messages API."""
+        """Generate a single completion via the Anthropic Messages API.
+
+        Args:
+            messages: Conversation messages.
+            model: Model name (defaults to config / hardcoded fallback).
+            temperature: Sampling temperature.
+            max_tokens: Maximum tokens to generate.
+            context: Optional metadata dict (user_id, tenant_id, …).
+            functions: Legacy OpenAI-format function list. Converted to tools
+                automatically when no ``tools`` kwarg is provided.
+            system_instruction: Explicit system prompt injected ahead of any
+                system-role messages in *messages*.
+            **kwargs: Forwarded to ``_build_request`` (tools, tool_choice,
+                thinking, top_p, stop_sequences, metadata, …).
+        """
+        # P2: merge explicit system_instruction into messages
+        if system_instruction:
+            messages = [LLMMessage(role="system", content=system_instruction)] + list(messages)
+
+        # P1: promote legacy functions= to tools= when tools not already given
+        if functions and "tools" not in kwargs:
+            kwargs["tools"] = [{"type": "function", "function": f} for f in functions]
+
         client = self._init_client()
         request = self._build_request(messages, model, temperature, max_tokens, kwargs)
 
@@ -457,7 +493,7 @@ class AnthropicVertexClient(BaseLLMClient):
         if tool_calls:
             metadata["tool_calls"] = tool_calls
 
-        return LLMResponse(
+        llm_response = LLMResponse(
             content=content_text,
             provider=self.provider_name,
             model=request["model"],
@@ -473,6 +509,15 @@ class AnthropicVertexClient(BaseLLMClient):
             thinking_tokens=None,
         )
 
+        # P0: expose tool_calls as an attribute (mirrors OpenAI/Vertex pattern) so
+        # that ToolAgent / HybridAgent can find them via getattr(response, "tool_calls").
+        # metadata["tool_calls"] is kept for backward-compatibility with callers that
+        # already read the metadata dict.
+        if tool_calls:
+            setattr(llm_response, "tool_calls", tool_calls)
+
+        return llm_response
+
     async def stream_text(
         self,
         messages: List[LLMMessage],
@@ -481,6 +526,8 @@ class AnthropicVertexClient(BaseLLMClient):
         max_tokens: Optional[int] = None,
         context: Optional[Dict[str, Any]] = None,
         return_chunks: bool = False,
+        functions: Optional[List[Dict[str, Any]]] = None,
+        system_instruction: Optional[str] = None,
         **kwargs,
     ) -> AsyncGenerator[Any, None]:
         """Stream a completion, optionally yielding ``StreamChunk`` objects.
@@ -489,7 +536,28 @@ class AnthropicVertexClient(BaseLLMClient):
         when ``return_chunks=False`` only text tokens are yielded; when
         ``return_chunks=True`` the stream also surfaces incremental ``tool_call``
         fragments, a final ``tool_calls`` batch, and a terminal ``usage`` event.
+
+        Args:
+            messages: Conversation messages.
+            model: Model name.
+            temperature: Sampling temperature.
+            max_tokens: Maximum tokens to generate.
+            context: Optional metadata dict (user_id, tenant_id, …).
+            return_chunks: Yield ``StreamChunk`` objects when True; plain str tokens when False.
+            functions: Legacy OpenAI-format function list. Converted to tools
+                automatically when no ``tools`` kwarg is provided.
+            system_instruction: Explicit system prompt injected ahead of any
+                system-role messages in *messages*.
+            **kwargs: Forwarded to ``_build_request`` (tools, tool_choice, thinking, …).
         """
+        # P2: merge explicit system_instruction into messages
+        if system_instruction:
+            messages = [LLMMessage(role="system", content=system_instruction)] + list(messages)
+
+        # P1: promote legacy functions= to tools= when tools not already given
+        if functions and "tools" not in kwargs:
+            kwargs["tools"] = [{"type": "function", "function": f} for f in functions]
+
         client = self._init_client()
         request = self._build_request(messages, model, temperature, max_tokens, kwargs)
 
@@ -498,6 +566,10 @@ class AnthropicVertexClient(BaseLLMClient):
         # block index that opened the ``tool_use`` block.
         tool_calls_by_index: Dict[int, Dict[str, Any]] = {}
         tool_call_args_buffer: Dict[int, str] = {}
+        # Track indices of thinking blocks so we can emit the closing tag at
+        # content_block_stop.  Anthropic always streams thinking before text,
+        # so the order in the output naturally mirrors the Gemini convention.
+        thinking_indices: set = set()
         last_usage: Dict[str, Optional[int]] = {
             "prompt_tokens": None,
             "completion_tokens": None,
@@ -520,14 +592,22 @@ class AnthropicVertexClient(BaseLLMClient):
 
                     if etype == "content_block_start":
                         block = getattr(event, "content_block", None)
-                        if getattr(block, "type", None) == "tool_use":
-                            idx = getattr(event, "index", 0)
+                        block_type = getattr(block, "type", None)
+                        idx = getattr(event, "index", 0)
+                        if block_type == "tool_use":
                             tool_calls_by_index[idx] = {
                                 "id": getattr(block, "id", None) or f"call_{idx}",
                                 "type": "function",
                                 "function": {"name": getattr(block, "name", "") or "", "arguments": "{}"},
                             }
                             tool_call_args_buffer[idx] = ""
+                        elif block_type == "thinking":
+                            # Register index and emit the opening <thinking> tag.
+                            thinking_indices.add(idx)
+                            if return_chunks:
+                                yield StreamChunk(type="token", content="<thinking>\n")
+                            else:
+                                yield "<thinking>\n"
                         continue
 
                     if etype == "content_block_delta":
@@ -541,6 +621,15 @@ class AnthropicVertexClient(BaseLLMClient):
                                 yield StreamChunk(type="token", content=text_piece)
                             else:
                                 yield text_piece
+                        elif dtype == "thinking_delta":
+                            # Extended thinking content streamed incrementally.
+                            thinking_piece = getattr(delta, "thinking", "") or ""
+                            if not thinking_piece:
+                                continue
+                            if return_chunks:
+                                yield StreamChunk(type="token", content=thinking_piece)
+                            else:
+                                yield thinking_piece
                         elif dtype == "input_json_delta":
                             idx = getattr(event, "index", 0)
                             partial = getattr(delta, "partial_json", "") or ""
@@ -553,7 +642,13 @@ class AnthropicVertexClient(BaseLLMClient):
 
                     if etype == "content_block_stop":
                         idx = getattr(event, "index", 0)
-                        if idx in tool_calls_by_index:
+                        if idx in thinking_indices:
+                            # Emit the closing </thinking> tag before text starts.
+                            if return_chunks:
+                                yield StreamChunk(type="token", content="\n</thinking>\n")
+                            else:
+                                yield "\n</thinking>\n"
+                        elif idx in tool_calls_by_index:
                             buffered = tool_call_args_buffer.get(idx, "")
                             if buffered:
                                 tool_calls_by_index[idx]["function"]["arguments"] = buffered

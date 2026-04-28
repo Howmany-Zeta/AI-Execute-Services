@@ -476,6 +476,8 @@ providers:
       "claude-3-7-sonnet": "claude-3-7-sonnet@20250219"
       "claude-opus-4": "claude-opus-4@20250514"
       "claude-sonnet-4": "claude-sonnet-4@20250514"
+      "claude-haiku-4-5": "claude-haiku-4-5@20251001"
+      "claude-sonnet-4-5": "claude-sonnet-4-5@20250929"
 
     models:
       - name: "claude-3-5-sonnet-v2@20241022"
@@ -553,6 +555,42 @@ providers:
       - name: "claude-sonnet-4@20250514"
         display_name: "Claude Sonnet 4 (Vertex)"
         description: "Anthropic Claude Sonnet 4 with extended thinking via Vertex AI"
+        costs:
+          input: 0.003
+          output: 0.015
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 64000
+          context_window: 200000
+        default_params:
+          temperature: 0.7
+          max_tokens: 8192
+          top_p: 1.0
+          top_k: 0
+
+      - name: "claude-haiku-4-5@20251001"
+        display_name: "Claude Haiku 4.5 (Vertex)"
+        description: "Anthropic Claude Haiku 4.5 — fast and cost-efficient via Vertex AI"
+        costs:
+          input: 0.0008
+          output: 0.004
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 8192
+          context_window: 200000
+        default_params:
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          top_k: 0
+
+      - name: "claude-sonnet-4-5@20250929"
+        display_name: "Claude Sonnet 4.5 (Vertex)"
+        description: "Anthropic Claude Sonnet 4.5 via Vertex AI"
         costs:
           input: 0.003
           output: 0.015
