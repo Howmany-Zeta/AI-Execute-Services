@@ -71,9 +71,12 @@ async for event in agent.execute_task_streaming(
     elif event['type'] == 'tool_result':
         # Tool result received
         print(f"\nResult: {event['result']}")
-    elif event['type'] == 'status':
-        # Status update
-        print(f"\nStatus: {event['status']}")
+    elif event['type'] == 'started':
+        # Lifecycle: task execution started
+        print("\n[Started]")
+    elif event['type'] == 'completed':
+        # Lifecycle: task execution completed (HybridAgent only)
+        print(f"\n[Completed in {event['execution_time']:.2f}s]")
 ```
 
 ### Pattern 2: Stream Message Processing
@@ -129,7 +132,9 @@ async for event in agent.execute_task_streaming(
 
 ### Pattern 2: ReAct Loop Streaming
 
-Stream ReAct loop execution (HybridAgent).
+Stream ReAct loop execution (HybridAgent). `HybridAgent` emits dedicated
+`thought` / `action` / `observation` events for each ReAct phase, plus
+`iteration_start` events that mark the boundary between iterations.
 
 ```python
 async for event in agent.execute_task_streaming(
@@ -139,35 +144,44 @@ async for event in agent.execute_task_streaming(
     if event['type'] == 'token':
         # Stream reasoning tokens
         print(event['content'], end='', flush=True)
-    elif event['type'] == 'tool_call':
-        # Tool call in ReAct loop
-        print(f"\n[Tool Call] {event['tool_name']}")
+    elif event['type'] == 'iteration_start':
+        # New ReAct iteration begins
+        print(f"\n[Iteration {event['iteration']}]")
+    elif event['type'] == 'thought':
+        # Reasoning text accumulated for this iteration
+        print(f"\n[Thought] {event['content']}")
+    elif event['type'] == 'action':
+        # Tool action selected by the model
+        print(f"\n[Action] {event['tool_name']}")
     elif event['type'] == 'tool_result':
-        # Tool result
+        # Raw tool result
         print(f"\n[Result] {event['result']}")
-    elif event['type'] == 'status':
-        # Status update (thinking, acting, observing)
-        print(f"\n[Status] {event['status']}")
+    elif event['type'] == 'observation':
+        # Observation derived from the tool result
+        print(f"\n[Observation] {event['content']}")
 ```
 
-### Pattern 3: Status Tracking
+### Pattern 3: Lifecycle Tracking
 
-Track execution status through streaming.
+Track execution lifecycle through streaming. `ToolAgent` and `HybridAgent`
+emit `started` at the beginning and (in `HybridAgent`) `completed` at the
+end; `HybridAgent` additionally emits `iteration_start` per ReAct loop.
 
 ```python
-current_status = None
-
 async for event in agent.execute_task_streaming(task, context):
-    if event['type'] == 'status':
-        current_status = event['status']
-        print(f"Status: {current_status}")
-        
-        if current_status == 'thinking':
-            print("Agent is thinking...")
-        elif current_status == 'acting':
-            print("Agent is executing tools...")
-        elif current_status == 'observing':
-            print("Agent is observing results...")
+    etype = event['type']
+
+    if etype == 'started':
+        print("Agent started")
+    elif etype == 'iteration_start':
+        # HybridAgent only — ReAct iteration boundary
+        print(f"Iteration {event['iteration']} starting")
+    elif etype == 'completed':
+        # HybridAgent only — symmetric to 'started'
+        print(f"Agent completed (success={event['success']})")
+    elif etype == 'result':
+        # Final result payload (all agents)
+        print(f"Final output: {event['output']}")
 ```
 
 ## Streaming Message Processing
@@ -255,17 +269,67 @@ async for event in agent.execute_task_streaming(task, context):
 
 ### Status Events
 
-Status events indicate execution status.
+Status events indicate execution status. Emitted by `BaseAgent` (default
+implementation) and `LLMAgent`; `status` is always `"started"` in the
+current implementation.
 
 ```python
 async for event in agent.execute_task_streaming(task, context):
     if event['type'] == 'status':
-        status = event['status']  # started, thinking, acting, observing, completed
-        iteration = event.get('iteration')  # ReAct iteration number
+        status = event['status']  # currently always "started"
         timestamp = event.get('timestamp')
-        
-        print(f"Status: {status} (iteration {iteration})")
+
+        print(f"Status: {status}")
 ```
+
+### Lifecycle Events
+
+`ToolAgent` and `HybridAgent` emit dedicated lifecycle events instead of
+`status`. `started` is emitted at the beginning of streaming execution;
+`completed` is emitted by `HybridAgent` only, as the symmetric counterpart
+to `started`.
+
+```python
+async for event in agent.execute_task_streaming(task, context):
+    if event['type'] == 'started':
+        timestamp = event.get('timestamp')
+        print("Execution started")
+    elif event['type'] == 'completed':
+        success = event['success']
+        execution_time = event['execution_time']
+        print(f"Execution completed (success={success}, {execution_time:.2f}s)")
+```
+
+### ReAct Events (HybridAgent)
+
+`HybridAgent` exposes the ReAct loop as discrete events. `iteration_start`
+marks the boundary between iterations; `thought`, `action`, and
+`observation` correspond to the three phases of each iteration.
+
+```python
+async for event in agent.execute_task_streaming(task, context):
+    etype = event['type']
+    if etype == 'iteration_start':
+        print(f"Iteration {event['iteration']} starting")
+    elif etype == 'thought':
+        print(f"Thought: {event['content']}")
+    elif etype == 'action':
+        print(f"Action: {event['tool_name']}({event.get('parameters', {})})")
+    elif etype == 'observation':
+        print(f"Observation: {event['content']}")
+```
+
+### Tool Streaming Events (ToolAgent / HybridAgent)
+
+In addition to `tool_call` and `tool_result`, the Function Calling
+streaming path emits two finer-grained events:
+
+- `tool_call_delta`: incremental tool-call fragment received from the
+  provider stream (arguments may still be partial).
+- `tool_calls_ready`: complete batch of tool calls assembled from the
+  stream, ready to be dispatched.
+
+`ToolAgent` also emits `tool_error` when a tool invocation fails.
 
 ### Result Events
 
@@ -370,18 +434,21 @@ result = await agent.execute_task(
 
 ### 2. Provide User Feedback
 
-Provide feedback to users during streaming:
+Provide feedback to users during streaming. Use the lifecycle and ReAct
+events emitted by `ToolAgent` / `HybridAgent` (or `status="started"` for
+`LLMAgent`) to drive UI affordances:
 
 ```python
 async for event in agent.execute_task_streaming(task, context):
-    if event['type'] == 'status':
-        status = event['status']
-        if status == 'thinking':
-            show_spinner("Thinking...")
-        elif status == 'acting':
-            show_spinner("Executing tools...")
-        elif status == 'completed':
-            hide_spinner()
+    etype = event['type']
+    if etype in ('started', 'status'):
+        show_spinner("Working...")
+    elif etype == 'thought':
+        show_spinner("Thinking...")
+    elif etype in ('action', 'tool_call'):
+        show_spinner(f"Executing {event.get('tool_name', 'tool')}...")
+    elif etype in ('completed', 'result', 'error'):
+        hide_spinner()
 ```
 
 ### 3. Handle Partial Results
