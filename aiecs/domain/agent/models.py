@@ -316,6 +316,19 @@ class AgentConfiguration(BaseModel):
         description="Maximum number of skills to include in context per request (default: 3).",
     )
 
+    # Extra LLM parameters (provider-specific)
+    extra_llm_kwargs: Dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Additional keyword arguments forwarded verbatim to every "
+            "llm_client.generate_text() and llm_client.stream_text() call. "
+            "Use for provider-specific parameters such as "
+            "thinking_config (Gemini Thinking models), "
+            "thinking (Claude extended thinking), or "
+            "reasoning_effort (OpenAI o-series models)."
+        ),
+    )
+
     # Metadata
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional configuration metadata")
 
