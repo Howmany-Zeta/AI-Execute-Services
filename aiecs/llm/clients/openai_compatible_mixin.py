@@ -260,6 +260,8 @@ class OpenAICompatibleFunctionCallingMixin:
         functions: Optional[List[Dict[str, Any]]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Any] = None,
+        input_price: Optional[float] = None,
+        output_price: Optional[float] = None,
         **kwargs,
     ) -> LLMResponse:
         """
@@ -340,7 +342,7 @@ class OpenAICompatibleFunctionCallingMixin:
             tokens_used=tokens_used,
             prompt_tokens=input_tokens if response.usage else None,
             completion_tokens=output_tokens if response.usage else None,
-            cost_estimate=self._estimate_cost_from_config(model, input_tokens, output_tokens) if hasattr(self, "_estimate_cost_from_config") else None,
+            cost_estimate=self._compute_cost(model, input_tokens, output_tokens, input_price, output_price) if hasattr(self, "_compute_cost") else None,
             cache_read_tokens=cache_read_tokens,
             cache_hit=cache_hit,
         )

@@ -23,6 +23,7 @@ from .vertex_client import VertexAIClient
 from .googleai_client import GoogleAIClient
 from .xai_client import XAIClient
 from .anthropic_client import AnthropicVertexClient
+from .vertex_maas_client import VertexMaaSClient
 
 __all__ = [
     # Base classes
@@ -41,4 +42,5 @@ __all__ = [
     "GoogleAIClient",
     "XAIClient",
     "AnthropicVertexClient",
+    "VertexMaaSClient",
 ]
