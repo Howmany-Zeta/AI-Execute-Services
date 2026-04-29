@@ -677,8 +677,8 @@ class HybridAgent(BaseAIAgent):
                 max_tokens=self._config.max_tokens,
                 context=context,
             )
-            # Merge provider-specific parameters (thinking_config, reasoning_effort, etc.)
-            kwargs.update(self._config.extra_llm_kwargs)
+            # Merge provider-specific parameters (top_p, top_k, thinking_config, reasoning_effort, etc.)
+            kwargs.update(self._config.get_llm_call_kwargs())
             if self._tool_schemas:
                 kwargs["tools"] = [{"type": "function", "function": s} for s in self._tool_schemas]
                 kwargs["tool_choice"] = "auto"
@@ -922,8 +922,8 @@ class HybridAgent(BaseAIAgent):
                 max_tokens=self._config.max_tokens,
                 context=context,
             )
-            # Merge provider-specific parameters (thinking_config, reasoning_effort, etc.)
-            kwargs.update(self._config.extra_llm_kwargs)
+            # Merge provider-specific parameters (top_p, top_k, thinking_config, reasoning_effort, etc.)
+            kwargs.update(self._config.get_llm_call_kwargs())
             if self._tool_schemas:
                 kwargs["tools"] = [{"type": "function", "function": s} for s in self._tool_schemas]
                 kwargs["tool_choice"] = "auto"

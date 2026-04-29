@@ -742,17 +742,24 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             # Build unified GenerateContentConfig.
             # When cached_content is set, system_instruction and tools must be omitted
             # because they are already baked into the cached content object.
-            config = types.GenerateContentConfig(
-                temperature=temperature,
-                max_output_tokens=max_tokens or 8192,
-                top_p=kwargs.pop("top_p", 0.95),
-                top_k=kwargs.pop("top_k", 40),
-                system_instruction=final_system_instruction if not cached_content_id else None,
-                tools=tools_for_api if not cached_content_id else None,  # type: ignore[arg-type]
-                cached_content=cached_content_id,
-                safety_settings=safety_settings,
-                thinking_config=thinking_config,
-            )
+            # top_p / top_k are only forwarded when explicitly supplied so that
+            # each model can use its own API-side defaults when they are not set.
+            _top_p = kwargs.pop("top_p", None)
+            _top_k = kwargs.pop("top_k", None)
+            _gen_config_params: Dict[str, Any] = {
+                "temperature": temperature,
+                "max_output_tokens": max_tokens or 8192,
+                "system_instruction": final_system_instruction if not cached_content_id else None,
+                "tools": tools_for_api if not cached_content_id else None,
+                "cached_content": cached_content_id,
+                "safety_settings": safety_settings,
+                "thinking_config": thinking_config,
+            }
+            if _top_p is not None:
+                _gen_config_params["top_p"] = _top_p
+            if _top_k is not None:
+                _gen_config_params["top_k"] = _top_k
+            config = types.GenerateContentConfig(**_gen_config_params)
 
             if cached_content_id:
                 self.logger.debug(f"Using CachedContent for prompt caching: {cached_content_id}")
@@ -1224,17 +1231,24 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             # Build unified GenerateContentConfig.
             # When cached_content is set, system_instruction and tools must be omitted
             # because they are already baked into the cached content object.
-            config = types.GenerateContentConfig(
-                temperature=temperature,
-                max_output_tokens=max_tokens or 8192,
-                top_p=kwargs.pop("top_p", 0.95),
-                top_k=kwargs.pop("top_k", 40),
-                system_instruction=final_system_instruction if not cached_content_id else None,
-                tools=tools_for_api if not cached_content_id else None,  # type: ignore[arg-type]
-                cached_content=cached_content_id,
-                safety_settings=safety_settings,
-                thinking_config=thinking_config,
-            )
+            # top_p / top_k are only forwarded when explicitly supplied so that
+            # each model can use its own API-side defaults when they are not set.
+            _stream_top_p = kwargs.pop("top_p", None)
+            _stream_top_k = kwargs.pop("top_k", None)
+            _stream_config_params: Dict[str, Any] = {
+                "temperature": temperature,
+                "max_output_tokens": max_tokens or 8192,
+                "system_instruction": final_system_instruction if not cached_content_id else None,
+                "tools": tools_for_api if not cached_content_id else None,
+                "cached_content": cached_content_id,
+                "safety_settings": safety_settings,
+                "thinking_config": thinking_config,
+            }
+            if _stream_top_p is not None:
+                _stream_config_params["top_p"] = _stream_top_p
+            if _stream_top_k is not None:
+                _stream_config_params["top_k"] = _stream_top_k
+            config = types.GenerateContentConfig(**_stream_config_params)
 
             if cached_content_id:
                 self.logger.debug(f"Using CachedContent for prompt caching in streaming: {cached_content_id}")
