@@ -488,8 +488,8 @@ class ToolAgent(BaseAIAgent):
             max_tokens=self._config.max_tokens,
             context=context,
         )
-        # Merge provider-specific parameters (thinking_config, reasoning_effort, etc.)
-        call_kwargs.update(self._config.extra_llm_kwargs)
+        # Merge provider-specific parameters (top_p, top_k, thinking_config, reasoning_effort, etc.)
+        call_kwargs.update(self._config.get_llm_call_kwargs())
         call_kwargs["tools"] = tools
         call_kwargs["tool_choice"] = "auto"
         response = await self.llm_client.generate_text(**call_kwargs)  # type: ignore[union-attr]
@@ -876,8 +876,8 @@ class ToolAgent(BaseAIAgent):
             max_tokens=self._config.max_tokens,
             context=context,
         )
-        # Merge provider-specific parameters (thinking_config, reasoning_effort, etc.)
-        stream_kwargs.update(self._config.extra_llm_kwargs)
+        # Merge provider-specific parameters (top_p, top_k, thinking_config, reasoning_effort, etc.)
+        stream_kwargs.update(self._config.get_llm_call_kwargs())
         stream_kwargs["tools"] = tools
         stream_kwargs["tool_choice"] = "auto"
         stream_kwargs["return_chunks"] = True
