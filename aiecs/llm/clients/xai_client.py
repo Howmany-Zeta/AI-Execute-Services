@@ -94,6 +94,8 @@ class XAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
         functions: Optional[List[Dict[str, Any]]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Any] = None,
+        input_price: Optional[float] = None,
+        output_price: Optional[float] = None,
         **kwargs,
     ) -> LLMResponse:
         """
@@ -145,13 +147,14 @@ class XAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
                 functions=functions,
                 tools=tools,
                 tool_choice=tool_choice,
+                input_price=input_price,
+                output_price=output_price,
                 **kwargs,
             )
 
             # Override provider and model name for xAI
             response.provider = self.provider_name
             response.model = selected_model
-            response.cost_estimate = 0.0  # xAI pricing not available yet
 
             return response
 
@@ -172,6 +175,8 @@ class XAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Any] = None,
         return_chunks: bool = False,
+        input_price: Optional[float] = None,
+        output_price: Optional[float] = None,
         **kwargs,
     ) -> AsyncGenerator[Any, None]:
         """

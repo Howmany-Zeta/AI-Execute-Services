@@ -438,6 +438,8 @@ class AnthropicVertexClient(BaseLLMClient):
         context: Optional[Dict[str, Any]] = None,
         functions: Optional[List[Dict[str, Any]]] = None,
         system_instruction: Optional[str] = None,
+        input_price: Optional[float] = None,
+        output_price: Optional[float] = None,
         **kwargs,
     ) -> LLMResponse:
         """Generate a single completion via the Anthropic Messages API.
@@ -483,7 +485,7 @@ class AnthropicVertexClient(BaseLLMClient):
 
         cost_estimate: Optional[float] = None
         if prompt_tokens is not None and completion_tokens is not None:
-            cost_estimate = self._estimate_cost_from_config(request["model"], prompt_tokens, completion_tokens)
+            cost_estimate = self._compute_cost(request["model"], prompt_tokens, completion_tokens, input_price, output_price)
 
         metadata: Dict[str, Any] = {
             "stop_reason": getattr(response, "stop_reason", None),
@@ -528,6 +530,8 @@ class AnthropicVertexClient(BaseLLMClient):
         return_chunks: bool = False,
         functions: Optional[List[Dict[str, Any]]] = None,
         system_instruction: Optional[str] = None,
+        input_price: Optional[float] = None,
+        output_price: Optional[float] = None,
         **kwargs,
     ) -> AsyncGenerator[Any, None]:
         """Stream a completion, optionally yielding ``StreamChunk`` objects.

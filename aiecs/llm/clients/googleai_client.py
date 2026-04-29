@@ -192,6 +192,8 @@ class GoogleAIClient(BaseLLMClient):
         max_tokens: Optional[int] = None,
         context: Optional[Dict[str, Any]] = None,
         system_instruction: Optional[str] = None,
+        input_price: Optional[float] = None,
+        output_price: Optional[float] = None,
         **kwargs,
     ) -> LLMResponse:
         """
@@ -314,8 +316,8 @@ class GoogleAIClient(BaseLLMClient):
                 cache_read_tokens = usage.cached_content_token_count
                 cache_hit = cache_read_tokens is not None and cache_read_tokens > 0
 
-            # Use config-based cost estimation
-            cost = self._estimate_cost_from_config(model_name, prompt_tokens, completion_tokens)
+            # Compute cost: use caller-supplied prices when provided, else fall back to config.
+            cost = self._compute_cost(model_name, prompt_tokens, completion_tokens, input_price, output_price)
 
             return LLMResponse(
                 content=content,
@@ -343,6 +345,8 @@ class GoogleAIClient(BaseLLMClient):
         max_tokens: Optional[int] = None,
         context: Optional[Dict[str, Any]] = None,
         system_instruction: Optional[str] = None,
+        input_price: Optional[float] = None,
+        output_price: Optional[float] = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]:
         """

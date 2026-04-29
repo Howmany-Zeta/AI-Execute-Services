@@ -193,6 +193,9 @@ class BaseLLMClient(ABC):
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         context: Optional[Dict[str, Any]] = None,
+        *,
+        input_price: Optional[float] = None,
+        output_price: Optional[float] = None,
         **kwargs,
     ) -> LLMResponse:
         """
@@ -223,6 +226,9 @@ class BaseLLMClient(ABC):
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         context: Optional[Dict[str, Any]] = None,
+        *,
+        input_price: Optional[float] = None,
+        output_price: Optional[float] = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]:
         """
@@ -336,6 +342,38 @@ class BaseLLMClient(ABC):
             costs = token_costs[model]
             return float((input_tokens * costs["input"] + output_tokens * costs["output"]) / 1000)
         return 0.0
+
+    def _compute_cost(
+        self,
+        model_name: str,
+        input_tokens: int,
+        output_tokens: int,
+        input_price: Optional[float] = None,
+        output_price: Optional[float] = None,
+    ) -> float:
+        """
+        Compute the cost of an API call.
+
+        When *both* ``input_price`` and ``output_price`` are provided they are
+        used directly, bypassing the YAML config.  Otherwise falls back to
+        ``_estimate_cost_from_config``.
+
+        Args:
+            model_name: Model identifier (used for config look-up when prices
+                are not provided inline).
+            input_tokens: Number of prompt / input tokens.
+            output_tokens: Number of completion / output tokens.
+            input_price: USD per **1 000** input tokens.  Pass ``None`` to use
+                the value from ``llm_models.yaml``.
+            output_price: USD per **1 000** output tokens.  Pass ``None`` to
+                use the value from ``llm_models.yaml``.
+
+        Returns:
+            Estimated cost in USD.
+        """
+        if input_price is not None and output_price is not None:
+            return float((input_tokens * input_price + output_tokens * output_price) / 1000)
+        return self._estimate_cost_from_config(model_name, input_tokens, output_tokens)
 
     def _estimate_cost_from_config(self, model_name: str, input_tokens: int, output_tokens: int) -> float:
         """

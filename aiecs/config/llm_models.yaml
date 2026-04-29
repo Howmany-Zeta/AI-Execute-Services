@@ -683,3 +683,190 @@ providers:
           top_p: 0.95
           top_k: 40
 
+  # Vertex AI MaaS - Partner / Open Models via OpenAI-compatible endpoint
+  # Covers xAI Grok, Qwen, Llama, DeepSeek, Mistral, and others on Model Garden.
+  # Auth: GCP Application Default Credentials (no separate API key needed).
+  vertex_maas:
+    provider_name: "VertexMaaS"
+    default_model: "grok-4.20-non-reasoning"
+    models:
+      # ── xAI Grok ──────────────────────────────────────────────────────────
+      - name: "grok-4.20-reasoning"
+        display_name: "Grok 4.20 (Reasoning)"
+        description: "xAI flagship reasoning model on Vertex AI MaaS"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 131072
+        default_params:
+          temperature: 0.7
+          max_tokens: 8192
+
+      - name: "grok-4.20-non-reasoning"
+        display_name: "Grok 4.20 (Non-Reasoning)"
+        description: "xAI flagship non-thinking model on Vertex AI MaaS"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 131072
+        default_params:
+          temperature: 0.7
+          max_tokens: 8192
+
+      - name: "grok-4.1-fast-reasoning"
+        display_name: "Grok 4.1 Fast (Reasoning)"
+        description: "xAI cost-effective reasoning model on Vertex AI MaaS"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 131072
+        default_params:
+          temperature: 0.7
+          max_tokens: 8192
+
+      - name: "grok-4.1-fast-non-reasoning"
+        display_name: "Grok 4.1 Fast (Non-Reasoning)"
+        description: "xAI cost-effective non-thinking model on Vertex AI MaaS"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 131072
+        default_params:
+          temperature: 0.7
+          max_tokens: 8192
+
+      # ── Qwen ──────────────────────────────────────────────────────────────
+      - name: "qwen3-235b-a22b-instruct-2507-maas"
+        display_name: "Qwen3 235B"
+        description: "Alibaba Qwen3 235B hybrid-thinking model on Vertex AI MaaS"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 131072
+        default_params:
+          temperature: 0.7
+          max_tokens: 8192
+
+      - name: "qwen3-next-80b-instruct-maas"
+        display_name: "Qwen3-Next 80B Instruct"
+        description: "Alibaba Qwen3-Next 80B instruct model on Vertex AI MaaS"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 131072
+        default_params:
+          temperature: 0.7
+          max_tokens: 8192
+
+      - name: "qwen3-next-80b-thinking-maas"
+        display_name: "Qwen3-Next 80B Thinking"
+        description: "Alibaba Qwen3-Next 80B thinking model on Vertex AI MaaS"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 131072
+        default_params:
+          temperature: 0.7
+          max_tokens: 8192
+
+      # ── Llama ─────────────────────────────────────────────────────────────
+      - name: "llama-4-maverick-17b-128e-instruct-maas"
+        display_name: "Llama 4 Maverick"
+        description: "Meta Llama 4 Maverick multimodal model on Vertex AI MaaS"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 8192
+          context_window: 1048576
+        default_params:
+          temperature: 0.7
+          max_tokens: 8192
+
+      - name: "llama-4-scout-17b-16e-instruct-maas"
+        display_name: "Llama 4 Scout"
+        description: "Meta Llama 4 Scout multimodal model on Vertex AI MaaS"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: true
+          function_calling: true
+          max_tokens: 8192
+          context_window: 10485760
+        default_params:
+          temperature: 0.7
+          max_tokens: 8192
+
+      # ── DeepSeek ──────────────────────────────────────────────────────────
+      - name: "deepseek-v3-2-maas"
+        display_name: "DeepSeek-V3.2"
+        description: "DeepSeek V3.2 model on Vertex AI MaaS"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 131072
+        default_params:
+          temperature: 0.7
+          max_tokens: 8192
+
+      # ── Mistral ───────────────────────────────────────────────────────────
+      - name: "mistral-medium-3"
+        display_name: "Mistral Medium 3"
+        description: "Mistral Medium 3 model on Vertex AI MaaS"
+        costs:
+          input: 0.0
+          output: 0.0
+        capabilities:
+          streaming: true
+          vision: false
+          function_calling: true
+          max_tokens: 8192
+          context_window: 131072
+        default_params:
+          temperature: 0.7
+          max_tokens: 8192
