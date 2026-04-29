@@ -76,6 +76,9 @@ class LLMClientProtocol(Protocol):
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         context: Optional[Dict[str, Any]] = None,
+        *,
+        input_price: Optional[float] = None,
+        output_price: Optional[float] = None,
         **kwargs,
     ) -> LLMResponse:
         """
@@ -106,6 +109,9 @@ class LLMClientProtocol(Protocol):
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         context: Optional[Dict[str, Any]] = None,
+        *,
+        input_price: Optional[float] = None,
+        output_price: Optional[float] = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]:
         """

@@ -602,6 +602,8 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Any] = None,
         system_instruction: Optional[str] = None,
+        input_price: Optional[float] = None,
+        output_price: Optional[float] = None,
         **kwargs,
     ) -> LLMResponse:
         """
@@ -1000,8 +1002,8 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 # Gemini Thinking models report internal reasoning cost separately.
                 thinking_tokens = getattr(usage, "thinking_token_count", None)
 
-            # Use config-based cost estimation
-            cost = self._estimate_cost_from_config(model_name, prompt_tokens, completion_tokens)
+            # Compute cost: use caller-supplied prices when provided, else fall back to config.
+            cost = self._compute_cost(model_name, prompt_tokens, completion_tokens, input_price, output_price)
 
             # Extract function calls from response if present
             function_calls = self._extract_function_calls_from_google_response(response)
@@ -1069,6 +1071,8 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
         tool_choice: Optional[Any] = None,
         return_chunks: bool = False,
         system_instruction: Optional[str] = None,
+        input_price: Optional[float] = None,
+        output_price: Optional[float] = None,
         **kwargs,
     ) -> AsyncGenerator[Any, None]:
         """

@@ -118,6 +118,8 @@ class OpenRouterClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
         functions: Optional[List[Dict[str, Any]]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Any] = None,
+        input_price: Optional[float] = None,
+        output_price: Optional[float] = None,
         **kwargs,
     ) -> LLMResponse:
         """
@@ -175,6 +177,8 @@ class OpenRouterClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
                 functions=functions,
                 tools=tools,
                 tool_choice=tool_choice,
+                input_price=input_price,
+                output_price=output_price,
                 **kwargs_clean,
             )
 
@@ -201,6 +205,8 @@ class OpenRouterClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Any] = None,
         return_chunks: bool = False,
+        input_price: Optional[float] = None,
+        output_price: Optional[float] = None,
         **kwargs,
     ) -> AsyncGenerator[Any, None]:
         """
