@@ -260,14 +260,14 @@ class GoogleAIClient(BaseLLMClient):
             # Convert messages to Content objects
             contents = self._convert_messages_to_contents(user_messages)
 
-            # Create GenerateContentConfig with all settings
-            config = types.GenerateContentConfig(
-                system_instruction=final_system_instruction,
-                temperature=temperature,
-                max_output_tokens=max_tokens or 8192,
-                top_p=kwargs.get("top_p", 0.95),
-                top_k=kwargs.get("top_k", 40),
-                safety_settings=[
+            # Create GenerateContentConfig with all settings.
+            # top_p / top_k are only forwarded when explicitly supplied so that
+            # each model can use its own API-side defaults when they are not set.
+            generate_config_params: Dict[str, Any] = {
+                "system_instruction": final_system_instruction,
+                "temperature": temperature,
+                "max_output_tokens": max_tokens or 8192,
+                "safety_settings": [
                     types.SafetySetting(
                         category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
                         threshold=types.HarmBlockThreshold.OFF,
@@ -285,7 +285,14 @@ class GoogleAIClient(BaseLLMClient):
                         threshold=types.HarmBlockThreshold.OFF,
                     ),
                 ],
-            )
+            }
+            top_p_val = kwargs.pop("top_p", None)
+            top_k_val = kwargs.pop("top_k", None)
+            if top_p_val is not None:
+                generate_config_params["top_p"] = top_p_val
+            if top_k_val is not None:
+                generate_config_params["top_k"] = top_k_val
+            config = types.GenerateContentConfig(**generate_config_params)
 
             # Use async client for async operations
             response = await client.aio.models.generate_content(
@@ -404,14 +411,14 @@ class GoogleAIClient(BaseLLMClient):
             # Convert messages to Content objects
             contents = self._convert_messages_to_contents(user_messages)
 
-            # Create GenerateContentConfig with all settings
-            config = types.GenerateContentConfig(
-                system_instruction=final_system_instruction,
-                temperature=temperature,
-                max_output_tokens=max_tokens or 8192,
-                top_p=kwargs.get("top_p", 0.95),
-                top_k=kwargs.get("top_k", 40),
-                safety_settings=[
+            # Create GenerateContentConfig with all settings.
+            # top_p / top_k are only forwarded when explicitly supplied so that
+            # each model can use its own API-side defaults when they are not set.
+            stream_config_params: Dict[str, Any] = {
+                "system_instruction": final_system_instruction,
+                "temperature": temperature,
+                "max_output_tokens": max_tokens or 8192,
+                "safety_settings": [
                     types.SafetySetting(
                         category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
                         threshold=types.HarmBlockThreshold.OFF,
@@ -429,7 +436,14 @@ class GoogleAIClient(BaseLLMClient):
                         threshold=types.HarmBlockThreshold.OFF,
                     ),
                 ],
-            )
+            }
+            stream_top_p = kwargs.pop("top_p", None)
+            stream_top_k = kwargs.pop("top_k", None)
+            if stream_top_p is not None:
+                stream_config_params["top_p"] = stream_top_p
+            if stream_top_k is not None:
+                stream_config_params["top_k"] = stream_top_k
+            config = types.GenerateContentConfig(**stream_config_params)
 
             # Use async streaming with the new SDK
             async for chunk in await client.aio.models.generate_content_stream(

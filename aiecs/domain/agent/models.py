@@ -182,6 +182,23 @@ class AgentConfiguration(BaseModel):
     llm_model: Optional[str] = Field(None, description="LLM model name")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="LLM temperature setting")
     max_tokens: int = Field(default=4096, ge=1, description="Maximum tokens for LLM responses")
+    top_p: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Nucleus sampling probability mass (0.0-1.0). "
+        "When set, forwarded to every generate_text/stream_text call. "
+        "Supported by all providers (OpenAI, xAI, OpenRouter, Anthropic, Google AI, Vertex AI). "
+        "When None, the provider uses its own default.",
+    )
+    top_k: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description="Top-k sampling: limit token selection to the k most likely tokens. "
+        "When set, forwarded to every generate_text/stream_text call. "
+        "Supported by Google AI and Vertex AI providers. "
+        "When None, the provider uses its own default.",
+    )
 
     # RAG strategy selection LLM configuration
     strategy_selection_llm_provider: Optional[str] = Field(
@@ -325,9 +342,40 @@ class AgentConfiguration(BaseModel):
             "Use for provider-specific parameters such as "
             "thinking_config (Gemini Thinking models), "
             "thinking (Claude extended thinking), or "
-            "reasoning_effort (OpenAI o-series models)."
+            "reasoning_effort (OpenAI o-series models). "
+            "Note: top_p and top_k have dedicated fields above and should be "
+            "set there rather than here."
         ),
     )
+
+    def get_llm_call_kwargs(self) -> Dict[str, Any]:
+        """Return a dict of extra kwargs to pass to every LLM call.
+
+        Merges ``extra_llm_kwargs`` with the first-class ``top_p`` / ``top_k``
+        sampling parameters. Values already present in ``extra_llm_kwargs``
+        take precedence over the dedicated fields so that advanced users can
+        still override via the escape hatch.
+
+        Usage in agents::
+
+            response = await self.llm_client.generate_text(
+                messages=messages,
+                model=self._config.llm_model,
+                temperature=self._config.temperature,
+                max_tokens=self._config.max_tokens,
+                context=context,
+                **self._config.get_llm_call_kwargs(),
+            )
+        """
+        kwargs: Dict[str, Any] = {}
+        # First-class sampling knobs – only forwarded when explicitly set.
+        if self.top_p is not None:
+            kwargs["top_p"] = self.top_p
+        if self.top_k is not None:
+            kwargs["top_k"] = self.top_k
+        # extra_llm_kwargs wins over the dedicated fields (allows override).
+        kwargs.update(self.extra_llm_kwargs)
+        return kwargs
 
     # Metadata
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional configuration metadata")
