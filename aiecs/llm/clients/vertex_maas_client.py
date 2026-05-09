@@ -20,8 +20,10 @@ All models share the same Vertex AI OpenAI-compatible endpoint:
     https://{location}-aiplatform.googleapis.com/v1/projects/{project}/
         locations/{location}/endpoints/openapi
 
-Authentication uses GCP Application Default Credentials or a service-account
-JSON path. Prefer ``GOOGLE_APPLICATION_CREDENTIALS_VERTEX_MAAS``; otherwise
+Authentication uses project/region
+``VERTEX_PROJECT_ID_MAAS`` / ``VERTEX_LOCATION_MAAS``, or falls back to
+``VERTEX_PROJECT_ID`` / ``VERTEX_LOCATION``.
+Prefer ``GOOGLE_APPLICATION_CREDENTIALS_VERTEX_MAAS``; otherwise
 ``GOOGLE_APPLICATION_CREDENTIALS`` (or ADC). Access tokens are cached and
 refreshed automatically 5 minutes before expiry. Credentials are loaded per
 client without overwriting process-global ``GOOGLE_APPLICATION_CREDENTIALS``.
@@ -90,10 +92,10 @@ def _to_api_model(model_name: str) -> str:
 class VertexMaaSClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
     """Vertex AI MaaS unified client for partner / open models.
 
-    Routes to xAI Grok, Qwen, Llama, DeepSeek, Mistral, and any other model
-    available via Vertex AI Model Garden MaaS through the shared OpenAI-compatible
-    endpoint.  GCP Application Default Credentials are used for authentication;
-    the access token is refreshed transparently before expiry.
+    Uses project/region ``VERTEX_PROJECT_ID_MAAS`` / ``VERTEX_LOCATION_MAAS``,
+    or falls back to ``VERTEX_PROJECT_ID`` / ``VERTEX_LOCATION``.
+    GCP Application Default Credentials or a per-client service-account JSON
+    path are used for authentication; the access token is refreshed transparently before expiry.
     """
 
     def __init__(self) -> None:
@@ -106,10 +108,10 @@ class VertexMaaSClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
     # ------------------------------------------------------------------ helpers
 
     def _get_base_url(self) -> str:
-        project_id = self.settings.vertex_project_id
+        project_id = self.settings.maas_vertex_project_id
         if not project_id:
-            raise ProviderNotAvailableError("Vertex AI project ID not configured (VERTEX_PROJECT_ID)")
-        location = getattr(self.settings, "vertex_location", "us-central1") or "us-central1"
+            raise ProviderNotAvailableError("Vertex AI project ID not configured (VERTEX_PROJECT_ID_MAAS or VERTEX_PROJECT_ID)")
+        location = self.settings.maas_vertex_location or "us-central1"
 
         if location == "global":
             # Global endpoint: hostname has no location prefix.
@@ -160,7 +162,12 @@ class VertexMaaSClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
             self._token_expiry = datetime.now(tz=timezone.utc) + timedelta(hours=1)
 
         self.logger.debug(f"GCP token refreshed, expires at {self._token_expiry.isoformat()}")
-        return credentials.token  # type: ignore[return-value]
+        token = credentials.token
+        if not isinstance(token, str) or not token:
+            raise ProviderNotAvailableError(
+                "GCP access token missing or invalid after credentials.refresh().",
+            )
+        return token
 
     def _get_openai_client(self) -> AsyncOpenAI:
         """Return an ``AsyncOpenAI`` client backed by a fresh GCP access token."""

@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     googleai_api_key: str = Field(default="", alias="GOOGLEAI_API_KEY")
     vertex_project_id: str = Field(default="", alias="VERTEX_PROJECT_ID")
     vertex_location: str = Field(default="us-central1", alias="VERTEX_LOCATION")
+    vertex_project_id_anthropic: str = Field(default="", alias="VERTEX_PROJECT_ID_ANTHROPIC")
+    vertex_location_anthropic: str = Field(default="", alias="VERTEX_LOCATION_ANTHROPIC")
+    vertex_project_id_maas: str = Field(default="", alias="VERTEX_PROJECT_ID_MAAS")
+    vertex_location_maas: str = Field(default="", alias="VERTEX_LOCATION_MAAS")
     google_application_credentials: str = Field(default="", alias="GOOGLE_APPLICATION_CREDENTIALS")
     # Per-Vertex-client service account JSON (optional; fall back to GOOGLE_APPLICATION_CREDENTIALS)
     google_application_credentials_vertex_gemini: str = Field(
@@ -450,6 +454,30 @@ class Settings(BaseSettings):
         )
 
     @property
+    def anthropic_vertex_project_id(self) -> str:
+        """GCP project for Claude on Vertex; falls back to VERTEX_PROJECT_ID."""
+        s = (self.vertex_project_id_anthropic or "").strip()
+        return s or (self.vertex_project_id or "").strip()
+
+    @property
+    def anthropic_vertex_location(self) -> str:
+        """Region for Claude on Vertex; falls back to VERTEX_LOCATION."""
+        s = (self.vertex_location_anthropic or "").strip()
+        return s or (self.vertex_location or "us-central1").strip() or "us-central1"
+
+    @property
+    def maas_vertex_project_id(self) -> str:
+        """GCP project for Vertex AI MaaS OpenAPI; falls back to VERTEX_PROJECT_ID."""
+        s = (self.vertex_project_id_maas or "").strip()
+        return s or (self.vertex_project_id or "").strip()
+
+    @property
+    def maas_vertex_location(self) -> str:
+        """Region for Vertex MaaS (e.g. global for Grok); falls back to VERTEX_LOCATION."""
+        s = (self.vertex_location_maas or "").strip()
+        return s or (self.vertex_location or "us-central1").strip() or "us-central1"
+
+    @property
     def database_config(self) -> dict:
         """
         Get database configuration for asyncpg.
@@ -817,11 +845,12 @@ def validate_required_settings(operation_type: str = "full") -> bool:
 
     if operation_type in ["llm", "full"]:
         # At least one LLM provider should be configured
+        any_vertex_project = bool(settings.vertex_project_id or settings.vertex_project_id_anthropic or settings.vertex_project_id_maas)
         llm_configs = [
             ("OpenAI", settings.openai_api_key),
             (
                 "Vertex AI",
-                settings.vertex_project_id and settings.has_vertex_gcp_credentials_configured(),
+                any_vertex_project and settings.has_vertex_gcp_credentials_configured(),
             ),
             ("xAI", settings.xai_api_key),
         ]

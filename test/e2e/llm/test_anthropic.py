@@ -18,22 +18,26 @@ from test.e2e.base import E2ELLMTestBase, log_test_info
 # Load .env.test explicitly (the shared conftest only loads .env).
 _ENV_TEST = Path(__file__).resolve().parents[2].parent / ".env.test"
 if _ENV_TEST.exists():
-    load_dotenv(_ENV_TEST, override=False)
+    load_dotenv(_ENV_TEST, override=True)
 
 
 @pytest.fixture(scope="session")
 def anthropic_vertex_config():
     """Resolve Anthropic-on-Vertex credentials from the environment."""
-    project_id = os.getenv("VERTEX_PROJECT_ID")
-    location = os.getenv("VERTEX_LOCATION")
-    credentials = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    project_id = os.getenv("VERTEX_PROJECT_ID_ANTHROPIC") or os.getenv("VERTEX_PROJECT_ID")
+    location = os.getenv("VERTEX_LOCATION_ANTHROPIC") or os.getenv("VERTEX_LOCATION")
+    credentials = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_VERTEX_ANTHROPIC") or os.getenv(
+        "GOOGLE_APPLICATION_CREDENTIALS"
+    )
 
     if not project_id:
-        pytest.skip("VERTEX_PROJECT_ID not set in environment")
+        pytest.skip("VERTEX_PROJECT_ID_ANTHROPIC or VERTEX_PROJECT_ID not set in environment")
     if not location:
-        pytest.skip("VERTEX_LOCATION not set in environment")
+        pytest.skip("VERTEX_LOCATION_ANTHROPIC or VERTEX_LOCATION not set in environment")
     if not credentials or not Path(credentials).exists():
-        pytest.skip("GOOGLE_APPLICATION_CREDENTIALS file not found")
+        pytest.skip(
+            "GOOGLE_APPLICATION_CREDENTIALS_VERTEX_ANTHROPIC or GOOGLE_APPLICATION_CREDENTIALS file not found"
+        )
 
     return {
         "project_id": project_id,
@@ -53,8 +57,8 @@ class TestAnthropicVertexE2E(E2ELLMTestBase):
         self.project_id = anthropic_vertex_config["project_id"]
         self.location = anthropic_vertex_config["location"]
         self.cost_tracker = cost_tracker
-        # Cheapest Claude enabled on the kjmsdw-claude project in us-east5.
-        self.model = "claude-haiku-4-5@20251001"
+        # Vertex partner model id (see Google Cloud “Request predictions with Claude models”).
+        self.model = "claude-sonnet-4-6"
 
     @pytest.mark.asyncio
     async def test_anthropic_vertex_complete_response(self):
