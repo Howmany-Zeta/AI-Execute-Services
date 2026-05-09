@@ -5,15 +5,15 @@ Tests Vertex AI MaaS (Model-as-a-Service) client with real API calls.
 Uses GCP credentials from .env.test.
 
 Requirements:
-- VERTEX_PROJECT_ID must be set in .env.test
-- GOOGLE_APPLICATION_CREDENTIALS must point to a valid service-account key
-  that has the Vertex AI MaaS models enabled in Model Garden
+- VERTEX_PROJECT_ID_MAAS (or VERTEX_PROJECT_ID) must be set in .env.test
+- GOOGLE_APPLICATION_CREDENTIALS_VERTEX_MAAS (or GOOGLE_APPLICATION_CREDENTIALS)
+  must point to a valid service-account key with MaaS models enabled
 - Real LLM calls will be made (costs may apply)
 
 Note:
-  .env.test sets VERTEX_LOCATION=us-east5 (configured for Claude/Anthropic).
-  Grok models on Vertex AI MaaS are available in us-central1, so this file
-  overrides VERTEX_LOCATION to us-central1 before constructing the client.
+  Partner models such as Grok use the global endpoint; set VERTEX_LOCATION_MAAS=global
+  in .env.test (or export it before running this file). If unset, this test sets
+  VERTEX_LOCATION_MAAS=global so it does not disturb Anthropic's region.
 """
 
 import os
@@ -35,14 +35,15 @@ if env_test_path.exists():
 else:
     print(f"⚠ .env.test not found at {env_test_path}")
 
-# Grok partner models on Vertex AI are only available via the global endpoint.
-# Override the Claude-specific region (us-east5) set in .env.test.
-os.environ["VERTEX_LOCATION"] = "global"
+# Qwen on MaaS uses the global OpenAPI endpoint unless VERTEX_LOCATION_MAAS is set.
+if not os.getenv("VERTEX_LOCATION_MAAS"):
+    os.environ["VERTEX_LOCATION_MAAS"] = "global"
 
 # ---------------------------------------------------------------------------
-# Model under test
+# Model under test (Alibaba Qwen on Vertex AI Model Garden MaaS)
 # ---------------------------------------------------------------------------
-_MODEL = "grok-4.1-fast-non-reasoning"
+# qwen3-next-80b-* can return 403/404 unless that SKU is entitled on the project.
+_MODEL = "qwen3-235b-a22b-instruct-2507-maas"
 
 # ---------------------------------------------------------------------------
 # Fixture

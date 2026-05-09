@@ -7,9 +7,10 @@ Anthropic on Vertex AI client.
 
 Connects to Claude models hosted on Google Cloud Vertex AI Model Garden via
 the official ``anthropic[vertex]`` SDK (``AsyncAnthropicVertex``).  Uses the
-same ``vertex_project_id`` / ``vertex_location`` as ``VertexAIClient``, with
-optional JSON key file ``GOOGLE_APPLICATION_CREDENTIALS_VERTEX_ANTHROPIC`` (or
-fallback ``GOOGLE_APPLICATION_CREDENTIALS`` / ADC), and speaks the native
+``VERTEX_PROJECT_ID_ANTHROPIC`` / ``VERTEX_LOCATION_ANTHROPIC`` when set,
+otherwise falls back to global ``VERTEX_PROJECT_ID`` / ``VERTEX_LOCATION``.
+Optional JSON key: ``GOOGLE_APPLICATION_CREDENTIALS_VERTEX_ANTHROPIC`` or
+fallback ``GOOGLE_APPLICATION_CREDENTIALS`` / ADC. Uses the native
 Anthropic Messages API rather than the Gemini API.
 
 Differences vs the regular ``VertexAIClient`` (Gemini) implementation:
@@ -120,8 +121,10 @@ def _image_block_from_source(source: Union[str, Dict[str, Any]]) -> Dict[str, An
 class AnthropicVertexClient(BaseLLMClient):
     """Anthropic (Claude) on Google Cloud Vertex AI.
 
-    Authenticates with an explicit service-account JSON when configured
-    (``GOOGLE_APPLICATION_CREDENTIALS_VERTEX_ANTHROPIC`` or fallback
+    Uses project/region ``VERTEX_PROJECT_ID_ANTHROPIC`` / ``VERTEX_LOCATION_ANTHROPIC``,
+    or falls back to ``VERTEX_PROJECT_ID`` / ``VERTEX_LOCATION``. Authenticates
+    with an explicit service-account JSON when configured (
+    ``GOOGLE_APPLICATION_CREDENTIALS_VERTEX_ANTHROPIC`` or fallback
     ``GOOGLE_APPLICATION_CREDENTIALS``) or via Application Default Credentials,
     and routes all calls through the Anthropic SDK's ``AsyncAnthropicVertex``
     transport without mutating process-global ``GOOGLE_APPLICATION_CREDENTIALS``.
@@ -144,8 +147,8 @@ class AnthropicVertexClient(BaseLLMClient):
         if not _ANTHROPIC_AVAILABLE:
             raise ProviderNotAvailableError("The 'anthropic' SDK is not installed. Install with: pip install 'anthropic[vertex]'")
 
-        if not self.settings.vertex_project_id:
-            raise ProviderNotAvailableError("Vertex AI project ID not configured (VERTEX_PROJECT_ID)")
+        if not self.settings.anthropic_vertex_project_id:
+            raise ProviderNotAvailableError("Vertex AI project ID not configured (VERTEX_PROJECT_ID_ANTHROPIC or VERTEX_PROJECT_ID)")
 
         from aiecs.llm.utils.gcp_credentials import (
             load_optional_service_account_credentials,
@@ -168,15 +171,15 @@ class AnthropicVertexClient(BaseLLMClient):
         elif "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
             self.logger.warning("No Google Cloud credentials configured. Falling back to Application Default Credentials.")
 
-        region = getattr(self.settings, "vertex_location", "us-central1")
+        region = self.settings.anthropic_vertex_location
         try:
             self._client = AsyncAnthropicVertex(
-                project_id=self.settings.vertex_project_id,
+                project_id=self.settings.anthropic_vertex_project_id,
                 region=region,
                 credentials=creds,
             )
             self._initialized = True
-            self.logger.info(f"AnthropicVertex initialized for project {self.settings.vertex_project_id} region={region}")
+            self.logger.info(f"AnthropicVertex initialized for project {self.settings.anthropic_vertex_project_id} region={region}")
         except Exception as e:
             raise ProviderNotAvailableError(f"Failed to initialize AnthropicVertex: {str(e)}")
 
