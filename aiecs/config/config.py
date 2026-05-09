@@ -50,6 +50,19 @@ class Settings(BaseSettings):
     vertex_project_id: str = Field(default="", alias="VERTEX_PROJECT_ID")
     vertex_location: str = Field(default="us-central1", alias="VERTEX_LOCATION")
     google_application_credentials: str = Field(default="", alias="GOOGLE_APPLICATION_CREDENTIALS")
+    # Per-Vertex-client service account JSON (optional; fall back to GOOGLE_APPLICATION_CREDENTIALS)
+    google_application_credentials_vertex_gemini: str = Field(
+        default="",
+        alias="GOOGLE_APPLICATION_CREDENTIALS_VERTEX_GEMINI",
+    )
+    google_application_credentials_vertex_anthropic: str = Field(
+        default="",
+        alias="GOOGLE_APPLICATION_CREDENTIALS_VERTEX_ANTHROPIC",
+    )
+    google_application_credentials_vertex_maas: str = Field(
+        default="",
+        alias="GOOGLE_APPLICATION_CREDENTIALS_VERTEX_MAAS",
+    )
     google_api_key: str = Field(default="", alias="GOOGLE_API_KEY")
     google_cse_id: str = Field(default="", alias="GOOGLE_CSE_ID")
     xai_api_key: str = Field(default="", alias="XAI_API_KEY")
@@ -427,6 +440,15 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="allow")
 
+    def has_vertex_gcp_credentials_configured(self) -> bool:
+        """True if any explicit GCP JSON credential path is set (global or per-Vertex-client)."""
+        return bool(
+            self.google_application_credentials
+            or self.google_application_credentials_vertex_gemini
+            or self.google_application_credentials_vertex_anthropic
+            or self.google_application_credentials_vertex_maas
+        )
+
     @property
     def database_config(self) -> dict:
         """
@@ -799,7 +821,7 @@ def validate_required_settings(operation_type: str = "full") -> bool:
             ("OpenAI", settings.openai_api_key),
             (
                 "Vertex AI",
-                settings.vertex_project_id and settings.google_application_credentials,
+                settings.vertex_project_id and settings.has_vertex_gcp_credentials_configured(),
             ),
             ("xAI", settings.xai_api_key),
         ]

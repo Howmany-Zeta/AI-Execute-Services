@@ -139,7 +139,7 @@ async def example_configuration_check():
         print("\n📊 当前配置状态:")
         config_status = {
             "OpenAI": bool(settings.openai_api_key),
-            "Vertex AI": bool(settings.vertex_project_id and settings.google_application_credentials),
+            "Vertex AI": bool(settings.vertex_project_id and settings.has_vertex_gcp_credentials_configured()),
             "xAI": bool(settings.xai_api_key),
             "Redis": bool(settings.celery_broker_url),
             "Database": bool(settings.db_password),

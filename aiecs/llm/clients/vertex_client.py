@@ -218,30 +218,41 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 raise ProviderNotAvailableError("Vertex AI project ID not configured")
 
             try:
-                # Check if GOOGLE_APPLICATION_CREDENTIALS is configured
-                if self.settings.google_application_credentials:
-                    credentials_path = self.settings.google_application_credentials
-                    if os.path.exists(credentials_path):
-                        # Set the environment variable for Google Cloud SDK
-                        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
-                        self.logger.info(f"Using Google Cloud credentials from: {credentials_path}")
-                    else:
-                        self.logger.warning(f"Google Cloud credentials file not found: {credentials_path}")
-                        raise ProviderNotAvailableError(f"Google Cloud credentials file not found: {credentials_path}")
-                elif "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
-                    self.logger.info("Using Google Cloud credentials from environment variable")
-                else:
-                    self.logger.warning("No Google Cloud credentials configured. Using default authentication.")
+                from aiecs.llm.utils.gcp_credentials import (
+                    load_optional_service_account_credentials,
+                    resolve_credentials_json_path,
+                )
 
-                # Initialize the google-genai client for Vertex AI
+                spec = self.settings.google_application_credentials_vertex_gemini
+                fb = self.settings.google_application_credentials
+
+                if spec and not os.path.isfile(spec):
+                    raise ProviderNotAvailableError(f"Gemini Vertex credentials file not found: {spec}")
+                if not spec and fb and not os.path.isfile(fb):
+                    raise ProviderNotAvailableError(f"Google Cloud credentials file not found: {fb}")
+
+                cred_path = resolve_credentials_json_path(spec, fb)
+                creds = load_optional_service_account_credentials(specific_path=spec, fallback_path=fb)
+
+                if cred_path:
+                    self.logger.info(f"Using Google Cloud credentials from: {cred_path}")
+                elif os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+                    self.logger.info("Using Google Cloud credentials from GOOGLE_APPLICATION_CREDENTIALS (ADC)")
+                else:
+                    self.logger.warning("No Google Cloud credentials file in settings; using Application Default Credentials.")
+
+                # Initialize the google-genai client for Vertex AI (explicit creds avoid mutating os.environ)
                 self._client = genai.Client(
                     vertexai=True,
                     project=self.settings.vertex_project_id,
                     location=getattr(self.settings, "vertex_location", "us-central1"),
+                    credentials=creds,
                 )
                 self._initialized = True
                 self.logger.info(f"Vertex AI (google-genai) initialized for project {self.settings.vertex_project_id}")
 
+            except ProviderNotAvailableError:
+                raise
             except Exception as e:
                 raise ProviderNotAvailableError(f"Failed to initialize Vertex AI: {str(e)}")
 

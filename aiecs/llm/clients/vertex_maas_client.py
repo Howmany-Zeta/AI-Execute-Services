@@ -20,9 +20,11 @@ All models share the same Vertex AI OpenAI-compatible endpoint:
     https://{location}-aiplatform.googleapis.com/v1/projects/{project}/
         locations/{location}/endpoints/openapi
 
-Authentication uses GCP Application Default Credentials (or
-``GOOGLE_APPLICATION_CREDENTIALS``).  Access tokens are cached and refreshed
-automatically 5 minutes before expiry.
+Authentication uses GCP Application Default Credentials or a service-account
+JSON path. Prefer ``GOOGLE_APPLICATION_CREDENTIALS_VERTEX_MAAS``; otherwise
+``GOOGLE_APPLICATION_CREDENTIALS`` (or ADC). Access tokens are cached and
+refreshed automatically 5 minutes before expiry. Credentials are loaded per
+client without overwriting process-global ``GOOGLE_APPLICATION_CREDENTIALS``.
 """
 
 import logging
@@ -129,16 +131,22 @@ class VertexMaaSClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
         except ImportError:
             raise ProviderNotAvailableError("google-auth is not installed. Install with: pip install google-auth")
 
-        # Honor explicit credentials path from settings / environment.
-        cred_path = self.settings.google_application_credentials
-        if cred_path:
-            if os.path.exists(cred_path):
-                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = cred_path
-            else:
-                raise ProviderNotAvailableError(f"Google Cloud credentials file not found: {cred_path}")
+        from aiecs.llm.utils.gcp_credentials import load_optional_service_account_credentials
 
+        spec = self.settings.google_application_credentials_vertex_maas
+        fb = self.settings.google_application_credentials
+
+        if spec and not os.path.isfile(spec):
+            raise ProviderNotAvailableError(f"Vertex MaaS credentials file not found: {spec}")
+        if not spec and fb and not os.path.isfile(fb):
+            raise ProviderNotAvailableError(f"Google Cloud credentials file not found: {fb}")
+
+        explicit = load_optional_service_account_credentials(specific_path=spec, fallback_path=fb)
         try:
-            credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+            if explicit is not None:
+                credentials = explicit
+            else:
+                credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
             auth_req = google.auth.transport.requests.Request()
             credentials.refresh(auth_req)
         except Exception as exc:

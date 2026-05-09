@@ -7,8 +7,10 @@ Anthropic on Vertex AI client.
 
 Connects to Claude models hosted on Google Cloud Vertex AI Model Garden via
 the official ``anthropic[vertex]`` SDK (``AsyncAnthropicVertex``).  Uses the
-same ``vertex_project_id`` / ``vertex_location`` credentials as ``VertexAIClient``,
-but speaks the native Anthropic Messages API rather than the Gemini API.
+same ``vertex_project_id`` / ``vertex_location`` as ``VertexAIClient``, with
+optional JSON key file ``GOOGLE_APPLICATION_CREDENTIALS_VERTEX_ANTHROPIC`` (or
+fallback ``GOOGLE_APPLICATION_CREDENTIALS`` / ADC), and speaks the native
+Anthropic Messages API rather than the Gemini API.
 
 Differences vs the regular ``VertexAIClient`` (Gemini) implementation:
 
@@ -118,9 +120,12 @@ def _image_block_from_source(source: Union[str, Dict[str, Any]]) -> Dict[str, An
 class AnthropicVertexClient(BaseLLMClient):
     """Anthropic (Claude) on Google Cloud Vertex AI.
 
-    Authenticates via the same Google Cloud credentials used by ``VertexAIClient``
-    (``GOOGLE_APPLICATION_CREDENTIALS`` / ADC) and routes all calls through the
-    Anthropic SDK's ``AsyncAnthropicVertex`` transport.  Returned data uses the
+    Authenticates with an explicit service-account JSON when configured
+    (``GOOGLE_APPLICATION_CREDENTIALS_VERTEX_ANTHROPIC`` or fallback
+    ``GOOGLE_APPLICATION_CREDENTIALS``) or via Application Default Credentials,
+    and routes all calls through the Anthropic SDK's ``AsyncAnthropicVertex``
+    transport without mutating process-global ``GOOGLE_APPLICATION_CREDENTIALS``.
+    Returned data uses the
     same ``LLMResponse`` / ``StreamChunk`` shapes as the other clients so that
     higher-level agents do not need to special-case Anthropic.
     """
@@ -142,16 +147,24 @@ class AnthropicVertexClient(BaseLLMClient):
         if not self.settings.vertex_project_id:
             raise ProviderNotAvailableError("Vertex AI project ID not configured (VERTEX_PROJECT_ID)")
 
-        # Reuse the same credential resolution logic as VertexAIClient: prefer an
-        # explicitly configured key file, fall back to GOOGLE_APPLICATION_CREDENTIALS,
-        # otherwise rely on Application Default Credentials.
-        if self.settings.google_application_credentials:
-            credentials_path = self.settings.google_application_credentials
-            if os.path.exists(credentials_path):
-                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
-                self.logger.info(f"Using Google Cloud credentials from: {credentials_path}")
-            else:
-                raise ProviderNotAvailableError(f"Google Cloud credentials file not found: {credentials_path}")
+        from aiecs.llm.utils.gcp_credentials import (
+            load_optional_service_account_credentials,
+            resolve_credentials_json_path,
+        )
+
+        spec = self.settings.google_application_credentials_vertex_anthropic
+        fb = self.settings.google_application_credentials
+
+        if spec and not os.path.isfile(spec):
+            raise ProviderNotAvailableError(f"Anthropic Vertex credentials file not found: {spec}")
+        if not spec and fb and not os.path.isfile(fb):
+            raise ProviderNotAvailableError(f"Google Cloud credentials file not found: {fb}")
+
+        cred_path = resolve_credentials_json_path(spec, fb)
+        creds = load_optional_service_account_credentials(specific_path=spec, fallback_path=fb)
+
+        if cred_path:
+            self.logger.info(f"Using Google Cloud credentials from: {cred_path}")
         elif "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
             self.logger.warning("No Google Cloud credentials configured. Falling back to Application Default Credentials.")
 
@@ -160,6 +173,7 @@ class AnthropicVertexClient(BaseLLMClient):
             self._client = AsyncAnthropicVertex(
                 project_id=self.settings.vertex_project_id,
                 region=region,
+                credentials=creds,
             )
             self._initialized = True
             self.logger.info(f"AnthropicVertex initialized for project {self.settings.vertex_project_id} region={region}")
