@@ -120,44 +120,36 @@ class VersionManager:
         print(f"✓ Updated {main_file.relative_to(self.project_root)}: FastAPI version and health check version")
 
     def update_pyproject_file(self, new_version: str) -> None:
-        """Update version in pyproject.toml"""
+        """Update version in pyproject.toml ([project] and [tool.poetry] sections)"""
         pyproject_file = self.files["pyproject"]
         content = pyproject_file.read_text(encoding="utf-8")
 
-        # Update project version (only in [project] section, not in [project.scripts])
-        # Use a more specific pattern that only matches within [project] section
-        # Pattern: match [project] section, then find version line before next [section]
         lines = content.split("\n")
-        in_project_section = False
-        updated = False
+        current_section: Optional[str] = None
+        updated_sections: set[str] = set()
 
         for i, line in enumerate(lines):
-            # Check if we're entering [project] section
-            if line.strip() == "[project]":
-                in_project_section = True
+            section_match = re.match(r"^\[(.+)\]$", line.strip())
+            if section_match:
+                current_section = section_match.group(1)
                 continue
 
-            # Check if we're leaving [project] section (entering another section)
-            if in_project_section and line.strip().startswith("[") and line.strip() != "[project]":
-                in_project_section = False
-                break
-
-            # Update version line if we're in [project] section
-            if in_project_section and re.match(r'^\s*version\s*=\s*"', line):
+            if current_section in ("project", "tool.poetry") and re.match(r'^\s*version\s*=\s*"', line):
                 lines[i] = re.sub(
                     r'^(\s*version\s*=\s*")([^"]+)(")',
                     rf"\g<1>{new_version}\g<3>",
                     line,
                 )
-                updated = True
-                break
+                updated_sections.add(current_section)
 
-        if not updated:
+        if "project" not in updated_sections:
             raise ValueError("Could not find version in [project] section of pyproject.toml")
 
         content = "\n".join(lines)
         pyproject_file.write_text(content, encoding="utf-8")
         print(f"✓ Updated {pyproject_file.relative_to(self.project_root)}: project version")
+        if "tool.poetry" in updated_sections:
+            print(f"✓ Updated {pyproject_file.relative_to(self.project_root)}: poetry version")
 
     def update_version(self, new_version: str) -> None:
         """Update version in all files"""
