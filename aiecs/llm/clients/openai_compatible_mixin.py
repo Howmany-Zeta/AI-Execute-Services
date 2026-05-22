@@ -426,8 +426,9 @@ class OpenAICompatibleFunctionCallingMixin:
         # Stream response
         stream = await client.chat.completions.create(**api_params)
 
-        # Accumulator for tool calls
-        tool_calls_accumulator: Dict[str, Dict[str, Any]] = {}
+        # Accumulator for tool calls, keyed by streaming index (OpenAI standard).
+        # Some providers (e.g. OpenRouter → Nvidia) omit id in early deltas.
+        tool_calls_accumulator: Dict[int, Dict[str, Any]] = {}
         last_usage: Optional[Any] = None
 
         if hasattr(stream, "__aiter__"):
@@ -451,33 +452,40 @@ class OpenAICompatibleFunctionCallingMixin:
                 # Accumulate tool calls
                 if delta.tool_calls:
                     for tool_call_delta in delta.tool_calls:
-                        call_id = tool_call_delta.id
+                        index = getattr(tool_call_delta, "index", None)
+                        if index is None:
+                            index = max(tool_calls_accumulator.keys(), default=-1) + 1
 
-                        # Initialize accumulator for this call if needed
-                        if call_id not in tool_calls_accumulator:
-                            tool_calls_accumulator[call_id] = {
+                        if index not in tool_calls_accumulator:
+                            call_id = tool_call_delta.id or f"call_{index}"
+                            tool_calls_accumulator[index] = {
                                 "id": call_id,
                                 "type": "function",
                                 "function": {"name": "", "arguments": ""},
                             }
+                        elif tool_call_delta.id:
+                            # Backfill provider-assigned id when it arrives in a later delta.
+                            tool_calls_accumulator[index]["id"] = tool_call_delta.id
+
+                        acc_entry = tool_calls_accumulator[index]
 
                         # Accumulate function name and arguments
                         if tool_call_delta.function:
                             if tool_call_delta.function.name:
-                                tool_calls_accumulator[call_id]["function"]["name"] = tool_call_delta.function.name
+                                acc_entry["function"]["name"] = tool_call_delta.function.name
                             if tool_call_delta.function.arguments:
-                                tool_calls_accumulator[call_id]["function"]["arguments"] += tool_call_delta.function.arguments
+                                acc_entry["function"]["arguments"] += tool_call_delta.function.arguments
 
                         # Yield tool call update if return_chunks=True
                         if return_chunks:
                             yield StreamChunk(
                                 type="tool_call",
-                                tool_call=tool_calls_accumulator[call_id].copy(),
+                                tool_call=acc_entry.copy(),
                             )
 
             # At the end of stream, yield complete tool_calls if any
             if tool_calls_accumulator and return_chunks:
-                complete_tool_calls = list(tool_calls_accumulator.values())
+                complete_tool_calls = [tool_calls_accumulator[i] for i in sorted(tool_calls_accumulator.keys())]
                 yield StreamChunk(
                     type="tool_calls",
                     tool_calls=complete_tool_calls,

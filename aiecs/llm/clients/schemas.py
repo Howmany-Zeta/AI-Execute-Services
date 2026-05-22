@@ -91,14 +91,15 @@ def sanitize_tool_calls(raw: Optional[List[Any]]) -> Optional[List[Dict[str, Any
     if not raw:
         return None
     result: List[Dict[str, Any]] = []
-    for item in raw:
+    for i, item in enumerate(raw):
         validated = ToolCallItem.model_validate_safe(item)
         if validated:
+            call_id = validated.id or f"call_{i}"
             func = validated.function
             if isinstance(func, ToolCallFunction):
                 result.append(
                     {
-                        "id": validated.id,
+                        "id": call_id,
                         "type": validated.type,
                         "function": {"name": func.name, "arguments": func.arguments},
                     }
@@ -106,7 +107,7 @@ def sanitize_tool_calls(raw: Optional[List[Any]]) -> Optional[List[Dict[str, Any
             else:
                 result.append(
                     {
-                        "id": validated.id,
+                        "id": call_id,
                         "type": validated.type,
                         "function": func if isinstance(func, dict) else {},
                     }
