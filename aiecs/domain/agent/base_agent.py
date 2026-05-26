@@ -47,6 +47,7 @@ if TYPE_CHECKING:
     from aiecs.domain.context.context_engine import ContextEngine
     from aiecs.domain.agent.tools import SkillScriptRegistry, Tool
     from aiecs.domain.agent.skills import SkillRegistry
+    from aiecs.domain.agent.plugins.manager import PluginManager
 
 logger = logging.getLogger(__name__)
 
@@ -559,6 +560,8 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         # Automatically tries retry → simplify → fallback → delegate if errors occur
     """
 
+    _plugin_manager: Optional["PluginManager"] = None
+
     def __init__(
         self,
         agent_id: str,
@@ -639,6 +642,8 @@ class BaseAIAgent(SkillCapableMixin, ABC):
                 tools=["search", "calculator"]  # Loaded by subclass
             )
         """
+        self._plugin_manager = None
+
         # Identity
         self.agent_id = agent_id
         self.name = name
