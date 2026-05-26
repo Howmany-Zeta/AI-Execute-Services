@@ -1,0 +1,43 @@
+name: hybrid_context_history
+description: HybridAgent context.history expansion before task user message (§7.2)
+agent:
+  tools: []
+config:
+  goal: Plugin parity history agent
+  llm_model: parity-mock
+  system_prompt: You are a plugin parity history agent.
+  skills_enabled: false
+  memory_enabled: true
+  enable_prompt_caching: false
+task:
+  description: Follow-up question
+context:
+  history:
+  - role: user
+    content: Previous question
+  - role: assistant
+    content: Previous answer
+capture:
+  mock_final_output: Parity history follow-up response.
+expect:
+  messages_normalized:
+  - role: system
+    content: You are a plugin parity history agent.
+  - role: user
+    content: Previous question
+  - role: assistant
+    content: Previous answer
+  - role: user
+    content: 'Task: Follow-up question'
+  tool_schema_names: []
+  plugin_state_keys: []
+  execute_task_response:
+    iterations: 1
+    output: Parity history follow-up response.
+    reason: null
+    reasoning_steps:
+    - content: Parity history follow-up response.
+      iteration: 1
+      type: thought
+    success: true
+    tool_calls_count: 0

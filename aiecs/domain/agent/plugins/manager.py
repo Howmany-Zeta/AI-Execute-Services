@@ -8,6 +8,9 @@ PluginManager orchestrates plugin lifecycle hooks (§5.6, §4.4, §6.3.6).
 
 from __future__ import annotations
 
+import inspect
+import time
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from aiecs.domain.agent.plugins.context import AgentPluginContext, PluginShortCircuitResult
@@ -143,6 +146,14 @@ class PluginManager:
             raise ValueError("run_phase requires ctx=AgentPluginContext")
 
         plugins = self._plugins_for_phase(phase)
+        await self._emit_plugin_framework_event(
+            ctx,
+            {
+                "type": "plugin_phase_started",
+                "phase": phase.value,
+                "plugin_count": len(plugins),
+            },
+        )
 
         if phase == PluginPhase.BUILD_MESSAGES:
             messages = list(kwargs["messages"])
@@ -246,6 +257,21 @@ class PluginManager:
         origin = entry.origin if entry is not None else PluginOrigin.REGISTRY
         return format_plugin_id(name, origin)
 
+    async def _emit_plugin_framework_event(
+        self,
+        ctx: AgentPluginContext,
+        event: dict[str, Any],
+    ) -> None:
+        """Forward framework streaming events to ``ctx.event_sink`` when set (§10.3)."""
+        sink = ctx.event_sink
+        if sink is None:
+            return
+        payload = dict(event)
+        payload.setdefault("timestamp", datetime.utcnow().isoformat())
+        result = sink(payload)
+        if inspect.isawaitable(result):
+            await result
+
     async def _invoke_hook(
         self,
         plugin: BaseAgentPlugin,
@@ -254,11 +280,31 @@ class PluginManager:
         ctx: AgentPluginContext,
         **hook_kwargs: Any,
     ) -> Any:
+        await self._emit_plugin_framework_event(
+            ctx,
+            {
+                "type": "plugin_hook_started",
+                "phase": phase.value,
+                "plugin_name": plugin.metadata.name,
+            },
+        )
+        started = time.perf_counter()
         try:
             hook = getattr(plugin, hook_name)
             if hook_kwargs:
-                return await hook(ctx, **hook_kwargs)
-            return await hook(ctx)
+                result = await hook(ctx, **hook_kwargs)
+            else:
+                result = await hook(ctx)
+            await self._emit_plugin_framework_event(
+                ctx,
+                {
+                    "type": "plugin_hook_completed",
+                    "phase": phase.value,
+                    "plugin_name": plugin.metadata.name,
+                    "duration_ms": round((time.perf_counter() - started) * 1000, 3),
+                },
+            )
+            return result
         except Exception as exc:
             plugin_id = self._plugin_id(plugin.metadata.name)
             error = PluginHookError(
@@ -266,6 +312,15 @@ class PluginManager:
                 plugin_id=plugin_id,
                 phase=phase,
                 details={"error_type": type(exc).__name__},
+            )
+            await self._emit_plugin_framework_event(
+                ctx,
+                {
+                    "type": "plugin_hook_failed",
+                    "phase": phase.value,
+                    "plugin_name": plugin.metadata.name,
+                    "error": error.model_dump(mode="json"),
+                },
             )
             if self._continue_on_error:
                 self.last_load_result.errors.append(error)

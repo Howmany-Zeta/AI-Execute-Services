@@ -234,8 +234,10 @@ class ToolAgent(BaseAIAgent):
         llm_info = f" with LLM ({self.llm_client.provider_name})" if self.llm_client else ""
         logger.info(f"ToolAgent initialized: {agent_id}{llm_info} and {tool_count} tools")
 
-    async def _initialize(self) -> None:
+    async def _initialize(self, *, force_reload_plugins: bool = False) -> None:
         """Initialize Tool agent - load tools, validate LLM client, generate schemas."""
+        await super()._initialize(force_reload_plugins=force_reload_plugins)
+
         # Validate LLM client if provided
         if self.llm_client:
             self._validate_llm_client()
@@ -268,6 +270,7 @@ class ToolAgent(BaseAIAgent):
         if self.llm_client and hasattr(self.llm_client, "close"):
             await self.llm_client.close()
 
+        await super()._shutdown()
         logger.info(f"ToolAgent {self.agent_id} shut down")
 
     def _build_system_prompts(self) -> List[Dict[str, Any]]:

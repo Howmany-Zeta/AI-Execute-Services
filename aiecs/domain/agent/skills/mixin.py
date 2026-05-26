@@ -21,6 +21,11 @@ Usage:
     agent = MyAgent(name="assistant", llm_client=client)
     agent.attach_skills(["python-testing"])
     context = agent.get_skill_context("write unit tests")
+
+**HybridAgent / plugin-enabled agents**: prefer ``SkillPlugin`` (``AGENT_INIT`` +
+``BUILD_MESSAGES``) instead of calling ``attach_skills`` / ``get_skill_context`` directly
+from HybridAgent. The mixin remains the implementation surface that ``SkillPlugin``
+delegates to (§7.1).
 """
 
 import logging

@@ -13,6 +13,20 @@ from aiecs.domain.agent import HybridAgent, AgentConfiguration
 from aiecs.llm import BaseLLMClient, LLMResponse, LLMMessage
 
 
+async def _build_initial_messages_via_plugins(
+    agent: HybridAgent,
+    task: str,
+    context: Dict[str, Any],
+) -> List[LLMMessage]:
+    """Production path: MemoryPlugin history + SkillPlugin via BUILD_MESSAGES."""
+    plugin_ctx = agent._make_plugin_context(
+        task={"description": task},
+        context=context,
+        task_description=task,
+    )
+    return await agent._build_initial_messages_async(task, context, plugin_ctx)
+
+
 class MockLLMClient(BaseLLMClient):
     """Mock LLM client for testing."""
 
@@ -129,7 +143,9 @@ async def test_history_messages_via_context():
         "user_id": "user123"
     }
 
-    messages = agent._build_initial_messages("Tell me the weather", context)
+    messages = await _build_initial_messages_via_plugins(
+        agent, "Tell me the weather", context
+    )
 
     user_messages = [msg for msg in messages if msg.role == "user"]
     assistant_messages = [msg for msg in messages if msg.role == "assistant"]
@@ -169,7 +185,9 @@ async def test_history_with_llmmessage_instances():
         ]
     }
 
-    messages = agent._build_initial_messages("Continue conversation", context)
+    messages = await _build_initial_messages_via_plugins(
+        agent, "Continue conversation", context
+    )
 
     assert len(messages) >= 3
     assert any(msg.content == "Hello" for msg in messages)
@@ -316,7 +334,7 @@ async def test_images_in_history():
         ]
     }
 
-    messages = agent._build_initial_messages("Tell me more", context)
+    messages = await _build_initial_messages_via_plugins(agent, "Tell me more", context)
 
     history_with_images = [
         msg for msg in messages
@@ -429,7 +447,9 @@ async def test_history_assistant_message_with_tool_calls_no_content():
         ]
     }
 
-    messages = agent._build_initial_messages("Follow up question", context)
+    messages = await _build_initial_messages_via_plugins(
+        agent, "Follow up question", context
+    )
 
     assistant_msgs = [msg for msg in messages if msg.role == "assistant"]
     assert len(assistant_msgs) >= 1
@@ -484,7 +504,7 @@ async def test_history_tool_result_message_with_tool_call_id():
         ]
     }
 
-    messages = agent._build_initial_messages("Tell me more", context)
+    messages = await _build_initial_messages_via_plugins(agent, "Tell me more", context)
 
     tool_result_msgs = [msg for msg in messages if msg.role == "tool"]
     assert len(tool_result_msgs) >= 1
@@ -553,7 +573,9 @@ async def test_history_mixed_full_tool_use_sequence():
         ]
     }
 
-    messages = agent._build_initial_messages("Now find a dog picture.", context)
+    messages = await _build_initial_messages_via_plugins(
+        agent, "Now find a dog picture.", context
+    )
 
     # --- user message with image ---
     user_with_image = next(
