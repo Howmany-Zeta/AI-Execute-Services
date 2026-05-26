@@ -273,7 +273,10 @@ markers = [
     
     # Legacy markers (backward compatibility)
     "asyncio: Async tests (automatically applied by pytest-asyncio)",
-    "security: Security-related tests"
+    "security: Security-related tests",
+
+    # Agent plugin system (Phase 2 parity gate, §12.1)
+    "plugin_parity: Golden snapshot parity tests for HybridAgent plugin integration",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

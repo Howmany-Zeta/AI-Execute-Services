@@ -1,0 +1,60 @@
+name: hybrid_skills_enabled
+description: HybridAgent with skills_enabled and attached parity-test-skill (§7.1)
+agent:
+  tools:
+  - parity_search
+config:
+  goal: Plugin parity skills agent
+  llm_model: parity-mock
+  system_prompt: You are a plugin parity skills agent.
+  skills_enabled: true
+  skill_names:
+  - parity-test-skill
+  memory_enabled: true
+  enable_prompt_caching: false
+task:
+  description: Run the parity test skill workflow
+context: {}
+capture:
+  mock_final_output: Parity skills-enabled final response.
+expect:
+  messages_normalized:
+  - role: system
+    content: You are a plugin parity skills agent.
+  - role: system
+    content: 'Available tools: parity_search'
+  - role: system
+    content: 'Relevant Skills for this Task:
+
+      ## Skill: parity-test-skill
+
+      *Minimal skill for plugin parity baseline*
+
+
+      🔧 **This is an EXECUTABLE skill** - Call the corresponding tool ''parity-test-skill''
+      to execute this skill''s functionality.
+
+
+      ### Available Scripts
+
+      - **run**: `scripts/run.py` (mode: native)
+
+      - Run parity skill
+
+
+      To execute a script, use `execute_skill_script` or call directly via Bash/Python.'
+  - role: user
+    content: 'Task: Run the parity test skill workflow'
+  tool_schema_names:
+  - parity_search
+  plugin_state_keys: []
+  execute_task_response:
+    iterations: 1
+    output: Parity skills-enabled final response.
+    reason: null
+    reasoning_steps:
+    - content: Parity skills-enabled final response.
+      iteration: 1
+      type: thought
+    success: true
+    tool_calls_count: 0

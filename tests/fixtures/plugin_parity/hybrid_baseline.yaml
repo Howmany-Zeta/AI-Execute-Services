@@ -1,0 +1,39 @@
+name: hybrid_baseline
+description: HybridAgent with parity_search tool, memory on, no skills, empty context
+  (§12.1)
+agent:
+  tools:
+  - parity_search
+config:
+  goal: Plugin parity baseline agent
+  llm_model: parity-mock
+  system_prompt: You are a plugin parity baseline agent.
+  skills_enabled: false
+  memory_enabled: true
+  enable_prompt_caching: false
+task:
+  description: Find latest news about AI
+context: {}
+capture:
+  mock_final_output: Parity baseline final response.
+expect:
+  messages_normalized:
+  - role: system
+    content: You are a plugin parity baseline agent.
+  - role: system
+    content: 'Available tools: parity_search'
+  - role: user
+    content: 'Task: Find latest news about AI'
+  tool_schema_names:
+  - parity_search
+  plugin_state_keys: []
+  execute_task_response:
+    iterations: 1
+    output: Parity baseline final response.
+    reason: null
+    reasoning_steps:
+    - content: Parity baseline final response.
+      iteration: 1
+      type: thought
+    success: true
+    tool_calls_count: 0

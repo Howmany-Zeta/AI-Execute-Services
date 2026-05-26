@@ -109,3 +109,98 @@ class TestDerivePluginConfigs:
         assert by_name["tool"].options["allowed_tools"] == ["search"]
         assert by_name["tool"].options["tool_selection_strategy"] == "rule_based"
         assert any("replaces derive" in entry or "explicit 'tool'" in entry for entry in merge_log)
+
+
+@pytest.mark.unit
+class TestDerivePluginConfigsTaskContext:
+    """Priority 3 task/context overlays (§6.3.1, P2-04)."""
+
+    @pytest.fixture
+    def agent_with_tools(self, mock_agent):
+        mock_agent._tools_input = ["search"]
+        return mock_agent
+
+    def test_task_plugins_disables_skill_over_config_enabled(
+        self, agent_with_tools, plugin_agent_config
+    ):
+        """Config enables skill; task.plugins disables skill for this request."""
+        config = plugin_agent_config.model_copy(
+            update={
+                "plugins": [
+                    PluginConfig(
+                        name="skill",
+                        enabled=True,
+                        options={"skill_names": ["python-testing"]},
+                    ),
+                ],
+                "skills_enabled": False,
+            },
+        )
+        task = {"plugins": [PluginConfig(name="skill", enabled=False)]}
+
+        merged, merge_log = derive_plugin_configs(
+            config, agent_with_tools, task=task, context=None
+        )
+        by_name = _by_name(merged)
+
+        assert by_name["skill"].enabled is False
+        assert any("task.plugins" in entry and "skill" in entry for entry in merge_log)
+
+    def test_task_plugins_enables_audit_plugin(
+        self, agent_with_tools, plugin_agent_config
+    ):
+        """task.plugins can add a registered extension plugin for the current task."""
+        config = plugin_agent_config.model_copy(update={"plugins": [], "skills_enabled": False})
+        task = {
+            "plugins": [
+                PluginConfig(name="audit", enabled=True, options={"mode": "strict"}),
+            ],
+        }
+
+        merged, merge_log = derive_plugin_configs(
+            config, agent_with_tools, task=task, context=None
+        )
+        by_name = _by_name(merged)
+
+        assert "audit" in by_name
+        assert by_name["audit"].enabled is True
+        assert by_name["audit"].options["mode"] == "strict"
+        assert any("task.plugins" in entry and "audit" in entry for entry in merge_log)
+
+    def test_context_plugins_override_task_for_same_name(
+        self, agent_with_tools, plugin_agent_config
+    ):
+        """context.plugins wins over task.plugins when both set the same name."""
+        config = plugin_agent_config.model_copy(update={"plugins": [], "skills_enabled": False})
+        task = {"plugins": [PluginConfig(name="memory", enabled=False)]}
+        context = {"plugins": [PluginConfig(name="memory", enabled=True)]}
+
+        merged, merge_log = derive_plugin_configs(
+            config, agent_with_tools, task=task, context=context
+        )
+        by_name = _by_name(merged)
+
+        assert by_name["memory"].enabled is True
+        assert any("task.plugins" in e for e in merge_log)
+        assert any("context.plugins" in e for e in merge_log)
+
+    def test_partial_config_list_still_works_with_task_overlay(
+        self, agent_with_tools, plugin_agent_config
+    ):
+        """§6.3.3 partial config + task overlay: memory disabled at config, tool still derived."""
+        config = plugin_agent_config.model_copy(
+            update={
+                "plugins": [PluginConfig(name="memory", enabled=False)],
+                "skills_enabled": False,
+            },
+        )
+        task = {"plugins": [PluginConfig(name="tool", enabled=False)]}
+
+        merged, merge_log = derive_plugin_configs(config, agent_with_tools, task=task)
+        by_name = _by_name(merged)
+
+        assert by_name["memory"].enabled is False
+        assert by_name["tool"].enabled is False
+        assert by_name["skill"].enabled is False
+        assert any("filled missing 'tool'" in entry for entry in merge_log)
+        assert any("task.plugins" in entry and "tool" in entry for entry in merge_log)

@@ -24,6 +24,8 @@ from aiecs.domain.agent.plugins.errors import (
     PluginErrorException,
     PluginHookError,
     PluginInitError,
+    PluginReloadError,
+    PluginReloadErrorException,
     get_plugin_error_message,
 )
 from aiecs.domain.agent.plugins.base import BaseAgentPlugin
@@ -51,6 +53,8 @@ __all__ = [
     "PluginHookError",
     "PluginIdentifier",
     "PluginInitError",
+    "PluginReloadError",
+    "PluginReloadErrorException",
     "PluginLoadResult",
     "PluginMetadata",
     "PluginPhase",

@@ -11,11 +11,11 @@ from aiecs.domain.agent.models import AgentConfiguration, AgentType
 class MockPluginAgent(BaseAIAgent):
     """Minimal BaseAIAgent for plugin framework tests."""
 
-    async def _initialize(self) -> None:
-        pass
+    async def _initialize(self, **kwargs) -> None:
+        await super()._initialize(**kwargs)
 
     async def _shutdown(self) -> None:
-        pass
+        await super()._shutdown()
 
     async def execute_task(self, task: dict, context: dict) -> dict:
         return {"success": True, "output": "plugin test result"}
@@ -40,6 +40,5 @@ def mock_agent(plugin_agent_config: AgentConfiguration) -> MockPluginAgent:
         config=plugin_agent_config,
         tools=[],
     )
-    agent._plugin_manager = None
     agent._hook_order = []
     return agent

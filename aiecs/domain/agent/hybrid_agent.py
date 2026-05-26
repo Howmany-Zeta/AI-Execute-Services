@@ -17,7 +17,7 @@ Uses OpenAI Function Calling for tool use (BetaToolRunner-style loop).
 import asyncio
 import json
 import logging
-from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING, AsyncGenerator
+from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING, AsyncGenerator, Callable, Awaitable
 from datetime import datetime
 
 from aiecs.llm import BaseLLMClient, CacheControl, LLMMessage
@@ -27,7 +27,10 @@ from aiecs.domain.agent.tools.schema_generator import ToolSchemaGenerator
 from .base_agent import BaseAIAgent
 from .models import AgentType, AgentConfiguration, ToolObservation
 from .exceptions import TaskExecutionError, ToolAccessDeniedError
+from .tool_loop_core import ToolLoopIterationOutcome, ToolLoopRunState
 from .tool_result_matcher import matches_stop_condition
+from aiecs.domain.agent.plugins.context import AgentPluginContext, PluginShortCircuitResult
+from aiecs.domain.agent.plugins.models import PluginPhase
 
 if TYPE_CHECKING:
     from aiecs.llm.protocols import LLMClientProtocol
@@ -45,6 +48,14 @@ class HybridAgent(BaseAIAgent):
 
     Uses OpenAI Function Calling for tool use (BetaToolRunner-style loop).
     ReAct text format is no longer supported; use Function Calling only.
+
+    **Plugin-first skill and memory (Phase 2)**:
+    Do not call :meth:`~aiecs.domain.agent.skills.mixin.SkillCapableMixin.attach_skills`
+    or :meth:`~aiecs.domain.agent.skills.mixin.SkillCapableMixin.get_skill_context` from
+    HybridAgent code paths. ``SkillPlugin`` (``AGENT_INIT`` / ``BUILD_MESSAGES``) and
+    ``MemoryPlugin`` (``BUILD_MESSAGES`` / ``context.history``) own those behaviors.
+    Use :meth:`_build_initial_messages_async` for message assembly; the sync
+    :meth:`_build_initial_messages` helper omits plugin phases (legacy/tests only).
 
     **Tool Configuration:**
     - Tool names (List[str]): Backward compatible, tools loaded by name
@@ -205,6 +216,7 @@ class HybridAgent(BaseAIAgent):
         agent_registry: Optional[Dict[str, Any]] = None,
         learning_enabled: bool = False,
         resource_limits: Optional[Any] = None,
+        plugin_registry: Optional[Any] = None,
     ):
         """
         Initialize Hybrid agent.
@@ -267,6 +279,7 @@ class HybridAgent(BaseAIAgent):
             agent_registry=agent_registry,
             learning_enabled=learning_enabled,
             resource_limits=resource_limits,
+            plugin_registry=plugin_registry,
         )
 
         # Store LLM client reference (from BaseAIAgent or local)
@@ -289,8 +302,16 @@ class HybridAgent(BaseAIAgent):
 
         logger.info(f"HybridAgent initialized: {agent_id} with LLM ({self.llm_client.provider_name}) " f"and {len(tools) if isinstance(tools, (list, dict)) else 0} tools")
 
-    async def _initialize(self) -> None:
-        """Initialize Hybrid agent - validate LLM client, load tools, and build system prompt."""
+    async def _initialize(self, *, force_reload_plugins: bool = False) -> None:
+        """
+        Initialize Hybrid agent — validate LLM client, load tools, build system prompt.
+
+        Builtin plugins run via ``super()._initialize()`` (``PluginManager``).
+        Skill attachment is **only** performed by ``SkillPlugin.on_agent_init`` when the
+        skill plugin is enabled — do not call ``attach_skills`` here.
+        """
+        await super()._initialize(force_reload_plugins=force_reload_plugins)
+
         # Validate LLM client using BaseAIAgent helper
         self._validate_llm_client()
 
@@ -323,6 +344,7 @@ class HybridAgent(BaseAIAgent):
         if hasattr(self.llm_client, "close"):
             await self.llm_client.close()
 
+        await super()._shutdown()
         logger.info(f"HybridAgent {self.agent_id} shut down")
 
     def _build_system_prompts(self) -> List[Dict[str, Any]]:
@@ -367,9 +389,155 @@ class HybridAgent(BaseAIAgent):
         parts = [p["content"] for p in prompts if p.get("content")]
         return "\n\n".join(parts)
 
+    def _format_execute_task_response(
+        self,
+        inner: Dict[str, Any],
+        execution_time: float,
+    ) -> Dict[str, Any]:
+        """
+        Map tool-loop kernel dict to execute_task outer shell (§8.2, §4.4).
+
+        Passthrough when ``inner`` already contains ``output`` (e.g. Knowledge short-circuit).
+        """
+        if inner.get("output") is not None:
+            outer = dict(inner)
+            outer.setdefault("execution_time", execution_time)
+            outer.setdefault("timestamp", datetime.utcnow().isoformat())
+            return outer
+
+        return {
+            "success": inner.get("success", True),
+            "reason": inner.get("reason"),
+            "output": inner.get("final_response"),
+            "reasoning_steps": inner.get("steps"),
+            "tool_calls_count": inner.get("tool_calls_count"),
+            "iterations": inner.get("iterations"),
+            "execution_time": execution_time,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+    async def _execute_task_with_plugins(
+        self,
+        task: Dict[str, Any],
+        context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Task kernel: plugin phases + tool loop (§8.2).
+
+        PRE_TASK and PRE_MAIN_LOOP run before the loop; POST_TASK always runs (including
+        after PRE_MAIN_LOOP short-circuit).
+        """
+        task_description = self._extract_task_description(task)
+        self._merge_task_images(task, context)
+
+        plugin_ctx = self._make_plugin_context(
+            task=task,
+            context=context,
+            task_description=task_description,
+        )
+        self._apply_task_plugin_configs(task=task, context=context)
+
+        if self._plugin_manager is not None:
+            await self._plugin_manager.run_phase(PluginPhase.PRE_TASK, ctx=plugin_ctx)
+            short = await self._plugin_manager.run_phase(PluginPhase.PRE_MAIN_LOOP, ctx=plugin_ctx)
+        else:
+            short = None
+
+        if isinstance(short, PluginShortCircuitResult):
+            loop_result = dict(short.result)
+        else:
+            loop_result = await self._execute_with_retry(
+                self._tool_loop_with_plugins,
+                task_description,
+                context,
+                plugin_ctx,
+            )
+
+        if self._plugin_manager is not None:
+            loop_result = await self._plugin_manager.run_phase(
+                PluginPhase.POST_TASK,
+                ctx=plugin_ctx,
+                result=loop_result,
+            )
+        return loop_result
+
+    def _assemble_loop_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Return tool-loop kernel dict with legacy ``_tool_loop`` keys (§8.4).
+
+        Ensures ``final_response``, ``steps``, ``iterations``, ``tool_calls_count``, and
+        ``total_tokens`` are present for ``execute_task`` / POST_TASK consumers.
+        """
+        return dict(result)
+
+    def _iteration_step_payload(
+        self,
+        outcome: ToolLoopIterationOutcome,
+        iteration: int,
+        state: ToolLoopRunState,
+    ) -> Dict[str, Any]:
+        """Summary passed to ``ON_ITERATION_END`` hooks."""
+        return {
+            "kind": outcome.kind,
+            "iteration": iteration + 1,
+            "steps": list(state.steps),
+            "tool_calls_count": state.tool_calls_count,
+            "total_tokens": state.total_tokens,
+        }
+
+    async def _run_tool_loop_with_iteration_hooks(
+        self,
+        messages: List[LLMMessage],
+        context: Dict[str, Any],
+        plugin_ctx: Optional[AgentPluginContext] = None,
+    ) -> Dict[str, Any]:
+        """
+        LLM+tool iteration loop with optional ``ON_ITERATION_*`` plugin phases (§8.4).
+        """
+        state = ToolLoopRunState()
+        for iteration in range(self._max_iterations):
+            logger.debug(f"HybridAgent {self.agent_id} - tool loop iteration {iteration + 1}")
+
+            if plugin_ctx is not None and self._plugin_manager is not None:
+                await self._plugin_manager.run_phase(
+                    PluginPhase.ON_ITERATION_START,
+                    ctx=plugin_ctx,
+                    iteration=iteration,
+                )
+
+            outcome = await self._run_tool_loop_core_iteration(messages, context, iteration, state)
+
+            if plugin_ctx is not None and self._plugin_manager is not None:
+                step = self._iteration_step_payload(outcome, iteration, state)
+                await self._plugin_manager.run_phase(
+                    PluginPhase.ON_ITERATION_END,
+                    ctx=plugin_ctx,
+                    iteration=iteration,
+                    step=step,
+                )
+
+            if outcome.kind == "continue":
+                continue
+            if outcome.kind in ("final", "stop_match") and outcome.result is not None:
+                return self._assemble_loop_result(outcome.result)
+
+        return self._assemble_loop_result(self._tool_loop_max_iterations_result(state))
+
+    async def _tool_loop_with_plugins(
+        self,
+        task_description: str,
+        context: Dict[str, Any],
+        plugin_ctx: AgentPluginContext,
+    ) -> Dict[str, Any]:
+        """
+        Tool loop with plugin-aware messages and ``ON_ITERATION_*`` hooks (§8.4).
+        """
+        messages = await self._build_initial_messages_async(task_description, context, plugin_ctx)
+        return await self._run_tool_loop_with_iteration_hooks(messages, context, plugin_ctx=plugin_ctx)
+
     async def execute_task(self, task: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Execute a task using ReAct loop.
+        Execute a task using the plugin-wrapped tool loop (§8.2).
 
         Args:
             task: Task specification with 'description' or 'prompt'
@@ -384,54 +552,32 @@ class HybridAgent(BaseAIAgent):
         start_time = datetime.utcnow()
 
         try:
-            # Extract task description using shared method
-            task_description = self._extract_task_description(task)
-
-            # Merge images from task payload into context (deduplicates merge logic).
-            self._merge_task_images(task, context)
-
-            # Transition to busy state
             self._transition_state(self.state.__class__.BUSY)
             self._current_task_id = task.get("task_id")
 
-            # Execute tool loop with exponential backoff retry (handles 429 / transient errors)
-            result = await self._execute_with_retry(self._tool_loop, task_description, context)
+            inner = await self._execute_task_with_plugins(task, context)
 
-            # Calculate execution time
             execution_time = (datetime.utcnow() - start_time).total_seconds()
 
-            # Update metrics
             self.update_metrics(
                 execution_time=execution_time,
-                success=True,
-                tokens_used=result.get("total_tokens"),
-                tool_calls=result.get("tool_calls_count", 0),
+                success=inner.get("success", True),
+                tokens_used=inner.get("total_tokens"),
+                tool_calls=inner.get("tool_calls_count", 0),
             )
 
-            # Transition back to active
             self._transition_state(self.state.__class__.ACTIVE)
             self._current_task_id = None
             self.last_active_at = datetime.utcnow()
 
-            return {
-                "success": result.get("success", True),
-                "reason": result.get("reason"),
-                "output": result.get("final_response"),  # Changed from final_answer
-                "reasoning_steps": result.get("steps"),
-                "tool_calls_count": result.get("tool_calls_count"),
-                "iterations": result.get("iterations"),
-                "execution_time": execution_time,
-                "timestamp": datetime.utcnow().isoformat(),
-            }
+            return self._format_execute_task_response(inner, execution_time)
 
         except Exception as e:
             logger.error(f"Task execution failed for {self.agent_id}: {e}")
 
-            # Update metrics for failure
             execution_time = (datetime.utcnow() - start_time).total_seconds()
             self.update_metrics(execution_time=execution_time, success=False)
 
-            # Transition to error state
             self._transition_state(self.state.__class__.ERROR)
             self._current_task_id = None
 
@@ -472,6 +618,114 @@ class HybridAgent(BaseAIAgent):
             logger.error(f"Message processing failed for {self.agent_id}: {e}")
             raise
 
+    def _create_plugin_event_collector(
+        self,
+    ) -> tuple[List[Dict[str, Any]], Callable[[Dict[str, Any]], Awaitable[None]]]:
+        """Buffer plugin framework events for streaming yields (§10.3)."""
+        pending: List[Dict[str, Any]] = []
+
+        async def sink(event: Dict[str, Any]) -> None:
+            pending.append(event)
+
+        return pending, sink
+
+    async def _yield_pending_plugin_events(
+        self,
+        pending: List[Dict[str, Any]],
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        while pending:
+            yield pending.pop(0)
+
+    def _loop_result_from_streaming_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert a streaming ``result`` event to tool-loop kernel dict for POST_TASK."""
+        return {
+            "success": event.get("success", True),
+            "reason": event.get("reason"),
+            "final_response": event.get("output"),
+            "steps": event.get("reasoning_steps", []),
+            "tool_calls_count": event.get("tool_calls_count", 0),
+            "iterations": event.get("iterations", 0),
+            "total_tokens": event.get("total_tokens", 0),
+            **({"stop_reason": event["stop_reason"]} if event.get("stop_reason") else {}),
+        }
+
+    def _streaming_result_event_from_inner(
+        self,
+        inner: Dict[str, Any],
+        *,
+        execution_time: float = 0.0,
+    ) -> Dict[str, Any]:
+        """Build streaming ``result`` event from kernel dict (§8.2, §8.5)."""
+        shell = self._format_execute_task_response(inner, execution_time)
+        return {
+            "type": "result",
+            **shell,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+    async def _tool_loop_streaming_with_plugins(
+        self,
+        task_description: str,
+        context: Dict[str, Any],
+        plugin_ctx: AgentPluginContext,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        Streaming tool loop with async messages and ``ON_ITERATION_*`` hooks (§8.4, §8.5).
+        """
+        messages = await self._build_initial_messages_async(task_description, context, plugin_ctx)
+        state = ToolLoopRunState()
+
+        for iteration in range(self._max_iterations):
+            logger.debug(f"HybridAgent {self.agent_id} - tool loop iteration {iteration + 1}")
+
+            if self._plugin_manager is not None:
+                await self._plugin_manager.run_phase(
+                    PluginPhase.ON_ITERATION_START,
+                    ctx=plugin_ctx,
+                    iteration=iteration,
+                )
+
+            yield {
+                "type": "iteration_start",
+                "iteration": iteration + 1,
+                "max_iterations": self._max_iterations,
+                "remaining": self._max_iterations - iteration - 1,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+            state.last_outcome = None
+            async for event in self._run_tool_loop_core_iteration_streaming(messages, context, iteration, state):
+                yield event
+
+            if self._plugin_manager is not None:
+                step = self._iteration_step_payload(
+                    state.last_outcome or ToolLoopIterationOutcome(kind="continue"),
+                    iteration,
+                    state,
+                )
+                await self._plugin_manager.run_phase(
+                    PluginPhase.ON_ITERATION_END,
+                    ctx=plugin_ctx,
+                    iteration=iteration,
+                    step=step,
+                )
+
+            outcome = state.last_outcome
+            if outcome is None:
+                continue
+
+            if outcome.kind == "continue":
+                continue
+
+            if outcome.kind == "stop_match":
+                return
+
+            if outcome.kind == "final" and outcome.result is not None:
+                yield self._streaming_result_event_from_inner(outcome.result)
+                return
+
+        yield self._streaming_result_event_from_inner(self._tool_loop_max_iterations_result(state))
+
     async def execute_task_streaming(self, task: Dict[str, Any], context: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Execute a task with streaming tokens and tool calls.
@@ -497,31 +751,86 @@ class HybridAgent(BaseAIAgent):
         start_time = datetime.utcnow()
 
         try:
-            # Extract task description
-            task_description = task.get("description") or task.get("prompt") or task.get("task")
-            if not task_description:
+            try:
+                task_description = self._extract_task_description(task)
+            except Exception as exc:
                 yield {
                     "type": "error",
-                    "error": "Task must contain 'description', 'prompt', or 'task' field",
+                    "error": str(exc),
                     "timestamp": datetime.utcnow().isoformat(),
                 }
                 return
 
-            # Merge images from task payload into context (deduplicates merge logic).
             self._merge_task_images(task, context)
 
-            # Transition to busy state
             self._transition_state(self.state.__class__.BUSY)
             self._current_task_id = task.get("task_id")
 
-            # Yield started lifecycle event
             yield {
                 "type": "started",
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
-            # Execute streaming tool loop with exponential backoff retry.
-            # _execute_with_retry cannot wrap async generators, so retry is inlined here.
+            pending_plugin_events, event_sink = self._create_plugin_event_collector()
+            plugin_ctx = self._make_plugin_context(
+                task=task,
+                context=context,
+                task_description=task_description,
+                event_sink=event_sink,
+            )
+            self._apply_task_plugin_configs(task=task, context=context)
+
+            plugin_configs, merge_log = self._resolve_plugin_configs(task=task, context=context)
+            yield {
+                "type": "plugin_config_resolved",
+                "plugin_count": len(plugin_configs),
+                "merge_log_summary": merge_log[:5],
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+            if self._plugin_manager is not None:
+                async for plugin_event in self._yield_pending_plugin_events(pending_plugin_events):
+                    yield plugin_event
+                await self._plugin_manager.run_phase(PluginPhase.PRE_TASK, ctx=plugin_ctx)
+                async for plugin_event in self._yield_pending_plugin_events(pending_plugin_events):
+                    yield plugin_event
+
+                short = await self._plugin_manager.run_phase(PluginPhase.PRE_MAIN_LOOP, ctx=plugin_ctx)
+                async for plugin_event in self._yield_pending_plugin_events(pending_plugin_events):
+                    yield plugin_event
+
+                if isinstance(short, PluginShortCircuitResult):
+                    execution_time = (datetime.utcnow() - start_time).total_seconds()
+                    loop_result = dict(short.result)
+                    if self._plugin_manager is not None:
+                        loop_result = await self._plugin_manager.run_phase(
+                            PluginPhase.POST_TASK,
+                            ctx=plugin_ctx,
+                            result=loop_result,
+                        )
+                        async for plugin_event in self._yield_pending_plugin_events(pending_plugin_events):
+                            yield plugin_event
+
+                    result_event = self._streaming_result_event_from_inner(loop_result, execution_time=execution_time)
+                    task_success = result_event.get("success", True)
+                    self.update_metrics(
+                        execution_time=execution_time,
+                        success=task_success,
+                        tokens_used=result_event.get("total_tokens"),
+                        tool_calls=result_event.get("tool_calls_count", 0),
+                    )
+                    self._transition_state(self.state.__class__.ACTIVE)
+                    self._current_task_id = None
+                    self.last_active_at = datetime.utcnow()
+                    yield result_event
+                    yield {
+                        "type": "completed",
+                        "success": task_success,
+                        "execution_time": execution_time,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                    return
+
             from .integration.retry_policy import EnhancedRetryPolicy, ErrorClassifier
 
             _retry_cfg = self._config.retry_policy
@@ -532,14 +841,17 @@ class HybridAgent(BaseAIAgent):
                 exponential_base=_retry_cfg.exponential_factor,
                 jitter_factor=_retry_cfg.jitter_factor,
             )
-            # Initialise event so the variable is always bound even if _tool_loop_streaming
-            # raises before yielding a single event (e.g. all retries exhausted).
-            event: Dict[str, Any] = {}
+            stream_result_event: Optional[Dict[str, Any]] = None
             for _attempt in range(_policy.max_retries + 1):
                 try:
-                    async for event in self._tool_loop_streaming(task_description, context):
-                        yield event
-                    break  # success – exit retry loop
+                    async for stream_event in self._tool_loop_streaming_with_plugins(task_description, context, plugin_ctx):
+                        async for plugin_event in self._yield_pending_plugin_events(pending_plugin_events):
+                            yield plugin_event
+                        if stream_event.get("type") == "result":
+                            stream_result_event = stream_event
+                        else:
+                            yield stream_event
+                    break
                 except Exception as _exc:
                     _error_type = ErrorClassifier.classify(_exc)
                     if _attempt >= _policy.max_retries or not ErrorClassifier.is_retryable(_error_type):
@@ -548,28 +860,30 @@ class HybridAgent(BaseAIAgent):
                     logger.warning(f"Streaming attempt {_attempt + 1} failed " f"({_error_type.value}). Retrying in {_delay:.2f}s…")
                     await asyncio.sleep(_delay)
 
-            # Get final result from last event
-            if event.get("type") == "result":
-                result = event
-                task_success = result.get("success", True)
-
-                # Calculate execution time
+            if stream_result_event is not None:
                 execution_time = (datetime.utcnow() - start_time).total_seconds()
+                loop_result = self._loop_result_from_streaming_event(stream_result_event)
+                if self._plugin_manager is not None:
+                    loop_result = await self._plugin_manager.run_phase(
+                        PluginPhase.POST_TASK,
+                        ctx=plugin_ctx,
+                        result=loop_result,
+                    )
+                    async for plugin_event in self._yield_pending_plugin_events(pending_plugin_events):
+                        yield plugin_event
+                formatted_result = self._streaming_result_event_from_inner(loop_result, execution_time=execution_time)
+                yield formatted_result
 
-                # Update metrics (use actual success from result, e.g. False on max_iterations)
+                task_success = formatted_result.get("success", True)
                 self.update_metrics(
                     execution_time=execution_time,
                     success=task_success,
-                    tokens_used=result.get("total_tokens"),
-                    tool_calls=result.get("tool_calls_count", 0),
+                    tokens_used=formatted_result.get("total_tokens"),
+                    tool_calls=formatted_result.get("tool_calls_count", 0),
                 )
-
-                # Transition back to active
                 self._transition_state(self.state.__class__.ACTIVE)
                 self._current_task_id = None
                 self.last_active_at = datetime.utcnow()
-
-                # Yield completed lifecycle event (symmetric counterpart to "started")
                 yield {
                     "type": "completed",
                     "success": task_success,
@@ -627,267 +941,389 @@ class HybridAgent(BaseAIAgent):
             logger.error(f"Streaming message processing failed for {self.agent_id}: {e}")
             raise
 
-    async def _tool_loop_streaming(self, task: str, context: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
-        """
-        Execute tool loop with streaming (BetaToolRunner-style).
-        Append-only messages; native tool_use/tool_result; no iteration labels.
-
-        Args:
-            task: Task description
-            context: Context dictionary
-
-        Yields:
-            Dict[str, Any]: Event dictionaries with streaming tokens, tool calls, and results
-        """
-        steps = []
-        tool_calls_count = 0
-        total_tokens = 0
-
-        # Build initial messages
-        messages = self._build_initial_messages(task, context)
-
-        for iteration in range(self._max_iterations):
-            logger.debug(f"HybridAgent {self.agent_id} - tool loop iteration {iteration + 1}")
-
-            # Yield iteration_start lifecycle event (fires before each LLM call)
-            yield {
-                "type": "iteration_start",
-                "iteration": iteration + 1,
-                "max_iterations": self._max_iterations,
-                "remaining": self._max_iterations - iteration - 1,
-                "timestamp": datetime.utcnow().isoformat(),
-            }
-
-            # THINK: Stream LLM reasoning
-            thought_tokens = []
-            tool_calls_from_stream = None
-
-            # Require Function Calling when tools are configured
-            if self._tool_schemas and not self._use_function_calling:
-                provider = getattr(self.llm_client, "provider_name", "unknown")
-                raise ValueError(
-                    "HybridAgent requires an LLM client with Function Calling support when tools are configured. "
-                    f"Current client ({provider}) does not support tools. "
-                    "Use OpenAI-compatible clients: OpenAI, xAI, Anthropic, or Google Vertex."
-                )
-            kwargs: Dict[str, Any] = dict(
-                messages=messages,
-                model=self._config.llm_model,
-                temperature=self._config.temperature,
-                max_tokens=self._config.max_tokens,
-                context=context,
+    def _require_function_calling_when_tools_configured(self) -> None:
+        """Raise when tools are configured but the LLM client lacks Function Calling."""
+        if self._tool_schemas and not self._use_function_calling:
+            provider = getattr(self.llm_client, "provider_name", "unknown")
+            raise ValueError(
+                "HybridAgent requires an LLM client with Function Calling support when tools are configured. "
+                f"Current client ({provider}) does not support tools. "
+                "Use OpenAI-compatible clients: OpenAI, xAI, Anthropic, or Google Vertex."
             )
-            # Merge provider-specific parameters (top_p, top_k, thinking_config, reasoning_effort, etc.)
-            kwargs.update(self._config.get_llm_call_kwargs())
-            if self._tool_schemas:
-                kwargs["tools"] = [{"type": "function", "function": s} for s in self._tool_schemas]
-                kwargs["tool_choice"] = "auto"
+
+    def _build_tool_loop_llm_kwargs(
+        self,
+        messages: List[LLMMessage],
+        context: Dict[str, Any],
+        *,
+        streaming: bool = False,
+    ) -> Dict[str, Any]:
+        """Build kwargs for ``generate_text`` / ``stream_text`` in the tool loop."""
+        kwargs: Dict[str, Any] = dict(
+            messages=messages,
+            model=self._config.llm_model,
+            temperature=self._config.temperature,
+            max_tokens=self._config.max_tokens,
+            context=context,
+        )
+        kwargs.update(self._config.get_llm_call_kwargs())
+        if self._tool_schemas:
+            kwargs["tools"] = [{"type": "function", "function": s} for s in self._tool_schemas]
+            kwargs["tool_choice"] = "auto"
+            if streaming:
                 kwargs["return_chunks"] = True
-            stream_gen = self.llm_client.stream_text(**kwargs)
+        return kwargs
 
-            # Stream tokens and collect tool calls
-            from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
+    def _tool_loop_max_iterations_result(self, state: ToolLoopRunState) -> Dict[str, Any]:
+        """Build the max-iterations result dict (sync path)."""
+        logger.warning(f"HybridAgent {self.agent_id} reached max iterations")
+        return {
+            "success": False,
+            "reason": "max_iterations_reached",
+            "final_response": "Max iterations reached. Unable to complete task fully.",
+            "steps": state.steps,
+            "iterations": self._max_iterations,
+            "tool_calls_count": state.tool_calls_count,
+            "total_tokens": state.total_tokens,
+        }
 
-            async for chunk in stream_gen:
-                # Handle StreamChunk objects (Function Calling mode)
-                if isinstance(chunk, StreamChunk):
-                    if chunk.type == "token" and chunk.content:
-                        thought_tokens.append(chunk.content)
-                        yield {
-                            "type": "token",
-                            "content": chunk.content,
-                            "timestamp": datetime.utcnow().isoformat(),
-                        }
-                    elif chunk.type == "tool_call" and chunk.tool_call:
-                        # Yield incremental tool call delta (streaming fragment)
-                        yield {
-                            "type": "tool_call_delta",
-                            "tool_call": chunk.tool_call,
-                            "timestamp": datetime.utcnow().isoformat(),
-                        }
-                    elif chunk.type == "tool_calls" and chunk.tool_calls:
-                        # Complete tool_calls batch received
-                        tool_calls_from_stream = chunk.tool_calls
-                        yield {
-                            "type": "tool_calls_ready",
-                            "tool_calls": chunk.tool_calls,
-                            "timestamp": datetime.utcnow().isoformat(),
-                        }
-                else:
-                    # Handle plain string tokens (ReAct mode or non-Function Calling)
-                    thought_tokens.append(chunk)
-                    yield {
-                        "type": "token",
-                        "content": chunk,
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-
-            thought_raw = "".join(thought_tokens)
-
-            # Store raw output in steps (no format processing)
-            steps.append(
+    def _normalize_tool_calls_from_response(
+        self,
+        tool_calls: Any,
+        function_call: Any,
+    ) -> List[Dict[str, Any]]:
+        """Normalize ``tool_calls`` / legacy ``function_call`` to a list."""
+        if tool_calls:
+            return list(tool_calls)
+        if function_call:
+            return [
                 {
-                    "type": "thought",
-                    "content": thought_raw.strip(),  # Return raw output without processing
-                    "iteration": iteration + 1,
+                    "id": "call_0",
+                    "type": "function",
+                    "function": {
+                        "name": function_call["name"],
+                        "arguments": function_call["arguments"],
+                    },
                 }
+            ]
+        return []
+
+    async def _process_tool_calls_batch(
+        self,
+        *,
+        thought_raw: str,
+        tool_calls_to_process: List[Dict[str, Any]],
+        messages: List[LLMMessage],
+        iteration: int,
+        state: ToolLoopRunState,
+        event_callback: Optional[Any] = None,
+    ) -> ToolLoopIterationOutcome:
+        """
+        Execute a batch of tool calls, append messages, and update ``state``.
+
+        When ``event_callback`` is provided (streaming), it is awaited with event dicts.
+        """
+        messages.append(
+            LLMMessage(
+                role="assistant",
+                content=(thought_raw or "").strip() or None,
+                tool_calls=tool_calls_to_process or None,
             )
+        )
 
-            # Process tool_calls if received from stream
-            if tool_calls_from_stream:
-                # Add assistant message with BOTH content and tool_calls (align with Claude)
-                messages.append(
-                    LLMMessage(
-                        role="assistant",
-                        content=thought_raw.strip() or None,
-                        tool_calls=tool_calls_from_stream,
-                    )
-                )
+        for i, tool_call in enumerate(tool_calls_to_process):
+            tool_name = "unknown"
+            tool_call_id = tool_call.get("id") or f"call_{i}"
+            try:
+                func_name = tool_call["function"]["name"]
+                func_args = tool_call["function"]["arguments"]
+                tool_name, operation = self._parse_function_name(func_name)
 
-                # Process each tool call
-                for i, tool_call in enumerate(tool_calls_from_stream):
-                    tool_name = "unknown"  # initialise so error handler always has a value
-                    # Use the call's own id; fall back to a per-index sentinel so that
-                    # every tool_result message in a parallel batch has a unique id.
-                    tool_call_id = tool_call.get("id") or f"call_{i}"
-                    try:
-                        func_name = tool_call["function"]["name"]
-                        func_args = tool_call["function"]["arguments"]
+                if isinstance(func_args, str):
+                    parameters = json.loads(func_args)
+                else:
+                    parameters = func_args if func_args else {}
 
-                        # Resolve tool name and operation via shared helper.
-                        # Raises ValueError with a clear message if the name
-                        # cannot be matched even after the underscore-split fallback.
-                        tool_name, operation = self._parse_function_name(func_name)
-
-                        # Parse arguments JSON
-                        if isinstance(func_args, str):
-                            parameters = json.loads(func_args)
-                        else:
-                            parameters = func_args if func_args else {}
-
-                        # Yield tool call event
-                        yield {
+                if event_callback is not None:
+                    await event_callback(
+                        {
                             "type": "tool_call",
                             "tool_name": tool_name,
                             "operation": operation,
                             "parameters": parameters,
                             "timestamp": datetime.utcnow().isoformat(),
                         }
+                    )
 
-                        # Execute tool
-                        tool_result = await self._execute_tool(tool_name, operation, parameters)
-                        tool_calls_count += 1
+                tool_result = await self._execute_tool(tool_name, operation, parameters)
+                state.tool_calls_count += 1
 
-                        # Wrap tool call and result in step
-                        steps.append(
-                            {
-                                "type": "action",
-                                "tool": tool_name,
-                                "operation": operation,
-                                "parameters": parameters,
-                                "result": str(tool_result),  # Include result in step
-                                "iteration": iteration + 1,
-                            }
-                        )
+                state.steps.append(
+                    {
+                        "type": "action",
+                        "tool": tool_name,
+                        "operation": operation,
+                        "parameters": parameters,
+                        "result": str(tool_result),
+                        "iteration": iteration + 1,
+                    }
+                )
 
-                        # Yield tool result event (streaming)
-                        yield {
+                if event_callback is not None:
+                    await event_callback(
+                        {
                             "type": "tool_result",
                             "tool_name": tool_name,
                             "result": tool_result,
                             "timestamp": datetime.utcnow().isoformat(),
                         }
+                    )
 
-                        # Check tool result stop conditions: end loop if matched
-                        if self._config.tool_result_stop_conditions and matches_stop_condition(tool_result, self._config.tool_result_stop_conditions):
-                            final_output = json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result)
-                            yield {
+                if self._config.tool_result_stop_conditions and matches_stop_condition(tool_result, self._config.tool_result_stop_conditions):
+                    final_output = json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result)
+                    result = {
+                        "final_response": final_output,
+                        "steps": state.steps,
+                        "iterations": iteration + 1,
+                        "tool_calls_count": state.tool_calls_count,
+                        "total_tokens": state.total_tokens,
+                        "stop_reason": "tool_result_matched",
+                    }
+                    if event_callback is not None:
+                        await event_callback(
+                            {
                                 "type": "result",
                                 "success": True,
                                 "output": final_output,
-                                "reasoning_steps": steps,
-                                "tool_calls_count": tool_calls_count,
+                                "reasoning_steps": state.steps,
+                                "tool_calls_count": state.tool_calls_count,
                                 "iterations": iteration + 1,
-                                "total_tokens": total_tokens,
+                                "total_tokens": state.total_tokens,
                                 "stop_reason": "tool_result_matched",
                                 "timestamp": datetime.utcnow().isoformat(),
                             }
-                            return
-
-                        # Add tool result to messages (for LLM consumption)
-                        # Only add the tool result message, assistant message already added above
-                        # Extract inline image data if the tool returned _image_b64 / _image_media_type
-                        tool_images: List[Union[str, Dict[str, Any]]] = []
-                        if isinstance(tool_result, dict) and tool_result.get("_image_b64"):
-                            media_type = tool_result.get("_image_media_type", "image/png")
-                            tool_images = [f"data:{media_type};base64,{tool_result['_image_b64']}"]
-                        messages.append(
-                            LLMMessage(
-                                role="tool",
-                                content=json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result),
-                                tool_call_id=tool_call_id,
-                                images=tool_images,
-                            )
                         )
+                    return ToolLoopIterationOutcome(kind="stop_match", result=result)
 
-                    except Exception as e:
-                        error_msg = f"Tool execution failed: {str(e)}"
-                        steps.append(
-                            {
-                                "type": "observation",
-                                "content": error_msg,
-                                "iteration": iteration + 1,
-                                "has_error": True,
-                            }
-                        )
-                        yield {
+                tool_images: List[Union[str, Dict[str, Any]]] = []
+                if isinstance(tool_result, dict) and tool_result.get("_image_b64"):
+                    media_type = tool_result.get("_image_media_type", "image/png")
+                    tool_images = [f"data:{media_type};base64,{tool_result['_image_b64']}"]
+                messages.append(
+                    LLMMessage(
+                        role="tool",
+                        content=json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result),
+                        tool_call_id=tool_call_id,
+                        images=tool_images,
+                    )
+                )
+
+            except Exception as e:
+                error_msg = f"Tool execution failed: {str(e)}"
+                state.steps.append(
+                    {
+                        "type": "observation",
+                        "content": error_msg,
+                        "iteration": iteration + 1,
+                        "has_error": True,
+                    }
+                )
+                if event_callback is not None:
+                    await event_callback(
+                        {
                             "type": "tool_error",
                             "tool_name": tool_name,
                             "error": str(e),
                             "timestamp": datetime.utcnow().isoformat(),
                         }
-                        messages.append(
-                            LLMMessage(
-                                role="tool",
-                                content=error_msg,
-                                tool_call_id=tool_call_id,
-                            )
-                        )
+                    )
+                messages.append(
+                    LLMMessage(
+                        role="tool",
+                        content=error_msg,
+                        tool_call_id=tool_call_id,
+                    )
+                )
 
-                # Continue to next iteration
-                continue
+        return ToolLoopIterationOutcome(kind="continue")
 
-            # No tool_calls: treat as final response (Function Calling only; no ReAct parsing)
-            yield {
-                "type": "result",
-                "success": True,
-                "output": thought_raw.strip(),
-                "reasoning_steps": steps,
-                "tool_calls_count": tool_calls_count,
-                "iterations": iteration + 1,
-                "total_tokens": total_tokens,
-                "timestamp": datetime.utcnow().isoformat(),
+    async def _run_tool_loop_core_iteration(
+        self,
+        messages: List[LLMMessage],
+        context: Dict[str, Any],
+        iteration: int,
+        state: ToolLoopRunState,
+    ) -> ToolLoopIterationOutcome:
+        """Single non-streaming tool-loop iteration (LLM call + tool batch)."""
+        self._require_function_calling_when_tools_configured()
+        kwargs = self._build_tool_loop_llm_kwargs(messages, context, streaming=False)
+        response = await self.llm_client.generate_text(**kwargs)
+
+        thought_raw = response.content or ""
+        state.total_tokens += getattr(response, "total_tokens", 0)
+
+        cache_read_tokens = getattr(response, "cache_read_tokens", None)
+        cache_creation_tokens = getattr(response, "cache_creation_tokens", None)
+        cache_hit = getattr(response, "cache_hit", None)
+        if cache_read_tokens is not None or cache_creation_tokens is not None or cache_hit is not None:
+            self.update_cache_metrics(
+                cache_read_tokens=cache_read_tokens,
+                cache_creation_tokens=cache_creation_tokens,
+                cache_hit=cache_hit,
+            )
+
+        state.steps.append(
+            {
+                "type": "thought",
+                "content": thought_raw.strip(),
+                "iteration": iteration + 1,
             }
+        )
+
+        tool_calls = getattr(response, "tool_calls", None)
+        function_call = getattr(response, "function_call", None)
+        tool_calls_to_process = self._normalize_tool_calls_from_response(tool_calls, function_call)
+
+        if tool_calls_to_process:
+            return await self._process_tool_calls_batch(
+                thought_raw=thought_raw,
+                tool_calls_to_process=tool_calls_to_process,
+                messages=messages,
+                iteration=iteration,
+                state=state,
+            )
+
+        return ToolLoopIterationOutcome(
+            kind="final",
+            result={
+                "final_response": thought_raw.strip(),
+                "steps": state.steps,
+                "iterations": iteration + 1,
+                "tool_calls_count": state.tool_calls_count,
+                "total_tokens": state.total_tokens,
+            },
+        )
+
+    async def _run_tool_loop_core(
+        self,
+        messages: List[LLMMessage],
+        context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Shared LLM+tool iteration loop without plugin iteration hooks (§8.4, CR-2).
+
+        Custom Reasoning ``StepRunner`` uses this entry; ``_tool_loop_with_plugins``
+        uses :meth:`_run_tool_loop_with_iteration_hooks` instead.
+        """
+        return await self._run_tool_loop_with_iteration_hooks(messages, context, plugin_ctx=None)
+
+    async def _run_tool_loop_core_iteration_streaming(
+        self,
+        messages: List[LLMMessage],
+        context: Dict[str, Any],
+        iteration: int,
+        state: ToolLoopRunState,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Single streaming tool-loop iteration; yields events then sets ``state.last_outcome``."""
+        from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
+
+        self._require_function_calling_when_tools_configured()
+        kwargs = self._build_tool_loop_llm_kwargs(messages, context, streaming=True)
+        stream_gen = self.llm_client.stream_text(**kwargs)
+
+        thought_tokens: List[str] = []
+        tool_calls_from_stream = None
+
+        async for chunk in stream_gen:
+            if isinstance(chunk, StreamChunk):
+                if chunk.type == "token" and chunk.content:
+                    thought_tokens.append(chunk.content)
+                    yield {
+                        "type": "token",
+                        "content": chunk.content,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                elif chunk.type == "tool_call" and chunk.tool_call:
+                    yield {
+                        "type": "tool_call_delta",
+                        "tool_call": chunk.tool_call,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                elif chunk.type == "tool_calls" and chunk.tool_calls:
+                    tool_calls_from_stream = chunk.tool_calls
+                    yield {
+                        "type": "tool_calls_ready",
+                        "tool_calls": chunk.tool_calls,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+            else:
+                thought_tokens.append(chunk)
+                yield {
+                    "type": "token",
+                    "content": chunk,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+
+        thought_raw = "".join(thought_tokens)
+        state.steps.append(
+            {
+                "type": "thought",
+                "content": thought_raw.strip(),
+                "iteration": iteration + 1,
+            }
+        )
+
+        if tool_calls_from_stream:
+            events: List[Dict[str, Any]] = []
+
+            async def _emit(event: Dict[str, Any]) -> None:
+                events.append(event)
+
+            outcome = await self._process_tool_calls_batch(
+                thought_raw=thought_raw,
+                tool_calls_to_process=tool_calls_from_stream,
+                messages=messages,
+                iteration=iteration,
+                state=state,
+                event_callback=_emit,
+            )
+            for event in events:
+                yield event
+            state.last_outcome = outcome
             return
 
-        # Max iterations reached - task did not complete successfully within the limit
-        logger.warning(f"HybridAgent {self.agent_id} reached max iterations")
-        yield {
-            "type": "result",
-            "success": False,
-            "reason": "max_iterations_reached",
-            "output": "Max iterations reached. Unable to complete task fully.",
-            "reasoning_steps": steps,
-            "tool_calls_count": tool_calls_count,
-            "iterations": self._max_iterations,
-            "total_tokens": total_tokens,
-            "timestamp": datetime.utcnow().isoformat(),
-        }
+        state.last_outcome = ToolLoopIterationOutcome(
+            kind="final",
+            result={
+                "final_response": thought_raw.strip(),
+                "steps": state.steps,
+                "iterations": iteration + 1,
+                "tool_calls_count": state.tool_calls_count,
+                "total_tokens": state.total_tokens,
+            },
+        )
+
+    async def _tool_loop_streaming(self, task: str, context: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        Execute tool loop with streaming (BetaToolRunner-style).
+
+        Delegates to :meth:`_tool_loop_streaming_with_plugins` without a streaming
+        ``event_sink`` (direct callers / legacy tests).
+        """
+        plugin_ctx = self._make_plugin_context(
+            task={"description": task},
+            context=context,
+            task_description=task,
+        )
+        async for event in self._tool_loop_streaming_with_plugins(task, context, plugin_ctx):
+            yield event
 
     async def _tool_loop(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute tool loop (BetaToolRunner-style).
         Append-only messages; native tool_use/tool_result; no iteration labels.
+
+        Delegates iteration to :meth:`_run_tool_loop_core` (§8.4, CR-2).
 
         Args:
             task: Task description
@@ -896,219 +1332,45 @@ class HybridAgent(BaseAIAgent):
         Returns:
             Result dictionary with 'final_response', 'steps', 'iterations'
         """
-        steps = []
-        tool_calls_count = 0
-        total_tokens = 0
+        plugin_ctx = self._make_plugin_context(
+            task={"description": task},
+            context=context,
+            task_description=task,
+        )
+        messages = await self._build_initial_messages_async(task, context, plugin_ctx)
+        return await self._run_tool_loop_core(messages, context)
 
-        # Build initial messages
-        messages = self._build_initial_messages(task, context)
+    def _make_plugin_context(
+        self,
+        task: Dict[str, Any],
+        context: Dict[str, Any],
+        task_description: str,
+        *,
+        event_sink: Optional[Any] = None,
+        plugin_state: Optional[Dict[str, Any]] = None,
+    ) -> AgentPluginContext:
+        """Create per-task plugin context (§5.4, §8.2)."""
+        return AgentPluginContext(
+            agent=self,
+            task=task,
+            context=context,
+            task_description=task_description,
+            plugin_state=dict(plugin_state or {}),
+            event_sink=event_sink,
+        )
 
-        for iteration in range(self._max_iterations):
-            logger.debug(f"HybridAgent {self.agent_id} - tool loop iteration {iteration + 1}")
-
-            # THINK: LLM reasons about next action
-            # Require Function Calling when tools are configured
-            if self._tool_schemas and not self._use_function_calling:
-                provider = getattr(self.llm_client, "provider_name", "unknown")
-                raise ValueError(
-                    "HybridAgent requires an LLM client with Function Calling support when tools are configured. "
-                    f"Current client ({provider}) does not support tools. "
-                    "Use OpenAI-compatible clients: OpenAI, xAI, Anthropic, or Google Vertex."
-                )
-            kwargs: Dict[str, Any] = dict(
-                messages=messages,
-                model=self._config.llm_model,
-                temperature=self._config.temperature,
-                max_tokens=self._config.max_tokens,
-                context=context,
-            )
-            # Merge provider-specific parameters (top_p, top_k, thinking_config, reasoning_effort, etc.)
-            kwargs.update(self._config.get_llm_call_kwargs())
-            if self._tool_schemas:
-                kwargs["tools"] = [{"type": "function", "function": s} for s in self._tool_schemas]
-                kwargs["tool_choice"] = "auto"
-            response = await self.llm_client.generate_text(**kwargs)
-
-            thought_raw = response.content or ""
-            total_tokens += getattr(response, "total_tokens", 0)
-
-            # Update prompt cache metrics from LLM response
-            cache_read_tokens = getattr(response, "cache_read_tokens", None)
-            cache_creation_tokens = getattr(response, "cache_creation_tokens", None)
-            cache_hit = getattr(response, "cache_hit", None)
-            if cache_read_tokens is not None or cache_creation_tokens is not None or cache_hit is not None:
-                self.update_cache_metrics(
-                    cache_read_tokens=cache_read_tokens,
-                    cache_creation_tokens=cache_creation_tokens,
-                    cache_hit=cache_hit,
-                )
-
-            # Store raw output in steps (no format processing)
-            steps.append(
-                {
-                    "type": "thought",
-                    "content": thought_raw.strip(),  # Return raw output without processing
-                    "iteration": iteration + 1,
-                }
-            )
-
-            # Check for Function Calling response
-            tool_calls = getattr(response, "tool_calls", None)
-            function_call = getattr(response, "function_call", None)
-
-            if tool_calls or function_call:
-                # Handle Function Calling response
-                tool_calls_to_process = tool_calls or []
-                if function_call:
-                    # Convert legacy function_call to tool_calls format
-                    tool_calls_to_process = [
-                        {
-                            "id": "call_0",
-                            "type": "function",
-                            "function": {
-                                "name": function_call["name"],
-                                "arguments": function_call["arguments"],
-                            },
-                        }
-                    ]
-
-                # Add assistant message with BOTH content and tool_calls (align with Claude)
-                messages.append(
-                    LLMMessage(
-                        role="assistant",
-                        content=(thought_raw or "").strip() or None,
-                        # Fix: use tool_calls_to_process (processed list), not the raw
-                        # tool_calls attribute which is None when only function_call is set.
-                        tool_calls=tool_calls_to_process or None,
-                    )
-                )
-
-                # Process each tool call
-                for i, tool_call in enumerate(tool_calls_to_process):
-                    tool_name = "unknown"  # initialise so error handler always has a value
-                    # Use the call's own id; fall back to a per-index sentinel so that
-                    # every tool_result message in a parallel batch has a unique id.
-                    tool_call_id = tool_call.get("id") or f"call_{i}"
-                    try:
-                        func_name = tool_call["function"]["name"]
-                        func_args = tool_call["function"]["arguments"]
-
-                        # Resolve tool name and operation via shared helper.
-                        # Raises ValueError with a clear message if the name
-                        # cannot be matched even after the underscore-split fallback.
-                        tool_name, operation = self._parse_function_name(func_name)
-
-                        # Parse arguments JSON
-                        if isinstance(func_args, str):
-                            parameters = json.loads(func_args)
-                        else:
-                            parameters = func_args if func_args else {}
-
-                        # Execute tool
-                        tool_result = await self._execute_tool(tool_name, operation, parameters)
-                        tool_calls_count += 1
-
-                        # Wrap tool call and result in step
-                        steps.append(
-                            {
-                                "type": "action",
-                                "tool": tool_name,
-                                "operation": operation,
-                                "parameters": parameters,
-                                "result": str(tool_result),  # Include result in step
-                                "iteration": iteration + 1,
-                            }
-                        )
-
-                        # Check tool result stop conditions: end loop if matched
-                        if self._config.tool_result_stop_conditions and matches_stop_condition(tool_result, self._config.tool_result_stop_conditions):
-                            final_output = json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result)
-                            return {
-                                "final_response": final_output,
-                                "steps": steps,
-                                "iterations": iteration + 1,
-                                "tool_calls_count": tool_calls_count,
-                                "total_tokens": total_tokens,
-                                "stop_reason": "tool_result_matched",
-                            }
-
-                        # Add tool result to messages (for LLM consumption)
-                        # Only add the tool result message, assistant message already added above
-                        # Extract inline image data if the tool returned _image_b64 / _image_media_type
-                        tool_images_sync: List[Union[str, Dict[str, Any]]] = []
-                        if isinstance(tool_result, dict) and tool_result.get("_image_b64"):
-                            media_type = tool_result.get("_image_media_type", "image/png")
-                            tool_images_sync = [f"data:{media_type};base64,{tool_result['_image_b64']}"]
-                        messages.append(
-                            LLMMessage(
-                                role="tool",
-                                content=json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result),
-                                tool_call_id=tool_call_id,
-                                images=tool_images_sync,
-                            )
-                        )
-
-                    except Exception as e:
-                        error_msg = f"Tool execution failed: {str(e)}"
-                        steps.append(
-                            {
-                                "type": "observation",
-                                "content": error_msg,
-                                "iteration": iteration + 1,
-                                "has_error": True,
-                            }
-                        )
-                        # Add error to messages
-                        messages.append(
-                            LLMMessage(
-                                role="tool",
-                                content=error_msg,
-                                tool_call_id=tool_call_id,
-                            )
-                        )
-
-                # Continue to next iteration
-                continue
-
-            # No tool_calls: treat as final response (Function Calling only; no ReAct parsing)
-            return {
-                "final_response": thought_raw.strip(),
-                "steps": steps,
-                "iterations": iteration + 1,
-                "tool_calls_count": tool_calls_count,
-                "total_tokens": total_tokens,
-            }
-
-        # Max iterations reached - task did not complete successfully within the limit
-        logger.warning(f"HybridAgent {self.agent_id} reached max iterations")
-        return {
-            "success": False,
-            "reason": "max_iterations_reached",
-            "final_response": "Max iterations reached. Unable to complete task fully.",
-            "steps": steps,
-            "iterations": self._max_iterations,
-            "tool_calls_count": tool_calls_count,
-            "total_tokens": total_tokens,
-        }
-
-    def _build_initial_messages(self, task: str, context: Dict[str, Any]) -> List[LLMMessage]:
-        """Build initial messages for tool loop. First user message = raw task only."""
-        messages = []
-
-        # Add system prompts (supports multiple system messages with individual cache control)
-        system_prompts = self._build_system_prompts()
-        for prompt_dict in system_prompts:
+    def _build_initial_messages_system(self) -> List[LLMMessage]:
+        """System prompts only (before BUILD_MESSAGES plugin phase)."""
+        messages: List[LLMMessage] = []
+        for prompt_dict in self._build_system_prompts():
             content = prompt_dict.get("content", "")
             if not content:
                 continue
 
-            # Determine cache control: use prompt-specific setting if provided, else use global setting
             prompt_cache_control = prompt_dict.get("cache_control")
             if prompt_cache_control is None:
-                # Use global setting
                 cache_control = CacheControl(type="ephemeral") if self._config.enable_prompt_caching else None
             else:
-                # Use prompt-specific setting
                 cache_control = CacheControl(type="ephemeral") if prompt_cache_control else None
 
             messages.append(
@@ -1118,47 +1380,17 @@ class HybridAgent(BaseAIAgent):
                     cache_control=cache_control,
                 )
             )
+        return messages
 
-        # Collect images from context to attach to task message
-        task_images = []
-
-        # Add context if provided
+    def _append_initial_messages_context_and_task(
+        self,
+        task: str,
+        context: Dict[str, Any],
+        messages: List[LLMMessage],
+    ) -> List[LLMMessage]:
+        """Additional Context and Task user message (after BUILD_MESSAGES; §8.3)."""
+        task_images: List[Any] = []
         if context:
-            # Special handling: if context contains 'history' as a list of messages,
-            # add them as separate user/assistant messages instead of formatting
-            history = context.get("history")
-            if isinstance(history, list) and len(history) > 0:
-                # Check if history contains message-like dictionaries
-                for msg in history:
-                    if isinstance(msg, dict) and "role" in msg and ("content" in msg or "tool_calls" in msg):
-                        # Valid message format - add as separate message
-                        # Extract optional fields
-                        _raw_images = msg.get("images")
-                        # Normalise: keep only non-None/non-empty image values so we
-                        # never end up passing [None] to LLMMessage when the key is
-                        # explicitly set to None in the history entry.
-                        if isinstance(_raw_images, list):
-                            msg_images: List[Any] = [img for img in _raw_images if img is not None]
-                        elif _raw_images is not None:
-                            msg_images = [_raw_images]
-                        else:
-                            msg_images = []
-                        msg_tool_calls = msg.get("tool_calls")
-                        msg_tool_call_id = msg.get("tool_call_id")
-                        messages.append(
-                            LLMMessage(
-                                role=msg["role"],
-                                content=msg.get("content"),
-                                images=msg_images,
-                                tool_calls=msg_tool_calls,
-                                tool_call_id=msg_tool_call_id,
-                            )
-                        )
-                    elif isinstance(msg, LLMMessage):
-                        # Already an LLMMessage instance (may already have images)
-                        messages.append(msg)
-
-            # Extract images from context if present
             context_images = context.get("images")
             if context_images:
                 if isinstance(context_images, list):
@@ -1166,7 +1398,6 @@ class HybridAgent(BaseAIAgent):
                 else:
                     task_images.append(context_images)
 
-            # Format remaining context fields (excluding history and images) as Additional Context
             context_without_history = {k: v for k, v in context.items() if k not in ("history", "images")}
             if context_without_history:
                 context_str = self._format_context(context_without_history)
@@ -1178,32 +1409,44 @@ class HybridAgent(BaseAIAgent):
                         )
                     )
 
-        # Add request-specific skill context if skills are enabled
-        # This provides skills matched to the specific task for tool selection guidance
-        if self._config.skills_enabled and self._attached_skills:
-            skill_context = self.get_skill_context(
-                request=task,
-                include_all_skills=False,  # Only include matched skills
-            )
-            if skill_context:
-                messages.append(
-                    LLMMessage(
-                        role="system",
-                        content=f"Relevant Skills for this Task:\n{skill_context}",
-                    )
-                )
-
-        # Add task (first user message = raw request only; no iteration labels)
-        task_message = f"Task: {task}"
         messages.append(
             LLMMessage(
                 role="user",
-                content=task_message,
+                content=f"Task: {task}",
                 images=task_images if task_images else [],
             )
         )
-
         return messages
+
+    async def _build_initial_messages_async(
+        self,
+        task: str,
+        context: Dict[str, Any],
+        plugin_ctx: AgentPluginContext,
+    ) -> List[LLMMessage]:
+        """
+        Build initial messages with plugin BUILD_MESSAGES (§8.3, §7.1–§7.2).
+
+        History and skill injection are owned by MemoryPlugin / SkillPlugin.
+        """
+        messages = self._build_initial_messages_system()
+        if self._plugin_manager is not None:
+            messages = await self._plugin_manager.run_phase(
+                PluginPhase.BUILD_MESSAGES,
+                ctx=plugin_ctx,
+                messages=messages,
+            )
+        return self._append_initial_messages_context_and_task(task, context, messages)
+
+    def _build_initial_messages(self, task: str, context: Dict[str, Any]) -> List[LLMMessage]:
+        """
+        Synchronous message build for legacy callers (no plugin phases).
+
+        Prefer :meth:`_build_initial_messages_async` when plugins must run.
+        History and skill blocks are not applied here; use the async path instead.
+        """
+        messages = self._build_initial_messages_system()
+        return self._append_initial_messages_context_and_task(task, context, messages)
 
     def _format_context(self, context: Dict[str, Any]) -> str:
         """Format context dictionary as string."""

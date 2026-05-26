@@ -23,13 +23,13 @@ from aiecs.domain.agent.exceptions import InvalidStateTransitionError
 class MockAgent(BaseAIAgent):
     """Concrete agent implementation for testing."""
 
-    async def _initialize(self) -> None:
+    async def _initialize(self, **kwargs) -> None:
         """Initialize test agent."""
-        pass
+        await super()._initialize(**kwargs)
 
     async def _shutdown(self) -> None:
         """Shutdown test agent."""
-        pass
+        await super()._shutdown()
 
     async def execute_task(self, task: dict, context: dict) -> dict:
         """Execute test task."""

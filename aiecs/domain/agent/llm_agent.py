@@ -289,8 +289,10 @@ class LLMAgent(BaseAIAgent):
 
         logger.info(f"LLMAgent initialized: {agent_id} with client {self.llm_client.provider_name}")
 
-    async def _initialize(self) -> None:
+    async def _initialize(self, *, force_reload_plugins: bool = False) -> None:
         """Initialize LLM agent - validate LLM client and build system prompt."""
+        await super()._initialize(force_reload_plugins=force_reload_plugins)
+
         # Validate LLM client using BaseAIAgent helper
         self._validate_llm_client()
 
@@ -307,6 +309,7 @@ class LLMAgent(BaseAIAgent):
         if hasattr(self.llm_client, "close"):
             await self.llm_client.close()
 
+        await super()._shutdown()
         logger.info(f"LLMAgent {self.agent_id} shut down")
 
     def _build_system_prompt(self) -> str:

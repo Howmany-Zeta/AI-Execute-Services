@@ -4,6 +4,13 @@
 #  *--------------------------------------------------------------------------------------------*/
 """
 Default plugin derivation from AgentConfiguration and agent state (§6.3.2, §6.4).
+
+``derive_plugin_configs`` merge priority (high → low, §6.3.1):
+
+1. ``policy_plugins`` — Phase 3 (skipped)
+2. ``AgentConfiguration.plugins`` + partial derive fill
+3. ``task["plugins"]`` then ``context["plugins"]`` (**context overrides task** for the same name)
+4. ``derive_default_plugins()``
 """
 
 from __future__ import annotations
@@ -93,42 +100,91 @@ def derive_plugin_configs(
     context: dict[str, Any] | None = None,
 ) -> tuple[list[PluginConfig], list[str]]:
     """
-    Merge explicit ``config.plugins`` with ``derive_default_plugins()`` (§6.3.1–§6.3.4).
+    Merge plugin configs from config, defaults, and per-request task/context (§6.3.1–§6.3.4).
 
-    Phase 1: policy and task/context overrides are not applied (parameters reserved).
+    Priority 3 (task/context) applies after priority 2 (``config.plugins``). Within tier 3,
+    ``context["plugins"]`` is applied after ``task["plugins"]`` so **context wins** on conflicts.
+    Each overlay fully replaces the prior entry for the same ``name``; a higher tier
+    ``enabled=False`` cannot be re-enabled by a lower tier.
     """
-    del task, context  # Phase 2
-
     merge_log: list[str] = []
     defaults = derive_default_plugins(config, agent)
     defaults_by_name = {plugin.name: plugin for plugin in defaults}
 
-    merged: dict[str, PluginConfig]
-    if not config.plugins:
-        merge_log.append("plugins=[]: using full derive_default_plugins()")
-        merged = dict(defaults_by_name)
-    else:
-        merged = {}
-        for explicit in config.plugins:
-            merged[explicit.name] = explicit
-            merge_log.append(f"config.plugins: explicit {explicit.name!r} " f"(enabled={explicit.enabled}, priority={explicit.priority})")
-
-        for name in _DERIVE_FILL_NAMES:
-            if name not in merged:
-                derived = defaults_by_name[name]
-                merged[name] = derived
-                merge_log.append(f"derive_default_plugins: filled missing {name!r} " f"(enabled={derived.enabled})")
-            elif merged[name].enabled is False:
-                merge_log.append(f"config.plugins: explicit {name!r} disabled; derive skipped")
-            else:
-                merge_log.append(f"config.plugins: explicit {name!r} replaces derive_default_plugins entry")
-
-        for plugin in defaults:
-            if plugin.name not in _DERIVE_FILL_NAMES and plugin.name not in merged:
-                merged[plugin.name] = plugin
-                merge_log.append(f"derive_default_plugins: added {plugin.name!r} " f"(enabled={plugin.enabled})")
+    merged = _merge_config_plugins(config, defaults_by_name, defaults, merge_log)
+    merged = _apply_runtime_plugin_overlays(merged, task, context, merge_log)
 
     return _sort_plugin_configs(merged), merge_log
+
+
+def _merge_config_plugins(
+    config: AgentConfiguration,
+    defaults_by_name: dict[str, PluginConfig],
+    defaults: list[PluginConfig],
+    merge_log: list[str],
+) -> dict[str, PluginConfig]:
+    """Priority 2 + 4: ``config.plugins`` with derive fill for missing builtin names."""
+    if not config.plugins:
+        merge_log.append("plugins=[]: using full derive_default_plugins()")
+        return dict(defaults_by_name)
+
+    merged: dict[str, PluginConfig] = {}
+    for explicit in config.plugins:
+        merged[explicit.name] = explicit
+        merge_log.append(f"config.plugins: explicit {explicit.name!r} " f"(enabled={explicit.enabled}, priority={explicit.priority})")
+
+    for name in _DERIVE_FILL_NAMES:
+        if name not in merged:
+            derived = defaults_by_name[name]
+            merged[name] = derived
+            merge_log.append(f"derive_default_plugins: filled missing {name!r} (enabled={derived.enabled})")
+        elif merged[name].enabled is False:
+            merge_log.append(f"config.plugins: explicit {name!r} disabled; derive skipped")
+        else:
+            merge_log.append(f"config.plugins: explicit {name!r} replaces derive_default_plugins entry")
+
+    for plugin in defaults:
+        if plugin.name not in _DERIVE_FILL_NAMES and plugin.name not in merged:
+            merged[plugin.name] = plugin
+            merge_log.append(f"derive_default_plugins: added {plugin.name!r} (enabled={plugin.enabled})")
+
+    return merged
+
+
+def _apply_runtime_plugin_overlays(
+    merged: dict[str, PluginConfig],
+    task: dict[str, Any] | None,
+    context: dict[str, Any] | None,
+    merge_log: list[str],
+) -> dict[str, PluginConfig]:
+    """Priority 3: task then context overlays (context wins over task)."""
+    result = dict(merged)
+
+    task_plugins = _coerce_plugin_configs((task or {}).get("plugins"))
+    for overlay in task_plugins:
+        result[overlay.name] = overlay
+        merge_log.append(f"task.plugins: override {overlay.name!r} " f"(enabled={overlay.enabled}, priority={overlay.priority})")
+
+    context_plugins = _coerce_plugin_configs((context or {}).get("plugins"))
+    for overlay in context_plugins:
+        result[overlay.name] = overlay
+        merge_log.append(f"context.plugins: override {overlay.name!r} " f"(enabled={overlay.enabled}, priority={overlay.priority})")
+
+    return result
+
+
+def _coerce_plugin_configs(raw: Any) -> list[PluginConfig]:
+    """Parse ``plugins`` entries from task/context as ``PluginConfig`` models."""
+    if raw is None or not isinstance(raw, list):
+        return []
+
+    configs: list[PluginConfig] = []
+    for item in raw:
+        if isinstance(item, PluginConfig):
+            configs.append(item)
+        elif isinstance(item, dict) and item.get("name"):
+            configs.append(PluginConfig.model_validate(item))
+    return configs
 
 
 def _sort_plugin_configs(merged: dict[str, PluginConfig]) -> list[PluginConfig]:
