@@ -214,6 +214,7 @@ ehthumbs.db
 
 # bug_report
 bug_report/
+issue_report/
 
 # openspec
 openspec/

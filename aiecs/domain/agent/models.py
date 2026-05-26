@@ -333,6 +333,16 @@ class AgentConfiguration(BaseModel):
         description="Maximum number of skills to include in context per request (default: 3).",
     )
 
+    # Plugin system (Phase 1)
+    plugins: List["PluginConfig"] = Field(
+        default_factory=list,
+        description=("Explicit plugin configuration. An empty list means derive defaults from " "legacy fields, not disable all plugins."),
+    )
+    policy_plugins: List["PluginConfig"] = Field(
+        default_factory=list,
+        description="Enterprise/policy plugin overrides (Phase 3; not merged in Phase 1).",
+    )
+
     # Extra LLM parameters (provider-specific)
     extra_llm_kwargs: Dict[str, Any] = Field(
         default_factory=dict,
@@ -1001,3 +1011,8 @@ class ToolObservation(BaseModel):
         lines.append(f"Timestamp: {self.timestamp}")
 
         return "\n".join(lines)
+
+
+from aiecs.domain.agent.plugins.models import PluginConfig  # noqa: E402
+
+AgentConfiguration.model_rebuild()
