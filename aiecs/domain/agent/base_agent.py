@@ -37,6 +37,11 @@ from .exceptions import (
 )
 
 # Import protocols for type hints
+from aiecs.domain.agent.plugins.errors import raise_plugin_reload_error
+from aiecs.domain.agent.plugins.manager import PluginManager
+from aiecs.domain.agent.plugins.models import PluginLoadResult
+from aiecs.domain.agent.plugins.registry import PluginRegistry
+
 if TYPE_CHECKING:
     from aiecs.llm.protocols import LLMClientProtocol
     from aiecs.domain.agent.integration.protocols import (
@@ -47,7 +52,7 @@ if TYPE_CHECKING:
     from aiecs.domain.context.context_engine import ContextEngine
     from aiecs.domain.agent.tools import SkillScriptRegistry, Tool
     from aiecs.domain.agent.skills import SkillRegistry
-    from aiecs.domain.agent.plugins.manager import PluginManager
+    from aiecs.domain.agent.plugins.models import PluginConfig
 
 logger = logging.getLogger(__name__)
 
@@ -561,6 +566,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
     """
 
     _plugin_manager: Optional["PluginManager"] = None
+    _plugin_registry: Optional["PluginRegistry"] = None
 
     def __init__(
         self,
@@ -581,6 +587,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         resource_limits: Optional[Any] = None,
         skill_script_registry: Optional["SkillScriptRegistry"] = None,
         skill_registry: Optional["SkillRegistry"] = None,
+        plugin_registry: Optional["PluginRegistry"] = None,
     ):
         """
         Initialize the base agent.
@@ -610,6 +617,8 @@ class BaseAIAgent(SkillCapableMixin, ABC):
                           If provided, enables dynamic tool registration via add_tool(), remove_tool(), etc.
             skill_registry: Optional SkillRegistry for loading skills by name.
                           If provided along with config.skills_enabled=True, enables skill support.
+            plugin_registry: Optional PluginRegistry for builtin and extension plugins.
+                          Defaults to ``PluginRegistry.default()`` when omitted.
 
         Example:
             # With tool instances and ContextEngine
@@ -642,8 +651,6 @@ class BaseAIAgent(SkillCapableMixin, ABC):
                 tools=["search", "calculator"]  # Loaded by subclass
             )
         """
-        self._plugin_manager = None
-
         # Identity
         self.agent_id = agent_id
         self.name = name
@@ -744,6 +751,39 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         feature_str = f" with {', '.join(features)}" if features else ""
         logger.info(f"Agent initialized: {self.agent_id} ({self.name}, {self.agent_type.value}){feature_str}")
 
+        self._plugin_registry = plugin_registry or PluginRegistry.default()
+        plugin_configs, _ = self._resolve_plugin_configs()
+        self._plugin_manager = PluginManager(
+            agent=self,
+            plugin_configs=plugin_configs,
+            registry=self._plugin_registry,
+        )
+
+    def _resolve_plugin_configs(
+        self,
+        task: Optional[Dict[str, Any]] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> tuple[list["PluginConfig"], list[str]]:
+        """
+        Merge plugin configuration for agent startup or per-task refresh (§6.3, §8.1).
+
+        Merged with optional per-task ``task`` / ``context`` overlays (§6.3, P2-09).
+        """
+        from aiecs.domain.agent.plugins.defaults import derive_plugin_configs
+
+        return derive_plugin_configs(self._config, self, task=task, context=context)
+
+    def _apply_task_plugin_configs(
+        self,
+        task: Optional[Dict[str, Any]] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Refresh resolved plugin configs on the manager for this task (§8.2, P2-09)."""
+        if self._plugin_manager is None:
+            return
+        plugin_configs, _ = self._resolve_plugin_configs(task=task, context=context)
+        self._plugin_manager._plugin_configs = list(plugin_configs)
+
     # ==================== State Management ====================
 
     @property
@@ -825,14 +865,49 @@ class BaseAIAgent(SkillCapableMixin, ABC):
                 agent_id=self.agent_id,
             )
 
-    @abstractmethod
-    async def _initialize(self) -> None:
+    async def _initialize(self, *, force_reload_plugins: bool = False) -> None:
         """
-        Subclass-specific initialization logic.
+        Base initialization: builtin/extension plugins via ``PluginManager``.
 
-        Override this method in subclasses to implement
-        custom initialization.
+        Subclasses must call ``await super()._initialize()`` before their own setup.
+
+        Args:
+            force_reload_plugins: When True, run ``reload_plugins()`` instead of a
+                first-time ``initialize()`` on the existing manager (§8.1, §9.7).
         """
+        if force_reload_plugins:
+            await self.reload_plugins()
+        elif self._plugin_manager is not None:
+            await self._plugin_manager.initialize()
+
+    async def reload_plugins(self) -> PluginLoadResult:
+        """
+        Explicit plugin reload: shutdown → re-derive config → new manager → initialize (§9.7).
+
+        Rejected while the agent is BUSY or ``_current_task_id`` is set. Does not run
+        automatically on configuration changes mid-task.
+        """
+        if self._state == AgentState.BUSY or self._current_task_id is not None:
+            raise_plugin_reload_error(
+                "Cannot reload plugins while a task is in progress",
+                details={
+                    "agent_id": self.agent_id,
+                    "state": self._state.value,
+                    "current_task_id": self._current_task_id,
+                },
+            )
+
+        if self._plugin_manager is not None:
+            await self._plugin_manager.shutdown()
+
+        plugin_configs, _ = self._resolve_plugin_configs()
+        self._plugin_manager = PluginManager(
+            agent=self,
+            plugin_configs=plugin_configs,
+            registry=self._plugin_registry,
+        )
+        await self._plugin_manager.initialize()
+        return self._plugin_manager.last_load_result
 
     async def activate(self) -> None:
         """Activate the agent."""
@@ -862,14 +937,14 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         self._transition_state(AgentState.STOPPED)
         logger.info(f"Agent {self.agent_id} shut down")
 
-    @abstractmethod
     async def _shutdown(self) -> None:
         """
-        Subclass-specific shutdown logic.
+        Base shutdown: release plugin resources.
 
-        Override this method in subclasses to implement
-        custom cleanup.
+        Subclasses must call ``await super()._shutdown()`` after their own cleanup.
         """
+        if self._plugin_manager is not None:
+            await self._plugin_manager.shutdown()
 
     # ==================== Tool and LLM Client Helper Methods ====================
 

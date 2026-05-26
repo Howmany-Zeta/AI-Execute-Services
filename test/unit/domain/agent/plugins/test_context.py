@@ -65,6 +65,7 @@ class TestAgentPluginContext:
 
     def test_get_plugin_returns_none_without_manager(self, mock_agent):
         """Missing _plugin_manager yields None."""
+        mock_agent._plugin_manager = None
         ctx = AgentPluginContext(
             agent=mock_agent,
             task={},

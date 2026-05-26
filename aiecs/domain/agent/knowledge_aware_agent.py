@@ -208,10 +208,10 @@ class KnowledgeAwareAgent(HybridAgent):
 
         logger.info(f"KnowledgeAwareAgent initialized: {agent_id} " f"with graph_store={'enabled' if graph_store else 'disabled'}")
 
-    async def _initialize(self) -> None:
+    async def _initialize(self, *, force_reload_plugins: bool = False) -> None:
         """Initialize Knowledge-Aware agent - setup graph tools and augmented prompts."""
         # Call parent initialization
-        await super()._initialize()
+        await super()._initialize(force_reload_plugins=force_reload_plugins)
 
         # Initialize graph reasoning tool if graph store is available
         if self.graph_store is not None and self.enable_graph_reasoning:

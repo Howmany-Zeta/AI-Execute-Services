@@ -62,6 +62,12 @@ class PluginDependencyError(PluginError):
     type: Literal["plugin_dependency_error"] = "plugin_dependency_error"
 
 
+class PluginReloadError(PluginError):
+    """Plugin reload rejected (e.g. agent busy or task in flight, §9.7)."""
+
+    type: Literal["plugin_reload_error"] = "plugin_reload_error"
+
+
 class PluginErrorException(Exception):
     """
     Control-flow exception wrapping a typed :class:`PluginError` record.
@@ -93,6 +99,22 @@ class PluginConfigErrorException(PluginErrorException):
         )
 
 
+class PluginReloadErrorException(PluginErrorException):
+    """Raised when ``reload_plugins()`` is not allowed (§8.1, §9.7)."""
+
+    def __init__(
+        self,
+        message: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            PluginReloadError(
+                message=message,
+                details=details or {},
+            )
+        )
+
+
 def raise_plugin_config_error(
     message: str,
     plugin_id: str | None = None,
@@ -100,6 +122,14 @@ def raise_plugin_config_error(
 ) -> NoReturn:
     """Raise :class:`PluginConfigErrorException` with a typed error payload."""
     raise PluginConfigErrorException(message=message, plugin_id=plugin_id, details=details)
+
+
+def raise_plugin_reload_error(
+    message: str,
+    details: dict[str, Any] | None = None,
+) -> NoReturn:
+    """Raise :class:`PluginReloadErrorException` when reload is rejected."""
+    raise PluginReloadErrorException(message=message, details=details)
 
 
 def get_plugin_error_message(error: PluginError) -> str:

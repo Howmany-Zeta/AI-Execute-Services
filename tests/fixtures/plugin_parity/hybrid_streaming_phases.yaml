@@ -1,0 +1,67 @@
+name: hybrid_streaming_phases
+description: execute_task_streaming plugin_phase_started order matches sync execute_task
+  (§12.1)
+parity_mode: streaming_phases
+agent:
+  tools:
+  - parity_search
+config:
+  goal: Plugin parity streaming phase order
+  llm_model: parity-mock
+  system_prompt: You are a plugin parity baseline agent.
+  skills_enabled: false
+  memory_enabled: true
+  enable_prompt_caching: false
+task:
+  description: Streaming phase order check
+context: {}
+capture:
+  mock_final_output: Parity streaming phase response.
+  max_iterations: 2
+expect:
+  streaming_phase_sequence:
+  - phase: pre_task
+    plugin_count: 2
+  - phase: pre_main_loop
+    plugin_count: 2
+  - phase: build_messages
+    plugin_count: 2
+  - phase: on_iteration_start
+    plugin_count: 2
+  - phase: on_iteration_end
+    plugin_count: 2
+  - phase: post_task
+    plugin_count: 2
+  sync_phase_sequence:
+  - phase: pre_task
+    plugin_count: 2
+  - phase: pre_main_loop
+    plugin_count: 2
+  - phase: build_messages
+    plugin_count: 2
+  - phase: on_iteration_start
+    plugin_count: 2
+  - phase: on_iteration_end
+    plugin_count: 2
+  - phase: post_task
+    plugin_count: 2
+  messages_normalized:
+  - role: system
+    content: You are a plugin parity baseline agent.
+  - role: system
+    content: 'Available tools: parity_search'
+  - role: user
+    content: 'Task: Streaming phase order check'
+  tool_schema_names:
+  - parity_search
+  plugin_state_keys: []
+  execute_task_response:
+    iterations: 1
+    output: Parity streaming phase response.
+    reason: null
+    reasoning_steps:
+    - content: Parity streaming phase response.
+      iteration: 1
+      type: thought
+    success: true
+    tool_calls_count: 0
