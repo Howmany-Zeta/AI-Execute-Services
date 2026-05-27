@@ -1,0 +1,33 @@
+name: llm_memory_multiturn
+description: LLMAgent memory_enabled=True multi-turn via _conversation_history (§7.2)
+agent:
+  type: LLMAgent
+config:
+  goal: Plugin parity LLM agent
+  llm_model: parity-mock
+  system_prompt: You are a plugin parity LLM agent.
+  memory_enabled: true
+  enable_prompt_caching: false
+task:
+  description: Follow-up question about AI
+context: {}
+capture:
+  warmup:
+    task:
+      description: What is artificial intelligence?
+    mock_output: AI is the simulation of human intelligence by machines.
+  mock_final_output: AI continues to advance rapidly across many domains.
+expect:
+  execute_task_response:
+    output: AI continues to advance rapidly across many domains.
+    success: true
+  messages_normalized:
+  - role: system
+    content: You are a plugin parity LLM agent.
+  - role: user
+    content: What is artificial intelligence?
+  - role: assistant
+    content: AI is the simulation of human intelligence by machines.
+  - role: user
+    content: Follow-up question about AI
+  tool_schema_names: []

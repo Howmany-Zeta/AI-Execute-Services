@@ -50,9 +50,10 @@ async def graph_store():
 
 @pytest.fixture
 def mock_llm_client():
-    """Create a mock LLM client"""
+    """Create a mock LLM client with function-calling support for ToolPlugin init."""
     client = AsyncMock(spec=BaseLLMClient)
-    client.provider_name = "test_provider"
+    client.provider_name = "openai"
+    client.supports_function_calling = MagicMock(return_value=True)
     client.generate = AsyncMock(return_value=LLMResponse(
         content="Test response",
         provider="test_provider",
@@ -380,14 +381,13 @@ class TestKnowledgeContext:
 
 
 class TestToolLoopDelegation:
-    """Test _tool_loop delegates to parent with knowledge injection"""
+    """Test _tool_loop delegates through KnowledgePlugin when graph store is enabled"""
 
     @pytest.mark.asyncio
-    async def test_tool_loop_augments_task_when_graph_store_enabled(
+    async def test_tool_loop_uses_plugin_path_when_graph_store_enabled(
         self, mock_llm_client, agent_config, graph_store
     ):
-        """When graph_store enabled, _tool_loop augments task with RETRIEVED KNOWLEDGE before delegating"""
-        # Use tools={} to avoid auto-adding graph_reasoning (which requires Function Calling)
+        """When graph_store enabled, _tool_loop routes through _tool_loop_with_plugins."""
         agent = KnowledgeAwareAgent(
             agent_id="test_agent_tool_loop_1",
             name="Test Agent",
@@ -398,34 +398,26 @@ class TestToolLoopDelegation:
         )
         await agent.initialize()
 
+        assert agent._knowledge_retrieval_via_plugin()
+
         task = "How is Alice connected to Bob?"
         context = {}
 
-        # Mock _retrieve_relevant_knowledge to return entities
-        alice = Entity(id="alice", entity_type="Person", properties={"name": "Alice"})
         with patch.object(
-            agent, "_retrieve_relevant_knowledge", new_callable=AsyncMock
-        ) as mock_retrieve:
-            mock_retrieve.return_value = [alice]
+            agent, "_tool_loop_with_plugins", new_callable=AsyncMock
+        ) as mock_plugin_loop:
+            mock_plugin_loop.return_value = {
+                "final_response": "done",
+                "steps": [],
+                "iterations": 1,
+            }
 
-            with patch.object(
-                agent.__class__.__bases__[0],
-                "_tool_loop",
-                new_callable=AsyncMock,
-            ) as mock_parent_tool_loop:
-                mock_parent_tool_loop.return_value = {
-                    "final_response": "done",
-                    "steps": [],
-                    "iterations": 1,
-                }
+            await agent._tool_loop(task, context)
 
-                result = await agent._tool_loop(task, context)
-
-                mock_retrieve.assert_called_once()
-                mock_parent_tool_loop.assert_called_once()
-                call_task = mock_parent_tool_loop.call_args[0][0]
-                assert "RETRIEVED KNOWLEDGE" in call_task
-                assert "- Person: alice" in call_task or "alice" in call_task
+            mock_plugin_loop.assert_called_once()
+            call_args = mock_plugin_loop.call_args[0]
+            assert call_args[0] == task
+            assert call_args[1] == context
 
         await agent.shutdown()
 

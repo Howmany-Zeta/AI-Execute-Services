@@ -55,7 +55,7 @@ class ParityCase:
 
 @dataclass
 class ParityCaptureResult:
-    """Normalized outputs from a live HybridAgent run."""
+    """Normalized outputs from a live agent run."""
 
     messages_normalized: list[dict[str, Any]] = field(default_factory=list)
     tool_schema_names: list[str] = field(default_factory=list)
@@ -70,10 +70,31 @@ def default_fixtures_dir() -> Path:
     return _DEFAULT_FIXTURES_DIR
 
 
-def list_parity_fixtures(fixtures_dir: Path | None = None) -> list[Path]:
-    """Sorted paths to ``hybrid_*.yaml`` parity fixtures."""
+def list_parity_fixtures(fixtures_dir: Path | None = None, *, prefix: str = "hybrid_") -> list[Path]:
+    """Sorted paths to parity fixtures matching ``{prefix}*.yaml``."""
     root = fixtures_dir or default_fixtures_dir()
-    return sorted(root.glob("hybrid_*.yaml"))
+    return sorted(root.glob(f"{prefix}*.yaml"))
+
+
+def list_llm_parity_fixtures(fixtures_dir: Path | None = None) -> list[Path]:
+    """Sorted paths to ``llm_*.yaml`` parity fixtures (P3-00)."""
+    return list_parity_fixtures(fixtures_dir, prefix="llm_")
+
+
+def list_tool_parity_fixtures(fixtures_dir: Path | None = None) -> list[Path]:
+    """Sorted paths to ``tool_*.yaml`` parity fixtures (P3-00)."""
+    return list_parity_fixtures(fixtures_dir, prefix="tool_")
+
+
+def list_knowledge_parity_fixtures(fixtures_dir: Path | None = None) -> list[Path]:
+    """Sorted paths to ``knowledge_*.yaml`` parity fixtures (E-07)."""
+    return list_parity_fixtures(fixtures_dir, prefix="knowledge_")
+
+
+def list_all_parity_fixtures(fixtures_dir: Path | None = None) -> list[Path]:
+    """All hybrid, llm, tool, and knowledge parity fixture paths."""
+    root = fixtures_dir or default_fixtures_dir()
+    return sorted(list_parity_fixtures(root) + list_llm_parity_fixtures(root) + list_tool_parity_fixtures(root) + list_knowledge_parity_fixtures(root))
 
 
 def load_parity_fixture(path: Path | str) -> ParityCase:
@@ -87,7 +108,7 @@ def load_parity_fixture(path: Path | str) -> ParityCase:
 
 
 async def capture_parity_case(case: ParityCase) -> ParityCaptureResult:
-    """Run HybridAgent for a fixture spec and return normalized capture fields."""
+    """Run agent for a fixture spec and return normalized capture fields."""
     raw = await capture_fixture_spec(case.spec)
     return ParityCaptureResult(
         messages_normalized=list(raw.get("messages_normalized") or []),

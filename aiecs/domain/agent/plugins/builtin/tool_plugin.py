@@ -104,9 +104,13 @@ class ToolPlugin(BaseAgentPlugin):
 
 
 def _validate_function_calling_support(agent: Any) -> None:
-    """Align with HybridAgent: require FC when tools are configured."""
+    """Align with HybridAgent: require FC when tools are configured and an LLM client exists."""
     tool_instances = getattr(agent, "_tool_instances", None) or {}
     if not tool_instances:
+        return
+
+    llm_client = getattr(agent, "llm_client", None)
+    if llm_client is None:
         return
 
     check = getattr(agent, "_check_function_calling_support", None)

@@ -46,6 +46,14 @@ class PluginConfig(BaseModel):
     enabled: bool = True
     priority: int | None = None
     options: dict[str, Any] = Field(default_factory=dict)
+    policy_locked: bool = Field(
+        default=False,
+        description=("When set in policy_plugins, lower-priority layers cannot override " "this plugin entry (§6.3.1)."),
+    )
+    locked_options: list[str] = Field(
+        default_factory=list,
+        description=("Option keys enforced by policy_plugins; lower tiers cannot override " "these keys (§6.3.1)."),
+    )
 
     @field_validator("name")
     @classmethod
@@ -66,19 +74,7 @@ class PluginLoadResult(BaseModel):
     errors: list[PluginError] = Field(default_factory=list)
 
 
-class PluginManifest(BaseModel):
-    """
-    External plugin manifest schema (§9.1).
-
-    Phase 3: load from aiecs-plugin.yaml / plugin.json with full validation.
-    """
-
-    name: str
-    version: str | None = None
-    description: str | None = None
-    dependencies: list[str] = Field(default_factory=list)
-    options_schema: dict[str, Any] | None = None
-
+from aiecs.domain.agent.plugins.schema.manifest import PluginManifest  # noqa: E402, F401
 
 from aiecs.domain.agent.plugins.errors import PluginHookError  # noqa: E402
 

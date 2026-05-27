@@ -1,0 +1,39 @@
+name: knowledge_short_circuit
+description: KnowledgeAwareAgent PRE_MAIN_LOOP graph short-circuit (E-07)
+agent:
+  type: KnowledgeAwareAgent
+  tools: {}
+config:
+  goal: Plugin parity knowledge short-circuit agent
+  llm_model: parity-mock
+  system_prompt: You are a knowledge-aware parity agent.
+  skills_enabled: false
+  memory_enabled: true
+  enable_prompt_caching: false
+task:
+  description: How is Alice connected to Bob?
+context: {}
+capture:
+  mock_final_output: Must not reach LLM on short-circuit.
+  mock_graph_result:
+    answer: Alice knows Bob through a mutual connection at Company X.
+    confidence: 0.95
+    evidence_count: 3
+    reasoning_trace:
+    - hop1
+    - hop2
+expect:
+  messages_normalized:
+  - role: system
+    content: You are a knowledge-aware parity agent.
+  - role: user
+    content: 'Task: How is Alice connected to Bob?'
+  tool_schema_names: []
+  plugin_state_keys:
+  - knowledge.augmented_task
+  execute_task_response:
+    confidence: 0.95
+    evidence_count: 3
+    output: Alice knows Bob through a mutual connection at Company X.
+    source: knowledge_graph
+    success: true

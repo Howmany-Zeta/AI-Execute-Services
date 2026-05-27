@@ -30,6 +30,10 @@ from .exceptions import TaskExecutionError, ToolAccessDeniedError
 from .tool_loop_core import ToolLoopIterationOutcome, ToolLoopRunState
 from .tool_result_matcher import matches_stop_condition
 from aiecs.domain.agent.plugins.context import AgentPluginContext, PluginShortCircuitResult
+from aiecs.domain.agent.plugins.builtin.knowledge_plugin import (
+    effective_task_description,
+    inject_iteration_knowledge_into_messages,
+)
 from aiecs.domain.agent.plugins.models import PluginPhase
 
 if TYPE_CHECKING:
@@ -443,12 +447,14 @@ class HybridAgent(BaseAIAgent):
         else:
             short = None
 
+        task_for_loop = effective_task_description(plugin_ctx, task_description)
+
         if isinstance(short, PluginShortCircuitResult):
             loop_result = dict(short.result)
         else:
             loop_result = await self._execute_with_retry(
                 self._tool_loop_with_plugins,
-                task_description,
+                task_for_loop,
                 context,
                 plugin_ctx,
             )
@@ -504,6 +510,7 @@ class HybridAgent(BaseAIAgent):
                     ctx=plugin_ctx,
                     iteration=iteration,
                 )
+                messages = inject_iteration_knowledge_into_messages(messages, plugin_ctx)
 
             outcome = await self._run_tool_loop_core_iteration(messages, context, iteration, state)
 
@@ -684,6 +691,7 @@ class HybridAgent(BaseAIAgent):
                     ctx=plugin_ctx,
                     iteration=iteration,
                 )
+                messages = inject_iteration_knowledge_into_messages(messages, plugin_ctx)
 
             yield {
                 "type": "iteration_start",
@@ -831,6 +839,8 @@ class HybridAgent(BaseAIAgent):
                     }
                     return
 
+            task_for_loop = effective_task_description(plugin_ctx, task_description)
+
             from .integration.retry_policy import EnhancedRetryPolicy, ErrorClassifier
 
             _retry_cfg = self._config.retry_policy
@@ -844,7 +854,11 @@ class HybridAgent(BaseAIAgent):
             stream_result_event: Optional[Dict[str, Any]] = None
             for _attempt in range(_policy.max_retries + 1):
                 try:
-                    async for stream_event in self._tool_loop_streaming_with_plugins(task_description, context, plugin_ctx):
+                    async for stream_event in self._tool_loop_streaming_with_plugins(
+                        task_for_loop,
+                        context,
+                        plugin_ctx,
+                    ):
                         async for plugin_event in self._yield_pending_plugin_events(pending_plugin_events):
                             yield plugin_event
                         if stream_event.get("type") == "result":

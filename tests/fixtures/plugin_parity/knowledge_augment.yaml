@@ -1,0 +1,46 @@
+name: knowledge_augment
+description: KnowledgeAwareAgent PRE_TASK augmentation from cached graph context (E-07)
+agent:
+  type: KnowledgeAwareAgent
+  tools: {}
+config:
+  goal: Plugin parity knowledge augment agent
+  llm_model: parity-mock
+  system_prompt: You are a knowledge-aware parity agent.
+  skills_enabled: false
+  memory_enabled: true
+  enable_prompt_caching: false
+task:
+  description: Tell me about alice profile
+context: {}
+capture:
+  mock_final_output: Parity knowledge-augmented final response.
+  knowledge_context:
+    alice profile:
+      answer: Alice is a senior engineer at Company X
+      confidence: 0.92
+      evidence_count: 2
+expect:
+  messages_normalized:
+  - role: system
+    content: You are a knowledge-aware parity agent.
+  - role: user
+    content: 'Task: Tell me about alice profile
+
+
+      RELEVANT KNOWLEDGE FROM GRAPH:
+
+      - alice profile: Alice is a senior engineer at Company X (confidence: 0.92)'
+  tool_schema_names: []
+  plugin_state_keys:
+  - knowledge.augmented_task
+  execute_task_response:
+    iterations: 1
+    output: Parity knowledge-augmented final response.
+    reason: null
+    reasoning_steps:
+    - content: Parity knowledge-augmented final response.
+      iteration: 1
+      type: thought
+    success: true
+    tool_calls_count: 0

@@ -87,7 +87,7 @@ class TestDerivePluginConfigs:
         names = [p.name for p in merged]
 
         assert names.index("tool") < names.index("skill") < names.index("memory")
-        assert names[-1] == "custom_reasoning"
+        assert names[-1] == "knowledge"
 
     def test_explicit_replaces_derive_same_name(self, agent_with_tools, plugin_agent_config):
         """Explicit entry fully replaces derive entry for the same name."""
@@ -204,3 +204,191 @@ class TestDerivePluginConfigsTaskContext:
         assert by_name["skill"].enabled is False
         assert any("filled missing 'tool'" in entry for entry in merge_log)
         assert any("task.plugins" in entry and "tool" in entry for entry in merge_log)
+
+
+@pytest.mark.unit
+class TestDerivePluginConfigsPolicy:
+    """Priority 1 policy_plugins merge (§6.3.1, P3-04)."""
+
+    @pytest.fixture
+    def agent_with_tools(self, mock_agent):
+        mock_agent._tools_input = ["search"]
+        return mock_agent
+
+    def test_policy_disables_memory_task_cannot_reenable(
+        self, agent_with_tools, plugin_agent_config
+    ):
+        """Policy ``enabled=false`` on memory; task ``enabled=true`` stays disabled."""
+        config = plugin_agent_config.model_copy(
+            update={
+                "memory_enabled": True,
+                "plugins": [],
+                "skills_enabled": False,
+                "policy_plugins": [PluginConfig(name="memory", enabled=False)],
+            },
+        )
+        task = {"plugins": [PluginConfig(name="memory", enabled=True)]}
+
+        merged, merge_log = derive_plugin_configs(
+            config, agent_with_tools, task=task, context=None
+        )
+        by_name = _by_name(merged)
+
+        assert by_name["memory"].enabled is False
+        assert any("policy.plugins" in entry for entry in merge_log)
+        assert any(
+            "task.plugins: rejected" in entry and "memory" in entry for entry in merge_log
+        )
+
+    def test_policy_locked_options_subset(
+        self, agent_with_tools, plugin_agent_config
+    ):
+        """Policy locks ``allowed_tools``; config may set other tool options."""
+        config = plugin_agent_config.model_copy(
+            update={
+                "plugins": [
+                    PluginConfig(
+                        name="tool",
+                        enabled=True,
+                        options={
+                            "allowed_tools": ["calculator"],
+                            "tool_selection_strategy": "rule_based",
+                        },
+                    ),
+                ],
+                "skills_enabled": False,
+                "policy_plugins": [
+                    PluginConfig(
+                        name="tool",
+                        enabled=True,
+                        options={"allowed_tools": ["search"]},
+                        locked_options=["allowed_tools"],
+                    ),
+                ],
+            },
+        )
+
+        merged, merge_log = derive_plugin_configs(config, agent_with_tools)
+        by_name = _by_name(merged)
+
+        assert by_name["tool"].options["allowed_tools"] == ["search"]
+        assert by_name["tool"].options["tool_selection_strategy"] == "rule_based"
+        assert any(
+            "policy.plugins: locked options" in entry and "allowed_tools" in entry
+            for entry in merge_log
+        )
+
+    def test_merge_log_contains_policy_source(
+        self, agent_with_tools, plugin_agent_config
+    ):
+        config = plugin_agent_config.model_copy(
+            update={
+                "plugins": [],
+                "skills_enabled": False,
+                "policy_plugins": [
+                    PluginConfig(name="skill", enabled=False, policy_locked=True),
+                ],
+            },
+        )
+        task = {
+            "plugins": [
+                PluginConfig(
+                    name="skill",
+                    enabled=True,
+                    options={"skill_names": ["python-testing"]},
+                ),
+            ],
+        }
+
+        _, merge_log = derive_plugin_configs(config, agent_with_tools, task=task)
+        policy_entries = [entry for entry in merge_log if "policy.plugins" in entry]
+
+        assert len(policy_entries) >= 1
+        assert any("rejected" in entry and "policy.plugins" in entry for entry in merge_log)
+
+
+@pytest.mark.unit
+class TestDerivePluginConfigsKnowledge:
+    """Knowledge legacy options and enabled derivation (§6.4, E-05)."""
+
+    @pytest.fixture
+    def agent_with_tools(self, mock_agent):
+        mock_agent._tools_input = ["search"]
+        return mock_agent
+
+    def test_knowledge_disabled_without_graph_store(self, agent_with_tools, plugin_agent_config):
+        config = plugin_agent_config.model_copy(
+            update={
+                "retrieval_strategy": "vector",
+                "enable_knowledge_caching": False,
+                "max_context_size": 12,
+                "plugins": [],
+                "skills_enabled": False,
+            },
+        )
+
+        merged, _ = derive_plugin_configs(config, agent_with_tools)
+        knowledge = _by_name(merged)["knowledge"]
+
+        assert knowledge.enabled is False
+        assert knowledge.options["retrieval_strategy"] == "vector"
+        assert knowledge.options["enable_knowledge_caching"] is False
+        assert knowledge.options["max_context_size"] == 12
+        assert "graph_store_ref" not in knowledge.options
+
+    def test_knowledge_enabled_when_graph_store_present(self, agent_with_tools, plugin_agent_config):
+        agent_with_tools.graph_store = object()
+
+        merged, _ = derive_plugin_configs(
+            plugin_agent_config.model_copy(update={"plugins": [], "skills_enabled": False}),
+            agent_with_tools,
+        )
+        knowledge = _by_name(merged)["knowledge"]
+
+        assert knowledge.enabled is True
+        assert knowledge.options["graph_store_ref"] == "object"
+
+    def test_knowledge_disabled_when_graph_reasoning_off(self, agent_with_tools, plugin_agent_config):
+        agent_with_tools.graph_store = object()
+        agent_with_tools.enable_graph_reasoning = False
+
+        merged, _ = derive_plugin_configs(
+            plugin_agent_config.model_copy(update={"plugins": [], "skills_enabled": False}),
+            agent_with_tools,
+        )
+
+        assert _by_name(merged)["knowledge"].enabled is False
+
+    def test_knowledge_explicit_enabled_without_graph_store(self, agent_with_tools, plugin_agent_config):
+        config = plugin_agent_config.model_copy(
+            update={
+                "plugins": [
+                    PluginConfig(
+                        name="knowledge",
+                        enabled=True,
+                        options={"retrieval_strategy": "graph"},
+                    ),
+                ],
+                "skills_enabled": False,
+            },
+        )
+
+        merged, merge_log = derive_plugin_configs(config, agent_with_tools)
+        knowledge = _by_name(merged)["knowledge"]
+
+        assert knowledge.enabled is True
+        assert knowledge.options["retrieval_strategy"] == "graph"
+        assert any("explicit 'knowledge'" in entry for entry in merge_log)
+
+    def test_knowledge_graph_store_ref_uses_store_id(self, agent_with_tools, plugin_agent_config):
+        class StubGraphStore:
+            store_id = "kg-main"
+
+        agent_with_tools.graph_store = StubGraphStore()
+
+        merged, _ = derive_plugin_configs(
+            plugin_agent_config.model_copy(update={"plugins": [], "skills_enabled": False}),
+            agent_with_tools,
+        )
+
+        assert _by_name(merged)["knowledge"].options["graph_store_ref"] == "kg-main"

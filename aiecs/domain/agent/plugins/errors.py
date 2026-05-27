@@ -115,6 +115,24 @@ class PluginReloadErrorException(PluginErrorException):
         )
 
 
+class PluginDependencyErrorException(PluginErrorException):
+    """Raised when a manifest dependency cannot be resolved."""
+
+    def __init__(
+        self,
+        message: str,
+        plugin_id: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            PluginDependencyError(
+                message=message,
+                plugin_id=plugin_id,
+                details=details or {},
+            )
+        )
+
+
 def raise_plugin_config_error(
     message: str,
     plugin_id: str | None = None,
@@ -130,6 +148,19 @@ def raise_plugin_reload_error(
 ) -> NoReturn:
     """Raise :class:`PluginReloadErrorException` when reload is rejected."""
     raise PluginReloadErrorException(message=message, details=details)
+
+
+def raise_plugin_dependency_error(
+    message: str,
+    plugin_id: str | None = None,
+    details: dict[str, Any] | None = None,
+) -> NoReturn:
+    """Raise :class:`PluginDependencyErrorException` for unresolved manifest dependencies."""
+    raise PluginDependencyErrorException(
+        message=message,
+        plugin_id=plugin_id,
+        details=details,
+    )
 
 
 def get_plugin_error_message(error: PluginError) -> str:

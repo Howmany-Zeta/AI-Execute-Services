@@ -1,0 +1,46 @@
+name: tool_llm_fc_mode
+description: ToolAgent LLM Function Calling mode with description + schemas (§7.3)
+agent:
+  type: ToolAgent
+  tools:
+  - parity_search
+config:
+  goal: Plugin parity tool agent
+  llm_model: parity-mock
+  system_prompt: You are a plugin parity tool agent.
+  memory_enabled: false
+  enable_prompt_caching: false
+task:
+  description: Search for latest AI news
+context: {}
+capture:
+  mock_final_output: I'll search for that.
+  mock_tool_calls:
+  - id: call_parity_1
+    type: function
+    function:
+      name: parity_search
+      arguments: '{"query": "latest AI news"}'
+expect:
+  execute_task_response:
+    output:
+      operation: run
+      query: latest AI news
+      status: ok
+    success: true
+    tool_calls_count: 1
+  messages_normalized:
+  - role: system
+    content: You are a plugin parity tool agent.
+  - role: system
+    content: 'You are a tool-executing agent. Your role is to select and use the appropriate
+      tools to complete tasks. Use the provided function calling interface to invoke
+      tools. Execute tools as needed and provide the results.
+
+
+
+      Available tools: parity_search'
+  - role: user
+    content: Search for latest AI news
+  tool_schema_names:
+  - parity_search

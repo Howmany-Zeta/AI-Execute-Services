@@ -52,7 +52,9 @@ if TYPE_CHECKING:
     from aiecs.domain.context.context_engine import ContextEngine
     from aiecs.domain.agent.tools import SkillScriptRegistry, Tool
     from aiecs.domain.agent.skills import SkillRegistry
+    from aiecs.domain.agent.plugins.base import BaseAgentPlugin
     from aiecs.domain.agent.plugins.models import PluginConfig
+    from aiecs.domain.agent.plugins.schema.manifest import PluginManifest
 
 logger = logging.getLogger(__name__)
 
@@ -752,6 +754,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         logger.info(f"Agent initialized: {self.agent_id} ({self.name}, {self.agent_type.value}){feature_str}")
 
         self._plugin_registry = plugin_registry or PluginRegistry.default()
+        self._loaded_plugin_manifests: list[PluginManifest] = []
         plugin_configs, _ = self._resolve_plugin_configs()
         self._plugin_manager = PluginManager(
             agent=self,
@@ -772,6 +775,43 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         from aiecs.domain.agent.plugins.defaults import derive_plugin_configs
 
         return derive_plugin_configs(self._config, self, task=task, context=context)
+
+    def _resolve_manifest_plugin_class(
+        self,
+        manifest: "PluginManifest",
+    ) -> type["BaseAgentPlugin"] | None:
+        """
+        Optional hook: return a plugin class for a loaded external manifest.
+
+        When ``None`` (default), manifests from ``plugin_manifest_paths`` /
+        ``extra_plugin_dirs`` are validated for dependencies only; register
+        factories via :meth:`PluginRegistry.register_from_manifest` before init
+        or override this hook in subclasses.
+        """
+        return None
+
+    def _apply_plugin_manifest_paths(self) -> None:
+        """Load manifest files from config and validate dependency order (§9.1)."""
+        from aiecs.domain.agent.plugins.manifest_loader import (
+            collect_manifests_from_config,
+            sort_manifests_by_dependencies,
+        )
+
+        manifests = collect_manifests_from_config(self._config)
+        if not manifests:
+            self._loaded_plugin_manifests = []
+            return
+
+        registry = self._plugin_registry or PluginRegistry.default()
+        ordered = sort_manifests_by_dependencies(manifests, registry)
+        self._loaded_plugin_manifests = ordered
+
+        for manifest in ordered:
+            if registry.get_entry(manifest.name) is not None:
+                continue
+            plugin_class = self._resolve_manifest_plugin_class(manifest)
+            if plugin_class is not None:
+                registry.register_from_manifest(manifest, plugin_class)
 
     def _apply_task_plugin_configs(
         self,
@@ -877,8 +917,10 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         """
         if force_reload_plugins:
             await self.reload_plugins()
-        elif self._plugin_manager is not None:
-            await self._plugin_manager.initialize()
+        else:
+            self._apply_plugin_manifest_paths()
+            if self._plugin_manager is not None:
+                await self._plugin_manager.initialize()
 
     async def reload_plugins(self) -> PluginLoadResult:
         """
@@ -900,6 +942,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         if self._plugin_manager is not None:
             await self._plugin_manager.shutdown()
 
+        self._apply_plugin_manifest_paths()
         plugin_configs, _ = self._resolve_plugin_configs()
         self._plugin_manager = PluginManager(
             agent=self,

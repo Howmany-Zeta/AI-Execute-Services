@@ -104,7 +104,7 @@ async def test_skill_attach_on_hybrid_init_only_via_skill_plugin() -> None:
     )
     agent._skill_registry = registry
 
-    with patch.object(agent, "attach_skills", wraps=agent.attach_skills) as attach_mock:
+    with patch.object(agent, "_attach_skills_impl", wraps=agent._attach_skills_impl) as attach_mock:
         await agent.initialize()
 
     assert attach_mock.call_count == 1

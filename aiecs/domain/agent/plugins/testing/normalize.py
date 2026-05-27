@@ -144,8 +144,16 @@ def normalize_plugin_state_keys(plugin_state: dict[str, Any]) -> list[str]:
     return sorted(str(k) for k in plugin_state.keys())
 
 
-def normalize_execute_task_response(response: dict[str, Any]) -> dict[str, Any]:
-    """Normalize execute_task outer shell (§8.2)."""
+def normalize_execute_task_response(
+    response: dict[str, Any],
+    *,
+    extra_fields: frozenset[str] | None = None,
+) -> dict[str, Any]:
+    """Normalize execute_task outer shell (§8.2).
+
+    ``extra_fields`` adds agent-specific keys (e.g. ``tool_used`` for ToolAgent
+    direct mode) used by LLM/Tool parity fixtures (P3-00).
+    """
     allowed = {
         "success",
         "reason",
@@ -154,6 +162,8 @@ def normalize_execute_task_response(response: dict[str, Any]) -> dict[str, Any]:
         "tool_calls_count",
         "iterations",
     }
+    if extra_fields:
+        allowed = allowed | extra_fields
     shell = {k: response[k] for k in allowed if k in response}
     return normalize_dict(shell)
 
