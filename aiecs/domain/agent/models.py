@@ -340,7 +340,15 @@ class AgentConfiguration(BaseModel):
     )
     policy_plugins: List["PluginConfig"] = Field(
         default_factory=list,
-        description="Enterprise/policy plugin overrides (Phase 3; not merged in Phase 1).",
+        description=("Enterprise/policy plugin overrides (§6.3.1 priority 1). " "Applied after config/task/context; can lock enabled=false or option keys."),
+    )
+    plugin_manifest_paths: List[str] = Field(
+        default_factory=list,
+        description=("Paths to external plugin manifest files or directories containing " "aiecs-plugin.yaml / plugin.json (§9.1 Phase 3)."),
+    )
+    extra_plugin_dirs: List[str] = Field(
+        default_factory=list,
+        description=("Directories scanned for aiecs-plugin.yaml / plugin.json manifests " "during agent initialization (§9.1 Phase 3)."),
     )
 
     # Extra LLM parameters (provider-specific)

@@ -275,8 +275,8 @@ markers = [
     "asyncio: Async tests (automatically applied by pytest-asyncio)",
     "security: Security-related tests",
 
-    # Agent plugin system (Phase 2 parity gate, §12.1)
-    "plugin_parity: Golden snapshot parity tests for HybridAgent plugin integration",
+    # Agent plugin system (Phase 2–3 parity gate, §12.1)
+    "plugin_parity: Golden snapshot parity for Hybrid/LLM/Tool agents; run test/unit/domain/agent/plugins/test_plugin_parity.py -m plugin_parity",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

@@ -4,6 +4,7 @@ Unit tests for SkillPlugin business logic (§7.1, P2-02).
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from unittest.mock import patch
 
@@ -196,7 +197,7 @@ class TestSkillPluginBuildMessages:
 
         with patch.object(
             skill_test_agent,
-            "get_skill_context",
+            "_get_skill_context_impl",
             return_value="mocked skill context",
         ) as mock_get_context:
             result = await manager.run_phase(
@@ -241,3 +242,54 @@ class TestSkillPluginShutdown:
         await manager.shutdown()
 
         assert not skill_test_agent._attached_skills
+
+
+@pytest.mark.unit
+class TestSkillCapableMixinDeprecation:
+    def test_attach_skills_emits_deprecation_warning(
+        self, skill_test_agent: SkillTestAgent
+    ) -> None:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", DeprecationWarning)
+            skill_test_agent.attach_skills(["test-skill"])
+
+        deprecation = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+        assert len(deprecation) == 1
+        assert "attach_skills" in str(deprecation[0].message)
+
+    @pytest.mark.asyncio
+    async def test_skill_plugin_init_does_not_emit_mixin_deprecation(
+        self, skill_test_agent: SkillTestAgent
+    ) -> None:
+        registry = PluginRegistry()
+        registry.register("skill", SkillPlugin, origin="registry")
+        manager = PluginManager(
+            skill_test_agent,
+            [
+                PluginConfig(
+                    name="skill",
+                    enabled=True,
+                    options={"skill_names": ["test-skill"]},
+                ),
+            ],
+            registry=registry,
+        )
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", DeprecationWarning)
+            await manager.initialize()
+            ctx = _make_ctx(skill_test_agent)
+            await manager.run_phase(
+                PluginPhase.BUILD_MESSAGES,
+                ctx=ctx,
+                messages=[LLMMessage(role="user", content="Task")],
+            )
+            await manager.shutdown()
+
+        mixin_deprecations = [
+            w
+            for w in caught
+            if issubclass(w.category, DeprecationWarning)
+            and "SkillCapableMixin" in str(w.message)
+        ]
+        assert mixin_deprecations == []

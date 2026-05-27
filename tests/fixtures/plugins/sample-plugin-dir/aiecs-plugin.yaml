@@ -1,0 +1,15 @@
+name: sample-audit
+version: "1.0.0"
+description: Sample external plugin manifest for loader tests (§9.1)
+dependencies:
+  - memory@builtin
+phases:
+  - pre_task
+  - post_task
+options_schema:
+  type: object
+  properties:
+    tag:
+      type: string
+  required:
+    - tag

@@ -21,6 +21,8 @@ from aiecs.domain.agent.tools.schema_generator import ToolSchemaGenerator
 from .base_agent import BaseAIAgent
 from .models import AgentType, AgentConfiguration
 from .exceptions import TaskExecutionError, ToolAccessDeniedError
+from .plugins.context import AgentPluginContext, PluginShortCircuitResult
+from .plugins.models import PluginPhase
 
 if TYPE_CHECKING:
     from aiecs.llm.protocols import LLMClientProtocol
@@ -375,80 +377,44 @@ class ToolAgent(BaseAIAgent):
         2. Explicit format (backward compatible): {'tool': 'name', 'operation': 'op', 'parameters': {...}}
         3. Function call format: {'function_call': {'name': 'tool', 'arguments': {...}}}
 
-        Args:
-            task: Task specification with 'description' (LLM mode), or 'tool' + 'parameters' (direct mode)
-            context: Execution context
-
-        Returns:
-            Execution result with 'output', 'tool_used', 'execution_time', 'tool_results'
-
-        Raises:
-            TaskExecutionError: If task execution fails
+        Direct mode runs PRE_TASK/POST_TASK only (no BUILD_MESSAGES) when plugins are active.
         """
         start_time = datetime.utcnow()
         tool_name: Optional[str] = None
 
         try:
-            # Check if we should use LLM mode
             task_description = task.get("description") or task.get("prompt") or task.get("task")
-            use_llm_mode = self.llm_client is not None and self._tool_schemas and task_description and not task.get("tool")  # Not explicit tool specification
+            use_llm_mode = self.llm_client is not None and self._tool_schemas and task_description and not task.get("tool")
 
             if use_llm_mode:
-                # Merge images from task payload into context (deduplicates merge logic).
                 self._merge_task_images(task, context)
+                self._transition_state(self.state.__class__.BUSY)
+                self._current_task_id = task.get("task_id")
 
-                # LLM-powered Function Calling mode
-                return await self._execute_with_llm(task, context, start_time)
+                inner = await self._execute_task_with_plugins(task, context)
 
-            # Direct tool execution mode (backward compatible)
-            tool_name = task.get("tool")
-            operation = task.get("operation")
-            parameters = task.get("parameters", {})
-
-            # Check for function_call format
-            if not tool_name and "function_call" in task:
-                function_call = task["function_call"]
-                tool_name = function_call.get("name")
-                operation = function_call.get("operation")
-                parameters = function_call.get("arguments", {})
-
-            if not tool_name:
-                raise TaskExecutionError(
-                    "Task must contain 'description' (LLM mode), 'tool' field, or 'function_call'",
-                    agent_id=self.agent_id,
+                execution_time = (datetime.utcnow() - start_time).total_seconds()
+                self.update_metrics(
+                    execution_time=execution_time,
+                    success=True,
+                    tokens_used=inner.get("tokens_used"),
+                    tool_calls=inner.get("tool_calls_count", 0),
                 )
+                self._transition_state(self.state.__class__.ACTIVE)
+                self._current_task_id = None
+                self.last_active_at = datetime.utcnow()
 
-            # Check tool access
-            if not self._available_tools or tool_name not in self._available_tools:
-                raise ToolAccessDeniedError(self.agent_id, tool_name)
+                return {
+                    "success": True,
+                    "output": inner.get("output"),
+                    "llm_response": inner.get("llm_response"),
+                    "tool_results": inner.get("tool_results", []),
+                    "tool_calls_count": inner.get("tool_calls_count", 0),
+                    "execution_time": execution_time,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
 
-            # Transition to busy state
-            self._transition_state(self.state.__class__.BUSY)
-            self._current_task_id = task.get("task_id")
-
-            # Execute tool directly
-            result = await self._execute_tool(tool_name, operation, parameters)
-
-            # Calculate execution time
-            execution_time = (datetime.utcnow() - start_time).total_seconds()
-
-            # Update metrics
-            self.update_metrics(execution_time=execution_time, success=True, tool_calls=1)
-            self._update_tool_stats(tool_name, success=True)
-
-            # Transition back to active
-            self._transition_state(self.state.__class__.ACTIVE)
-            self._current_task_id = None
-            self.last_active_at = datetime.utcnow()
-
-            return {
-                "success": True,
-                "output": result,
-                "tool_used": tool_name,
-                "operation": operation,
-                "execution_time": execution_time,
-                "timestamp": datetime.utcnow().isoformat(),
-            }
+            return await self._execute_direct_tool_task(task, context, start_time)
 
         except Exception as e:
             logger.error(f"Task execution failed for {self.agent_id}: {e}")
@@ -467,23 +433,177 @@ class ToolAgent(BaseAIAgent):
                 task_id=task.get("task_id"),
             )
 
-    async def _execute_with_llm(self, task: Dict[str, Any], context: Dict[str, Any], start_time: datetime) -> Dict[str, Any]:
-        """Execute task using LLM Function Calling mode."""
-        task_description = self._extract_task_description(task)
-        tool_calls_count = 0
-        tool_results: List[Dict[str, Any]] = []
+    async def _execute_direct_tool_task(
+        self,
+        task: Dict[str, Any],
+        context: Dict[str, Any],
+        start_time: datetime,
+    ) -> Dict[str, Any]:
+        """
+        Direct tool invoke (legacy path): PRE_TASK/POST_TASK only, no BUILD_MESSAGES.
 
-        # Transition to busy state
+        Documented behavior for Phase 3 plugin integration on non-LLM tasks.
+        """
+        tool_name: Optional[str] = None
+        tool_name = task.get("tool")
+        operation = task.get("operation")
+        parameters = task.get("parameters", {})
+
+        if not tool_name and "function_call" in task:
+            function_call = task["function_call"]
+            tool_name = function_call.get("name")
+            operation = function_call.get("operation")
+            parameters = function_call.get("arguments", {})
+
+        if not tool_name:
+            raise TaskExecutionError(
+                "Task must contain 'description' (LLM mode), 'tool' field, or 'function_call'",
+                agent_id=self.agent_id,
+            )
+
+        if not self._available_tools or tool_name not in self._available_tools:
+            raise ToolAccessDeniedError(self.agent_id, tool_name)
+
+        task_description = str(task.get("description") or tool_name)
+        plugin_ctx = self._make_plugin_context(
+            task=task,
+            context=context,
+            task_description=task_description,
+        )
+        self._apply_task_plugin_configs(task=task, context=context)
+
+        if self._plugin_manager is not None:
+            await self._plugin_manager.run_phase(PluginPhase.PRE_TASK, ctx=plugin_ctx)
+
         self._transition_state(self.state.__class__.BUSY)
         self._current_task_id = task.get("task_id")
 
-        # Build messages
-        messages = self._build_messages(task_description, context)
+        result = await self._execute_tool(tool_name, operation, parameters)
 
-        # Convert schemas to tools format
+        execution_time = (datetime.utcnow() - start_time).total_seconds()
+        self.update_metrics(execution_time=execution_time, success=True, tool_calls=1)
+        self._update_tool_stats(tool_name, success=True)
+
+        self._transition_state(self.state.__class__.ACTIVE)
+        self._current_task_id = None
+        self.last_active_at = datetime.utcnow()
+
+        inner: Dict[str, Any] = {
+            "success": True,
+            "output": result,
+            "tool_used": tool_name,
+            "operation": operation,
+        }
+
+        if self._plugin_manager is not None:
+            inner = await self._plugin_manager.run_phase(
+                PluginPhase.POST_TASK,
+                ctx=plugin_ctx,
+                result=inner,
+            )
+
+        return {
+            "success": True,
+            "output": inner.get("output"),
+            "tool_used": tool_name,
+            "operation": operation,
+            "execution_time": execution_time,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+    async def _execute_task_with_plugins(
+        self,
+        task: Dict[str, Any],
+        context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        LLM FC kernel: PRE_TASK → PRE_MAIN_LOOP → BUILD_MESSAGES → FC loop → POST_TASK (§7.3).
+        """
+        task_description = self._extract_task_description(task)
+        plugin_ctx = self._make_plugin_context(
+            task=task,
+            context=context,
+            task_description=task_description,
+        )
+        self._apply_task_plugin_configs(task=task, context=context)
+
+        if self._plugin_manager is not None:
+            await self._plugin_manager.run_phase(PluginPhase.PRE_TASK, ctx=plugin_ctx)
+            short = await self._plugin_manager.run_phase(
+                PluginPhase.PRE_MAIN_LOOP,
+                ctx=plugin_ctx,
+            )
+            if isinstance(short, PluginShortCircuitResult):
+                inner = dict(short.result)
+                post_result = await self._plugin_manager.run_phase(
+                    PluginPhase.POST_TASK,
+                    ctx=plugin_ctx,
+                    result=inner,
+                )
+                return dict(post_result) if isinstance(post_result, dict) else inner
+
+        if self._should_use_legacy_messages(task, context):
+            messages = self._build_messages(task_description, context)
+        else:
+            messages = await self._build_messages_via_plugins(
+                task_description,
+                context,
+                plugin_ctx,
+            )
+
+        inner = await self._run_fc_loop_with_plugins(messages, context, plugin_ctx)
+
+        if self._plugin_manager is not None:
+            inner = await self._plugin_manager.run_phase(
+                PluginPhase.POST_TASK,
+                ctx=plugin_ctx,
+                result=inner,
+            )
+
+        return inner
+
+    async def _run_fc_loop_with_plugins(
+        self,
+        messages: List[LLMMessage],
+        context: Dict[str, Any],
+        plugin_ctx: AgentPluginContext,
+    ) -> Dict[str, Any]:
+        """Single-iteration FC loop with ON_ITERATION_* hooks (ToolAgent uses one LLM call)."""
+        iteration = 0
+        if self._plugin_manager is not None:
+            await self._plugin_manager.run_phase(
+                PluginPhase.ON_ITERATION_START,
+                ctx=plugin_ctx,
+                iteration=iteration,
+            )
+
+        inner = await self._execute_fc_iteration(messages, context)
+
+        if self._plugin_manager is not None:
+            step = {
+                "type": "fc",
+                "iteration": iteration + 1,
+                "tool_calls_count": inner.get("tool_calls_count", 0),
+            }
+            await self._plugin_manager.run_phase(
+                PluginPhase.ON_ITERATION_END,
+                ctx=plugin_ctx,
+                iteration=iteration,
+                step=step,
+            )
+
+        return inner
+
+    async def _execute_fc_iteration(
+        self,
+        messages: List[LLMMessage],
+        context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """One LLM Function Calling round + tool execution (legacy ToolAgent semantics)."""
+        tool_calls_count = 0
+        tool_results: List[Dict[str, Any]] = []
+
         tools = [{"type": "function", "function": schema} for schema in self._tool_schemas]
-
-        # Call LLM with Function Calling
         call_kwargs: Dict[str, Any] = dict(
             messages=messages,
             model=self._config.llm_model,
@@ -491,21 +611,16 @@ class ToolAgent(BaseAIAgent):
             max_tokens=self._config.max_tokens,
             context=context,
         )
-        # Merge provider-specific parameters (top_p, top_k, thinking_config, reasoning_effort, etc.)
         call_kwargs.update(self._config.get_llm_call_kwargs())
         call_kwargs["tools"] = tools
         call_kwargs["tool_choice"] = "auto"
         response = await self.llm_client.generate_text(**call_kwargs)  # type: ignore[union-attr]
 
-        # Get LLM response content
         llm_response = response.content or ""
-
-        # Check for tool_calls in response
         response_tool_calls = getattr(response, "tool_calls", None)
         function_call = getattr(response, "function_call", None)
 
         if response_tool_calls or function_call:
-            # Process tool calls
             calls_to_process = response_tool_calls or []
             if function_call:
                 calls_to_process = [
@@ -520,24 +635,18 @@ class ToolAgent(BaseAIAgent):
                 ]
 
             for tool_call in calls_to_process:
-                # Initialise name variables so the except block always has valid values
-                # regardless of where inside the try block the exception is raised.
                 func_name = "unknown"
                 tool_name: str = "unknown"
                 try:
                     func_name = tool_call["function"]["name"]
                     func_args = tool_call["function"]["arguments"]
-
-                    # Parse tool name and operation
                     tool_name, operation = self._parse_function_name(func_name)
 
-                    # Parse arguments
                     if isinstance(func_args, str):
                         parameters = json.loads(func_args)
                     else:
                         parameters = func_args if func_args else {}
 
-                    # Execute tool
                     tool_result = await self._execute_tool(tool_name, operation, parameters)
                     tool_calls_count += 1
                     self._update_tool_stats(tool_name, success=True)
@@ -562,28 +671,149 @@ class ToolAgent(BaseAIAgent):
                         }
                     )
 
-        # Calculate execution time
-        execution_time = (datetime.utcnow() - start_time).total_seconds()
-
-        # Update metrics
-        self.update_metrics(
-            execution_time=execution_time,
-            success=True,
-            tokens_used=getattr(response, "total_tokens", None),
-            tool_calls=tool_calls_count,
-        )
-
-        # Transition back to active
-        self._transition_state(self.state.__class__.ACTIVE)
-        self._current_task_id = None
-        self.last_active_at = datetime.utcnow()
-
         return {
             "success": True,
             "output": tool_results[-1]["result"] if tool_results else llm_response,
             "llm_response": llm_response,
             "tool_results": tool_results,
             "tool_calls_count": tool_calls_count,
+            "tokens_used": getattr(response, "total_tokens", None),
+        }
+
+    def _make_plugin_context(
+        self,
+        task: Dict[str, Any],
+        context: Dict[str, Any],
+        task_description: str,
+        *,
+        event_sink: Optional[Any] = None,
+        plugin_state: Optional[Dict[str, Any]] = None,
+    ) -> AgentPluginContext:
+        """Create per-task plugin context (§5.4)."""
+        return AgentPluginContext(
+            agent=self,
+            task=task,
+            context=context,
+            task_description=task_description,
+            plugin_state=dict(plugin_state or {}),
+            event_sink=event_sink,
+        )
+
+    def _should_use_legacy_messages(
+        self,
+        task: Dict[str, Any],
+        context: Dict[str, Any],
+    ) -> bool:
+        """Legacy ``_build_messages`` when no plugin manager (dual-path, §8.3)."""
+        return self._plugin_manager is None
+
+    async def _build_messages_via_plugins(
+        self,
+        task_description: str,
+        context: Dict[str, Any],
+        plugin_ctx: AgentPluginContext,
+    ) -> List[LLMMessage]:
+        """Build FC messages with BUILD_MESSAGES plugin phase (MemoryPlugin §7.2)."""
+        messages = self._build_messages_system()
+        if self._plugin_manager is not None:
+            messages = await self._plugin_manager.run_phase(
+                PluginPhase.BUILD_MESSAGES,
+                ctx=plugin_ctx,
+                messages=messages,
+            )
+        return self._append_tool_user_message(task_description, context, messages)
+
+    def _build_messages_system(self) -> List[LLMMessage]:
+        """System prompts only (before BUILD_MESSAGES)."""
+        messages: List[LLMMessage] = []
+        for prompt_dict in self._build_system_prompts():
+            content = prompt_dict.get("content", "")
+            if not content:
+                continue
+
+            prompt_cache_control = prompt_dict.get("cache_control")
+            if prompt_cache_control is None:
+                cache_control = CacheControl(type="ephemeral") if self._config.enable_prompt_caching else None
+            else:
+                cache_control = CacheControl(type="ephemeral") if prompt_cache_control else None
+
+            messages.append(LLMMessage(role="system", content=content, cache_control=cache_control))
+        return messages
+
+    def _append_tool_user_message(
+        self,
+        user_message: str,
+        context: Dict[str, Any],
+        messages: List[LLMMessage],
+    ) -> List[LLMMessage]:
+        """Additional context, optional skill block (legacy), and user message with images."""
+        user_message_images: List[Any] = []
+
+        if context:
+            context_images = context.get("images")
+            if context_images:
+                if isinstance(context_images, list):
+                    user_message_images.extend(context_images)
+                else:
+                    user_message_images.append(context_images)
+
+            context_without_history = {k: v for k, v in context.items() if k not in ("history", "images")}
+            if context_without_history:
+                context_str = self._format_context(context_without_history)
+                if context_str:
+                    messages.append(
+                        LLMMessage(
+                            role="system",
+                            content=f"Additional Context:\n{context_str}",
+                        )
+                    )
+
+        if self._config.skills_enabled and self._attached_skills:
+            skill_context = self.get_skill_context(
+                request=user_message,
+                include_all_skills=False,
+            )
+            if skill_context:
+                messages.append(
+                    LLMMessage(
+                        role="system",
+                        content=f"Relevant Skills for this Request:\n{skill_context}",
+                    )
+                )
+
+        messages.append(
+            LLMMessage(
+                role="user",
+                content=user_message,
+                images=user_message_images if user_message_images else [],
+            )
+        )
+        return messages
+
+    async def _execute_with_llm(
+        self,
+        task: Dict[str, Any],
+        context: Dict[str, Any],
+        start_time: datetime,
+    ) -> Dict[str, Any]:
+        """Deprecated: use :meth:`execute_task` plugin path. Kept for streaming callers."""
+        self._transition_state(self.state.__class__.BUSY)
+        self._current_task_id = task.get("task_id")
+        task_description = self._extract_task_description(task)
+        messages = self._build_messages(task_description, context)
+        inner = await self._execute_fc_iteration(messages, context)
+        execution_time = (datetime.utcnow() - start_time).total_seconds()
+        self.update_metrics(
+            execution_time=execution_time,
+            success=True,
+            tokens_used=inner.get("tokens_used"),
+            tool_calls=inner.get("tool_calls_count", 0),
+        )
+        self._transition_state(self.state.__class__.ACTIVE)
+        self._current_task_id = None
+        self.last_active_at = datetime.utcnow()
+        return {
+            **inner,
             "execution_time": execution_time,
             "timestamp": datetime.utcnow().isoformat(),
         }
@@ -624,48 +854,19 @@ class ToolAgent(BaseAIAgent):
         return candidate_tool, candidate_op
 
     def _build_messages(self, user_message: str, context: Dict[str, Any]) -> List[LLMMessage]:
-        """Build LLM messages for function calling.
-
-        If skills are enabled and attached, request-specific skill context is added
-        to help guide tool selection for the specific user request.
-
-        Supports conversation history via context['history'] and images via context['images'].
-        History format matches HybridAgent implementation for consistency.
         """
-        messages = []
+        Legacy synchronous message build (no plugin phases).
 
-        # Add system prompts (supports multiple system messages with individual cache control)
-        system_prompts = self._build_system_prompts()
-        for prompt_dict in system_prompts:
-            content = prompt_dict.get("content", "")
-            if not content:
-                continue
+        Prefer :meth:`_build_messages_via_plugins` for :meth:`execute_task` LLM mode.
+        Uses ``context['history']`` when present (legacy ToolAgent path).
+        """
+        messages = self._build_messages_system()
 
-            # Determine cache control: use prompt-specific setting if provided, else use global setting
-            prompt_cache_control = prompt_dict.get("cache_control")
-            if prompt_cache_control is None:
-                # Use global setting
-                cache_control = CacheControl(type="ephemeral") if self._config.enable_prompt_caching else None
-            else:
-                # Use prompt-specific setting
-                cache_control = CacheControl(type="ephemeral") if prompt_cache_control else None
-
-            messages.append(LLMMessage(role="system", content=content, cache_control=cache_control))
-
-        # Collect images from context to attach to user message
-        user_message_images = []
-
-        # Add context if provided
         if context:
-            # Special handling: if context contains 'history' as a list of messages,
-            # add them as separate user/assistant messages instead of formatting
             history = context.get("history")
             if isinstance(history, list) and len(history) > 0:
-                # Check if history contains message-like dictionaries
                 for msg in history:
                     if isinstance(msg, dict) and "role" in msg and "content" in msg:
-                        # Valid message format - add as separate message
-                        # Extract images if present
                         msg_images = msg.get("images", [])
                         if msg_images:
                             messages.append(
@@ -683,54 +884,13 @@ class ToolAgent(BaseAIAgent):
                                 )
                             )
                     elif isinstance(msg, LLMMessage):
-                        # Already an LLMMessage instance (may already have images)
                         messages.append(msg)
 
-            # Extract images from context if present
-            context_images = context.get("images")
-            if context_images:
-                if isinstance(context_images, list):
-                    user_message_images.extend(context_images)
-                else:
-                    user_message_images.append(context_images)
+        if self._config.memory_enabled and self._conversation_history:
+            max_history = 10
+            messages.extend(self._conversation_history[-max_history:])
 
-            # Format remaining context fields (excluding history and images) as Additional Context
-            context_without_history = {k: v for k, v in context.items() if k not in ("history", "images")}
-            if context_without_history:
-                context_str = self._format_context(context_without_history)
-                if context_str:
-                    messages.append(
-                        LLMMessage(
-                            role="system",
-                            content=f"Additional Context:\n{context_str}",
-                        )
-                    )
-
-        # Add request-specific skill context if skills are enabled
-        # This provides skills matched to the specific user request for tool selection
-        if self._config.skills_enabled and self._attached_skills:
-            skill_context = self.get_skill_context(
-                request=user_message,
-                include_all_skills=False,  # Only include matched skills
-            )
-            if skill_context:
-                messages.append(
-                    LLMMessage(
-                        role="system",
-                        content=f"Relevant Skills for this Request:\n{skill_context}",
-                    )
-                )
-
-        # Add user message with images if present
-        messages.append(
-            LLMMessage(
-                role="user",
-                content=user_message,
-                images=user_message_images if user_message_images else [],
-            )
-        )
-
-        return messages
+        return self._append_tool_user_message(user_message, context, messages)
 
     def _format_context(self, context: Dict[str, Any]) -> str:
         """Format context dictionary as string."""

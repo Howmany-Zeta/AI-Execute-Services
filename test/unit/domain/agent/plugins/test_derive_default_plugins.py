@@ -29,6 +29,7 @@ class TestDeriveDefaultPlugins:
         assert by_name["skill"].enabled is False
         assert by_name["tool"].enabled is True
         assert by_name["custom_reasoning"].enabled is False
+        assert by_name["knowledge"].enabled is False
 
         assert by_name["memory"].options["capacity"] == config.memory_capacity
         assert by_name["tool"].options["allowed_tools"] == []
@@ -90,4 +91,4 @@ class TestDeriveDefaultPlugins:
     def test_returns_all_builtin_plugin_names(self, mock_agent, plugin_agent_config):
         mock_agent._tools_input = ["search"]
         names = [p.name for p in derive_default_plugins(plugin_agent_config, mock_agent)]
-        assert names == ["memory", "skill", "tool", "custom_reasoning"]
+        assert names == ["memory", "skill", "tool", "knowledge", "collaboration", "custom_reasoning"]

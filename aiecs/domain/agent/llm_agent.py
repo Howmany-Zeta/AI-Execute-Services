@@ -17,6 +17,8 @@ from aiecs.llm import BaseLLMClient, CacheControl, LLMMessage
 from .base_agent import BaseAIAgent
 from .models import AgentType, AgentConfiguration
 from .exceptions import TaskExecutionError
+from .plugins.context import AgentPluginContext
+from .plugins.models import PluginPhase
 
 if TYPE_CHECKING:
     from aiecs.llm.protocols import LLMClientProtocol
@@ -345,55 +347,29 @@ class LLMAgent(BaseAIAgent):
         start_time = datetime.utcnow()
 
         try:
-            # Extract task description using shared method
-            task_description = self._extract_task_description(task)
-
-            # Transition to busy state
             self._transition_state(self.state.__class__.BUSY)
             self._current_task_id = task.get("task_id")
 
-            # Build messages
-            messages = self._build_messages(task_description, context)
+            inner = await self._execute_task_with_plugins(task, context)
 
-            # Call LLM
-            response = await self.llm_client.generate_text(
-                messages=messages,
-                model=self._config.llm_model,
-                temperature=self._config.temperature,
-                max_tokens=self._config.max_tokens,
-                context=context,
-                **self._config.get_llm_call_kwargs(),
-            )
-
-            # Extract result
-            output = response.content
-
-            # Store in conversation history if enabled
-            if self._config.memory_enabled:
-                self._conversation_history.append(LLMMessage(role="user", content=task_description))
-                self._conversation_history.append(LLMMessage(role="assistant", content=output))
-
-            # Calculate execution time
             execution_time = (datetime.utcnow() - start_time).total_seconds()
 
-            # Update metrics
             self.update_metrics(
                 execution_time=execution_time,
                 success=True,
-                tokens_used=getattr(response, "total_tokens", None),
+                tokens_used=inner.get("tokens_used"),
             )
 
-            # Transition back to active
             self._transition_state(self.state.__class__.ACTIVE)
             self._current_task_id = None
             self.last_active_at = datetime.utcnow()
 
             return {
                 "success": True,
-                "output": output,
-                "provider": response.provider,
-                "model": response.model,
-                "tokens_used": getattr(response, "total_tokens", None),
+                "output": inner.get("output"),
+                "provider": inner.get("provider"),
+                "model": inner.get("model"),
+                "tokens_used": inner.get("tokens_used"),
                 "execution_time": execution_time,
                 "timestamp": datetime.utcnow().isoformat(),
             }
@@ -401,11 +377,9 @@ class LLMAgent(BaseAIAgent):
         except Exception as e:
             logger.error(f"Task execution failed for {self.agent_id}: {e}")
 
-            # Update metrics for failure
             execution_time = (datetime.utcnow() - start_time).total_seconds()
             self.update_metrics(execution_time=execution_time, success=False)
 
-            # Transition to error state
             self._transition_state(self.state.__class__.ERROR)
             self._current_task_id = None
 
@@ -415,16 +389,160 @@ class LLMAgent(BaseAIAgent):
                 task_id=task.get("task_id"),
             )
 
+    async def _execute_task_with_plugins(
+        self,
+        task: Dict[str, Any],
+        context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Task kernel: PRE_TASK → BUILD_MESSAGES → single LLM call → POST_TASK (§8.2, no MAIN_LOOP).
+        """
+        task_description = self._extract_task_description(task)
+        plugin_ctx = self._make_plugin_context(
+            task=task,
+            context=context,
+            task_description=task_description,
+        )
+        self._apply_task_plugin_configs(task=task, context=context)
+
+        if self._plugin_manager is not None:
+            await self._plugin_manager.run_phase(PluginPhase.PRE_TASK, ctx=plugin_ctx)
+
+        if self._should_use_legacy_messages(task, context):
+            messages = self._build_messages(task_description, context)
+        else:
+            messages = await self._build_messages_via_plugins(
+                task_description,
+                context,
+                plugin_ctx,
+            )
+
+        response = await self.llm_client.generate_text(
+            messages=messages,
+            model=self._config.llm_model,
+            temperature=self._config.temperature,
+            max_tokens=self._config.max_tokens,
+            context=context,
+            **self._config.get_llm_call_kwargs(),
+        )
+
+        inner: Dict[str, Any] = {
+            "success": True,
+            "output": response.content,
+            "provider": response.provider,
+            "model": response.model,
+            "tokens_used": getattr(response, "total_tokens", None),
+        }
+
+        if self._plugin_manager is not None:
+            inner = await self._plugin_manager.run_phase(
+                PluginPhase.POST_TASK,
+                ctx=plugin_ctx,
+                result=inner,
+            )
+        elif self._config.memory_enabled:
+            self._conversation_history.append(LLMMessage(role="user", content=task_description))
+            self._conversation_history.append(LLMMessage(role="assistant", content=inner.get("output") or ""))
+
+        return inner
+
+    def _make_plugin_context(
+        self,
+        task: Dict[str, Any],
+        context: Dict[str, Any],
+        task_description: str,
+        *,
+        event_sink: Optional[Any] = None,
+        plugin_state: Optional[Dict[str, Any]] = None,
+    ) -> AgentPluginContext:
+        """Create per-task plugin context (§5.4)."""
+        return AgentPluginContext(
+            agent=self,
+            task=task,
+            context=context,
+            task_description=task_description,
+            plugin_state=dict(plugin_state or {}),
+            event_sink=event_sink,
+        )
+
+    def _should_use_legacy_messages(
+        self,
+        task: Dict[str, Any],
+        context: Dict[str, Any],
+    ) -> bool:
+        """
+        Dual-path message build (§8.3): legacy ``_build_messages`` when no plugin manager.
+
+        With ``plugins=[]``, defaults are derived and the plugin path runs (MemoryPlugin §7.2).
+        """
+        if self._plugin_manager is None:
+            return True
+        return False
+
+    async def _build_messages_via_plugins(
+        self,
+        task_description: str,
+        context: Dict[str, Any],
+        plugin_ctx: AgentPluginContext,
+    ) -> List[LLMMessage]:
+        """Build messages with BUILD_MESSAGES plugin phase (MemoryPlugin / optional SkillPlugin)."""
+        messages = self._build_messages_system()
+        if self._plugin_manager is not None:
+            messages = await self._plugin_manager.run_phase(
+                PluginPhase.BUILD_MESSAGES,
+                ctx=plugin_ctx,
+                messages=messages,
+            )
+        return self._append_messages_context_and_user(task_description, context, messages)
+
+    def _build_messages_system(self) -> List[LLMMessage]:
+        """System prompts only (before BUILD_MESSAGES plugin phase)."""
+        messages: List[LLMMessage] = []
+        for prompt_dict in self._build_system_prompts():
+            content = prompt_dict.get("content", "")
+            if not content:
+                continue
+
+            prompt_cache_control = prompt_dict.get("cache_control")
+            if prompt_cache_control is None:
+                cache_control = CacheControl(type="ephemeral") if self._config.enable_prompt_caching else None
+            else:
+                cache_control = CacheControl(type="ephemeral") if prompt_cache_control else None
+
+            messages.append(
+                LLMMessage(
+                    role="system",
+                    content=content,
+                    cache_control=cache_control,
+                )
+            )
+        return messages
+
+    def _append_messages_context_and_user(
+        self,
+        user_message: str,
+        context: Dict[str, Any],
+        messages: List[LLMMessage],
+    ) -> List[LLMMessage]:
+        """Additional context and user message (after BUILD_MESSAGES)."""
+        if context:
+            context_str = self._format_context(context)
+            if context_str:
+                messages.append(
+                    LLMMessage(
+                        role="system",
+                        content=f"Additional Context:\n{context_str}",
+                    )
+                )
+
+        messages.append(LLMMessage(role="user", content=user_message))
+        return messages
+
     async def process_message(self, message: str, sender_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Process an incoming message.
 
-        Args:
-            message: Message content
-            sender_id: Optional sender identifier
-
-        Returns:
-            Response dictionary with 'response', 'tokens_used'
+        Delegates to :meth:`execute_task` (plugin path including MemoryPlugin POST_TASK).
         """
         try:
             # Build task from message
@@ -450,21 +568,7 @@ class LLMAgent(BaseAIAgent):
         """
         Execute a task with streaming LLM tokens.
 
-        Args:
-            task: Task specification with 'description' or 'prompt'
-            context: Execution context
-
-        Yields:
-            Dict[str, Any]: Event dictionaries with streaming tokens and final result
-
-        Example:
-            ```python
-            async for event in agent.execute_task_streaming(task, context):
-                if event['type'] == 'token':
-                    print(event['content'], end='', flush=True)
-                elif event['type'] == 'result':
-                    print(f"\\nTokens used: {event['tokens_used']}")
-            ```
+        Phase 3: uses legacy ``_build_messages`` (no plugin phases). Sync path to follow.
         """
         start_time = datetime.utcnow()
 
@@ -595,53 +699,20 @@ class LLMAgent(BaseAIAgent):
 
     def _build_messages(self, user_message: str, context: Dict[str, Any]) -> List[LLMMessage]:
         """
-        Build LLM messages from task and context.
+        Legacy synchronous message build (no plugin phases).
 
-        Args:
-            user_message: User message
-            context: Context dictionary
-
-        Returns:
-            List of LLM messages
+        Prefer :meth:`_build_messages_via_plugins` for :meth:`execute_task`.
         """
-        messages = []
+        messages = self._build_messages_system()
 
-        # Add system prompts (supports multiple system messages with individual cache control)
-        system_prompts = self._build_system_prompts()
-        for prompt_dict in system_prompts:
-            content = prompt_dict.get("content", "")
-            if not content:
-                continue
-
-            # Determine cache control: use prompt-specific setting if provided, else use global setting
-            prompt_cache_control = prompt_dict.get("cache_control")
-            if prompt_cache_control is None:
-                # Use global setting
-                cache_control = CacheControl(type="ephemeral") if self._config.enable_prompt_caching else None
-            else:
-                # Use prompt-specific setting
-                cache_control = CacheControl(type="ephemeral") if prompt_cache_control else None
-
-            messages.append(
-                LLMMessage(
-                    role="system",
-                    content=content,
-                    cache_control=cache_control,
-                )
-            )
-
-        # Add conversation history if available and memory enabled
         if self._config.memory_enabled and self._conversation_history:
-            # Limit history to prevent token overflow
-            max_history = 10  # Keep last 10 exchanges
+            max_history = 10
             messages.extend(self._conversation_history[-max_history:])
 
-        # Add request-specific skill context if skills are enabled
-        # This provides skills matched to the specific user message
         if self._config.skills_enabled and self._attached_skills:
             skill_context = self.get_skill_context(
                 request=user_message,
-                include_all_skills=False,  # Only include matched skills
+                include_all_skills=False,
             )
             if skill_context:
                 messages.append(
@@ -651,21 +722,7 @@ class LLMAgent(BaseAIAgent):
                     )
                 )
 
-        # Add additional context if provided
-        if context:
-            context_str = self._format_context(context)
-            if context_str:
-                messages.append(
-                    LLMMessage(
-                        role="system",
-                        content=f"Additional Context:\n{context_str}",
-                    )
-                )
-
-        # Add user message
-        messages.append(LLMMessage(role="user", content=user_message))
-
-        return messages
+        return self._append_messages_context_and_user(user_message, context, messages)
 
     def _format_context(self, context: Dict[str, Any]) -> str:
         """Format context dictionary as string."""

@@ -23,6 +23,7 @@ from aiecs.domain.agent.plugins.identifier import (
     format_plugin_id,
 )
 from aiecs.domain.agent.plugins.models import PluginConfig, PluginMetadata
+from aiecs.domain.agent.plugins.schema.manifest import PluginManifest
 
 if TYPE_CHECKING:
     from aiecs.domain.agent.base_agent import BaseAIAgent
@@ -35,6 +36,7 @@ class RegistryEntry:
     factory: Type[BaseAgentPlugin]
     metadata: PluginMetadata
     origin: PluginOrigin
+    manifest: PluginManifest | None = None
 
 
 class PluginRegistry:
@@ -58,7 +60,13 @@ class PluginRegistry:
         Builtin entries use ``origin="builtin"`` and ``metadata.default_enabled=True``.
         Registration does not enable plugins; see ``derive_plugin_configs()`` (§6.3.5).
         """
-        from aiecs.domain.agent.plugins.builtin import MemoryPlugin, SkillPlugin, ToolPlugin
+        from aiecs.domain.agent.plugins.builtin import (
+            CollaborationPlugin,
+            KnowledgePlugin,
+            MemoryPlugin,
+            SkillPlugin,
+            ToolPlugin,
+        )
 
         registry = cls()
         for plugin_class in (SkillPlugin, MemoryPlugin, ToolPlugin):
@@ -75,6 +83,34 @@ class PluginRegistry:
                 ),
                 origin=PluginOrigin.BUILTIN,
             )
+
+        knowledge_metadata = KnowledgePlugin.metadata
+        registry.register(
+            knowledge_metadata.name,
+            KnowledgePlugin,
+            metadata=PluginMetadata(
+                name=knowledge_metadata.name,
+                version=knowledge_metadata.version,
+                description=knowledge_metadata.description,
+                priority=knowledge_metadata.priority,
+                default_enabled=False,
+            ),
+            origin=PluginOrigin.BUILTIN,
+        )
+
+        collaboration_metadata = CollaborationPlugin.metadata
+        registry.register(
+            collaboration_metadata.name,
+            CollaborationPlugin,
+            metadata=PluginMetadata(
+                name=collaboration_metadata.name,
+                version=collaboration_metadata.version,
+                description=collaboration_metadata.description,
+                priority=collaboration_metadata.priority,
+                default_enabled=False,
+            ),
+            origin=PluginOrigin.BUILTIN,
+        )
         return registry
 
     def register(
@@ -109,6 +145,46 @@ class PluginRegistry:
             metadata=resolved_metadata,
             origin=origin_value,
         )
+
+    def register_from_manifest(
+        self,
+        manifest: PluginManifest,
+        plugin_class: Type[BaseAgentPlugin],
+        *,
+        origin: str | PluginOrigin = PluginOrigin.CONFIG,
+    ) -> None:
+        """
+        Register a plugin from an external manifest (§6.3.5, §9.1).
+
+        Manifest-registered plugins use ``default_enabled=False``; they are loaded
+        only when explicitly enabled in ``AgentConfiguration.plugins`` or task/context.
+        """
+        origin_value = _coerce_origin(origin)
+        class_metadata = getattr(plugin_class, "metadata", None)
+        if not isinstance(class_metadata, PluginMetadata):
+            raise_plugin_config_error(
+                f"plugin class {plugin_class.__name__!r} has no metadata",
+                plugin_id=format_plugin_id(manifest.name, origin_value),
+            )
+
+        metadata = PluginMetadata(
+            name=manifest.name,
+            version=manifest.version or class_metadata.version,
+            description=manifest.description or class_metadata.description,
+            priority=class_metadata.priority,
+            default_enabled=False,
+        )
+        self._entries[manifest.name] = RegistryEntry(
+            factory=plugin_class,
+            metadata=metadata,
+            origin=origin_value,
+            manifest=manifest,
+        )
+
+    def get_manifest(self, name: str) -> PluginManifest | None:
+        """Return the manifest attached to a registered plugin, if any."""
+        entry = self._entries.get(name)
+        return entry.manifest if entry is not None else None
 
     def get_entry(self, name: str) -> RegistryEntry | None:
         """Return the registry entry for a short plugin name, if registered."""

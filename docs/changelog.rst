@@ -17,6 +17,18 @@ Changed
 * HybridAgent tool loop aligned with Claude BetaToolRunner: append-only messages, no iteration labels, first user message = raw task only.
 * Callers (e.g., MasterController) MUST NOT append initial_act_prompt or Step 1/2 to task; move to system prompt if needed.
 
+Planned (v3)
+~~~~~~~~~~~~
+
+* **BREAKING (v3, E-11)**: Remove public ``SkillCapableMixin`` API (``attach_skills``, ``get_skill_context``, ``detach_all_skills``). Skill attach, context injection, and detach will be **SkillPlugin only**. See ``docs/developer/DOMAIN_AGENT/PLUGIN_SYSTEM.md`` §SkillCapableMixin removal plan for caller inventory and migration checklist. Mixin deletion is a **separate breaking PR** after grep confirms no new direct callers.
+
+Added (Phase 3+ extensions)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* ``KnowledgePlugin`` (``knowledge@builtin``): PRE_TASK augment, PRE_MAIN_LOOP graph short-circuit, ON_ITERATION_START retrieval; ``KnowledgeAwareAgent`` delegates to plugin kernel (E-01–E-07).
+* ``CollaborationPlugin`` (``collaboration@builtin``): AGENT_INIT peer registry in ``plugin_state["collaboration.peers"]``; optional BUILD_MESSAGES hint; no cross-agent orchestration (E-08).
+* Knowledge parity golden fixtures: ``knowledge_augment.yaml``, ``knowledge_short_circuit.yaml``.
+
 [1.5.3] - 2024-01-XX
 --------------------
 
