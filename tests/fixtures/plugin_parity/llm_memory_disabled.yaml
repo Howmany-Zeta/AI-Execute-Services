@@ -1,0 +1,25 @@
+name: llm_memory_disabled
+description: LLMAgent memory_enabled=False single-turn (§7.2)
+agent:
+  type: LLMAgent
+config:
+  goal: Plugin parity LLM agent
+  llm_model: parity-mock
+  system_prompt: You are a plugin parity LLM agent.
+  memory_enabled: false
+  enable_prompt_caching: false
+task:
+  description: Single-turn question about weather
+context: {}
+capture:
+  mock_final_output: Single-turn parity response.
+expect:
+  execute_task_response:
+    output: Single-turn parity response.
+    success: true
+  messages_normalized:
+  - role: system
+    content: You are a plugin parity LLM agent.
+  - role: user
+    content: Single-turn question about weather
+  tool_schema_names: []

@@ -29,6 +29,7 @@ delegates to (§7.1).
 """
 
 import logging
+import warnings
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
@@ -48,6 +49,12 @@ if TYPE_CHECKING:
     from ..tools.registry import SkillScriptRegistry
 
 logger = logging.getLogger(__name__)
+
+_SKILL_MIXIN_DEPRECATION = (
+    "{method} is deprecated on SkillCapableMixin; enable SkillPlugin via "
+    "AgentConfiguration.plugins or legacy skills_enabled / skill_names instead. "
+    "SkillPlugin is the supported attach/inject path for HybridAgent, LLMAgent, and ToolAgent."
+)
 
 
 class SkillCapableMixin:
@@ -142,6 +149,9 @@ class SkillCapableMixin:
         """
         Attach skills by name from the skill registry.
 
+        .. deprecated::
+            Use ``SkillPlugin`` (``AGENT_INIT``) instead of calling this directly.
+
         Args:
             skill_names: List of skill names to attach
             auto_register_tools: If True, register skill scripts as LLM-callable tools
@@ -153,6 +163,24 @@ class SkillCapableMixin:
         Raises:
             ValueError: If skill registry is not configured
         """
+        warnings.warn(
+            _SKILL_MIXIN_DEPRECATION.format(method="attach_skills"),
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._attach_skills_impl(
+            skill_names,
+            auto_register_tools=auto_register_tools,
+            inject_script_paths=inject_script_paths,
+        )
+
+    def _attach_skills_impl(
+        self,
+        skill_names: List[str],
+        auto_register_tools: bool = False,
+        inject_script_paths: bool = True,
+    ) -> List[str]:
+        """Internal attach-by-name implementation (SkillPlugin delegation, §7.1)."""
         if self._skill_registry is None:
             raise ValueError("Skill registry not configured. Pass skill_registry to __init_skills__ " "or use attach_skill_instances() instead.")
 
@@ -264,9 +292,21 @@ class SkillCapableMixin:
         """
         Detach all attached skills.
 
+        .. deprecated::
+            Use ``SkillPlugin`` (``AGENT_SHUTDOWN``) instead of calling this directly.
+
         Returns:
             List of detached skill names
         """
+        warnings.warn(
+            _SKILL_MIXIN_DEPRECATION.format(method="detach_all_skills"),
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.detach_skills(self.skill_names)
+
+    def _detach_all_skills_impl(self) -> List[str]:
+        """Internal detach-all implementation (SkillPlugin delegation, §7.1)."""
         return self.detach_skills(self.skill_names)
 
     # ==========================================================================
@@ -663,6 +703,9 @@ class SkillCapableMixin:
         """
         Get formatted skill context for prompt injection.
 
+        .. deprecated::
+            Use ``SkillPlugin`` (``BUILD_MESSAGES``) instead of calling this directly.
+
         Builds a markdown-formatted context string from attached skills,
         respecting the inject_script_paths configuration for each skill.
 
@@ -673,6 +716,22 @@ class SkillCapableMixin:
         Returns:
             Formatted context string ready for prompt injection
         """
+        warnings.warn(
+            _SKILL_MIXIN_DEPRECATION.format(method="get_skill_context"),
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._get_skill_context_impl(
+            request=request,
+            include_all_skills=include_all_skills,
+        )
+
+    def _get_skill_context_impl(
+        self,
+        request: Optional[str] = None,
+        include_all_skills: bool = False,
+    ) -> str:
+        """Internal context builder (SkillPlugin delegation, §7.1)."""
         if not self._attached_skills:
             return ""
 

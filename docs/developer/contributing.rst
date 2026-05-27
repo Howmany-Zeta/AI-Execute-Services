@@ -60,6 +60,18 @@ Unit Tests
    # Run with coverage
    pytest --cov=aiecs --cov-report=html
 
+Agent Plugin System
+~~~~~~~~~~~~~~~~~~~
+
+When changing the agent plugin framework or agent plugin integration, run the **standard plugin CI gate** (parity, agent tests, mypy). See `CONTRIBUTING.md` at the repository root and :doc:`DOMAIN_AGENT/PLUGIN_SYSTEM` for details.
+
+.. code-block:: bash
+
+   poetry run pytest test/unit/domain/agent/plugins/ -v --tb=short
+   poetry run pytest test/unit/domain/agent/plugins/test_plugin_parity.py -m plugin_parity -v --tb=short
+   poetry run pytest test/unit/domain/agent/test_hybrid_agent*.py test/unit/domain/agent/test_llm_agent*.py test/unit/domain/agent/test_tool_agent*.py -v --tb=short
+   poetry run mypy aiecs/domain/agent/plugins/ aiecs/domain/agent/hybrid_agent.py aiecs/domain/agent/llm_agent.py aiecs/domain/agent/tool_agent.py aiecs/domain/agent/base_agent.py
+
 Integration Tests
 ~~~~~~~~~~~~~~~~~
 

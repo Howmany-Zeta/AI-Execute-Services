@@ -24,6 +24,27 @@ logger = logging.getLogger(__name__)
 PLUGIN_STATE_SESSION_KEY = "memory.session_id"
 PLUGIN_STATE_TTL_KEY = "memory.ttl_seconds"
 DEFAULT_SESSION_KEY = "session_id"
+_LLM_AGENT_HISTORY_LIMIT = 10  # matches llm_agent._build_messages
+
+
+def _is_hybrid_agent(agent: Any) -> bool:
+    """HybridAgent uses ``context.history`` first in BUILD_MESSAGES (§7.2)."""
+    return type(agent).__name__ == "HybridAgent"
+
+
+def _agent_conversation_history(agent: Any) -> list[LLMMessage] | None:
+    history = getattr(agent, "_conversation_history", None)
+    if isinstance(history, list):
+        return history
+    return None
+
+
+def _memory_active_for_agent(agent: Any, memory: ConversationMemory | None) -> bool:
+    """True when memory plugin should read/write (aligns with ``memory_enabled``)."""
+    config = getattr(agent, "_config", None)
+    if config is not None and not getattr(config, "memory_enabled", True):
+        return False
+    return memory is not None
 
 
 def expand_context_history_entries(history: list[Any]) -> list[LLMMessage]:
@@ -86,6 +107,11 @@ class MemoryPlugin(BaseAgentPlugin):
         self._active_session_id: str | None = None
 
     async def on_agent_init(self, ctx: AgentPluginContext) -> None:
+        agent_config = getattr(self._agent, "_config", None)
+        if agent_config is not None and not agent_config.memory_enabled:
+            self._memory = None
+            return None
+
         capacity = int(self._config.options.get("capacity", 1000))
         ttl = self._config.options.get("ttl_seconds")
         if ttl is not None:
@@ -104,6 +130,26 @@ class MemoryPlugin(BaseAgentPlugin):
         return None
 
     async def on_pre_task(self, ctx: AgentPluginContext) -> None:
+        if not _memory_active_for_agent(self._agent, self._memory):
+            return None
+
+        if _is_hybrid_agent(self._agent):
+            if _context_has_history(ctx.context):
+                return None
+            session_id = self._resolve_session_id(ctx)
+            if not session_id or self._memory is None:
+                return None
+            self._active_session_id = session_id
+            ctx.plugin_state[PLUGIN_STATE_SESSION_KEY] = session_id
+            loaded = await self._load_session_history(session_id)
+            if loaded:
+                ctx.context["history"] = _history_messages_to_context_dicts(loaded)
+            return None
+
+        # LLMAgent / ToolAgent: hydrate agent._conversation_history from session (§7.2)
+        agent_history = _agent_conversation_history(self._agent)
+        if agent_history and len(agent_history) > 0:
+            return None
         if _context_has_history(ctx.context):
             return None
 
@@ -113,10 +159,9 @@ class MemoryPlugin(BaseAgentPlugin):
 
         self._active_session_id = session_id
         ctx.plugin_state[PLUGIN_STATE_SESSION_KEY] = session_id
-
         loaded = await self._load_session_history(session_id)
-        if loaded:
-            ctx.context["history"] = _history_messages_to_context_dicts(loaded)
+        if loaded and agent_history is not None:
+            agent_history.extend(loaded)
         return None
 
     async def on_build_messages(
@@ -124,9 +169,13 @@ class MemoryPlugin(BaseAgentPlugin):
         ctx: AgentPluginContext,
         messages: list[LLMMessage],
     ) -> list[LLMMessage]:
-        history = ctx.context.get("history")
-        if isinstance(history, list) and len(history) > 0:
-            return [*messages, *expand_context_history_entries(history)]
+        if not _memory_active_for_agent(self._agent, self._memory):
+            return messages
+
+        if _is_hybrid_agent(self._agent):
+            history = ctx.context.get("history")
+            if isinstance(history, list) and len(history) > 0:
+                return [*messages, *expand_context_history_entries(history)]
 
         memory_messages = await self._messages_from_conversation_memory(ctx)
         if memory_messages:
@@ -134,15 +183,33 @@ class MemoryPlugin(BaseAgentPlugin):
         return messages
 
     async def on_post_task(self, ctx: AgentPluginContext, result: dict[str, Any]) -> dict[str, Any]:
-        session_id = self._resolve_session_id(ctx)
-        if not session_id or self._memory is None:
+        if not _memory_active_for_agent(self._agent, self._memory):
             return result
 
         user_content = str(ctx.task_description)
         assistant_content = str(result.get("final_response") or result.get("output") or "")
-        await self.append_turn("user", user_content, session_id=session_id)
-        if assistant_content:
-            await self.append_turn("assistant", assistant_content, session_id=session_id)
+
+        if _is_hybrid_agent(self._agent):
+            session_id = self._resolve_session_id(ctx)
+            if not session_id or self._memory is None:
+                return result
+            await self.append_turn("user", user_content, session_id=session_id)
+            if assistant_content:
+                await self.append_turn("assistant", assistant_content, session_id=session_id)
+            return result
+
+        # LLMAgent / ToolAgent: keep agent._conversation_history authoritative (§7.2)
+        agent_history = _agent_conversation_history(self._agent)
+        if agent_history is not None:
+            agent_history.append(LLMMessage(role="user", content=user_content))
+            if assistant_content:
+                agent_history.append(LLMMessage(role="assistant", content=assistant_content))
+
+        session_id = self._resolve_session_id(ctx)
+        if session_id and self._memory is not None:
+            await self.append_turn("user", user_content, session_id=session_id)
+            if assistant_content:
+                await self.append_turn("assistant", assistant_content, session_id=session_id)
 
         return result
 
@@ -201,19 +268,20 @@ class MemoryPlugin(BaseAgentPlugin):
         self,
         ctx: AgentPluginContext,
     ) -> list[LLMMessage]:
-        """LLMAgent-style path when ``context["history"]`` is absent."""
+        """LLMAgent / ToolAgent path: ``agent._conversation_history`` when present (§7.2)."""
         if self._memory is None:
             return []
 
-        agent_history = getattr(self._agent, "_conversation_history", None)
+        agent_history = _agent_conversation_history(self._agent)
         if agent_history:
-            return list(agent_history)
+            return list(agent_history[-_LLM_AGENT_HISTORY_LIMIT:])
 
         session_id = self._resolve_session_id(ctx)
         if not session_id:
             return []
 
-        return await self._load_session_history(session_id)
+        loaded = await self._load_session_history(session_id)
+        return loaded[-_LLM_AGENT_HISTORY_LIMIT:] if loaded else []
 
 
 def _context_has_history(context: dict[str, Any]) -> bool:

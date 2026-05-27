@@ -1,0 +1,26 @@
+name: tool_direct_invoke
+description: ToolAgent direct tool invoke without LLM (legacy path)
+agent:
+  type: ToolAgent
+  tools:
+  - parity_search
+config:
+  goal: Plugin parity direct tool agent
+  memory_enabled: false
+task:
+  tool: parity_search
+  operation: search
+  parameters:
+    query: parity test query
+context: {}
+capture:
+  capture_messages: false
+expect:
+  execute_task_response:
+    operation: search
+    output:
+      operation: search
+      query: parity test query
+      status: ok
+    success: true
+    tool_used: parity_search

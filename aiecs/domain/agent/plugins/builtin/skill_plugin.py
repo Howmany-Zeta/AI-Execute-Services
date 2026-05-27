@@ -52,7 +52,7 @@ class SkillPlugin(BaseAgentPlugin):
 
         agent = self._agent
         try:
-            attached = agent.attach_skills(
+            attached = agent._attach_skills_impl(
                 skill_names,
                 auto_register_tools=auto_register,
                 inject_script_paths=inject_paths,
@@ -92,7 +92,7 @@ class SkillPlugin(BaseAgentPlugin):
             return messages
 
         task_description = str(ctx.task_description)
-        skill_context = self._agent.get_skill_context(
+        skill_context = self._agent._get_skill_context_impl(
             request=task_description,
             include_all_skills=False,
         )
@@ -109,5 +109,5 @@ class SkillPlugin(BaseAgentPlugin):
 
     async def on_agent_shutdown(self, ctx: AgentPluginContext) -> None:
         if getattr(self._agent, "_attached_skills", None):
-            self._agent.detach_all_skills()
+            self._agent._detach_all_skills_impl()
         return None

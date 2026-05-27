@@ -111,7 +111,13 @@ class TestPluginRegistryDefault:
         registry = PluginRegistry.default()
         formatted = {ident.format() for ident in registry.list_registered()}
 
-        assert formatted == {"memory@builtin", "skill@builtin", "tool@builtin"}
+        assert formatted == {
+            "collaboration@builtin",
+            "knowledge@builtin",
+            "memory@builtin",
+            "skill@builtin",
+            "tool@builtin",
+        }
 
     def test_default_builtin_metadata_default_enabled(self):
         registry = PluginRegistry.default()
@@ -120,6 +126,16 @@ class TestPluginRegistryDefault:
             entry = registry._entries[name]
             assert entry.origin == PluginOrigin.BUILTIN
             assert entry.metadata.default_enabled is True
+
+        knowledge_entry = registry._entries["knowledge"]
+        assert knowledge_entry.origin == PluginOrigin.BUILTIN
+        assert knowledge_entry.metadata.default_enabled is False
+        assert knowledge_entry.metadata.priority == 40
+
+        collaboration_entry = registry._entries["collaboration"]
+        assert collaboration_entry.origin == PluginOrigin.BUILTIN
+        assert collaboration_entry.metadata.default_enabled is False
+        assert collaboration_entry.metadata.priority == 80
 
     def test_default_registry_also_accepts_registry_origin(self, mock_agent):
         registry = PluginRegistry.default()

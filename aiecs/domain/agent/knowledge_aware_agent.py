@@ -148,6 +148,10 @@ class KnowledgeAwareAgent(HybridAgent):
             if "graph_reasoning" not in tools:
                 tools = tools + ["graph_reasoning"]
 
+        # Set before super().__init__ so derive_plugin_configs enables KnowledgePlugin (E-06)
+        self.graph_store = graph_store
+        self.enable_graph_reasoning = enable_graph_reasoning
+
         super().__init__(
             agent_id=agent_id,
             name=name,
@@ -166,9 +170,8 @@ class KnowledgeAwareAgent(HybridAgent):
             resource_limits=resource_limits,
         )
 
-        self.graph_store = graph_store
-        self.enable_graph_reasoning = enable_graph_reasoning
         self._graph_reasoning_tool: Optional[GraphReasoningTool] = None
+        self._load_tools()
         self._knowledge_context: Dict[str, Any] = {}
         self._query_intent_classifier: Optional[Any] = None  # Initialized in _initialize()
         self._hybrid_search: Optional[Any] = None  # Initialized in _initialize()
@@ -512,123 +515,23 @@ Use graph reasoning proactively when questions involve:
         Returns:
             Augmented task with knowledge context
         """
-        if self.graph_store is None or not self.enable_graph_reasoning:
-            return task
+        from aiecs.domain.agent.plugins.builtin.knowledge_plugin import augment_prompt_with_knowledge
 
-        # Check if we have cached knowledge for similar queries
-        relevant_knowledge = []
-        for query, kg_context in self._knowledge_context.items():
-            # Simple keyword matching (could be enhanced with embeddings)
-            if any(word in task.lower() for word in query.lower().split()):
-                confidence = kg_context.get("confidence", 0.0)
-                timestamp = kg_context.get("timestamp")
-                relevant_knowledge.append(
-                    {
-                        "query": query,
-                        "answer": kg_context["answer"],
-                        "confidence": confidence,
-                        "timestamp": timestamp,
-                    }
-                )
+        return await augment_prompt_with_knowledge(self, task, context)
 
-        if relevant_knowledge:
-            # Prioritize knowledge by confidence (relevance) and recency
-            # Convert to (item, score) tuples for prioritization
-            knowledge_items = []
-            for item in relevant_knowledge:
-                # Create a simple object with the required attributes
-                class KnowledgeItem:
-                    def __init__(self, data):
-                        self.data = data
-                        self.created_at = None
-                        if data.get("timestamp"):
-                            try:
-                                from dateutil import parser
-
-                                self.created_at = parser.parse(data["timestamp"])
-                            except Exception:
-                                pass
-
-                knowledge_items.append((KnowledgeItem(item), item["confidence"]))
-
-            # Prioritize using our prioritization method
-            prioritized = self._prioritize_knowledge_context(
-                knowledge_items,
-                relevance_weight=0.7,  # Favor relevance over recency for knowledge context
-                recency_weight=0.3,
-            )
-
-            # Format top 3 prioritized items
-            formatted_knowledge = []
-            for kg_item, priority_score in prioritized[:3]:
-                data = kg_item.data
-                formatted_knowledge.append(f"- {data['query']}: {data['answer']} (confidence: {data['confidence']:.2f})")
-
-            knowledge_section = "\n\nRELEVANT KNOWLEDGE FROM GRAPH:\n" + "\n".join(formatted_knowledge)
-            return task + knowledge_section
-
-        return task
+    def _knowledge_retrieval_via_plugin(self) -> bool:
+        """True when iteration retrieval is handled by ``KnowledgePlugin``."""
+        manager = getattr(self, "_plugin_manager", None)
+        return manager is not None and manager.is_enabled("knowledge")
 
     async def execute_task(self, task: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Execute task with knowledge graph augmentation.
+        Execute task via HybridAgent plugin kernel.
 
-        Uses knowledge-augmented tool loop (delegates to parent) that includes a RETRIEVE phase.
-
-        Args:
-            task: Task specification with 'description' or 'prompt'
-            context: Execution context
-
-        Returns:
-            Task execution result
+        KnowledgePlugin handles PRE_TASK augmentation, PRE_MAIN_LOOP graph short-circuit,
+        and ON_ITERATION_START retrieval when ``graph_store`` is configured.
         """
-        # Extract task description
-        task_description = task.get("description") or task.get("prompt") or task.get("task")
-        if not task_description:
-            return await super().execute_task(task, context)
-
-        # Augment task with knowledge if available
-        augmented_task_desc = await self._augment_prompt_with_knowledge(task_description, context)
-
-        # If task seems graph-related, consult graph first
-        if self.graph_store is not None and self.enable_graph_reasoning:
-            # Check if this is a direct graph query
-            graph_keywords = [
-                "connected",
-                "connection",
-                "relationship",
-                "knows",
-                "works at",
-            ]
-            if any(keyword in task_description.lower() for keyword in graph_keywords):
-                logger.info(f"Consulting knowledge graph for task: {task_description}")
-
-                # Try graph reasoning
-                graph_result = await self._reason_with_graph(augmented_task_desc, context)
-
-                # If we got a good answer from the graph, use it
-                if "answer" in graph_result and graph_result.get("confidence", 0) > 0.7:
-                    return {
-                        "success": True,
-                        "output": graph_result["answer"],
-                        "confidence": graph_result["confidence"],
-                        "source": "knowledge_graph",
-                        "evidence_count": graph_result.get("evidence_count", 0),
-                        "reasoning_trace": graph_result.get("reasoning_trace", []),
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-
-        # Fall back to standard hybrid agent execution (delegates to _tool_loop with knowledge injection)
-        # Create modified task dict with augmented description
-        augmented_task = task.copy()
-        if "description" in task:
-            augmented_task["description"] = augmented_task_desc
-        elif "prompt" in task:
-            augmented_task["prompt"] = augmented_task_desc
-        elif "task" in task:
-            augmented_task["task"] = augmented_task_desc
-
-        return await super().execute_task(augmented_task, context)
+        return await super().execute_task(task, context)
 
     async def execute_task_streaming(self, task: Dict[str, Any], context: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
         """
@@ -672,40 +575,21 @@ Use graph reasoning proactively when questions involve:
 
     async def _tool_loop(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Execute knowledge-augmented tool loop: RETRIEVE once, then delegate to parent.
-
-        Runs RETRIEVE logic to fetch relevant knowledge from the graph, augments the
-        task string with it, and delegates the main loop to HybridAgent._tool_loop.
+        Execute tool loop; route through plugin iteration hooks when KnowledgePlugin is enabled.
         """
-        augmented_task = task
-        if self.graph_store is not None and self.enable_graph_reasoning:
-            try:
-                event_callback = context.get("_knowledge_event_callback")
-                retrieved_knowledge = await self._retrieve_relevant_knowledge(task, context, 0, event_callback)
-                if retrieved_knowledge:
-                    knowledge_str = self._format_retrieved_knowledge(retrieved_knowledge)
-                    augmented_task = task + "\n\nRETRIEVED KNOWLEDGE:\n" + knowledge_str
-            except Exception as e:
-                logger.warning(f"Knowledge retrieval failed: {e}")
+        if self._knowledge_retrieval_via_plugin():
+            plugin_ctx = self._make_plugin_context(
+                task={"description": task},
+                context=context,
+                task_description=task,
+            )
+            return await self._tool_loop_with_plugins(task, context, plugin_ctx)
 
-        return await super()._tool_loop(augmented_task, context)
+        return await super()._tool_loop(task, context)
 
     async def _tool_loop_streaming(self, task: str, context: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
-        """
-        Execute knowledge-augmented tool loop with streaming: RETRIEVE once, then delegate to parent.
-        """
-        augmented_task = task
-        if self.graph_store is not None and self.enable_graph_reasoning:
-            try:
-                event_callback = context.get("_knowledge_event_callback")
-                retrieved_knowledge = await self._retrieve_relevant_knowledge(task, context, 0, event_callback)
-                if retrieved_knowledge:
-                    knowledge_str = self._format_retrieved_knowledge(retrieved_knowledge)
-                    augmented_task = task + "\n\nRETRIEVED KNOWLEDGE:\n" + knowledge_str
-            except Exception as e:
-                logger.warning(f"Knowledge retrieval failed: {e}")
-
-        async for event in super()._tool_loop_streaming(augmented_task, context):
+        """Streaming tool loop; parent path runs ON_ITERATION_START when KnowledgePlugin is enabled."""
+        async for event in super()._tool_loop_streaming(task, context):
             yield event
 
     async def _retrieve_relevant_knowledge(self, task: str, context: Dict[str, Any], iteration: int, event_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None) -> List[Entity]:
