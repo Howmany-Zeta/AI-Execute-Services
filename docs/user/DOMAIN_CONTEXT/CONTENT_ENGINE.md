@@ -329,15 +329,26 @@ async def initialize(self) -> bool:
 - **Flexible Configuration**: Supports environment variable configuration for Redis connection
 - **Error Handling**: Comprehensive error handling and logging
 
-### 6. ClickHouse Dual-Write (Permanent Storage)
+### 6. Permanent Storage Dual-Write (Redis hot + cold archive)
 
-When `CLICKHOUSE_ENABLED=true`, ContextEngine uses dual-write: Redis (hot cache) + ClickHouse (cold archive). Writes to ClickHouse are fire-and-forget; failures do not block the primary Redis path.
+Select a cold-storage backend with `CONTEXT_PERMANENT_BACKEND`:
+
+| Value | Backend | Notes |
+|-------|---------|-------|
+| `none` | Disabled (default) | Redis / in-memory only |
+| `postgres` | PostgreSQL | Reuses `POSTGRES_URL` or main DB settings; optional `CONTEXT_PG_URL` |
+| `clickhouse` | ClickHouse | Legacy `CLICKHOUSE_ENABLED=true` also selects ClickHouse |
+
+Writes to the permanent backend are fire-and-forget; failures do not block the primary Redis path.
 
 #### Environment Configuration
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `CLICKHOUSE_ENABLED` | Enable dual-write to ClickHouse | `false` |
+| `CONTEXT_PERMANENT_BACKEND` | Cold archive backend: `postgres`, `clickhouse`, `none` | `none` |
+| `CONTEXT_PG_URL` | PostgreSQL DSN for context archive (optional) | falls back to `POSTGRES_URL` / main DB |
+| `CONTEXT_PG_DATABASE` | Override database name for context archive | main `DB_NAME` |
+| `CLICKHOUSE_ENABLED` | Legacy: enable ClickHouse when `CONTEXT_PERMANENT_BACKEND` unset | `false` |
 | `CLICKHOUSE_HOST` | ClickHouse server host | `localhost` |
 | `CLICKHOUSE_PORT` | ClickHouse HTTP port | `8123` |
 | `CLICKHOUSE_USER` | ClickHouse username | `default` |
@@ -348,7 +359,16 @@ When `CLICKHOUSE_ENABLED=true`, ContextEngine uses dual-write: Redis (hot cache)
 | `REDIS_DB` | Redis database index | `1` |
 | `REDIS_PASSWORD` | Redis password | (empty) |
 
+#### PostgreSQL Tables (Auto-Created)
+
+When `CONTEXT_PERMANENT_BACKEND=postgres`, tables are created automatically (or run `aiecs/scripts/migrations/postgres/001_context_permanent_tables.sql`):
+
+- `context_sessions`, `context_conversations`, `context_task_contexts`
+- `context_checkpoints`, `context_checkpoint_writes`, `context_conversation_sessions`
+
 #### ClickHouse Tables (Auto-Created)
+
+When `CONTEXT_PERMANENT_BACKEND=clickhouse` (or legacy `CLICKHOUSE_ENABLED=true`):
 
 - `context_sessions` - Session create/update/end events
 - `context_conversations` - Conversation messages
