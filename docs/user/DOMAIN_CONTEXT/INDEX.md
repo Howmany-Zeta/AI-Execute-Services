@@ -38,7 +38,9 @@ await engine.initialize()
 
 | Variable | Purpose |
 |----------|---------|
-| `CLICKHOUSE_ENABLED` | Enable dual-write to ClickHouse (true/false) |
+| `CONTEXT_PERMANENT_BACKEND` | Cold archive for dual-write: `postgres`, `clickhouse`, `none` |
+| `CONTEXT_PG_URL`, `CONTEXT_PG_DATABASE` | PostgreSQL archive connection (optional) |
+| `CLICKHOUSE_ENABLED` | Legacy: enable ClickHouse when `CONTEXT_PERMANENT_BACKEND` unset |
 | `CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`, etc. | ClickHouse connection |
 | `REDIS_HOST`, `REDIS_PORT`, `REDIS_DB`, `REDIS_PASSWORD` | Redis connection |
 
