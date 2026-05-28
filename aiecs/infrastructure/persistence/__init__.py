@@ -23,6 +23,11 @@ from .clickhouse_client import (
     close_clickhouse_client,
 )
 from .clickhouse_permanent_backend import ClickHousePermanentBackend
+from .postgres_permanent_backend import PostgresPermanentBackend
+from .permanent_backend_factory import (
+    create_permanent_backend,
+    resolve_permanent_backend_kind,
+)
 
 __all__ = [
     "DatabaseManager",
@@ -38,4 +43,7 @@ __all__ = [
     "initialize_clickhouse_client",
     "close_clickhouse_client",
     "ClickHousePermanentBackend",
+    "PostgresPermanentBackend",
+    "create_permanent_backend",
+    "resolve_permanent_backend_kind",
 ]
