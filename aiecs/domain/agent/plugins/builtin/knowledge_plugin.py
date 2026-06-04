@@ -15,12 +15,14 @@ is left unchanged.
 
 from __future__ import annotations
 
+import inspect
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any, ClassVar
 
 from aiecs.domain.agent.plugins.base import BaseAgentPlugin
 from aiecs.domain.agent.plugins.context import AgentPluginContext, PluginShortCircuitResult
+from aiecs.infrastructure.knowledge import NoOpGraphStore, create_graph_store
 from aiecs.domain.agent.plugins.identifier import format_plugin_id
 from aiecs.domain.agent.plugins.models import PluginMetadata
 from aiecs.llm import LLMMessage
@@ -39,6 +41,7 @@ GRAPH_SHORT_CIRCUIT_KEYWORDS = (
     "works at",
 )
 GRAPH_SHORT_CIRCUIT_CONFIDENCE_THRESHOLD = 0.7
+DEFAULT_SEARCH_LIMIT = 10
 
 
 def effective_task_description(plugin_ctx: AgentPluginContext, fallback: str) -> str:
@@ -49,20 +52,40 @@ def effective_task_description(plugin_ctx: AgentPluginContext, fallback: str) ->
     return fallback
 
 
+def _graph_store_ready(agent: Any) -> tuple[Any | None, bool]:
+    """Return (graph_store, active) when store is non-NoOp and reasoning is enabled."""
+    graph_store = getattr(agent, "graph_store", None)
+    enable_graph_reasoning = getattr(agent, "enable_graph_reasoning", True)
+    if graph_store is None or isinstance(graph_store, NoOpGraphStore) or not enable_graph_reasoning:
+        return graph_store, False
+    return graph_store, True
+
+
+async def _call_graph_store_method(
+    graph_store: Any,
+    method_name: str,
+    *args: Any,
+    **kwargs: Any,
+) -> Any | None:
+    """Invoke an optional async/sync method on the L2 graph store backend."""
+    method = getattr(graph_store, method_name, None)
+    if not callable(method):
+        return None
+    result = method(*args, **kwargs)
+    if inspect.isawaitable(result):
+        return await result
+    return result
+
+
 async def augment_prompt_with_knowledge(
     agent: Any,
     task: str,
     context: dict[str, Any] | None = None,
 ) -> str:
-    """
-    Augment a task with cached knowledge graph context.
-
-    Extracted from ``KnowledgeAwareAgent._augment_prompt_with_knowledge`` (E-02).
-    """
+    """Augment a task with agent-local cached knowledge context (optional app hook)."""
     _ = context
-    graph_store = getattr(agent, "graph_store", None)
-    enable_graph_reasoning = getattr(agent, "enable_graph_reasoning", True)
-    if graph_store is None or not enable_graph_reasoning:
+    _, active = _graph_store_ready(agent)
+    if not active:
         return task
 
     knowledge_context = getattr(agent, "_knowledge_context", None)
@@ -85,27 +108,19 @@ async def augment_prompt_with_knowledge(
         return task
 
     knowledge_items = [(_KnowledgeCacheItem(item), item["confidence"]) for item in relevant_knowledge]
-    prioritize = getattr(agent, "_prioritize_knowledge_context", None)
-    if callable(prioritize):
-        prioritized = prioritize(
-            knowledge_items,
-            relevance_weight=0.7,
-            recency_weight=0.3,
-        )
-    else:
-        prioritized = sorted(knowledge_items, key=lambda pair: pair[1], reverse=True)
+    prioritized = sorted(knowledge_items, key=lambda pair: pair[1], reverse=True)
 
     formatted_knowledge = []
     for kg_item, _priority_score in prioritized[:3]:
-        data = kg_item.data if hasattr(kg_item, "data") else kg_item
-        formatted_knowledge.append(f"- {data['query']}: {data['answer']} (confidence: {data['confidence']:.2f})")
+        d = kg_item.data
+        formatted_knowledge.append(f"- {d['query']}: {d['answer']} (confidence: {d['confidence']:.2f})")
 
     knowledge_section = "\n\nRELEVANT KNOWLEDGE FROM GRAPH:\n" + "\n".join(formatted_knowledge)
     return task + knowledge_section
 
 
 class _KnowledgeCacheItem:
-    """Wrapper matching ``KnowledgeAwareAgent`` cache-item shape for prioritization."""
+    """Cache entry wrapper for task augmentation prioritization."""
 
     def __init__(self, data: dict[str, Any]) -> None:
         self.data = data
@@ -121,7 +136,7 @@ class _KnowledgeCacheItem:
 
 
 def is_graph_short_circuit_query(task_description: str) -> bool:
-    """True when the task matches legacy graph-reasoning keyword heuristics."""
+    """True when the task matches graph-reasoning keyword heuristics."""
     task_lower = task_description.lower()
     return any(keyword in task_lower for keyword in GRAPH_SHORT_CIRCUIT_KEYWORDS)
 
@@ -153,21 +168,23 @@ async def try_knowledge_graph_short_circuit(
     """
     Attempt PRE_MAIN_LOOP short-circuit via high-confidence graph reasoning (§4.4).
 
-    Keyword detection uses the original ``task_description``; the graph query uses
-    ``query`` (typically ``knowledge.augmented_task`` from PRE_TASK).
+    Uses ``graph_store.reason(...)`` when the private L2 backend provides it.
     """
-    graph_store = getattr(agent, "graph_store", None)
-    enable_graph_reasoning = getattr(agent, "enable_graph_reasoning", True)
-    if graph_store is None or not enable_graph_reasoning:
+    graph_store, active = _graph_store_ready(agent)
+    if not active:
         return None
     if not is_graph_short_circuit_query(task_description):
         return None
 
-    reason_with_graph = getattr(agent, "_reason_with_graph", None)
-    if not callable(reason_with_graph):
+    graph_result = await _call_graph_store_method(
+        graph_store,
+        "reason",
+        query or task_description,
+        context=context,
+    )
+    if not isinstance(graph_result, dict):
         return None
 
-    graph_result = await reason_with_graph(query or task_description, context)
     kernel = short_circuit_result_from_graph(graph_result)
     if kernel is None:
         return None
@@ -184,11 +201,8 @@ async def try_knowledge_graph_short_circuit(
     )
 
 
-def format_retrieved_knowledge_entities(agent: Any, entities: list[Any]) -> str:
-    """Format retrieved entities for prompt injection (``KnowledgeAwareAgent`` parity)."""
-    formatter = getattr(agent, "_format_retrieved_knowledge", None)
-    if callable(formatter):
-        return str(formatter(entities))
+def format_retrieved_knowledge_entities(entities: list[Any]) -> str:
+    """Format retrieved entities for prompt injection."""
     lines: list[str] = []
     for entity in entities:
         entity_type = getattr(entity, "entity_type", type(entity).__name__)
@@ -237,25 +251,21 @@ async def retrieve_iteration_knowledge(
     options: dict[str, Any] | None = None,
     event_callback: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
 ) -> dict[str, Any] | None:
-    """
-    Retrieve knowledge for a tool-loop iteration (``KnowledgeAwareAgent._retrieve_relevant_knowledge``).
-    """
-    retrieve = getattr(agent, "_retrieve_relevant_knowledge", None)
-    graph_store = getattr(agent, "graph_store", None)
-    enable_graph_reasoning = getattr(agent, "enable_graph_reasoning", True)
-    if not callable(retrieve) or graph_store is None or not enable_graph_reasoning:
+    """Retrieve knowledge for a tool-loop iteration via ``graph_store.search``."""
+    _ = event_callback, context.get("_knowledge_event_callback") if context else None
+    graph_store, active = _graph_store_ready(agent)
+    if not active:
         return None
 
-    callback = event_callback or context.get("_knowledge_event_callback")
     plugin_options = options or {}
+    limit = int(plugin_options.get("max_context_size", DEFAULT_SEARCH_LIMIT))
 
     with _apply_knowledge_options_to_agent(agent, plugin_options):
-        entities = await retrieve(task, context, iteration, callback)
-
-    if not entities:
+        entities = await _call_graph_store_method(graph_store, "search", task, limit=limit)
+    if not isinstance(entities, list) or not entities:
         return None
 
-    formatted = format_retrieved_knowledge_entities(agent, entities)
+    formatted = format_retrieved_knowledge_entities(entities)
     if not formatted:
         return None
 
@@ -298,6 +308,20 @@ class KnowledgePlugin(BaseAgentPlugin):
         priority=40,
         default_enabled=False,
     )
+
+    async def on_agent_init(self, ctx: AgentPluginContext) -> None:
+        """Wire graph store via factory when the agent has no explicit store (W-040)."""
+        _ = ctx
+        agent = self._agent
+        if getattr(agent, "graph_store", None) is not None:
+            return None
+        store = create_graph_store()
+        agent.graph_store = store
+        if isinstance(store, NoOpGraphStore):
+            agent.enable_graph_reasoning = False
+        elif not hasattr(agent, "enable_graph_reasoning"):
+            agent.enable_graph_reasoning = True
+        return None
 
     async def on_pre_task(self, ctx: AgentPluginContext) -> None:
         augmented = await augment_prompt_with_knowledge(

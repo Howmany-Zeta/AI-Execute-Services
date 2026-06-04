@@ -191,6 +191,18 @@ class BaseTool:
                             return config_attr
         return None
 
+    @property
+    def settings(self) -> Any:
+        """Backward-compatible alias for validated tool configuration (tests, legacy callers)."""
+        if hasattr(self, "config"):
+            return self.config
+        if self._config_obj is not None:
+            return self._config_obj
+        config_class = self._detect_config_class()
+        if config_class is not None:
+            return config_class()
+        return self._config
+
     def _register_schemas(self) -> None:
         """
         Register Pydantic schemas for operations by inspecting inner Schema classes.

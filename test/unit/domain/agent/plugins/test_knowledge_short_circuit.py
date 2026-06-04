@@ -25,15 +25,22 @@ from aiecs.domain.agent.plugins.registry import PluginRegistry
 from aiecs.llm import BaseLLMClient, LLMMessage, LLMResponse
 
 
+class _GraphStoreStub:
+    """Minimal L2 backend stub with optional ``reason`` / ``search``."""
+
+    def __init__(self) -> None:
+        self.reason = AsyncMock()
+        self.search = AsyncMock(return_value=[])
+
+
 class GraphReasoningHybridAgent(HybridAgent):
-    """HybridAgent with graph reasoning hooks attached for KnowledgePlugin tests."""
+    """HybridAgent with graph store stub for KnowledgePlugin tests."""
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.graph_store = object()
+        self.graph_store = _GraphStoreStub()
         self.enable_graph_reasoning = True
         self._knowledge_context: dict[str, Any] = {}
-        self._reason_with_graph = AsyncMock()
 
 
 class GraphReasoningAgent(BaseAIAgent):
@@ -41,10 +48,9 @@ class GraphReasoningAgent(BaseAIAgent):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.graph_store = object()
+        self.graph_store = _GraphStoreStub()
         self.enable_graph_reasoning = True
         self._knowledge_context: dict[str, Any] = {}
-        self._reason_with_graph = AsyncMock()
 
     async def _initialize(self) -> None:
         pass
@@ -126,7 +132,7 @@ def graph_agent() -> GraphReasoningAgent:
 @pytest.mark.asyncio
 class TestKnowledgeGraphShortCircuitPlugin:
     async def test_high_confidence_returns_short_circuit(self, graph_agent: GraphReasoningAgent) -> None:
-        graph_agent._reason_with_graph.return_value = {
+        graph_agent.graph_store.reason.return_value = {
             "answer": "Alice knows Bob",
             "confidence": 0.95,
             "evidence_count": 2,
@@ -142,10 +148,10 @@ class TestKnowledgeGraphShortCircuitPlugin:
         assert short.reason == "knowledge_graph_short_circuit"
         assert short.result["output"] == "Alice knows Bob"
         assert short.result["source"] == "knowledge_graph"
-        graph_agent._reason_with_graph.assert_awaited_once()
+        graph_agent.graph_store.reason.assert_awaited_once()
 
     async def test_low_confidence_does_not_short_circuit(self, graph_agent: GraphReasoningAgent) -> None:
-        graph_agent._reason_with_graph.return_value = {
+        graph_agent.graph_store.reason.return_value = {
             "answer": "Maybe connected",
             "confidence": 0.5,
         }
@@ -163,7 +169,7 @@ class TestKnowledgeGraphShortCircuitPlugin:
         short = await plugin.on_pre_main_loop(_make_ctx(graph_agent, "Summarize this document"))
 
         assert short is None
-        graph_agent._reason_with_graph.assert_not_called()
+        graph_agent.graph_store.reason.assert_not_called()
 
 
 @pytest.mark.unit
@@ -173,7 +179,7 @@ class TestKnowledgeGraphShortCircuitHybrid:
         self,
         graph_hybrid_agent: GraphReasoningHybridAgent,
     ) -> None:
-        graph_hybrid_agent._reason_with_graph.return_value = {
+        graph_hybrid_agent.graph_store.reason.return_value = {
             "answer": "Direct graph answer",
             "confidence": 0.91,
             "evidence_count": 1,
@@ -208,7 +214,7 @@ class TestKnowledgeGraphShortCircuitHybrid:
         self,
         graph_hybrid_agent: GraphReasoningHybridAgent,
     ) -> None:
-        graph_hybrid_agent._reason_with_graph.return_value = {
+        graph_hybrid_agent.graph_store.reason.return_value = {
             "answer": "Graph memory answer",
             "confidence": 0.88,
             "evidence_count": 1,
@@ -252,7 +258,7 @@ class TestKnowledgeGraphShortCircuitHybrid:
         self,
         graph_hybrid_agent: GraphReasoningHybridAgent,
     ) -> None:
-        graph_hybrid_agent._reason_with_graph.return_value = {
+        graph_hybrid_agent.graph_store.reason.return_value = {
             "answer": "Outer shell answer",
             "confidence": 0.99,
             "evidence_count": 4,
@@ -299,7 +305,7 @@ class TestKnowledgePluginPreMainLoopOrdering:
             config=AgentConfiguration(goal="Ordering test"),
             tools=[],
         )
-        agent._reason_with_graph.return_value = {
+        agent.graph_store.reason.return_value = {
             "answer": "Ordered short-circuit",
             "confidence": 0.92,
         }

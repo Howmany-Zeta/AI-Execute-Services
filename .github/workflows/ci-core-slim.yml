@@ -1,0 +1,57 @@
+name: Core Slim CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  core-slim:
+    name: core-slim
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install core + dev extras (editable)
+        run: pip install -e ".[dev]"
+
+      - name: Run L2 shell tests (NoOp factory + KnowledgePlugin)
+        run: |
+          pytest test/unit/infrastructure/knowledge/ \
+            test/unit/domain/agent/plugins/test_knowledge_plugin.py \
+            -q --tb=short
+
+  graphiti-optional:
+    name: graphiti-optional
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # L1 optional dependency smoke — does not block merge (W-486)
+    continue-on-error: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install core + dev extras (editable)
+        run: pip install -e ".[dev]"
+
+      - name: Install graphiti-core (optional L1)
+        run: pip install "graphiti-core[falkordb]>=0.29.1"
+
+      - name: Smoke import graphiti_core
+        run: python -c "import graphiti_core; print('graphiti_core', graphiti_core.__name__)"

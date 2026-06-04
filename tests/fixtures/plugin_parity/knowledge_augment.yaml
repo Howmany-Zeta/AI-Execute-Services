@@ -1,7 +1,7 @@
 name: knowledge_augment
-description: KnowledgeAwareAgent PRE_TASK augmentation from cached graph context (E-07)
+description: HybridAgent + knowledge plugin PRE_TASK augmentation (E-07)
 agent:
-  type: KnowledgeAwareAgent
+  type: HybridAgent
   tools: {}
 config:
   goal: Plugin parity knowledge augment agent
@@ -10,6 +10,9 @@ config:
   skills_enabled: false
   memory_enabled: true
   enable_prompt_caching: false
+  plugins:
+    - name: knowledge
+      enabled: true
 task:
   description: Tell me about alice profile
 context: {}

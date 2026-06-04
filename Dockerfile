@@ -134,9 +134,6 @@ COPY pyproject.toml poetry.lock ./
 # 安装 Python 依赖 (仅生产环境依赖，不安装当前项目)
 RUN poetry install --only=main --no-interaction --no-ansi --no-root
 
-# 安装 Playwright 浏览器
-RUN playwright install chromium --with-deps
-
 # ============================================================================
 # Stage 3: Download NLP Models & Data
 # ============================================================================
@@ -172,15 +169,6 @@ COPY --chown=aiecs:aiecs . .
 
 # 安装当前项目 (在复制代码后)
 RUN poetry install --only=main --no-interaction --no-ansi
-
-# 为 aiecs 用户安装 Playwright 浏览器 (在切换用户之前)
-RUN mkdir -p /home/aiecs/.cache && \
-    if [ -d /root/.cache/ms-playwright ]; then \
-        cp -r /root/.cache/ms-playwright /home/aiecs/.cache/ && \
-        chown -R aiecs:aiecs /home/aiecs/.cache/ms-playwright; \
-    else \
-        su - aiecs -c "playwright install chromium --with-deps" || true; \
-    fi
 
 # 切换到非 root 用户
 USER aiecs

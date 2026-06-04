@@ -18,7 +18,7 @@ import json
 import logging
 
 # Import fixtures from conftest_docs
-pytest_plugins = ["conftest_docs"]
+pytest_plugins = ["test.unit.tools.conftest_docs"]
 
 from aiecs.tools.docs.ai_document_orchestrator import (
     AIDocumentOrchestrator,

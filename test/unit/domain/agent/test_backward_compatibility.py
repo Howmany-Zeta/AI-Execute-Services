@@ -207,7 +207,7 @@ async def test_existing_agent_creation_code_unchanged():
         agent_id="researcher-1",
         name="Research Agent",
         llm_client=MockLLMClientOpenAI(),
-        tools=["search", "apisource"],
+        tools=["search", "document_parser"],
         config=config1,
     )
     await agent1.initialize()

@@ -2370,3 +2370,6 @@ Please provide a detailed editing plan with:
             self.logger.warning(f"Operation logging failed: {e}")
 
         return post_process_info
+
+
+WriterOrchestratorSettings = AIDocumentWriterOrchestrator.Config

@@ -35,9 +35,9 @@ from unittest.mock import AsyncMock
 import yaml
 
 from aiecs.domain.agent.hybrid_agent import HybridAgent
-from aiecs.domain.agent.knowledge_aware_agent import KnowledgeAwareAgent
 from aiecs.domain.agent.plugins.builtin.knowledge_plugin import effective_task_description
-from aiecs.infrastructure.graph_storage import InMemoryGraphStore
+from aiecs.domain.agent.plugins.models import PluginConfig
+from aiecs.infrastructure.knowledge import NoOpGraphStore
 from aiecs.domain.agent.llm_agent import LLMAgent
 from aiecs.domain.agent.models import AgentConfiguration
 from aiecs.domain.agent.plugins.models import PluginPhase
@@ -53,7 +53,7 @@ from aiecs.domain.agent.tool_agent import ToolAgent
 from aiecs.llm import BaseLLMClient, LLMMessage, LLMResponse
 from aiecs.tools.base_tool import BaseTool
 
-ParityAgent = Union[HybridAgent, LLMAgent, ToolAgent, KnowledgeAwareAgent]
+ParityAgent = Union[HybridAgent, LLMAgent, ToolAgent]
 
 
 class ParityStubTool(BaseTool):
@@ -225,7 +225,12 @@ async def create_hybrid_agent_from_spec(
     spec: dict[str, Any],
 ) -> tuple[HybridAgent, dict[str, Any], dict[str, Any], str]:
     """Build and initialize a HybridAgent from a fixture spec."""
-    config = _build_config(spec)
+    raw_config = dict(spec.get("config") or {})
+    if _spec_uses_knowledge_plugin(spec) and not raw_config.get("plugins"):
+        raw_config["plugins"] = [PluginConfig(name="knowledge", enabled=True)]
+    spec_with_config = dict(spec)
+    spec_with_config["config"] = raw_config
+    config = _build_config(spec_with_config)
     tools = _resolve_tools(spec)
     task = spec.get("task") or {"description": "Parity test task"}
     context = dict(spec.get("context") or {})
@@ -252,6 +257,9 @@ async def create_hybrid_agent_from_spec(
     )
     if skill_registry is not None:
         agent._skill_registry = skill_registry
+
+    if _spec_uses_knowledge_plugin(spec):
+        await _apply_knowledge_parity_extras(agent, spec)
 
     await agent.initialize()
     return agent, task, context, task_description
@@ -312,60 +320,45 @@ async def create_tool_agent_from_spec(
 
 
 async def _build_graph_store(spec: dict[str, Any]) -> Any:
-    """In-memory graph store for KnowledgeAwareAgent parity (no external I/O)."""
+    """No-op graph store for knowledge parity fixtures (no external I/O)."""
     capture = spec.get("capture") or {}
     if capture.get("no_graph_store"):
         return None
-    store = InMemoryGraphStore()
+    store = NoOpGraphStore()
     await store.initialize()
     return store
 
 
-async def create_knowledge_agent_from_spec(
-    spec: dict[str, Any],
-) -> tuple[KnowledgeAwareAgent, dict[str, Any], dict[str, Any], str]:
-    """Build and initialize a KnowledgeAwareAgent from a fixture spec (E-07)."""
-    config = _build_config(spec)
-    tools = _resolve_tools(spec)
-    task = spec.get("task") or {"description": "Parity test task"}
-    context = dict(spec.get("context") or {})
-    task_description = str(task.get("description") or task.get("prompt") or task.get("task", ""))
+def _spec_uses_knowledge_plugin(spec: dict[str, Any]) -> bool:
+    agent_type = _agent_type(spec)
+    if agent_type == "HybridAgent" and str(spec.get("name", "")).startswith("knowledge_"):
+        return True
+    config = spec.get("config") or {}
+    plugins = config.get("plugins") or []
+    for entry in plugins:
+        if isinstance(entry, dict) and entry.get("name") == "knowledge" and entry.get("enabled", True):
+            return True
+        if getattr(entry, "name", None) == "knowledge" and getattr(entry, "enabled", True):
+            return True
+    return False
 
-    client = _build_mock_client(spec)
-    assert client is not None
 
+async def _apply_knowledge_parity_extras(agent: HybridAgent, spec: dict[str, Any]) -> None:
+    """Wire graph store, cached context, and mocked reasoning for knowledge parity."""
+    capture = spec.get("capture") or {}
     agent_cfg = spec.get("agent") or {}
     graph_store = await _build_graph_store(spec)
-    enable_graph_reasoning = agent_cfg.get("enable_graph_reasoning", graph_store is not None)
+    if graph_store is not None:
+        agent.graph_store = graph_store
+        agent.enable_graph_reasoning = agent_cfg.get("enable_graph_reasoning", True)
 
-    agent = KnowledgeAwareAgent(
-        agent_id="plugin-parity-knowledge-capture",
-        name="Plugin Parity Knowledge Capture",
-        llm_client=client,
-        tools=tools,
-        config=config,
-        graph_store=graph_store,
-        enable_graph_reasoning=enable_graph_reasoning,
-        max_iterations=(spec.get("capture") or {}).get("max_iterations", 3),
-    )
-    await agent.initialize()
-
-    capture = spec.get("capture") or {}
     knowledge_context = capture.get("knowledge_context") or {}
     if isinstance(knowledge_context, dict):
-        for query, entry in knowledge_context.items():
-            if isinstance(entry, dict):
-                agent._knowledge_context[str(query)] = dict(entry)
+        agent._knowledge_context = {str(query): dict(entry) for query, entry in knowledge_context.items() if isinstance(entry, dict)}
 
     mock_graph_result = capture.get("mock_graph_result")
-    if isinstance(mock_graph_result, dict):
-        setattr(
-            agent,
-            "_reason_with_graph",
-            AsyncMock(return_value=dict(mock_graph_result)),
-        )
-
-    return agent, task, context, task_description
+    if isinstance(mock_graph_result, dict) and graph_store is not None:
+        graph_store.reason = AsyncMock(return_value=dict(mock_graph_result))
 
 
 async def create_agent_from_spec(
@@ -377,8 +370,6 @@ async def create_agent_from_spec(
         return await create_llm_agent_from_spec(spec)
     if agent_type == "ToolAgent":
         return await create_tool_agent_from_spec(spec)
-    if agent_type == "KnowledgeAwareAgent":
-        return await create_knowledge_agent_from_spec(spec)
     return await create_hybrid_agent_from_spec(spec)
 
 
@@ -389,7 +380,7 @@ def _shell_extra_fields(spec: dict[str, Any]) -> frozenset[str]:
         if task.get("tool"):
             return frozenset({"tool_used", "operation"})
         return frozenset({"tool_calls_count"})
-    if agent_type == "KnowledgeAwareAgent":
+    if _spec_uses_knowledge_plugin(spec) and (spec.get("capture") or {}).get("mock_graph_result"):
         return frozenset({"source", "confidence", "evidence_count"})
     return frozenset()
 
@@ -547,9 +538,17 @@ async def capture_llm_tool_spec(spec: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-async def capture_knowledge_spec(spec: dict[str, Any]) -> dict[str, Any]:
-    """Capture KnowledgeAwareAgent parity (PRE_TASK augment + graph short-circuit, E-07)."""
-    agent, task, context, task_description = await create_knowledge_agent_from_spec(spec)
+async def capture_fixture_spec(spec: dict[str, Any]) -> dict[str, Any]:
+    """Run agent and return normalized expect block for a fixture spec."""
+    mode = spec.get("parity_mode")
+    if mode == "streaming_phases":
+        return await capture_streaming_phases_spec(spec)
+
+    agent_type = _agent_type(spec)
+    if agent_type in ("LLMAgent", "ToolAgent"):
+        return await capture_llm_tool_spec(spec)
+
+    agent, task, context, task_description = await create_hybrid_agent_from_spec(spec)
     extra = _shell_extra_fields(spec)
 
     plugin_ctx = agent._make_plugin_context(
@@ -561,47 +560,12 @@ async def capture_knowledge_spec(spec: dict[str, Any]) -> dict[str, Any]:
     if agent._plugin_manager is not None:
         await agent._plugin_manager.run_phase(PluginPhase.PRE_TASK, ctx=plugin_ctx)
 
-    effective_task = effective_task_description(plugin_ctx, task_description)
-    messages = await agent._build_initial_messages_async(effective_task, context, plugin_ctx)
+    build_task = effective_task_description(plugin_ctx, task_description) if _spec_uses_knowledge_plugin(spec) else task_description
+    messages = await agent._build_initial_messages_async(build_task, context, plugin_ctx)
     tool_schema_names = normalize_tool_schema_names(agent._tool_schemas)
 
     execute_result = await agent.execute_task(task, context)
     execute_shell = normalize_execute_task_response(execute_result, extra_fields=extra)
-
-    plugin_state_keys = normalize_plugin_state_keys(plugin_ctx.plugin_state)
-
-    return {
-        "messages_normalized": normalize_messages(messages),
-        "tool_schema_names": tool_schema_names,
-        "plugin_state_keys": plugin_state_keys,
-        "execute_task_response": execute_shell,
-    }
-
-
-async def capture_fixture_spec(spec: dict[str, Any]) -> dict[str, Any]:
-    """Run agent and return normalized expect block for a fixture spec."""
-    mode = spec.get("parity_mode")
-    if mode == "streaming_phases":
-        return await capture_streaming_phases_spec(spec)
-
-    agent_type = _agent_type(spec)
-    if agent_type in ("LLMAgent", "ToolAgent"):
-        return await capture_llm_tool_spec(spec)
-    if agent_type == "KnowledgeAwareAgent":
-        return await capture_knowledge_spec(spec)
-
-    agent, task, context, task_description = await create_hybrid_agent_from_spec(spec)
-
-    plugin_ctx = agent._make_plugin_context(
-        task=task,
-        context=context,
-        task_description=task_description,
-    )
-    messages = await agent._build_initial_messages_async(task_description, context, plugin_ctx)
-    tool_schema_names = normalize_tool_schema_names(agent._tool_schemas)
-
-    execute_result = await agent.execute_task(task, context)
-    execute_shell = normalize_execute_task_response(execute_result)
 
     plugin_state_keys: list[str] = []
     if plugin_ctx.plugin_state:

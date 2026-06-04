@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from aiecs.domain.agent.plugins.models import PluginConfig
+from aiecs.infrastructure.knowledge import NoOpGraphStore, create_graph_store
 
 if TYPE_CHECKING:
     from aiecs.domain.agent.base_agent import BaseAIAgent
@@ -84,6 +85,8 @@ def _tool_plugin_config(config: AgentConfiguration, agent: BaseAIAgent) -> Plugi
 
 def _knowledge_plugin_config(config: AgentConfiguration, agent: BaseAIAgent) -> PluginConfig:
     graph_store = getattr(agent, "graph_store", None)
+    if graph_store is None:
+        graph_store = create_graph_store()
     enable_graph_reasoning = getattr(agent, "enable_graph_reasoning", True)
     options: dict[str, Any] = {
         "retrieval_strategy": config.retrieval_strategy,
@@ -93,9 +96,10 @@ def _knowledge_plugin_config(config: AgentConfiguration, agent: BaseAIAgent) -> 
         "entity_extraction_provider": config.entity_extraction_provider,
         "enable_graph_reasoning": bool(enable_graph_reasoning),
     }
-    graph_store_ref = _graph_store_ref(graph_store)
-    if graph_store_ref is not None:
-        options["graph_store_ref"] = graph_store_ref
+    if not isinstance(graph_store, NoOpGraphStore):
+        graph_store_ref = _graph_store_ref(graph_store)
+        if graph_store_ref is not None:
+            options["graph_store_ref"] = graph_store_ref
 
     return PluginConfig(
         name="knowledge",
@@ -105,8 +109,10 @@ def _knowledge_plugin_config(config: AgentConfiguration, agent: BaseAIAgent) -> 
 
 
 def _knowledge_plugin_enabled(graph_store: Any, enable_graph_reasoning: Any) -> bool:
-    """True when the agent has an active graph store (KnowledgeAwareAgent parity)."""
-    return graph_store is not None and bool(enable_graph_reasoning)
+    """True when factory resolved a non-NoOp store and graph reasoning is enabled."""
+    if graph_store is None or isinstance(graph_store, NoOpGraphStore):
+        return False
+    return bool(enable_graph_reasoning)
 
 
 def _graph_store_ref(graph_store: Any) -> str | None:

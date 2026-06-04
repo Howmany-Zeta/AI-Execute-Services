@@ -470,3 +470,12 @@ class ImageTool(BaseTool):
             }
         except Exception as e:
             raise FileOperationError(f"filter: Failed to process '{file_path}' (output_path: {output_path}, filter_type: {filter_type}): {e}")
+
+
+ImageSettings = ImageTool.Config
+
+LoadSchema = ImageTool.LoadSchema
+OCRSchema = ImageTool.OcrSchema
+MetadataSchema = ImageTool.MetadataSchema
+ResizeSchema = ImageTool.ResizeSchema
+FilterSchema = ImageTool.FilterSchema

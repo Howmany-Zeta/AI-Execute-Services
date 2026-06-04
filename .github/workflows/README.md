@@ -6,6 +6,7 @@ This directory contains CI/CD workflows for the `aiecs` project.
 
 | Workflow | File | Trigger | Purpose | Duration |
 |----------|------|---------|---------|----------|
+| **Core Slim** | `ci-core-slim.yml` | Push, PR | L2 shell: `pip install -e ".[dev]"` + knowledge factory/plugin pytest | ~2 min |
 | **Unit Tests** | `ci-unit.yml` | Push, PR | Run unit tests on Python 3.11 & 3.12 | ~5 min |
 | **Integration Tests** | `ci-integration.yml` | Push/PR to main | Test with Redis & PostgreSQL | ~10 min |
 | **Code Quality** | `ci-quality.yml` | Push, PR | Lint, format, type check, security | ~5 min |
@@ -17,7 +18,19 @@ This directory contains CI/CD workflows for the `aiecs` project.
 
 ## 🚀 CI/CD Workflows
 
-### 1. Unit Tests (`ci-unit.yml`)
+### 1. Core Slim (`ci-core-slim.yml`)
+
+**Purpose**: Fast gate for AIECS 2.0 core after slimdown — no private KG, no monorepo sample packages.
+
+**Jobs**:
+- **`core-slim`** (required): `pip install -e ".[dev]"` then pytest `test/unit/infrastructure/knowledge/` and `test_knowledge_plugin.py`
+- **`graphiti-optional`** (non-blocking): installs `graphiti-core[falkordb]` and smoke-imports `graphiti_core`
+
+**Banned in `core-slim`**: installing monorepo sample KG trees from `issue_report/` or any proprietary licensed graph engine wheel during CI.
+
+---
+
+### 2. Unit Tests (`ci-unit.yml`)
 
 **Purpose**: Fast, isolated unit tests for core functionality.
 

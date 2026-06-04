@@ -19,7 +19,7 @@ import json
 import logging
 
 # Import fixtures from conftest_docs
-pytest_plugins = ["conftest_docs"]
+pytest_plugins = ["test.unit.tools.conftest_docs"]
 
 from aiecs.tools.docs.document_parser_tool import (
     DocumentParserTool,

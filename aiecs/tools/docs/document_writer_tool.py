@@ -2370,3 +2370,6 @@ Multiple blocks can be provided sequentially. Each block will be executed in ord
                         replacements = 1 if new_content != content else 0
 
         return new_content, replacements, occurrence_info
+
+
+DocumentWriterSettings = DocumentWriterTool.Config

@@ -1,4 +1,0 @@
-"""
-Knowledge Graph Integration Tests
-"""
-

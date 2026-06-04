@@ -6,6 +6,8 @@
 Agent Domain Module
 
 Provides the base AI agent model and related components.
+
+Use ``HybridAgent`` with ``knowledge@builtin`` for optional L2 graph integration (ADR-002).
 """
 
 # Exceptions
@@ -46,10 +48,6 @@ from .base_agent import BaseAIAgent
 from .llm_agent import LLMAgent
 from .tool_agent import ToolAgent
 from .hybrid_agent import HybridAgent
-from .knowledge_aware_agent import KnowledgeAwareAgent
-
-# Graph-Aware Mixin
-from .graph_aware_mixin import GraphAwareAgentMixin
 
 # Lifecycle Management
 from .registry import AgentRegistry, get_global_registry, reset_global_registry
@@ -147,9 +145,7 @@ __all__ = [
     # Concrete Agents
     "LLMAgent",
     "ToolAgent",
-    "HybridAgent",  # Original hybrid agent (backward compatible)
-    "KnowledgeAwareAgent",  # Enhanced agent with knowledge graph integration
-    "GraphAwareAgentMixin",  # Reusable mixin for graph-aware agents
+    "HybridAgent",
     # Lifecycle Management
     "AgentRegistry",
     "get_global_registry",

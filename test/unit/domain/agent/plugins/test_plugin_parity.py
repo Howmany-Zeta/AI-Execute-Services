@@ -322,7 +322,7 @@ class TestLLMToolParityComparison:
 @pytest.mark.plugin_parity
 @pytest.mark.unit
 class TestKnowledgeParityFixtures:
-    """KnowledgeAwareAgent parity fixture skeleton (E-07)."""
+    """HybridAgent + knowledge plugin parity fixture skeleton (E-07)."""
 
     @pytest.mark.parametrize("fixture_path", _KNOWLEDGE_FIXTURES, ids=_KNOWLEDGE_FIXTURE_IDS)
     def test_fixture_file_exists(self, fixture_path: Path) -> None:
@@ -346,7 +346,7 @@ class TestKnowledgeParityFixtures:
 @pytest.mark.unit
 @pytest.mark.asyncio
 class TestKnowledgeParityComparison:
-    """Compare live KnowledgeAwareAgent output to golden fixtures (E-07)."""
+    """Compare live HybridAgent + knowledge plugin output to golden fixtures (E-07)."""
 
     @pytest.mark.parametrize("fixture_path", _KNOWLEDGE_FIXTURES, ids=_KNOWLEDGE_FIXTURE_IDS)
     async def test_knowledge_messages_normalized(self, fixture_path: Path) -> None:

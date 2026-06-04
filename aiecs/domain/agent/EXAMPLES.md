@@ -50,7 +50,7 @@ config = AgentConfiguration(
 agent = ToolAgent(
     agent_id="searcher-1",
     name="Search Agent",
-    tools=["search", "apisource"],
+    tools=["search", "docs"],
     config=config
 )
 
@@ -85,7 +85,7 @@ agent = HybridAgent(
     agent_id="researcher-1",
     name="Research Agent",
     llm_client=llm_client,
-    tools=["search", "apisource"],
+    tools=["search", "docs"],
     config=config,
     max_iterations=10
 )

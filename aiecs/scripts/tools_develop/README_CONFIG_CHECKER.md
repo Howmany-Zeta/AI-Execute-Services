@@ -1,5 +1,7 @@
 # 工具配置检查器使用指南
 
+> **AIECS 2.0:** `apisource`, `scraper_tool`, `statistics`, and built-in `knowledge_graph` tools were removed from core. This checker covers **active** tools (`task_tools`, `docs`, `search_tool`) only.
+
 这个脚本用于检查所有注册工具的配置设置是否正确，并生成配置模板和文档，方便开发者配置和使用。
 
 ## 功能特性
@@ -52,8 +54,7 @@ poetry run python aiecs/scripts/tools_develop/check_all_tools_config.py --show-c
 
 输出示例：
 ```
-✓ APISourceTool
-  文件: ../tools/apisource/tool.py
+(legacy APISourceTool examples removed in 2.0 — use `search_tool` / `docs` / custom `BaseTool`)
   配置字段 (11 个):
     • fred_api_key: Optional[str]
       🔴 必需

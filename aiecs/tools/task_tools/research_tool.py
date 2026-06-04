@@ -435,3 +435,6 @@ class ResearchTool(BaseTool):
             return summary
         except Exception as e:
             raise FileOperationError(f"Failed to process summarize: {str(e)}")
+
+
+ResearchSettings = ResearchTool.Config

@@ -19,9 +19,6 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any
 
-# Import fixtures from conftest_docs
-pytest_plugins = ["conftest_docs"]
-
 from aiecs.tools.docs.document_layout_tool import (
     DocumentLayoutTool,
     PageSize,
@@ -41,6 +38,16 @@ logger = logging.getLogger(__name__)
 
 class TestDocumentLayoutTool:
     """Test suite for DocumentLayoutTool"""
+
+    @pytest.fixture
+    def temp_dir(self):
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        path = Path(tempfile.mkdtemp(prefix="aiecs_layout_test_"))
+        yield path
+        shutil.rmtree(path, ignore_errors=True)
     
     @pytest.fixture
     def layout_config(self):

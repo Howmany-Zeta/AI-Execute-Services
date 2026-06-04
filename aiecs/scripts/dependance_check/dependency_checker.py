@@ -541,66 +541,14 @@ class DependencyChecker:
             optional_deps=optional_deps,
         )
 
-    def check_scraper_tool_dependencies(self) -> ToolDependencies:
-        """Check dependencies for Scraper Tool."""
-        system_deps: List[DependencyInfo] = []
-        python_deps: List[DependencyInfo] = []
-        model_deps: List[DependencyInfo] = []
-        optional_deps: List[DependencyInfo] = []
-
-        # Playwright browsers
-        playwright_status = self._check_playwright_browsers()
-        system_deps.append(
-            DependencyInfo(
-                name="Playwright Browsers",
-                status=playwright_status,
-                description="Browser binaries for JavaScript rendering",
-                install_command="playwright install",
-                impact="JavaScript rendering will be unavailable",
-                is_critical=False,
-            )
-        )
-
-        # Playwright system dependencies
-        playwright_deps_status = self._check_playwright_system_deps()
-        system_deps.append(
-            DependencyInfo(
-                name="Playwright System Dependencies",
-                status=playwright_deps_status,
-                description="System libraries for browser automation",
-                install_command="playwright install-deps",
-                impact="Browser automation may fail",
-                is_critical=False,
-            )
-        )
-
-        # Python packages (package_name: import_name)
-        python_packages = {
-            "playwright": "playwright",
-            "scrapy": "scrapy",
-            "httpx": "httpx",
-            "beautifulsoup4": "bs4",  # Package name vs import name
-            "lxml": "lxml",
-        }
-        for pkg_name, import_name in python_packages.items():
-            status = self.check_python_package(import_name)
-            python_deps.append(
-                DependencyInfo(
-                    name=pkg_name,
-                    status=status,
-                    description=f"Python package: {pkg_name}",
-                    install_command=f"pip install {pkg_name}",
-                    impact=f"{pkg_name} functionality will be unavailable",
-                    is_critical=True,
-                )
-            )
-
+    def _check_removed_tool_placeholder(self, tool_label: str) -> ToolDependencies:
+        """Removed in AIECS 2.0.0 (ADR-002); kept for report compatibility."""
         return ToolDependencies(
-            tool_name="Scraper Tool",
-            system_deps=system_deps,
-            python_deps=python_deps,
-            model_deps=model_deps,
-            optional_deps=optional_deps,
+            tool_name=tool_label,
+            system_deps=[],
+            python_deps=[],
+            model_deps=[],
+            optional_deps=[],
         )
 
     def _check_pillow_system_deps(self) -> DependencyStatus:
@@ -714,26 +662,6 @@ class DependencyChecker:
             import matplotlib.pyplot as plt
 
             plt.figure()
-            return DependencyStatus.AVAILABLE
-        except Exception:
-            return DependencyStatus.MISSING
-
-    def _check_playwright_browsers(self) -> DependencyStatus:
-        """Check if Playwright browsers are installed."""
-        browsers_dir = Path.home() / ".cache" / "ms-playwright"
-        if browsers_dir.exists() and any(browsers_dir.iterdir()):
-            return DependencyStatus.AVAILABLE
-        else:
-            return DependencyStatus.MISSING
-
-    def _check_playwright_system_deps(self) -> DependencyStatus:
-        """Check Playwright system dependencies."""
-        try:
-            from playwright.sync_api import sync_playwright
-
-            with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
-                browser.close()
             return DependencyStatus.AVAILABLE
         except Exception:
             return DependencyStatus.MISSING
@@ -1084,49 +1012,6 @@ class DependencyChecker:
 
         return ToolDependencies(
             tool_name="Model Trainer Tool",
-            system_deps=system_deps,
-            python_deps=python_deps,
-            model_deps=model_deps,
-            optional_deps=optional_deps,
-        )
-
-    def check_apisource_tool_dependencies(self) -> ToolDependencies:
-        """Check dependencies for APISource Tool."""
-        system_deps: List[DependencyInfo] = []
-        python_deps: List[DependencyInfo] = []
-        model_deps: List[DependencyInfo] = []
-        optional_deps: List[DependencyInfo] = []
-
-        # Core Python packages
-        python_packages = ["pydantic", "httpx", "requests"]
-        for pkg in python_packages:
-            status = self.check_python_package(pkg)
-            python_deps.append(
-                DependencyInfo(
-                    name=pkg,
-                    status=status,
-                    description=f"Python package: {pkg}",
-                    install_command=f"pip install {pkg}",
-                    impact=f"{pkg} functionality will be unavailable",
-                    is_critical=True,
-                )
-            )
-
-        # Optional: Redis for caching
-        redis_status = self.check_python_package("redis")
-        optional_deps.append(
-            DependencyInfo(
-                name="redis",
-                status=redis_status,
-                description="Python package: redis (Advanced caching support)",
-                install_command="pip install redis",
-                impact="Advanced caching features will be unavailable",
-                is_critical=False,
-            )
-        )
-
-        return ToolDependencies(
-            tool_name="APISource Tool",
             system_deps=system_deps,
             python_deps=python_deps,
             model_deps=model_deps,
@@ -1522,109 +1407,6 @@ class DependencyChecker:
             optional_deps=optional_deps,
         )
 
-    def check_kg_builder_tool_dependencies(self) -> ToolDependencies:
-        """Check dependencies for Knowledge Graph Builder Tool."""
-        system_deps: List[DependencyInfo] = []
-        python_deps: List[DependencyInfo] = []
-        model_deps: List[DependencyInfo] = []
-        optional_deps: List[DependencyInfo] = []
-
-        # Core Python packages
-        core_packages = ["pydantic", "networkx"]
-        for pkg in core_packages:
-            status = self.check_python_package(pkg)
-            python_deps.append(
-                DependencyInfo(
-                    name=pkg,
-                    status=status,
-                    description=f"Python package: {pkg}",
-                    install_command=f"pip install {pkg}",
-                    impact=f"{pkg} graph building functionality will be unavailable",
-                    is_critical=True,
-                )
-            )
-
-        # Optional: Neo4j for graph database
-        neo4j_status = self.check_python_package("neo4j")
-        optional_deps.append(
-            DependencyInfo(
-                name="neo4j",
-                status=neo4j_status,
-                description="Python package: neo4j (Graph database support)",
-                install_command="pip install neo4j",
-                impact="Neo4j graph database features will be unavailable",
-                is_critical=False,
-            )
-        )
-
-        return ToolDependencies(
-            tool_name="Knowledge Graph Builder Tool",
-            system_deps=system_deps,
-            python_deps=python_deps,
-            model_deps=model_deps,
-            optional_deps=optional_deps,
-        )
-
-    def check_graph_search_tool_dependencies(self) -> ToolDependencies:
-        """Check dependencies for Graph Search Tool."""
-        system_deps: List[DependencyInfo] = []
-        python_deps: List[DependencyInfo] = []
-        model_deps: List[DependencyInfo] = []
-        optional_deps: List[DependencyInfo] = []
-
-        # Core Python packages
-        core_packages = ["pydantic", "networkx"]
-        for pkg in core_packages:
-            status = self.check_python_package(pkg)
-            python_deps.append(
-                DependencyInfo(
-                    name=pkg,
-                    status=status,
-                    description=f"Python package: {pkg}",
-                    install_command=f"pip install {pkg}",
-                    impact=f"{pkg} graph search functionality will be unavailable",
-                    is_critical=True,
-                )
-            )
-
-        return ToolDependencies(
-            tool_name="Graph Search Tool",
-            system_deps=system_deps,
-            python_deps=python_deps,
-            model_deps=model_deps,
-            optional_deps=optional_deps,
-        )
-
-    def check_graph_reasoning_tool_dependencies(self) -> ToolDependencies:
-        """Check dependencies for Graph Reasoning Tool."""
-        system_deps: List[DependencyInfo] = []
-        python_deps: List[DependencyInfo] = []
-        model_deps: List[DependencyInfo] = []
-        optional_deps: List[DependencyInfo] = []
-
-        # Core Python packages
-        core_packages = ["pydantic", "networkx"]
-        for pkg in core_packages:
-            status = self.check_python_package(pkg)
-            python_deps.append(
-                DependencyInfo(
-                    name=pkg,
-                    status=status,
-                    description=f"Python package: {pkg}",
-                    install_command=f"pip install {pkg}",
-                    impact=f"{pkg} graph reasoning functionality will be unavailable",
-                    is_critical=True,
-                )
-            )
-
-        return ToolDependencies(
-            tool_name="Graph Reasoning Tool",
-            system_deps=system_deps,
-            python_deps=python_deps,
-            model_deps=model_deps,
-            optional_deps=optional_deps,
-        )
-
     def check_document_layout_tool_dependencies(self) -> ToolDependencies:
         """Check dependencies for Document Layout Tool."""
         return self.check_generic_tool_dependencies("document_layout", "Document Layout Tool")
@@ -1668,10 +1450,8 @@ class DependencyChecker:
             "office": self.check_office_tool_dependencies(),
             "stats": self.check_stats_tool_dependencies(),
             "report": self.check_report_tool_dependencies(),
-            "scraper": self.check_scraper_tool_dependencies(),
             "chart": self.check_chart_tool_dependencies(),
             "pandas": self.check_pandas_tool_dependencies(),
-            "apisource": self.check_apisource_tool_dependencies(),
             "search": self.check_search_tool_dependencies(),
             "research": self.check_research_tool_dependencies(),
             # Document tools (7 total)
@@ -1682,20 +1462,7 @@ class DependencyChecker:
             "document_creator": self.check_document_creator_tool_dependencies(),
             "ai_document_writer_orchestrator": self.check_ai_document_writer_orchestrator_dependencies(),
             "ai_document_orchestrator": self.check_ai_document_orchestrator_dependencies(),
-            # Statistics tools (9 total)
-            "data_loader": self.check_data_loader_tool_dependencies(),
-            "data_visualizer": self.check_data_visualizer_tool_dependencies(),
-            "model_trainer": self.check_model_trainer_tool_dependencies(),
-            "statistical_analyzer": self.check_statistical_analyzer_tool_dependencies(),
-            "data_profiler": self.check_data_profiler_tool_dependencies(),
-            "data_transformer": self.check_data_transformer_tool_dependencies(),
-            "ai_insight_generator": self.check_ai_insight_generator_tool_dependencies(),
-            "ai_data_analysis_orchestrator": self.check_ai_data_analysis_orchestrator_dependencies(),
-            "ai_report_orchestrator": self.check_ai_report_orchestrator_tool_dependencies(),
-            # Knowledge graph tools (3 total)
-            "kg_builder": self.check_kg_builder_tool_dependencies(),
-            "graph_search": self.check_graph_search_tool_dependencies(),
-            "graph_reasoning": self.check_graph_reasoning_tool_dependencies(),
+            # KG tools removed in AIECS 2.0 (use private aiecs-kg + custom BaseTool)
         }
 
         return tools

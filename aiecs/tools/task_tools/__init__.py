@@ -18,9 +18,9 @@ This module contains specialized tools for various task-oriented operations:
 - stats_tool: Statistical analysis and computation operations
 
 Note:
-- apisource_tool is now a standalone package at aiecs.tools.apisource
+- Legacy API source tools removed in AIECS 2.0.0 (fork or custom BaseTool)
 - search_tool is now a standalone package at aiecs.tools.search_tool
-- scraper_tool is now a standalone package at aiecs.tools.scraper_tool
+- Legacy scraper tools removed in AIECS 2.0.0 (fork or custom BaseTool)
 """
 
 # Lazy import all task tools to avoid heavy dependencies at import time

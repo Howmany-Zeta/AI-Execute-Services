@@ -396,6 +396,39 @@ Deletion PR checklist: grep shows no new public mixin calls → delete `mixin.py
 
 ---
 
+## 7.0 Migrating from KnowledgeAwareAgent (ADR-002)
+
+`KnowledgeAwareAgent` and `GraphAwareAgentMixin` are **deprecated** and will be removed in **AIECS 2.0.0**. Built-in KG tools (`graph_search`, `graph_reasoning`, `kg_builder`) are no longer auto-discovered.
+
+**Recommended path:**
+
+```python
+from aiecs.domain.agent import HybridAgent
+from aiecs.domain.agent.models import AgentConfiguration
+from aiecs.domain.agent.plugins.models import PluginConfig
+
+agent = HybridAgent(
+    agent_id="agent-001",
+    name="Assistant",
+    llm_client=llm_client,
+    tools=["search", "calculator"],
+    config=AgentConfiguration(
+        plugins=[
+            PluginConfig(name="knowledge", enabled=True, options={}),
+        ],
+    ),
+    graph_store=graph_store,  # optional; enables knowledge@builtin derive
+)
+```
+
+- L2 retrieval: `knowledge@builtin` (`KnowledgePlugin`) — not deprecated built-in KG tools.
+- Optional private engine: set `KG_ENABLED=true` and install customer `aiecs-kg` (ADR-003); AIECS does not bundle it.
+- Graph CRUD / custom search tools: implement `BaseTool` in your application (ADR-001).
+
+Parity fixtures using `KnowledgeAwareAgent` will migrate to `HybridAgent` + `knowledge@builtin` (E-07).
+
+---
+
 ## 7.1 KnowledgePlugin (Phase 3+, E-01–E-07)
 
 `knowledge@builtin` (`priority=40`, **default disabled**) handles knowledge-graph augmentation for `KnowledgeAwareAgent` and any agent with `graph_store` + `enable_graph_reasoning`.

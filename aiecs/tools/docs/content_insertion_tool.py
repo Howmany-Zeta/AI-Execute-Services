@@ -1325,3 +1325,11 @@ class ContentInsertionTool(BaseTool):
 
             except Exception as e:
                 self.logger.warning(f"Failed to process image: {e}")
+
+
+ContentInsertionSettings = ContentInsertionTool.Config
+
+ChartError = ChartInsertionError
+TableError = TableInsertionError
+ImageError = ImageInsertionError
+MediaError = ContentInsertionError

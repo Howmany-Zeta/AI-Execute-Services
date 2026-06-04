@@ -83,3 +83,14 @@ repos:
         files: '^aiecs/tools/.*\.py$'
         description: "Checks schema coverage for all tools (runs when tool files change)"
 
+      # -----------------------------------------------------------------------
+      # deptry — declared vs imported dependencies (PEP 621)
+      # -----------------------------------------------------------------------
+      - id: deptry
+        name: deptry (dependency consistency)
+        entry: poetry run deptry aiecs
+        language: system
+        pass_filenames: false
+        files: '^(pyproject\.toml|aiecs/.*\.py)$'
+        description: "Checks pyproject.toml dependencies match aiecs/ imports (DEP001/DEP002)"
+

@@ -131,13 +131,8 @@ dependencies = [
     # =============================================================================
     "beautifulsoup4 (>=4.13.4,<5.0.0)",             # HTML/XML parsing library
     "lxml (>=5.4.0,<6.0.0)",                        # Fast XML and HTML processing
-    "playwright (>=1.52.0,<2.0.0)",                 # Browser automation for dynamic content
-    "playwright-stealth>=1.0.6,<2.0.0",             # Stealth mode for Playwright to avoid bot detection
-    "curl_cffi (>=0.7.0,<1.0.0)",                   # HTTP client with TLS fingerprint simulation
     "pytesseract (>=0.3.13,<0.4.0)",                # OCR (Optical Character Recognition) wrapper
     "pillow (>=11.2.1,<12.0.0)",                    # Image processing library (PIL fork)
-    "scrapy (>=2.13.3,<3.0.0)",                     # Web scraping framework
-
     # =============================================================================
     # Configuration and Data Formats
     # =============================================================================
@@ -152,9 +147,6 @@ dependencies = [
     "sqlalchemy (>=2.0.41,<3.0.0)",                 # SQL toolkit and ORM
     "clickhouse-connect (>=0.8.0,<1.0.0)",         # ClickHouse client for permanent context storage (dual-write)
     "asyncpg (>=0.30.0,<1.0.0)",                    # PostgreSQL async driver
-    "aiosqlite (>=0.20.0,<1.0.0)",                  # SQLite async driver for graph storage
-    "networkx (>=3.0,<4.0.0)",                      # Graph data structures and algorithms for knowledge graphs
-    "lark-parser (>=0.12.0,<0.13.0)",              # Parsing library for logic query DSL
 
     # =============================================================================
     # Monitoring, Metrics, and Observability
@@ -162,7 +154,6 @@ dependencies = [
     "prometheus-client (>=0.21.1,<1.0.0)",          # Prometheus metrics client
     "jaeger-client (>=4.8.0,<5.0.0)",               # Jaeger distributed tracing client
     "opentracing (>=2.4.0,<3.0.0)",                 # OpenTracing API for distributed tracing
-    "psutil (>=7.0.0,<8.0.0)",                      # System and process monitoring utilities
 ]
 
 [project.urls]
@@ -172,6 +163,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "psutil>=7.0.0,<8.0.0",
     "pytest>=8.4.2,<9.0.0",
     "pytest-asyncio>=1.2.0,<2.0.0",
     "pytest-cov>=7.0.0,<8.0.0",
@@ -187,6 +179,7 @@ dev = [
     "types-opentracing>=2.4.10.20250622",
     "types-lxml>=2025.8.25",
     "types-bleach>=6.3.0.20251115",
+    "deptry>=0.23.0,<1.0.0",
 ]
 docs = [
     "sphinx>=7.0.0,<8.0.0",
@@ -226,6 +219,35 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 # Pytest configuration
+[tool.deptry]
+pep621_dev_dependency_groups = ["dev", "docs"]
+extend_exclude = [
+    "issue_report",
+    "examples",
+    "test",
+    "aiecs/scripts",
+]
+ignore = ["DEP003", "DEP004"]
+
+[tool.deptry.per_rule_ignores]
+# DEP002: runtime/optional packages not visible to static import scan in aiecs/
+DEP002 = [
+    "typing-extensions",
+    "python-engineio",
+    "flower",
+    "google-auth-httplib2",
+    "google-auth-oauthlib",
+    "langgraph",
+    "weasel",
+    "tabulate",
+    "openpyxl",
+    "pdfminer-six",
+    "lxml",
+    "markdown",
+    "python-frontmatter",
+    "sqlalchemy",
+]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
@@ -260,6 +282,7 @@ markers = [
     "slow: Slow tests - may take several seconds or minutes (deselect with '-m \"not slow\"')",
     
     # Dependency markers
+    "ai_required: Tests requiring AI services (may use mocks; deselect with '-m \"not ai_required\"')",
     "requires_api: Tests requiring real API keys (OpenAI, Google, etc.)",
     "requires_redis: Tests requiring Redis connection",
     "requires_postgres: Tests requiring PostgreSQL connection",

@@ -136,7 +136,4 @@ Or switch to SEPARATE_SCHEMA mode for better performance.
 
 ## Support
 
-For detailed documentation:
-- [Migration Guide](../../../../docs/user/knowledge_graph/deployment/MULTI_TENANCY_MIGRATION.md)
-- [Setup Guide](../../../../docs/user/knowledge_graph/deployment/MULTI_TENANCY_GUIDE.md)
-- [Troubleshooting](../../../../docs/user/knowledge_graph/deployment/MULTI_TENANCY_TROUBLESHOOTING.md)
+Monorepo KG user docs were removed in AIECS 2.0. Use your **private `aiecs-kg`** deployment guide and [MIGRATION_2_0.md](../../../../docs/developer/MIGRATION_2_0.md) for L2 integration.

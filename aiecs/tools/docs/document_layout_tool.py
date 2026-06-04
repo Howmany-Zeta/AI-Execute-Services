@@ -1162,3 +1162,6 @@ body {{
 
         except Exception as e:
             raise LayoutConfigurationError(f"Failed to insert {markup_type} markup: {str(e)}")
+
+
+DocumentLayoutSettings = DocumentLayoutTool.Config

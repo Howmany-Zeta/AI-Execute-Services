@@ -91,12 +91,10 @@ def auto_discover_tool_modules():
     tools_dir = os.path.join(project_root, "aiecs", "tools")
 
     # 定义工具目录
+    # Phase 1 allowlist only (ADR-002); deprecated dirs excluded from scans
     tool_dirs = {
         "task_tools": "aiecs.tools.task_tools",
         "docs": "aiecs.tools.docs",
-        "statistics": "aiecs.tools.statistics",
-        "api_sources": "aiecs.tools.api_sources",  # 旧的 API sources (如果存在)
-        "apisource": "aiecs.tools.apisource",  # 新的 APISource Tool
         "search_tool": "aiecs.tools.search_tool",
     }
 

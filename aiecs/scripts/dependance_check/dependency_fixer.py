@@ -314,15 +314,6 @@ class DependencyFixer:
                     else:
                         self.fixes_failed.append(f"NLTK data: {data_name}")
 
-        # Playwright browsers
-        if "playwright_browsers" in missing_models:
-            if self._ask_confirmation("Install Playwright browsers?"):
-                cmd = [sys.executable, "-m", "playwright", "install"]
-                if self._run_command(cmd, "Install Playwright browsers"):
-                    self.fixes_applied.append("Playwright browsers")
-                else:
-                    self.fixes_failed.append("Playwright browsers")
-
         return True
 
     def fix_dependencies_from_checker(self, checker_results: Dict) -> bool:

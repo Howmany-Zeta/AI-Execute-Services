@@ -926,3 +926,6 @@ class PandasTool(BaseTool):
         df = self._validate_df(records)
         result = self._to_json_serializable(df.sample(n=min(n, len(df)), random_state=random_state))
         return cast(List[Dict], result)
+
+
+PandasToolConfig = PandasTool.Config

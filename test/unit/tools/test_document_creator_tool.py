@@ -19,9 +19,6 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any
 
-# Import fixtures from conftest_docs
-pytest_plugins = ["conftest_docs"]
-
 from aiecs.tools.docs.document_creator_tool import (
     DocumentCreatorTool,
     DocumentType,

@@ -174,7 +174,6 @@ class DocumentParserTool(BaseTool):
         os.makedirs(self.config.temp_dir, exist_ok=True)
 
         # Pre-declare dependent tool attrs with Optional[Any] to allow None assignment
-        self.scraper_tool: Optional[Any] = None
         self.office_tool: Optional[Any] = None
         self.image_tool: Optional[Any] = None
 
@@ -186,14 +185,6 @@ class DocumentParserTool(BaseTool):
 
     def _init_dependent_tools(self):
         """Initialize dependent tools for document processing"""
-        try:
-            from aiecs.tools.scraper_tool import ScraperTool
-
-            self.scraper_tool = ScraperTool()
-        except ImportError:
-            self.logger.warning("ScraperTool not available")
-            self.scraper_tool = None
-
         try:
             from aiecs.tools.task_tools.office_tool import OfficeTool
 
@@ -518,25 +509,11 @@ class DocumentParserTool(BaseTool):
     def _detect_by_mime_type(self, url: str) -> Tuple[DocumentType, float]:
         """Detect document type by MIME type from URL"""
         try:
-            if not self.scraper_tool:
-                return DocumentType.UNKNOWN, 0.0
+            import httpx
 
-            # Use httpx directly for HEAD request to get headers
-            # The new ScraperTool doesn't support HEAD requests directly
-            try:
-                import httpx
-
-                with httpx.Client(timeout=self.config.timeout) as client:
-                    response = client.head(url, follow_redirects=True)
-                    content_type = response.headers.get("content-type", "").lower()
-            except Exception as e:
-                self.logger.debug(f"HEAD request failed, trying GET: {e}")
-                # Fallback: use scraper tool's fetch method
-                result = asyncio.run(self.scraper_tool.fetch(url))
-                if not result.get("success"):
-                    return DocumentType.UNKNOWN, 0.0
-                # Try to infer from content
-                content_type = ""
+            with httpx.Client(timeout=self.config.timeout) as client:
+                response = client.head(url, follow_redirects=True)
+                content_type = response.headers.get("content-type", "").lower()
 
             mime_map = {
                 "application/pdf": DocumentType.PDF,
@@ -643,45 +620,19 @@ class DocumentParserTool(BaseTool):
     def _download_document(self, url: str) -> str:
         """Download document from URL"""
         try:
-            if not self.scraper_tool:
-                raise DownloadError("ScraperTool not available for URL download")
+            import httpx
 
-            # Generate temp file path
             parsed_url = urlparse(url)
             filename = os.path.basename(parsed_url.path) or "document"
             temp_path = os.path.join(self.config.temp_dir, f"download_{hash(url)}_{filename}")
 
-            # Download using httpx directly for binary content
-            # The new ScraperTool's fetch() method is designed for HTML/text content
-            try:
-                import httpx
+            with httpx.Client(timeout=self.config.timeout, follow_redirects=True) as client:
+                response = client.get(url)
+                response.raise_for_status()
+                with open(temp_path, "wb") as f:
+                    f.write(response.content)
 
-                with httpx.Client(timeout=self.config.timeout, follow_redirects=True) as client:
-                    response = client.get(url)
-                    response.raise_for_status()
-
-                    # Save binary content to file
-                    with open(temp_path, "wb") as f:
-                        f.write(response.content)
-
-                    return temp_path
-
-            except Exception as e:
-                self.logger.warning(f"httpx download failed, trying scraper tool: {e}")
-
-                # Fallback: try using scraper tool's fetch method
-                result = asyncio.run(self.scraper_tool.fetch(url))
-
-                if not result.get("success"):
-                    error_msg = result.get("error", {}).get("message", "Unknown error")
-                    raise DownloadError(f"ScraperTool fetch failed: {error_msg}")
-
-                # Save content to file
-                content = result.get("content", "")
-                with open(temp_path, "w", encoding="utf-8") as f:
-                    f.write(content)
-
-                return temp_path
+            return temp_path
 
         except Exception as e:
             if isinstance(e, DownloadError):
@@ -1059,3 +1010,7 @@ class DocumentParserTool(BaseTool):
         except Exception:
             with open(file_path, "rb") as f:
                 return f.read().decode("utf-8", errors="ignore")
+
+
+# Backward-compatible alias for tests and legacy imports
+DocumentParserSettings = DocumentParserTool.Config

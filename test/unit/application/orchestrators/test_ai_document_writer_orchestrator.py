@@ -20,7 +20,7 @@ from datetime import datetime
 from typing import Dict, Any
 
 # Import fixtures from conftest_docs
-pytest_plugins = ["conftest_docs"]
+pytest_plugins = ["test.unit.tools.conftest_docs"]
 
 from aiecs.tools.docs.ai_document_writer_orchestrator import (
     AIDocumentWriterOrchestrator,

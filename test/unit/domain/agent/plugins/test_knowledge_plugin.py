@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from aiecs.domain.agent import KnowledgeAwareAgent
 from aiecs.domain.agent.base_agent import BaseAIAgent
 from aiecs.domain.agent.hybrid_agent import HybridAgent
 from aiecs.domain.agent.models import AgentConfiguration, AgentType
@@ -27,7 +26,7 @@ from aiecs.domain.agent.plugins.models import PluginConfig, PluginPhase
 from aiecs.domain.agent.plugins.registry import PluginRegistry
 from aiecs.domain.agent.plugins.testing.normalize import normalize_value
 from aiecs.domain.agent.tool_loop_core import ToolLoopIterationOutcome
-from aiecs.infrastructure.graph_storage import InMemoryGraphStore
+from aiecs.infrastructure.knowledge import NoOpGraphStore
 from aiecs.llm import BaseLLMClient, LLMMessage, LLMResponse
 
 
@@ -43,6 +42,14 @@ class MockLLMClient(BaseLLMClient):
 
     async def close(self) -> None:
         pass
+
+
+class _GraphStoreStub:
+    """Non-NoOp graph store for augment/retrieval tests."""
+
+    def __init__(self) -> None:
+        self.reason = AsyncMock()
+        self.search = AsyncMock(return_value=[])
 
 
 class KnowledgeTestAgent(BaseAIAgent):
@@ -77,24 +84,27 @@ def mock_llm_client():
 
 @pytest.fixture
 async def graph_store():
-    store = InMemoryGraphStore()
+    store = NoOpGraphStore()
     await store.initialize()
     yield store
     await store.close()
 
 
-def _make_knowledge_aware_agent(mock_llm_client, graph_store=None) -> KnowledgeAwareAgent:
-    """KnowledgeAwareAgent without initialize() to avoid default tool-plugin FC checks."""
-    agent = KnowledgeAwareAgent(
+def _make_hybrid_knowledge_agent(mock_llm_client, graph_store=None) -> HybridAgent:
+    """HybridAgent with knowledge plugin (no initialize — tests wire plugin manager manually)."""
+    agent = HybridAgent(
         agent_id="knowledge-plugin-test-agent",
         name="Knowledge Plugin Test Agent",
         llm_client=mock_llm_client,
         tools=[],
-        config=AgentConfiguration(goal="Knowledge plugin augment test"),
-        graph_store=None,
+        config=AgentConfiguration(
+            goal="Knowledge plugin augment test",
+            plugins=[PluginConfig(name="knowledge", enabled=True)],
+        ),
     )
     if graph_store is not None:
         agent.graph_store = graph_store
+        agent.enable_graph_reasoning = True
     return agent
 
 
@@ -209,8 +219,7 @@ class TestKnowledgePluginLoad:
 
 
 def _seed_knowledge_context(agent: BaseAIAgent) -> None:
-    if getattr(agent, "graph_store", None) is None:
-        agent.graph_store = object()
+    agent.graph_store = _GraphStoreStub()
     agent.enable_graph_reasoning = True
     agent._knowledge_context = {
         "alice": {
@@ -230,7 +239,7 @@ class TestKnowledgePluginAugment:
         mock_llm_client,
         graph_store,
     ) -> None:
-        agent = _make_knowledge_aware_agent(mock_llm_client, graph_store)
+        agent = _make_hybrid_knowledge_agent(mock_llm_client, graph_store)
         _seed_knowledge_context(agent)
 
         plugin = KnowledgePlugin(PluginConfig(name="knowledge", enabled=True), agent)
@@ -247,20 +256,20 @@ class TestKnowledgePluginAugment:
         assert "Alice is a person" in ctx.plugin_state[PLUGIN_STATE_AUGMENTED_TASK_KEY]
         assert effective_task_description(ctx, ctx.task_description) != ctx.task_description
 
-    async def test_augment_matches_legacy_augment_prompt_with_knowledge(
+    async def test_augment_includes_cached_graph_context(
         self,
         mock_llm_client,
         graph_store,
     ) -> None:
-        agent = _make_knowledge_aware_agent(mock_llm_client, graph_store)
+        agent = _make_hybrid_knowledge_agent(mock_llm_client, graph_store)
         _seed_knowledge_context(agent)
 
         task = "Tell me about alice"
-        legacy = await agent._augment_prompt_with_knowledge(task)
         plugin_result = await augment_prompt_with_knowledge(agent, task)
 
-        assert normalize_value(legacy) == normalize_value(plugin_result)
-        assert "confidence: 0.9" in plugin_result
+        assert "RELEVANT KNOWLEDGE FROM GRAPH" in plugin_result
+        assert "Alice is a person" in plugin_result
+        assert "confidence: 0.90" in plugin_result
 
     async def test_no_augment_without_graph_store(self, knowledge_test_agent: KnowledgeTestAgent) -> None:
         plugin = KnowledgePlugin(PluginConfig(name="knowledge", enabled=True), knowledge_test_agent)
@@ -280,7 +289,7 @@ class TestKnowledgePluginAugment:
         mock_llm_client,
         graph_store,
     ) -> None:
-        agent = _make_knowledge_aware_agent(mock_llm_client, graph_store)
+        agent = _make_hybrid_knowledge_agent(mock_llm_client, graph_store)
         _seed_knowledge_context(agent)
 
         registry = PluginRegistry()
@@ -318,10 +327,9 @@ class GraphReasoningAgent(BaseAIAgent):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.graph_store = object()
+        self.graph_store = _GraphStoreStub()
         self.enable_graph_reasoning = True
         self._knowledge_context: dict[str, Any] = {}
-        self._retrieve_relevant_knowledge = AsyncMock()
 
     async def _initialize(self) -> None:
         pass
@@ -348,18 +356,13 @@ def graph_agent() -> GraphReasoningAgent:
 
 
 class KnowledgeHybridAgent(HybridAgent):
-    """HybridAgent with graph retrieval hooks for KnowledgePlugin iteration tests."""
+    """HybridAgent with graph store stub for KnowledgePlugin iteration tests."""
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.graph_store = object()
+        self.graph_store = _GraphStoreStub()
         self.enable_graph_reasoning = True
         self._knowledge_context = {}
-        self._retrieve_relevant_knowledge = AsyncMock()
-        self._format_retrieved_knowledge = lambda entities: "\n".join(
-            f"- {getattr(entity, 'entity_type', 'Entity')}: {getattr(entity, 'id', entity)}"
-            for entity in entities
-        )
 
 
 @pytest.mark.unit
@@ -367,11 +370,7 @@ class KnowledgeHybridAgent(HybridAgent):
 class TestKnowledgePluginIterationRetrieval:
     async def test_on_iteration_start_writes_iteration_context(self, graph_agent: GraphReasoningAgent) -> None:
         alice = type("Entity", (), {"id": "alice", "entity_type": "Person", "properties": {}})()
-        graph_agent._retrieve_relevant_knowledge.return_value = [alice]
-        graph_agent._format_retrieved_knowledge = lambda entities: "\n".join(  # type: ignore[method-assign]
-            f"- {getattr(entity, 'entity_type', 'Entity')}: {getattr(entity, 'id', entity)}"
-            for entity in entities
-        )
+        graph_agent.graph_store.search.return_value = [alice]
 
         plugin = KnowledgePlugin(
             PluginConfig(name="knowledge", enabled=True, options={"max_context_size": 5}),
@@ -392,8 +391,6 @@ class TestKnowledgePluginIterationRetrieval:
         assert "alice" in block["formatted"]
 
     async def test_second_iteration_receives_new_context_block(self) -> None:
-        from aiecs.domain.knowledge_graph.models.entity import Entity
-
         registry = PluginRegistry()
         registry.register("knowledge", KnowledgePlugin, origin="builtin")
 
@@ -412,12 +409,16 @@ class TestKnowledgePluginIterationRetrieval:
         )
         await agent._plugin_manager.initialize()
 
-        async def retrieve_side_effect(task, context, iteration, event_callback=None):
-            if iteration == 0:
-                return [Entity(id="alice", entity_type="Person", properties={"name": "Alice"})]
-            return [Entity(id="bob", entity_type="Person", properties={"name": "Bob"})]
+        async def search_side_effect(task, limit=10, **kwargs):
+            _ = task, limit, kwargs
+            if not hasattr(search_side_effect, "calls"):
+                search_side_effect.calls = 0
+            search_side_effect.calls += 1
+            if search_side_effect.calls == 1:
+                return [type("Entity", (), {"id": "alice", "entity_type": "Person", "properties": {"name": "Alice"}})()]
+            return [type("Entity", (), {"id": "bob", "entity_type": "Person", "properties": {"name": "Bob"}})()]
 
-        agent._retrieve_relevant_knowledge.side_effect = retrieve_side_effect
+        agent.graph_store.search.side_effect = search_side_effect
 
         captured_messages: list[list[LLMMessage]] = []
         original_core = agent._run_tool_loop_core_iteration
@@ -464,32 +465,29 @@ class TestKnowledgePluginIterationRetrieval:
         assert any("bob" in block for block in iter1_blocks)
         assert iter0_blocks != iter1_blocks
 
-    async def test_hybrid_knowledge_plugin_integration_routes_to_plugin_tool_loop(
+    async def test_hybrid_execute_task_uses_plugin_tool_loop(
         self,
         mock_llm_client,
         graph_store,
     ) -> None:
-        """E-06: legacy one-shot RETRIEVE in KAA._tool_loop removed; uses _tool_loop_with_plugins."""
-        agent = _make_knowledge_aware_agent(mock_llm_client, graph_store)
-        agent._knowledge_retrieval_via_plugin = lambda: True  # type: ignore[method-assign, assignment]
+        """HybridAgent execute_task routes through the plugin-aware tool loop."""
+        agent = _make_hybrid_knowledge_agent(mock_llm_client, graph_store)
+        registry = PluginRegistry()
+        registry.register("knowledge", KnowledgePlugin, origin="builtin")
+        agent._plugin_manager = PluginManager(
+            agent,
+            [PluginConfig(name="knowledge", enabled=True)],
+            registry=registry,
+        )
+        await agent._plugin_manager.initialize()
+        await agent.initialize()
 
         with patch.object(
             agent,
-            "_retrieve_relevant_knowledge",
+            "_execute_task_with_plugins",
             new_callable=AsyncMock,
-        ) as mock_retrieve:
-            with patch.object(
-                agent,
-                "_tool_loop_with_plugins",
-                new_callable=AsyncMock,
-            ) as mock_plugin_loop:
-                mock_plugin_loop.return_value = {
-                    "final_response": "done",
-                    "steps": [],
-                    "iterations": 1,
-                }
-                await agent._tool_loop("Find Alice", {})
+        ) as mock_execute:
+            mock_execute.return_value = {"success": True, "output": "done"}
+            await agent.execute_task({"description": "Find Alice"}, {})
 
-        mock_retrieve.assert_not_called()
-        mock_plugin_loop.assert_called_once()
-        assert mock_plugin_loop.call_args[0][0] == "Find Alice"
+        mock_execute.assert_called_once()

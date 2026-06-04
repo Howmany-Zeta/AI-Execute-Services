@@ -20,9 +20,6 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, List
 
-# Import fixtures from conftest_docs
-pytest_plugins = ["conftest_docs"]
-
 from aiecs.tools.docs.content_insertion_tool import (
     ContentInsertionTool,
     ContentType,

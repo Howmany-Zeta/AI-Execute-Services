@@ -125,7 +125,7 @@ class AgentFriendlyErrorHandler:
                     "Verify API key has Custom Search API enabled",
                 ],
                 "alternative_approaches": [
-                    "Use alternative data sources (apisource_tool)",
+                    "Use alternative external API data sources",
                     "Request manual search from user",
                 ],
                 "can_retry": False,

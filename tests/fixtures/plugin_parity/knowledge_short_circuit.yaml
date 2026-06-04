@@ -1,7 +1,7 @@
 name: knowledge_short_circuit
-description: KnowledgeAwareAgent PRE_MAIN_LOOP graph short-circuit (E-07)
+description: HybridAgent + knowledge plugin PRE_MAIN_LOOP graph short-circuit (E-07)
 agent:
-  type: KnowledgeAwareAgent
+  type: HybridAgent
   tools: {}
 config:
   goal: Plugin parity knowledge short-circuit agent
@@ -10,6 +10,9 @@ config:
   skills_enabled: false
   memory_enabled: true
   enable_prompt_caching: false
+  plugins:
+    - name: knowledge
+      enabled: true
 task:
   description: How is Alice connected to Bob?
 context: {}

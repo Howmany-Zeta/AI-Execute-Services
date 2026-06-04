@@ -569,6 +569,9 @@ class BaseAIAgent(SkillCapableMixin, ABC):
 
     _plugin_manager: Optional["PluginManager"] = None
     _plugin_registry: Optional["PluginRegistry"] = None
+    graph_store: Any | None = None
+    enable_graph_reasoning: bool = True
+    _knowledge_context: dict[str, dict[str, Any]] | None = None
 
     def __init__(
         self,
@@ -737,6 +740,10 @@ class BaseAIAgent(SkillCapableMixin, ABC):
             skill_registry=skill_registry,
             tool_registry=skill_script_registry,  # Use skill_script_registry as tool_registry
         )
+
+        self.graph_store = None
+        self.enable_graph_reasoning = True
+        self._knowledge_context = None
 
         features = []
         if context_engine:

@@ -757,3 +757,6 @@ class ReportTool(BaseTool):
             return results
         except Exception as e:
             raise FileOperationError(f"Failed to generate batch reports: {str(e)}")
+
+
+ReportSettings = ReportTool.Config

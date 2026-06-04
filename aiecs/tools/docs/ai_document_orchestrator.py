@@ -611,3 +611,6 @@ class AIDocumentOrchestrator(BaseTool):
             "most_common_document_types": [],
             "ai_provider_usage": {},
         }
+
+
+OrchestratorSettings = AIDocumentOrchestrator.Config

@@ -708,3 +708,14 @@ class OfficeTool(BaseTool):
             raise
         except Exception as e:
             raise FileOperationError(f"Failed to extract text: {str(e)}")
+
+
+OfficeSettings = OfficeTool.Config
+
+ReadDocxSchema = OfficeTool.Read_docxSchema
+WriteDocxSchema = OfficeTool.Write_docxSchema
+ReadPptxSchema = OfficeTool.Read_pptxSchema
+WritePptxSchema = OfficeTool.Write_pptxSchema
+ReadXlsxSchema = OfficeTool.Read_xlsxSchema
+WriteXlsxSchema = OfficeTool.Write_xlsxSchema
+ExtractTextSchema = OfficeTool.Extract_textSchema

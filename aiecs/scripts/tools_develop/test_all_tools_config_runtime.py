@@ -62,9 +62,9 @@ def main():
     print("=" * 80)
 
     # 定义要测试的工具
+    # Deprecated tool packages removed in 2.0.0 (knowledge_graph, etc.)
+    # excluded per ADR-002 Phase 1 allowlist.
     tools_to_test = [
-        # API Source
-        ("APISourceTool", "aiecs.tools.apisource.tool", "APISourceTool"),
         # Document Tools
         ("DocumentParserTool", "aiecs.tools.docs.document_parser_tool", "DocumentParserTool"),
         ("DocumentWriterTool", "aiecs.tools.docs.document_writer_tool", "DocumentWriterTool"),
@@ -73,20 +73,7 @@ def main():
         ("ContentInsertionTool", "aiecs.tools.docs.content_insertion_tool", "ContentInsertionTool"),
         ("AIDocumentOrchestrator", "aiecs.tools.docs.ai_document_orchestrator", "AIDocumentOrchestrator"),
         ("AIDocumentWriterOrchestrator", "aiecs.tools.docs.ai_document_writer_orchestrator", "AIDocumentWriterOrchestrator"),
-        # Knowledge Graph Tools
-        ("KnowledgeGraphBuilderTool", "aiecs.tools.knowledge_graph.kg_builder_tool", "KnowledgeGraphBuilderTool"),
-        ("GraphSearchTool", "aiecs.tools.knowledge_graph.graph_search_tool", "GraphSearchTool"),
-        ("GraphReasoningTool", "aiecs.tools.knowledge_graph.graph_reasoning_tool", "GraphReasoningTool"),
-        # Statistics Tools
-        ("DataLoaderTool", "aiecs.tools.statistics.data_loader_tool", "DataLoaderTool"),
-        ("DataProfilerTool", "aiecs.tools.statistics.data_profiler_tool", "DataProfilerTool"),
-        ("DataTransformerTool", "aiecs.tools.statistics.data_transformer_tool", "DataTransformerTool"),
-        ("DataVisualizerTool", "aiecs.tools.statistics.data_visualizer_tool", "DataVisualizerTool"),
-        ("StatisticalAnalyzerTool", "aiecs.tools.statistics.statistical_analyzer_tool", "StatisticalAnalyzerTool"),
-        ("AIInsightGeneratorTool", "aiecs.tools.statistics.ai_insight_generator_tool", "AIInsightGeneratorTool"),
-        ("AIReportOrchestratorTool", "aiecs.tools.statistics.ai_report_orchestrator_tool", "AIReportOrchestratorTool"),
         # Task Tools
-        ("ScraperTool", "aiecs.tools.scraper_tool.core", "ScraperTool"),
         ("ImageTool", "aiecs.tools.task_tools.image_tool", "ImageTool"),
         ("OfficeTool", "aiecs.tools.task_tools.office_tool", "OfficeTool"),
         ("ChartTool", "aiecs.tools.task_tools.chart_tool", "ChartTool"),
