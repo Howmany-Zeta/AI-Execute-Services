@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -27,6 +27,29 @@ async def test_release_shuts_down_only_when_last_holder() -> None:
     await queue.release()
     assert not queue.running
     assert queue.holder_count == 0
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_enqueue_updates_ingest_queue_depth_metric() -> None:
+    queue = TemporalMemoryIngestQueue()
+    mock_metrics = MagicMock()
+
+    with patch(
+        "aiecs.infrastructure.temporal_memory.metrics.get_temporal_memory_metrics",
+        return_value=mock_metrics,
+    ):
+        await queue.acquire()
+
+        async def noop() -> None:
+            return None
+
+        await queue.enqueue(noop)
+        mock_metrics.set_ingest_queue_depth.assert_called()
+
+        await queue.release()
+
+    assert not queue.running
 
 
 @pytest.mark.unit

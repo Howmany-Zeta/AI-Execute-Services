@@ -129,7 +129,17 @@ class Settings(BaseSettings):
     tm_backend: str = Field(
         default="none",
         alias="TM_BACKEND",
-        description="Temporal backend: none | graphiti | postgres (postgres Phase 5 stub)",
+        description="Temporal backend: none | graphiti | postgres",
+    )
+    tm_postgres_url: str = Field(
+        default="",
+        alias="TM_POSTGRES_URL",
+        description="PostgreSQL DSN for TM_BACKEND=postgres (falls back to POSTGRES_URL)",
+    )
+    tm_postgres_auto_create_tables: bool = Field(
+        default=True,
+        alias="TM_POSTGRES_AUTO_CREATE_TABLES",
+        description="Auto-apply tm_episode/tm_fact DDL on initialize (dev); use migration in prod",
     )
     tm_graph_backend: str = Field(
         default="falkordb",
@@ -159,6 +169,39 @@ class Settings(BaseSettings):
         default="aiecs",
         alias="TM_GROUP_ID_PREFIX",
         description="Namespace prefix for Graphiti group_id values",
+    )
+    tm_search_primary_group_only: bool = Field(
+        default=False,
+        alias="TM_SEARCH_PRIMARY_GROUP_ONLY",
+        description="Search only the primary session group_id (omit tenant scope)",
+    )
+    tm_ingest_all_group_ids: bool = Field(
+        default=False,
+        alias="TM_INGEST_ALL_GROUP_IDS",
+        description="Ingest the same episode into every resolved group_id (advanced; default primary only)",
+    )
+    tm_search_cache_enabled: bool = Field(
+        default=True,
+        alias="TM_SEARCH_CACHE_ENABLED",
+        description="Enable in-process TTL cache for temporal search",
+    )
+    tm_search_cache_ttl_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        alias="TM_SEARCH_CACHE_TTL_SECONDS",
+        description="TTL for temporal search cache entries (seconds)",
+    )
+    tm_search_cache_max_size: int = Field(
+        default=256,
+        ge=1,
+        alias="TM_SEARCH_CACHE_MAX_SIZE",
+        description="Max entries in temporal search TTL cache",
+    )
+    tm_episode_body_max_chars: int = Field(
+        default=4000,
+        ge=1,
+        alias="TM_EPISODE_BODY_MAX_CHARS",
+        description="Max episode body length before ingest (PII / size guard)",
     )
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="allow")
@@ -195,7 +238,11 @@ class Settings(BaseSettings):
     def _validate_temporal_memory_settings(self) -> Self:
         backend: Literal["none", "graphiti", "postgres"] = self.tm_backend  # type: ignore[assignment]
         if backend == "postgres" and not self.tm_enabled:
-            raise ValueError("TM_BACKEND=postgres requires TM_ENABLED=true (Phase 5 — not yet implemented)")
+            raise ValueError("TM_BACKEND=postgres requires TM_ENABLED=true")
+        if backend == "postgres" and self.tm_enabled:
+            dsn = (self.tm_postgres_url or self.postgres_url or "").strip()
+            if not dsn:
+                raise ValueError("TM_BACKEND=postgres requires TM_POSTGRES_URL or POSTGRES_URL when TM_ENABLED=true")
         if backend == "graphiti" and self.tm_enabled and not (self.openai_api_key or "").strip():
             logger.debug("TM_BACKEND=graphiti with TM_ENABLED=true but OPENAI_API_KEY unset; " "Graphiti may require an LLM key or aiecs provider credentials")
         return self

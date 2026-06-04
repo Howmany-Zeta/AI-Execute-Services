@@ -25,6 +25,13 @@ class _FakeGraphitiStore:
         _ = settings
 
 
+class _FakePostgresStore:
+    store_id = "postgres-fake"
+
+    def __init__(self, settings: Settings | None = None) -> None:
+        _ = settings
+
+
 def test_resolve_backend_none_when_disabled() -> None:
     settings = Settings(TM_ENABLED=False, TM_BACKEND="graphiti")
     assert resolve_temporal_memory_backend(settings) == "none"
@@ -73,11 +80,21 @@ def test_create_store_graphiti_success_returns_graphiti_store() -> None:
     assert isinstance(store, _FakeGraphitiStore)
 
 
-def test_create_store_postgres_returns_noop(caplog: pytest.LogCaptureFixture) -> None:
-    settings = Settings(TM_ENABLED=True, TM_BACKEND="postgres")
-    with caplog.at_level(logging.WARNING):
+def test_create_store_postgres_returns_postgres_store() -> None:
+    settings = Settings(
+        TM_ENABLED=True,
+        TM_BACKEND="postgres",
+        TM_POSTGRES_URL="postgresql://user:pass@localhost/testdb",
+    )
+    fake_module = SimpleNamespace(PostgresTemporalMemoryStore=_FakePostgresStore)
+
+    with patch.dict(
+        "sys.modules",
+        {"aiecs.infrastructure.temporal_memory.postgres.store": fake_module},
+    ):
         store = create_temporal_memory_store(settings)
-    assert isinstance(store, NoOpTemporalMemoryStore)
+
+    assert isinstance(store, _FakePostgresStore)
 
 
 def test_no_graphiti_import_on_noop_path() -> None:

@@ -8,6 +8,8 @@ Developer guide for AIECS **L1 temporal memory**: episodic ingest, fact search, 
 
 - [TEMPORAL_KG_MEMORY_INDEX.md](../../issue_report/new_function_request/temporal_kg_memory/TEMPORAL_KG_MEMORY_INDEX.md)
 - [TEMPORAL_KG_MEMORY_DESIGN.md](../../issue_report/new_function_request/temporal_kg_memory/TEMPORAL_KG_MEMORY_DESIGN.md)
+- [DOMAIN_CONTEXT.md](./DOMAIN_CONTEXT.md) — L0/L1 episode_bridge sequence
+- [MIGRATION_GRAPH_MEMORY_TO_L1.md](./MIGRATION_GRAPH_MEMORY_TO_L1.md) — GraphMemoryMixin → L1
 - [PLUGIN_SYSTEM.md](./DOMAIN_AGENT/PLUGIN_SYSTEM.md) — plugin phases and POST_TASK ordering
 - [ADR-003](../../issue_report/new_function_request/temporal_kg_memory/adr/ADR-003-aiecs-kg-private-independent.md) — L2 private KG is customer-side; L1 is independent
 
@@ -90,6 +92,12 @@ Settings live in `aiecs/config/config.py` (env aliases in `.env.example`).
 | `tm_store_raw_episode` | `TM_STORE_RAW_EPISODE` | `false` | Persist raw episode text in Graphiti (PII caution) |
 | `tm_search_limit` | `TM_SEARCH_LIMIT` | `10` | Default fact search limit |
 | `tm_group_id_prefix` | `TM_GROUP_ID_PREFIX` | `aiecs` | Namespace prefix for Graphiti `group_id` values |
+| `tm_search_primary_group_only` | `TM_SEARCH_PRIMARY_GROUP_ONLY` | `false` | Search only primary session `group_id` |
+| `tm_ingest_all_group_ids` | `TM_INGEST_ALL_GROUP_IDS` | `false` | Ingest episode into every resolved `group_id` |
+| `tm_search_cache_enabled` | `TM_SEARCH_CACHE_ENABLED` | `true` | In-process TTL cache for search |
+| `tm_search_cache_ttl_seconds` | `TM_SEARCH_CACHE_TTL_SECONDS` | `30` | Search cache TTL (seconds) |
+| `tm_search_cache_max_size` | `TM_SEARCH_CACHE_MAX_SIZE` | `256` | Search cache max entries |
+| `tm_episode_body_max_chars` | `TM_EPISODE_BODY_MAX_CHARS` | `4000` | Max episode body length before ingest |
 
 **Agent configuration:**
 
@@ -128,12 +136,33 @@ OPENAI_API_KEY=sk-...   # Graphiti extraction may use OpenAI via aiecs LLM adapt
 | `AGENT_INIT` | `on_agent_init` | `create_temporal_memory_store()` → `TemporalMemoryEngine`; NoOp → disable plugin |
 | `PRE_TASK` | `on_pre_task` | `search_facts` → `plugin_state["temporal_memory.facts"]` |
 | `BUILD_MESSAGES` | `on_build_messages` | Optional inject `TEMPORAL MEMORY FACTS:` block (`inject_facts`, default true) |
-| `POST_TASK` | `on_post_task` | Ingest episode from task result (**after** `memory@builtin`, priority 80 → 85) |
+| `POST_TASK` | `on_post_task` | Ingest episode from task result (**after** `memory@builtin`, priority 80 → 85); write ingest `plugin_state` keys (§5.1) |
 | `AGENT_SHUTDOWN` | `on_agent_shutdown` | `store.close()`; release ingest queue refcount if `TM_INGEST_ASYNC` (worker stops only when no agents hold the queue) |
 
 **POST_TASK order:** `memory` (80) persists L0 session memory first; `temporal_memory` (85) ingests the completed turn into the graph backend.
 
 **Async ingest (`TM_INGEST_ASYNC`):** the plugin enqueues `TemporalMemoryEngine.ingest_from_task` on a process-wide worker. Refcounted `acquire` / `release` allows multiple agents per process; shutting down one agent does not stop the queue while others are active. The engine always calls `ingest_episode` (sync Port); store-level `ingest_episode_async` schedules Graphiti I/O on the event loop when invoked directly.
+
+### 5.1 `plugin_state` keys (L1 / L2 boundary)
+
+| Key | Writer | Consumers |
+|-----|--------|-----------|
+| `temporal_memory.facts` | `TemporalMemoryPlugin` `PRE_TASK` | `on_build_messages`; custom reasoning plugins |
+| `temporal_memory.ingest_job_id` | `TemporalMemoryPlugin` `POST_TASK` | Phase 4 `MemoryPlugin` metadata (correlation id) |
+| `temporal_memory.episode_id` | `TemporalMemoryPlugin` `POST_TASK` (after ingest) | Phase 4 episode bridge |
+| `temporal_memory.group_id` | `TemporalMemoryPlugin` `POST_TASK` (after ingest) | Phase 4 episode bridge |
+| `knowledge.augmented_task` | `KnowledgePlugin` | HybridAgent `BUILD_MESSAGES` |
+| `knowledge.iteration_context` | `KnowledgePlugin` | Tool-loop retrieval |
+
+**L1 / L2 separation:** `KnowledgePlugin` does **not** read or merge `temporal_memory.facts`. Use `aiecs.domain.memory.retrieve_for_task` (`UnifiedMemoryRetriever`) when a caller needs combined L1+L2 retrieval without shared storage.
+
+**Phase 4 episode_bridge:** Because POST_TASK runs **memory (80) before temporal_memory (85)**, the assistant turn is **deferred** when `temporal_memory_enabled=true` (`memory.pending_assistant`). `TemporalMemoryPlugin` calls `flush_pending_assistant_turn` after ingest with `build_l0_temporal_metadata`. Without L1, behavior matches Phase 0–2 (immediate assistant write). Custom plugin chains must call flush explicitly or rely on shutdown hooks. See [DOMAIN_CONTEXT.md](./DOMAIN_CONTEXT.md) and `episode_bridge.py`.
+
+**Async ingest ordering:** `temporal_memory.ingest_job_id` is written before the worker runs; `episode_id` / `group_id` after ingest. L0 metadata flush runs after both are set (sync path) or after worker completion (async path). Do not treat `job_id` as a substitute for `episode_id`.
+
+**UnifiedMemoryRetriever (TM-070/071):** `aiecs.domain.memory.retrieve_for_task` is a **read-only, opt-in API** — not wired into `TemporalMemoryPlugin` or `KnowledgePlugin`. Call it explicitly when merging L1 + L2 retrieval; plugins keep separate storage paths per ADR-003.
+
+**PII (TM-075):** `TemporalMemoryEngine.ingest_from_task` runs `redact_episode_body` before `ingest_episode`. When `TM_STORE_RAW_EPISODE=false`, overlong bodies are truncated with a hash suffix; when `true`, bodies are kept up to `TM_EPISODE_BODY_MAX_CHARS`. Graphiti `store_raw_episode_content` still follows `TM_STORE_RAW_EPISODE`.
 
 **Contrast with L2 `knowledge@builtin` (priority 40):**
 
@@ -185,7 +214,7 @@ See [examples/temporal_memory/README.md](../../examples/temporal_memory/README.m
 | `valid_at` | Mapped to Graphiti edge filters: fact valid at instant *T* (`valid_at <= T` and `invalid_at` null or `> T`). |
 | `SearchFilters.entity_types` | Mapped to Graphiti `node_labels`. |
 | `SearchFilters.center_node_uuid` | Passed as Graphiti `center_node_uuid` (rerank anchor). |
-| `SearchFilters.excluded_entity_types` | **Not applied** in L1; logged at debug. Phase 3. |
+| `SearchFilters.excluded_entity_types` | Post-filter on Graphiti results using `metadata['entity_labels']` from edge attributes; no-op when labels absent. Postgres backend ignores. |
 | `get_fact(fact_id)` | Loads `EntityEdge` by UUID via Graphiti driver (not search approximation). |
 
 Callers should not assume full bi-temporal query expressiveness until Phase 3 (`search_`, post-filters, TM-067).
@@ -223,6 +252,9 @@ Integration (optional): `pytest test/integration/temporal_memory -m graphiti` wi
 |------|---------|
 | `domain/temporal_memory/ports.py` | `TemporalMemoryStore` Protocol |
 | `domain/temporal_memory/engine.py` | `ingest_from_task`, `search_for_task` |
+| `domain/temporal_memory/pii.py` | `redact_episode_body` (ingest size / PII guard) |
+| `domain/temporal_memory/search_cache.py` | Process-local search TTL cache |
+| `domain/memory/unified_retriever.py` | Read-only L1+L2 merge (not used by plugins) |
 | `infrastructure/temporal_memory/store_factory.py` | `create_temporal_memory_store()` |
 | `infrastructure/temporal_memory/graphiti/store.py` | Graphiti adapter (lazy import) |
 | `infrastructure/temporal_memory/graphiti/search_filters.py` | Port ``SearchFilters`` / ``valid_at`` → Graphiti |

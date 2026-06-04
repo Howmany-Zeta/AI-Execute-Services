@@ -27,6 +27,8 @@ from aiecs.domain.temporal_memory.models import (
 )
 from aiecs.infrastructure.temporal_memory.graphiti.search_filters import (
     build_graphiti_search_filter,
+    extract_edge_entity_labels,
+    filter_facts_by_excluded_entity_types,
 )
 
 logger = logging.getLogger(__name__)
@@ -210,7 +212,13 @@ class GraphitiTemporalMemoryStore:
             center_node_uuid=center,
             search_filter=search_filter,
         )
-        return [_entity_edge_to_fact(edge, group_ids) for edge in edges]
+        facts = [_entity_edge_to_fact(edge, group_ids) for edge in edges]
+        if filters and filters.excluded_entity_types:
+            facts = filter_facts_by_excluded_entity_types(
+                facts,
+                filters.excluded_entity_types,
+            )
+        return facts
 
     async def _fetch_entity_edge(self, graphiti: Any, fact_id: str) -> Any:
         from graphiti_core.edges import EntityEdge
@@ -256,6 +264,10 @@ def _entity_edge_to_fact(edge: Any, group_ids: list[str]) -> TemporalFact:
         valid_at = valid_at.replace(tzinfo=timezone.utc)
     if invalid_at is not None and getattr(invalid_at, "tzinfo", None) is None:
         invalid_at = invalid_at.replace(tzinfo=timezone.utc)
+    entity_labels = extract_edge_entity_labels(edge)
+    metadata: dict[str, Any] = {}
+    if entity_labels:
+        metadata["entity_labels"] = entity_labels
     return TemporalFact(
         fact_id=fact_id,
         text=text,
@@ -264,5 +276,5 @@ def _entity_edge_to_fact(edge: Any, group_ids: list[str]) -> TemporalFact:
         invalid_at=invalid_at,
         confidence=getattr(edge, "confidence", None),
         source_episode_id=getattr(edge, "episode_uuid", None),
-        metadata={},
+        metadata=metadata,
     )

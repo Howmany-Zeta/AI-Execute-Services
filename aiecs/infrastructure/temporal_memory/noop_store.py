@@ -45,6 +45,7 @@ class NoOpTemporalMemoryStore:
         *,
         job_id: str | None = None,
     ) -> str:
+        """Port stub; production async ingest uses TemporalMemoryPlugin + ingest_queue."""
         await self.ingest_episode(request)
         return job_id or str(uuid.uuid4())
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -130,8 +131,33 @@ async def test_search_facts_passes_valid_at_search_filter() -> None:
                 filters=SearchFilters(entity_types=["Person"]),
             )
 
-    build_mock.assert_called_once()
+    build_mock.assert_called_once_with(valid_at, SearchFilters(entity_types=["Person"]))
     assert mock_graphiti.search.await_args.kwargs["search_filter"] is mock_filter
+
+
+@pytest.mark.asyncio
+async def test_search_facts_entity_types_maps_to_graphiti_filter() -> None:
+    store = GraphitiTemporalMemoryStore(settings=Settings(TM_GRAPH_BACKEND="falkordb"))
+    mock_graphiti = MagicMock()
+    mock_graphiti.search = AsyncMock(return_value=[])
+    captured: list[Any] = []
+
+    def _capture(valid_at: datetime | None, filters: SearchFilters | None) -> object:
+        captured.append((valid_at, filters))
+        return object()
+
+    with patch.object(store, "_ensure_graphiti", return_value=mock_graphiti):
+        with patch(
+            "aiecs.infrastructure.temporal_memory.graphiti.store.build_graphiti_search_filter",
+            side_effect=_capture,
+        ):
+            await store.search_facts(
+                "q",
+                group_ids=["g1"],
+                filters=SearchFilters(entity_types=["Organization"]),
+            )
+
+    assert captured[0][1] == SearchFilters(entity_types=["Organization"])
 
 
 @pytest.mark.asyncio

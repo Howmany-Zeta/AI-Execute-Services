@@ -138,6 +138,17 @@ async def test_search_for_task_delegates_to_store() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_primary_group_only_passes_single_group_id() -> None:
+    store = _RecordingStore()
+    settings = Settings(TM_SEARCH_PRIMARY_GROUP_ONLY=True)
+    engine = TemporalMemoryEngine(store, settings=settings)
+    all_ids = ["aiecs:agent-99:sess-1", "aiecs:tenant:tenant-a"]
+    await engine.search_for_task({"description": "weather"}, all_ids)
+
+    assert store.search_calls == [("weather", ["aiecs:agent-99:sess-1"])]
+
+
+@pytest.mark.asyncio
 async def test_resolve_group_ids_includes_tenant() -> None:
     store = _RecordingStore()
     engine = TemporalMemoryEngine(store)

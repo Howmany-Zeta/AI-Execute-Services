@@ -15,6 +15,10 @@ from typing import Any, ClassVar
 
 from aiecs.domain.agent.memory.conversation import ConversationMemory
 from aiecs.domain.agent.plugins.base import BaseAgentPlugin
+from aiecs.domain.temporal_memory.constants import (
+    PLUGIN_STATE_PENDING_ASSISTANT,
+    build_l0_temporal_metadata,
+)
 from aiecs.domain.agent.plugins.context import AgentPluginContext
 from aiecs.domain.agent.plugins.models import PluginMetadata
 from aiecs.llm import LLMMessage
@@ -37,6 +41,12 @@ def _agent_conversation_history(agent: Any) -> list[LLMMessage] | None:
     if isinstance(history, list):
         return history
     return None
+
+
+def _temporal_memory_requested(agent: Any) -> bool:
+    """True when agent config requests L1 (assistant may be deferred for episode_bridge)."""
+    config = getattr(agent, "_config", None)
+    return bool(getattr(config, "temporal_memory_enabled", False)) if config else False
 
 
 def _memory_active_for_agent(agent: Any, memory: ConversationMemory | None) -> bool:
@@ -188,32 +198,50 @@ class MemoryPlugin(BaseAgentPlugin):
 
         user_content = str(ctx.task_description)
         assistant_content = str(result.get("final_response") or result.get("output") or "")
+        defer_assistant = bool(assistant_content) and _temporal_memory_requested(self._agent)
 
         if _is_hybrid_agent(self._agent):
             session_id = self._resolve_session_id(ctx)
             if not session_id or self._memory is None:
                 return result
             await self.append_turn("user", user_content, session_id=session_id)
-            if assistant_content:
-                await self.append_turn("assistant", assistant_content, session_id=session_id)
+            if defer_assistant:
+                ctx.plugin_state[PLUGIN_STATE_PENDING_ASSISTANT] = assistant_content
+            elif assistant_content:
+                await self.append_turn(
+                    "assistant",
+                    assistant_content,
+                    session_id=session_id,
+                    metadata=build_l0_temporal_metadata(ctx.plugin_state),
+                )
             return result
 
         # LLMAgent / ToolAgent: keep agent._conversation_history authoritative (§7.2)
         agent_history = _agent_conversation_history(self._agent)
         if agent_history is not None:
             agent_history.append(LLMMessage(role="user", content=user_content))
-            if assistant_content:
+            if assistant_content and not defer_assistant:
                 agent_history.append(LLMMessage(role="assistant", content=assistant_content))
 
         session_id = self._resolve_session_id(ctx)
         if session_id and self._memory is not None:
             await self.append_turn("user", user_content, session_id=session_id)
-            if assistant_content:
-                await self.append_turn("assistant", assistant_content, session_id=session_id)
+            if defer_assistant:
+                ctx.plugin_state[PLUGIN_STATE_PENDING_ASSISTANT] = assistant_content
+            elif assistant_content:
+                await self.append_turn(
+                    "assistant",
+                    assistant_content,
+                    session_id=session_id,
+                    metadata=build_l0_temporal_metadata(ctx.plugin_state),
+                )
 
         return result
 
     async def on_agent_shutdown(self, ctx: AgentPluginContext) -> None:
+        # Safety net: persist deferred assistant if temporal flush did not run (custom chains).
+        if PLUGIN_STATE_PENDING_ASSISTANT in ctx.plugin_state:
+            await flush_pending_assistant_turn(self._agent, ctx)
         self._memory = None
         self._active_session_id = None
         return None
@@ -234,6 +262,8 @@ class MemoryPlugin(BaseAgentPlugin):
         role: str,
         content: str,
         session_id: str | None = None,
+        *,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Append a single message to the conversation memory session."""
         if self._memory is None:
@@ -244,7 +274,12 @@ class MemoryPlugin(BaseAgentPlugin):
             self._active_session_id = sid
 
         if self._memory.context_engine:
-            await self._memory.aadd_conversation_message(sid, role, content)
+            await self._memory.aadd_conversation_message(
+                sid,
+                role,
+                content,
+                metadata=metadata,
+            )
         else:
             self._memory.add_message(sid, role, content)
 
@@ -287,3 +322,54 @@ class MemoryPlugin(BaseAgentPlugin):
 def _context_has_history(context: dict[str, Any]) -> bool:
     history = context.get("history")
     return isinstance(history, list) and len(history) > 0
+
+
+async def flush_pending_assistant_turn(agent: Any, ctx: AgentPluginContext) -> None:
+    """
+    Append deferred assistant turn with temporal metadata (called after L1 POST_TASK).
+
+    POST_TASK order is memory(80) then temporal_memory(85); L1 ingest ids are written
+    before this flush. One-way bridge only — does not trigger Graphiti ingest from Context.
+    """
+    pending = ctx.plugin_state.pop(PLUGIN_STATE_PENDING_ASSISTANT, None)
+    if not pending:
+        return
+
+    memory_plugin = _find_memory_plugin(agent)
+    if memory_plugin is None or memory_plugin._memory is None:
+        return
+
+    session_id = memory_plugin._resolve_session_id(ctx)
+    if not session_id:
+        return
+
+    metadata = build_l0_temporal_metadata(ctx.plugin_state)
+    await memory_plugin.append_turn(
+        "assistant",
+        str(pending),
+        session_id=session_id,
+        metadata=metadata or None,
+    )
+
+    if _is_hybrid_agent(agent):
+        return
+
+    agent_history = _agent_conversation_history(agent)
+    if agent_history is not None:
+        agent_history.append(LLMMessage(role="assistant", content=str(pending)))
+
+
+def _find_memory_plugin(agent: Any) -> MemoryPlugin | None:
+    manager = getattr(agent, "_plugin_manager", None)
+    if manager is not None:
+        plugins = getattr(manager, "_plugins", None)
+        if isinstance(plugins, dict):
+            plugin = plugins.get("memory")
+            if isinstance(plugin, MemoryPlugin):
+                return plugin
+    legacy = getattr(agent, "_plugins", None)
+    if isinstance(legacy, dict):
+        plugin = legacy.get("memory")
+        if isinstance(plugin, MemoryPlugin):
+            return plugin
+    return None

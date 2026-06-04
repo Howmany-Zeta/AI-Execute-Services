@@ -49,3 +49,29 @@ def build_group_ids(
         group_ids.append(f"{prefix}:tenant:{tenant}")
 
     return group_ids
+
+
+def select_search_group_ids(
+    group_ids: list[str],
+    *,
+    settings: Settings | None = None,
+) -> list[str]:
+    """Return group_ids passed to store search (primary-only when configured)."""
+    settings = settings or get_settings()
+    if settings.tm_search_primary_group_only and group_ids:
+        return [group_ids[0]]
+    return list(group_ids)
+
+
+def select_ingest_group_ids(
+    group_ids: list[str],
+    *,
+    settings: Settings | None = None,
+) -> list[str]:
+    """Return group_ids for episode ingest (all scopes or primary only)."""
+    settings = settings or get_settings()
+    if not group_ids:
+        return []
+    if settings.tm_ingest_all_group_ids:
+        return list(group_ids)
+    return [group_ids[0]]

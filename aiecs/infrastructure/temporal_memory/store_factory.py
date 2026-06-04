@@ -37,8 +37,10 @@ def create_temporal_memory_store(settings: Settings | None = None) -> TemporalMe
     - ``TM_ENABLED=false`` or ``TM_BACKEND=none`` → :class:`NoOpTemporalMemoryStore`
     - ``TM_BACKEND=graphiti`` + graphiti-core installed → :class:`GraphitiTemporalMemoryStore`
     - ``ImportError`` for missing graphiti-core → :class:`NoOpTemporalMemoryStore` + warning
-    - Runtime connection / ``initialize()`` failures are **not** converted here (TM-069);
-      :class:`TemporalMemoryPlugin` disables the plugin and calls ``store.close()`` (best-effort)
+    - Runtime connection / ``initialize()`` failures are **not** converted here (TM-069).
+      **Scheme B (TM-069):** :class:`TemporalMemoryPlugin.on_agent_init` calls ``initialize()``;
+      on failure it ``await store.close()`` (best-effort), leaves ``NoOp`` unused, and sets
+      ``agent.temporal_memory_enabled=False`` so ``execute_task`` does not crash.
     """
     settings = settings or get_settings()
     backend = resolve_temporal_memory_backend(settings)
@@ -61,7 +63,10 @@ def create_temporal_memory_store(settings: Settings | None = None) -> TemporalMe
             return NoOpTemporalMemoryStore()
 
     if backend == "postgres":
-        logger.warning("TM_BACKEND=postgres is not implemented (Phase 5); using NoOpTemporalMemoryStore")
-        return NoOpTemporalMemoryStore()
+        from aiecs.infrastructure.temporal_memory.postgres.store import (
+            PostgresTemporalMemoryStore,
+        )
+
+        return PostgresTemporalMemoryStore(settings=settings)
 
     return NoOpTemporalMemoryStore()

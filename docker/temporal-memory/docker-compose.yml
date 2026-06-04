@@ -1,0 +1,27 @@
+# L1 Temporal Memory — local FalkorDB for Graphiti (TM-073)
+# Usage: docker compose -f docker/temporal-memory/docker-compose.yml up -d
+# No aiecs-kg service (ADR-003).
+
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    container_name: aiecs-temporal-falkordb
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # Optional Neo4j backend (uncomment + set TM_GRAPH_BACKEND=neo4j on AIECS host):
+  # neo4j:
+  #   image: neo4j:5
+  #   container_name: aiecs-temporal-neo4j
+  #   ports:
+  #     - "7474:7474"
+  #     - "7687:7687"
+  #   environment:
+  #     NEO4J_AUTH: neo4j/password
+  #   restart: unless-stopped

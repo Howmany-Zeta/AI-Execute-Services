@@ -17,7 +17,8 @@ class SearchFilters(BaseModel):
     Optional filters for temporal fact search.
 
     - ``entity_types``: mapped to Graphiti ``node_labels`` when using Graphiti backend.
-    - ``excluded_entity_types``: not applied by Graphiti search in L1 MVP (Phase 3).
+    - ``excluded_entity_types``: post-filter on Graphiti results (``metadata['entity_labels']``);
+      ignored on Postgres backend.
     - ``center_node_uuid``: Graphiti rerank anchor (``center_node_uuid`` on ``search()``).
     """
 

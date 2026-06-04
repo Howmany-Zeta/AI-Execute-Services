@@ -32,6 +32,8 @@ Choose the install profile that matches your deployment. AIECS core stays small;
 |------|--------|
 | Agents | [DOMAIN_AGENT/README.md](./DOMAIN_AGENT/README.md) |
 | Temporal memory (L1) | [DOMAIN_TEMPORAL_MEMORY.md](../developer/DOMAIN_TEMPORAL_MEMORY.md) |
+| Context + episode_bridge | [DOMAIN_CONTEXT.md](../developer/DOMAIN_CONTEXT.md) |
+| GraphMemory → L1 migration | [MIGRATION_GRAPH_MEMORY_TO_L1.md](../developer/MIGRATION_GRAPH_MEMORY_TO_L1.md) |
 | Hybrid agent config | [DOMAIN_AGENT/HYBRID_AGENT_CONFIGURATION.md](./DOMAIN_AGENT/HYBRID_AGENT_CONFIGURATION.md) |
 | Context | [DOMAIN_CONTEXT/INDEX.md](./DOMAIN_CONTEXT/INDEX.md) |
 | Community | [DOMAIN_COMMUNITY/INDEX.md](./DOMAIN_COMMUNITY/INDEX.md) |

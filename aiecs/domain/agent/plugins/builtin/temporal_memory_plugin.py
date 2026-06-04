@@ -11,15 +11,24 @@ Separate from MemoryPlugin (L0). POST_TASK priority 85 runs after memory (80).
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Any, ClassVar, cast
 
 from aiecs.config.config import get_settings
 from aiecs.domain.agent.plugins.base import BaseAgentPlugin
 from aiecs.domain.agent.plugins.context import AgentPluginContext
 from aiecs.domain.agent.plugins.models import PluginMetadata
+from aiecs.domain.temporal_memory.constants import (
+    PLUGIN_STATE_EPISODE_ID,
+    PLUGIN_STATE_FACTS_KEY,
+    PLUGIN_STATE_GROUP_ID,
+    PLUGIN_STATE_INGEST_JOB_ID,
+)
 from aiecs.domain.temporal_memory.engine import TemporalMemoryEngine
 from aiecs.domain.temporal_memory.models import TemporalFact
 from aiecs.infrastructure.temporal_memory import NoOpTemporalMemoryStore, create_temporal_memory_store
+from aiecs.infrastructure.temporal_memory.metrics import get_temporal_memory_metrics
+from aiecs.infrastructure.temporal_memory.store_factory import resolve_temporal_memory_backend
 from aiecs.infrastructure.temporal_memory.ingest_queue import (
     acquire_temporal_memory_ingest_queue,
     get_temporal_memory_ingest_queue,
@@ -29,7 +38,6 @@ from aiecs.llm import LLMMessage
 
 logger = logging.getLogger(__name__)
 
-PLUGIN_STATE_FACTS_KEY = "temporal_memory.facts"
 FACTS_HEADER = "TEMPORAL MEMORY FACTS:"
 
 
@@ -80,7 +88,10 @@ class TemporalMemoryPlugin(BaseAgentPlugin):
         agent.temporal_memory_enabled = False
         agent.temporal_memory_engine = None
 
+        metrics = get_temporal_memory_metrics()
         if not _config_requests_temporal_memory(agent):
+            metrics.set_backend_active("none")
+            metrics.set_plugin_enabled(False)
             return None
 
         store = create_temporal_memory_store()
@@ -89,6 +100,8 @@ class TemporalMemoryPlugin(BaseAgentPlugin):
                 "TemporalMemoryPlugin disabled for agent %s (NoOp store)",
                 getattr(agent, "agent_id", "?"),
             )
+            metrics.set_backend_active("none")
+            metrics.set_plugin_enabled(False)
             return None
 
         try:
@@ -106,10 +119,14 @@ class TemporalMemoryPlugin(BaseAgentPlugin):
                     "TemporalMemoryPlugin close after init failure: %s",
                     close_exc,
                 )
+            metrics.set_backend_active("none")
+            metrics.set_plugin_enabled(False)
             return None
 
         agent.temporal_memory_engine = TemporalMemoryEngine(store)
         agent.temporal_memory_enabled = True
+        metrics.set_backend_active(str(getattr(store, "store_id", resolve_temporal_memory_backend())))
+        metrics.set_plugin_enabled(True)
 
         if get_settings().tm_ingest_async:
             await acquire_temporal_memory_ingest_queue()
@@ -153,27 +170,70 @@ class TemporalMemoryPlugin(BaseAgentPlugin):
 
         return [*messages, LLMMessage(role="user", content=f"\n\n{block}")]
 
+    def _write_ingest_plugin_state(
+        self,
+        ctx: AgentPluginContext,
+        *,
+        ingest_job_id: str,
+        ingest_result: Any | None,
+    ) -> None:
+        """
+        Expose ingest identifiers for Phase 4 MemoryPlugin metadata (TM-072).
+
+        ``ingest_job_id`` is always set before async worker runs; ``episode_id`` only after ingest.
+        """
+        ctx.plugin_state[PLUGIN_STATE_INGEST_JOB_ID] = ingest_job_id
+        if ingest_result is not None:
+            episode_id = getattr(ingest_result, "episode_id", None)
+            group_id = getattr(ingest_result, "group_id", None)
+            if episode_id:
+                ctx.plugin_state[PLUGIN_STATE_EPISODE_ID] = str(episode_id)
+            if group_id:
+                ctx.plugin_state[PLUGIN_STATE_GROUP_ID] = str(group_id)
+
     async def on_post_task(self, ctx: AgentPluginContext, result: dict[str, Any]) -> dict[str, Any]:
         if not self._is_active():
             return result
 
         engine = cast(TemporalMemoryEngine, self._engine())
         settings = get_settings()
+        ingest_job_id = str(uuid.uuid4())
+        ctx.plugin_state[PLUGIN_STATE_INGEST_JOB_ID] = ingest_job_id
 
         if settings.tm_ingest_async:
             queue = get_temporal_memory_ingest_queue()
 
             async def _work() -> None:
-                await engine.ingest_from_task(ctx, result)
+                ingest_result = await engine.ingest_from_task(ctx, result)
+                self._write_ingest_plugin_state(
+                    ctx,
+                    ingest_job_id=ingest_job_id,
+                    ingest_result=ingest_result,
+                )
+                await self._flush_memory_episode_bridge(ctx)
 
             await queue.enqueue(_work)
             return result
 
-        await engine.ingest_from_task(ctx, result)
+        ingest_result = await engine.ingest_from_task(ctx, result)
+        self._write_ingest_plugin_state(
+            ctx,
+            ingest_job_id=ingest_job_id,
+            ingest_result=ingest_result,
+        )
+        await self._flush_memory_episode_bridge(ctx)
         return result
 
+    async def _flush_memory_episode_bridge(self, ctx: AgentPluginContext) -> None:
+        """Persist L0 assistant metadata after L1 ingest (memory POST_TASK runs at priority 80)."""
+        from aiecs.domain.agent.plugins.builtin.memory_plugin import (
+            flush_pending_assistant_turn,
+        )
+
+        await flush_pending_assistant_turn(self._agent, ctx)
+
     async def on_agent_shutdown(self, ctx: AgentPluginContext) -> None:
-        _ = ctx
+        await self._flush_memory_episode_bridge(ctx)
         engine = self._engine()
         if engine is not None:
             try:
@@ -185,6 +245,7 @@ class TemporalMemoryPlugin(BaseAgentPlugin):
                 )
         self._agent.temporal_memory_engine = None
         self._agent.temporal_memory_enabled = False
+        get_temporal_memory_metrics().set_plugin_enabled(False)
 
         if get_settings().tm_ingest_async:
             await release_temporal_memory_ingest_queue()

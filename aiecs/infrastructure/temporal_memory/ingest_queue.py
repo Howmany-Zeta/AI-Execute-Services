@@ -56,9 +56,18 @@ class TemporalMemoryIngestQueue:
             return
         self._worker = asyncio.create_task(self._run_worker(), name="temporal-memory-ingest")
 
+    def _sync_ingest_queue_depth_metric(self) -> None:
+        try:
+            from aiecs.infrastructure.temporal_memory.metrics import get_temporal_memory_metrics
+
+            get_temporal_memory_metrics().set_ingest_queue_depth(self._queue.qsize())
+        except Exception:
+            pass
+
     async def enqueue(self, work: IngestWork) -> None:
         await self.start()
         await self._queue.put(work)
+        self._sync_ingest_queue_depth_metric()
 
     async def shutdown(self) -> None:
         if not self.running:
@@ -87,6 +96,7 @@ class TemporalMemoryIngestQueue:
                 logger.warning("Temporal memory ingest queue job failed: %s", exc, exc_info=True)
             finally:
                 self._queue.task_done()
+                self._sync_ingest_queue_depth_metric()
 
 
 _queue: TemporalMemoryIngestQueue | None = None

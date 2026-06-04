@@ -12,7 +12,10 @@ from aiecs.config.config import Settings
 from aiecs.domain.agent.base_agent import BaseAIAgent
 from aiecs.domain.agent.models import AgentConfiguration, AgentType
 from aiecs.domain.agent.plugins.builtin.temporal_memory_plugin import (
+    PLUGIN_STATE_EPISODE_ID,
     PLUGIN_STATE_FACTS_KEY,
+    PLUGIN_STATE_GROUP_ID,
+    PLUGIN_STATE_INGEST_JOB_ID,
     TemporalMemoryPlugin,
     format_facts_for_prompt,
 )
@@ -204,6 +207,9 @@ async def test_post_task_ingest_calls_engine(temporal_agent: TemporalTestAgent) 
     assert len(store.ingest_calls) == 1
     assert "user:" in store.ingest_calls[0].body
     assert "assistant:" in store.ingest_calls[0].body
+    assert isinstance(ctx.plugin_state.get(PLUGIN_STATE_INGEST_JOB_ID), str)
+    assert ctx.plugin_state.get(PLUGIN_STATE_EPISODE_ID) == "ep-1"
+    assert ctx.plugin_state.get(PLUGIN_STATE_GROUP_ID) == store.ingest_calls[0].group_id
 
 
 @pytest.mark.asyncio

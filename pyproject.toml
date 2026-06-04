@@ -304,6 +304,8 @@ markers = [
 
     # L1 temporal memory (Graphiti + FalkorDB — optional, not default CI)
     "graphiti: Tests requiring graphiti-core and FalkorDB/Neo4j (deselect with '-m \"not graphiti\"')",
+    # L1 temporal memory Postgres backend (optional, not default CI)
+    "postgres: Tests requiring TM_POSTGRES_URL (deselect with '-m \"not postgres\"')",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

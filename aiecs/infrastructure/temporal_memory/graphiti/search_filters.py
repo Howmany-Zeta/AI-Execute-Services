@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from aiecs.domain.temporal_memory.models import SearchFilters
+from aiecs.domain.temporal_memory.models import SearchFilters, TemporalFact
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +25,8 @@ def build_graphiti_search_filter(
     When ``valid_at`` is set, restricts facts that are valid at that instant:
     ``edge.valid_at <= T`` and (``invalid_at IS NULL`` OR ``invalid_at > T``).
 
-    ``entity_types`` maps to Graphiti ``node_labels``. ``excluded_entity_types`` is not
-    supported by graphiti-core search (logged; Phase 3).
+    ``entity_types`` maps to Graphiti ``node_labels``. ``excluded_entity_types`` is applied
+    after search via :func:`filter_facts_by_excluded_entity_types` (Graphiti has no exclude API).
     """
     if valid_at is None and filters is None:
         return None
@@ -40,7 +40,7 @@ def build_graphiti_search_filter(
             kwargs["node_labels"] = list(filters.entity_types)
         if filters.excluded_entity_types:
             logger.debug(
-                "SearchFilters.excluded_entity_types=%r is not applied by Graphiti search " "(planned Phase 3); use entity_types or post-filter in application code",
+                "Post-filtering excluded entity types: %s",
                 filters.excluded_entity_types,
             )
 
@@ -55,3 +55,59 @@ def build_graphiti_search_filter(
         ]
 
     return graphiti_filter
+
+
+def extract_edge_entity_labels(edge: Any) -> list[str]:
+    """
+    Best-effort entity labels from a Graphiti ``EntityEdge`` for post-filtering.
+
+    Uses ``attributes`` keys when present; falls back to edge ``name`` (relation).
+    """
+    labels: list[str] = []
+    attrs = getattr(edge, "attributes", None) or {}
+    if isinstance(attrs, dict):
+        for key in (
+            "source_label",
+            "target_label",
+            "source_labels",
+            "target_labels",
+            "labels",
+            "node_labels",
+        ):
+            val = attrs.get(key)
+            if isinstance(val, str) and val.strip():
+                labels.append(val.strip())
+            elif isinstance(val, list):
+                labels.extend(str(item).strip() for item in val if item)
+    name = getattr(edge, "name", None)
+    if name:
+        labels.append(str(name))
+    seen: set[str] = set()
+    unique: list[str] = []
+    for label in labels:
+        key = label.lower()
+        if key not in seen:
+            seen.add(key)
+            unique.append(label)
+    return unique
+
+
+def filter_facts_by_excluded_entity_types(
+    facts: list[TemporalFact],
+    excluded_entity_types: list[str] | None,
+) -> list[TemporalFact]:
+    """Drop facts whose ``metadata['entity_labels']`` intersects ``excluded_entity_types``."""
+    if not excluded_entity_types:
+        return facts
+    excluded = {item.strip().lower() for item in excluded_entity_types if item and str(item).strip()}
+    if not excluded:
+        return facts
+
+    kept: list[TemporalFact] = []
+    for fact in facts:
+        raw = (fact.metadata or {}).get("entity_labels")
+        labels = [str(x).lower() for x in raw] if isinstance(raw, list) else []
+        if any(label in excluded for label in labels):
+            continue
+        kept.append(fact)
+    return kept
