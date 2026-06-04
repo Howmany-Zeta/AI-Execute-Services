@@ -22,13 +22,14 @@ from typing import TYPE_CHECKING, Any
 
 from aiecs.domain.agent.plugins.models import PluginConfig
 from aiecs.infrastructure.knowledge import NoOpGraphStore, create_graph_store
+from aiecs.infrastructure.temporal_memory import NoOpTemporalMemoryStore, create_temporal_memory_store
 
 if TYPE_CHECKING:
     from aiecs.domain.agent.base_agent import BaseAIAgent
     from aiecs.domain.agent.models import AgentConfiguration
 
 _DERIVE_FILL_NAMES = frozenset({"memory", "skill", "tool"})
-_SORT_ORDER = {"tool": 0, "skill": 1, "memory": 2}
+_SORT_ORDER = {"tool": 0, "skill": 1, "memory": 2, "temporal_memory": 3}
 
 
 def derive_default_plugins(
@@ -44,6 +45,7 @@ def derive_default_plugins(
         _memory_plugin_config(config),
         _skill_plugin_config(config),
         _tool_plugin_config(config, agent),
+        _temporal_memory_plugin_config(config),
         _knowledge_plugin_config(config, agent),
         _collaboration_plugin_config(agent),
         _custom_reasoning_plugin_config(),
@@ -79,6 +81,19 @@ def _tool_plugin_config(config: AgentConfiguration, agent: BaseAIAgent) -> Plugi
         options={
             "allowed_tools": list(config.allowed_tools),
             "tool_selection_strategy": config.tool_selection_strategy,
+        },
+    )
+
+
+def _temporal_memory_plugin_config(config: AgentConfiguration) -> PluginConfig:
+    store = create_temporal_memory_store()
+    enabled = config.temporal_memory_enabled is True and not isinstance(store, NoOpTemporalMemoryStore)
+    return PluginConfig(
+        name="temporal_memory",
+        enabled=enabled,
+        options={
+            "inject_facts": True,
+            "facts_limit": 10,
         },
     )
 

@@ -35,7 +35,7 @@ flowchart TB
     DEF --> PM[PluginManager]
 
     subgraph Registry["PluginRegistry"]
-        BUILTIN[skill / memory / tool @builtin]
+        BUILTIN[skill / memory / tool / temporal_memory / knowledge @builtin]
         REG[custom plugins @registry]
         MAN[manifest plugins @config]
     end
@@ -58,7 +58,7 @@ Hooks run in a fixed phase order during agent startup and each task:
 | `BUILD_MESSAGES` | Inject skill/memory context into LLM messages |
 | `PRE_MAIN_LOOP` | Filter tool schemas; short-circuit allowed |
 | `ON_ITERATION_START` / `ON_ITERATION_END` | Tool-loop instrumentation (Hybrid / Tool FC) |
-| `POST_TASK` | Persist memory, normalize execute_task shell |
+| `POST_TASK` | Persist L0 memory (`memory@builtin`, 80), ingest L1 temporal facts (`temporal_memory@builtin`, 85), normalize execute_task shell |
 
 **Builtin init order** (independent of `priority`): `tool` → `skill` → `memory`. Other plugins initialize afterward, sorted by effective priority ascending.
 
@@ -480,6 +480,44 @@ agent = HybridAgent(
 
 ---
 
+## 7.3 TemporalMemoryPlugin (L1, TM-046+)
+
+`temporal_memory@builtin` (`priority=85`, **default disabled**) handles L1 episodic ingest and temporal fact retrieval. It is **separate** from `memory@builtin` (L0) and `knowledge@builtin` (L2).
+
+| Phase | Hook | Behavior |
+|-------|------|----------|
+| `derive` | — | Enabled when `AgentConfiguration.temporal_memory_enabled=true` and `create_temporal_memory_store()` is not `NoOpTemporalMemoryStore` |
+| `AGENT_INIT` | `on_agent_init` | Factory → `TemporalMemoryEngine`; NoOp backend disables plugin |
+| `PRE_TASK` | `on_pre_task` | `search_facts` → `plugin_state["temporal_memory.facts"]` |
+| `BUILD_MESSAGES` | `on_build_messages` | Optional `TEMPORAL MEMORY FACTS:` injection (`inject_facts`, default true) |
+| `POST_TASK` | `on_post_task` | Ingest completed turn (**runs after** `memory@builtin` on POST_TASK) |
+| `AGENT_SHUTDOWN` | `on_agent_shutdown` | Close store; shutdown async ingest queue when `TM_INGEST_ASYNC=true` |
+
+**POST_TASK ordering:** plugins run by ascending effective priority. `memory` (80) persists session memory first; `temporal_memory` (85) ingests into the graph backend second. Verified in `test_plugin_manager_order.py`.
+
+**Enable explicitly:**
+
+```python
+from aiecs.domain.agent.models import AgentConfiguration
+from aiecs.domain.agent.plugins.models import PluginConfig
+
+config = AgentConfiguration(
+    temporal_memory_enabled=True,
+    plugins=[
+        PluginConfig(name="memory", enabled=True),
+        PluginConfig(name="temporal_memory", enabled=True),
+    ],
+)
+```
+
+**Environment:** `TM_ENABLED`, `TM_BACKEND` (`none` \| `graphiti`), optional `pip install aiecs[temporal-graphiti]` on the customer side. AIECS core does not bundle `graphiti-core`. See [DOMAIN_TEMPORAL_MEMORY.md](../DOMAIN_TEMPORAL_MEMORY.md).
+
+**Contrast with `knowledge@builtin`:** L2 augments tasks from a knowledge graph and may short-circuit in `PRE_MAIN_LOOP`; L1 stores time-valid facts via Graphiti (optional) and does not replace L2 `GraphStore`.
+
+**Implementation:** `aiecs/domain/agent/plugins/builtin/temporal_memory_plugin.py` — no `graphiti_core` imports in the plugin module.
+
+---
+
 ## 8. Module map
 
 | Path | Purpose |
@@ -487,7 +525,7 @@ agent = HybridAgent(
 | `plugins/manager.py` | `PluginManager` — phase orchestration |
 | `plugins/registry.py` | `PluginRegistry`, `register_from_manifest` |
 | `plugins/defaults.py` | `derive_default_plugins`, `derive_plugin_configs` |
-| `plugins/builtin/` | SkillPlugin, MemoryPlugin, ToolPlugin, KnowledgePlugin, CollaborationPlugin |
+| `plugins/builtin/` | SkillPlugin, MemoryPlugin, ToolPlugin, TemporalMemoryPlugin, KnowledgePlugin, CollaborationPlugin |
 | `plugins/schema/` | `PluginManifest`, manifest validation |
 | `plugins/manifest_loader.py` | Load YAML/JSON manifests from disk |
 | `plugins/testing/` | Parity capture, normalize, compare |

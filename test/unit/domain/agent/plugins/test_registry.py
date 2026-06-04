@@ -116,6 +116,7 @@ class TestPluginRegistryDefault:
             "knowledge@builtin",
             "memory@builtin",
             "skill@builtin",
+            "temporal_memory@builtin",
             "tool@builtin",
         }
 

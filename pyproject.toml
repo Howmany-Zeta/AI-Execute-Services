@@ -188,6 +188,7 @@ docs = [
     "myst-parser>=2.0.0,<3.0.0",
     "sphinx-copybutton>=0.5.0,<1.0.0",
 ]
+temporal-graphiti = ["graphiti-core[falkordb]>=0.29.1"]
 
 [project.scripts]
 aiecs = "aiecs.__main__:main"
@@ -300,6 +301,9 @@ markers = [
 
     # Agent plugin system (Phase 2–3 parity gate, §12.1)
     "plugin_parity: Golden snapshot parity for Hybrid/LLM/Tool agents; run test/unit/domain/agent/plugins/test_plugin_parity.py -m plugin_parity",
+
+    # L1 temporal memory (Graphiti + FalkorDB — optional, not default CI)
+    "graphiti: Tests requiring graphiti-core and FalkorDB/Neo4j (deselect with '-m \"not graphiti\"')",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

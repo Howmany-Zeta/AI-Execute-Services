@@ -65,6 +65,7 @@ class PluginRegistry:
             KnowledgePlugin,
             MemoryPlugin,
             SkillPlugin,
+            TemporalMemoryPlugin,
             ToolPlugin,
         )
 
@@ -93,6 +94,20 @@ class PluginRegistry:
                 version=knowledge_metadata.version,
                 description=knowledge_metadata.description,
                 priority=knowledge_metadata.priority,
+                default_enabled=False,
+            ),
+            origin=PluginOrigin.BUILTIN,
+        )
+
+        temporal_metadata = TemporalMemoryPlugin.metadata
+        registry.register(
+            temporal_metadata.name,
+            TemporalMemoryPlugin,
+            metadata=PluginMetadata(
+                name=temporal_metadata.name,
+                version=temporal_metadata.version,
+                description=temporal_metadata.description,
+                priority=temporal_metadata.priority,
                 default_enabled=False,
             ),
             origin=PluginOrigin.BUILTIN,

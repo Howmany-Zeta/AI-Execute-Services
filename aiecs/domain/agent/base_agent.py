@@ -53,6 +53,7 @@ if TYPE_CHECKING:
     from aiecs.domain.agent.tools import SkillScriptRegistry, Tool
     from aiecs.domain.agent.skills import SkillRegistry
     from aiecs.domain.agent.plugins.base import BaseAgentPlugin
+    from aiecs.domain.temporal_memory.engine import TemporalMemoryEngine
     from aiecs.domain.agent.plugins.models import PluginConfig
     from aiecs.domain.agent.plugins.schema.manifest import PluginManifest
 
@@ -572,6 +573,8 @@ class BaseAIAgent(SkillCapableMixin, ABC):
     graph_store: Any | None = None
     enable_graph_reasoning: bool = True
     _knowledge_context: dict[str, dict[str, Any]] | None = None
+    temporal_memory_enabled: bool = False
+    temporal_memory_engine: Optional["TemporalMemoryEngine"] = None
 
     def __init__(
         self,
@@ -744,6 +747,8 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         self.graph_store = None
         self.enable_graph_reasoning = True
         self._knowledge_context = None
+        self.temporal_memory_enabled = False
+        self.temporal_memory_engine = None
 
         features = []
         if context_engine:

@@ -91,4 +91,12 @@ class TestDeriveDefaultPlugins:
     def test_returns_all_builtin_plugin_names(self, mock_agent, plugin_agent_config):
         mock_agent._tools_input = ["search"]
         names = [p.name for p in derive_default_plugins(plugin_agent_config, mock_agent)]
-        assert names == ["memory", "skill", "tool", "knowledge", "collaboration", "custom_reasoning"]
+        assert names == [
+            "memory",
+            "skill",
+            "tool",
+            "temporal_memory",
+            "knowledge",
+            "collaboration",
+            "custom_reasoning",
+        ]

@@ -87,7 +87,8 @@ class TestDerivePluginConfigs:
         names = [p.name for p in merged]
 
         assert names.index("tool") < names.index("skill") < names.index("memory")
-        assert names[-1] == "knowledge"
+        assert names.index("memory") < names.index("temporal_memory")
+        assert "knowledge" in names
 
     def test_explicit_replaces_derive_same_name(self, agent_with_tools, plugin_agent_config):
         """Explicit entry fully replaces derive entry for the same name."""

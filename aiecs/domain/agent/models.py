@@ -241,6 +241,10 @@ class AgentConfiguration(BaseModel):
     memory_enabled: bool = Field(default=True, description="Whether memory is enabled")
     memory_capacity: int = Field(default=1000, ge=0, description="Maximum number of memory items")
     memory_ttl_seconds: Optional[int] = Field(None, ge=0, description="Time-to-live for short-term memory in seconds")
+    temporal_memory_enabled: bool = Field(
+        default=False,
+        description=("Enable L1 temporal memory plugin (Graphiti). Requires optional " "graphiti-core install (pip install aiecs[temporal-graphiti]) and TM_ENABLED=true."),
+    )
 
     # Behavior parameters
     max_iterations: int = Field(default=10, ge=1, description="Maximum iterations for tool loop")

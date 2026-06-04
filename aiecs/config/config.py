@@ -10,14 +10,20 @@ Centralized configuration via Pydantic settings (environment variables or .env).
 Optional L2 knowledge graph (private package, ADR-003):
     KG_ENABLED: Use NoOpGraphStore when false (default).
     KG_BACKEND_MODULE: importlib module for create_graph_store(settings) when enabled.
+
+Optional L1 temporal memory (Graphiti optional extra):
+    TM_ENABLED / TM_BACKEND / TM_* — see TEMPORAL_KG_MEMORY_L1_TASKS §0.7.
 """
 
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 from pathlib import Path
 import logging
-from typing import Any
+from typing import Any, Literal, Self
+
+_TM_BACKENDS = frozenset({"none", "graphiti", "postgres"})
+_TM_GRAPH_BACKENDS = frozenset({"falkordb", "neo4j"})
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +120,85 @@ class Settings(BaseSettings):
         description="Module name for private create_graph_store(settings) when KG_ENABLED=true",
     )
 
+    # L1 Temporal Memory (Graphiti optional — install: pip install aiecs[temporal-graphiti])
+    tm_enabled: bool = Field(
+        default=False,
+        alias="TM_ENABLED",
+        description="Enable L1 temporal memory; when false, NoOpTemporalMemoryStore is used",
+    )
+    tm_backend: str = Field(
+        default="none",
+        alias="TM_BACKEND",
+        description="Temporal backend: none | graphiti | postgres (postgres Phase 5 stub)",
+    )
+    tm_graph_backend: str = Field(
+        default="falkordb",
+        alias="TM_GRAPH_BACKEND",
+        description="Graphiti graph driver: falkordb | neo4j",
+    )
+    tm_falkordb_url: str = Field(
+        default="redis://localhost:6379",
+        alias="TM_FALKORDB_URL",
+        description="FalkorDB connection URL when TM_GRAPH_BACKEND=falkordb",
+    )
+    tm_neo4j_uri: str = Field(default="", alias="TM_NEO4J_URI")
+    tm_neo4j_user: str = Field(default="", alias="TM_NEO4J_USER")
+    tm_neo4j_password: str = Field(default="", alias="TM_NEO4J_PASSWORD")
+    tm_ingest_async: bool = Field(
+        default=True,
+        alias="TM_INGEST_ASYNC",
+        description="POST_TASK ingest via async queue (non-blocking)",
+    )
+    tm_store_raw_episode: bool = Field(
+        default=False,
+        alias="TM_STORE_RAW_EPISODE",
+        description="Store raw episode text in Graphiti (PII caution)",
+    )
+    tm_search_limit: int = Field(default=10, ge=1, alias="TM_SEARCH_LIMIT")
+    tm_group_id_prefix: str = Field(
+        default="aiecs",
+        alias="TM_GROUP_ID_PREFIX",
+        description="Namespace prefix for Graphiti group_id values",
+    )
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="allow")
+
+    @field_validator("tm_backend", mode="before")
+    @classmethod
+    def _normalize_tm_backend(cls, value: Any) -> str:
+        if value is None:
+            return "none"
+        return str(value).strip().lower()
+
+    @field_validator("tm_backend")
+    @classmethod
+    def _validate_tm_backend(cls, value: str) -> str:
+        if value not in _TM_BACKENDS:
+            raise ValueError(f"TM_BACKEND must be one of {sorted(_TM_BACKENDS)}; got {value!r}")
+        return value
+
+    @field_validator("tm_graph_backend", mode="before")
+    @classmethod
+    def _normalize_tm_graph_backend(cls, value: Any) -> str:
+        if value is None:
+            return "falkordb"
+        return str(value).strip().lower()
+
+    @field_validator("tm_graph_backend")
+    @classmethod
+    def _validate_tm_graph_backend(cls, value: str) -> str:
+        if value not in _TM_GRAPH_BACKENDS:
+            raise ValueError(f"TM_GRAPH_BACKEND must be one of {sorted(_TM_GRAPH_BACKENDS)}; got {value!r}")
+        return value
+
+    @model_validator(mode="after")
+    def _validate_temporal_memory_settings(self) -> Self:
+        backend: Literal["none", "graphiti", "postgres"] = self.tm_backend  # type: ignore[assignment]
+        if backend == "postgres" and not self.tm_enabled:
+            raise ValueError("TM_BACKEND=postgres requires TM_ENABLED=true (Phase 5 — not yet implemented)")
+        if backend == "graphiti" and self.tm_enabled and not (self.openai_api_key or "").strip():
+            logger.debug("TM_BACKEND=graphiti with TM_ENABLED=true but OPENAI_API_KEY unset; " "Graphiti may require an LLM key or aiecs provider credentials")
+        return self
 
     def has_vertex_gcp_credentials_configured(self) -> bool:
         """True if any explicit GCP JSON credential path is set (global or per-Vertex-client)."""

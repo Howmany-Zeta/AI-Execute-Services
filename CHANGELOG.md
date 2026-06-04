@@ -9,6 +9,14 @@ See also `docs/changelog.rst` for historical release notes.
 
 ## [Unreleased]
 
+### Added
+
+- **L1 temporal memory (Phase 0–2):** `TemporalMemoryStore` Port, `TemporalMemoryEngine`, `create_temporal_memory_store()`, `NoOpTemporalMemoryStore`, optional `GraphitiTemporalMemoryStore` (`TM_BACKEND=graphiti`)
+- **`temporal_memory@builtin` plugin** (`TemporalMemoryPlugin`, priority 85, default disabled) — PRE_TASK search, POST_TASK ingest after `memory` (80), optional fact injection in BUILD_MESSAGES
+- **Settings:** `TM_ENABLED`, `TM_BACKEND`, `TM_GRAPH_BACKEND`, FalkorDB/Neo4j URLs, `TM_INGEST_ASYNC`, `TM_SEARCH_LIMIT`, `TM_GROUP_ID_PREFIX`; `AgentConfiguration.temporal_memory_enabled`
+- **Optional extra:** `pip install aiecs[temporal-graphiti]` (customer-side `graphiti-core`; not in core wheel per ADR-003)
+- **Docs / example:** [docs/developer/DOMAIN_TEMPORAL_MEMORY.md](docs/developer/DOMAIN_TEMPORAL_MEMORY.md), [examples/temporal_memory/](examples/temporal_memory/)
+
 ## [2.0.0] — BREAKING
 
 ### Removed

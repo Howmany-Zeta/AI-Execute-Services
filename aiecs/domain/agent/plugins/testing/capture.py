@@ -35,12 +35,10 @@ from unittest.mock import AsyncMock
 import yaml
 
 from aiecs.domain.agent.hybrid_agent import HybridAgent
-from aiecs.domain.agent.plugins.builtin.knowledge_plugin import effective_task_description
-from aiecs.domain.agent.plugins.models import PluginConfig
-from aiecs.infrastructure.knowledge import NoOpGraphStore
 from aiecs.domain.agent.llm_agent import LLMAgent
 from aiecs.domain.agent.models import AgentConfiguration
-from aiecs.domain.agent.plugins.models import PluginPhase
+from aiecs.domain.agent.plugins.builtin.knowledge_plugin import effective_task_description
+from aiecs.domain.agent.plugins.models import PluginConfig, PluginPhase
 from aiecs.domain.agent.plugins.testing.normalize import (
     normalize_execute_task_response,
     normalize_messages,
@@ -54,6 +52,16 @@ from aiecs.llm import BaseLLMClient, LLMMessage, LLMResponse
 from aiecs.tools.base_tool import BaseTool
 
 ParityAgent = Union[HybridAgent, LLMAgent, ToolAgent]
+
+
+class _ParityGraphStore:
+    """Minimal non-NoOp graph backend so KnowledgePlugin parity hooks stay active."""
+
+    async def initialize(self) -> None:
+        return None
+
+    async def close(self) -> None:
+        return None
 
 
 class ParityStubTool(BaseTool):
@@ -320,11 +328,11 @@ async def create_tool_agent_from_spec(
 
 
 async def _build_graph_store(spec: dict[str, Any]) -> Any:
-    """No-op graph store for knowledge parity fixtures (no external I/O)."""
+    """In-process graph store stub for knowledge parity fixtures (no external I/O)."""
     capture = spec.get("capture") or {}
     if capture.get("no_graph_store"):
         return None
-    store = NoOpGraphStore()
+    store = _ParityGraphStore()
     await store.initialize()
     return store
 
