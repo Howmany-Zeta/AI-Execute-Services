@@ -23,7 +23,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.10'
+        python-version: '3.11'
     
     - name: Install build dependencies
       run: |
@@ -109,13 +109,28 @@ jobs:
     
     - name: Test installation from PyPI
       run: |
+        PKG_VERSION=$(python - <<'PY'
+        import pathlib
+        import re
+        import zipfile
+
+        wheel = next(pathlib.Path("dist").glob("*.whl"))
+        with zipfile.ZipFile(wheel) as zf:
+            metadata_name = next(name for name in zf.namelist() if name.endswith(".dist-info/METADATA"))
+            metadata = zf.read(metadata_name).decode()
+        match = re.search(r"^Version: (.+)$", metadata, re.MULTILINE)
+        if not match:
+            raise SystemExit("Could not read package version from wheel METADATA")
+        print(match.group(1))
+        PY
+        )
         echo "⏳ Waiting for package to be available on PyPI..."
         sleep 60
-        echo "🧪 Testing installation from PyPI..."
-        pip install aiecs
+        echo "🧪 Testing installation from PyPI (aiecs==${PKG_VERSION})..."
+        pip install --pre "aiecs==${PKG_VERSION}"
         echo "✅ Package installed successfully!"
         
-        # Test basic import
+        # Test basic import (requires Python >=3.11 per pyproject.toml)
         python -c "import aiecs; print(f'AIECS version: {aiecs.__version__}')"
         
         # Test command line tools
