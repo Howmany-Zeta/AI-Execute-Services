@@ -10,10 +10,18 @@ Document Tools Module
 This module contains specialized tools for document processing and analysis:
 - document_parser_tool: Modern high-performance document parsing with AI
 - ai_document_orchestrator: AI-powered document processing orchestrator
+
+.. deprecated:: 2026-07-01
+    Built-in document tools in ``aiecs.tools.docs`` are being migrated to MCP server
+    services and will be removed on 2026-07-01. Importing this package emits a
+    :class:`DeprecationWarning`; please migrate to the corresponding MCP server tools.
 """
 
-# Lazy import all document tools to avoid heavy dependencies at import time
 import os
+
+from aiecs.tools._builtin_tool_deprecation import warn_builtin_tool_deprecated
+
+warn_builtin_tool_deprecated("docs")
 
 # Define available document tools for lazy loading
 _AVAILABLE_DOC_TOOLS = [

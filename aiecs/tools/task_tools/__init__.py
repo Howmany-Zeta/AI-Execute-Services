@@ -17,14 +17,22 @@ This module contains specialized tools for various task-oriented operations:
 - research_tool: Research and information gathering operations
 - stats_tool: Statistical analysis and computation operations
 
+.. deprecated:: 2026-07-01
+    Built-in task tools in ``aiecs.tools.task_tools`` are being migrated to MCP server
+    services and will be removed on 2026-07-01. Importing this package emits a
+    :class:`DeprecationWarning`; please migrate to the corresponding MCP server tools.
+
 Note:
 - Legacy API source tools removed in AIECS 2.0.0 (fork or custom BaseTool)
 - search_tool is now a standalone package at aiecs.tools.search_tool
 - Legacy scraper tools removed in AIECS 2.0.0 (fork or custom BaseTool)
 """
 
-# Lazy import all task tools to avoid heavy dependencies at import time
 import os
+
+from aiecs.tools._builtin_tool_deprecation import warn_builtin_tool_deprecated
+
+warn_builtin_tool_deprecated("task_tools")
 
 # Define available tools for lazy loading
 _AVAILABLE_TOOLS = [

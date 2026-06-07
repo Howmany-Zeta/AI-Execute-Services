@@ -5,6 +5,11 @@
 """
 Enhanced Search Tool Package
 
+.. deprecated:: 2026-07-01
+    Built-in search tools in ``aiecs.tools.search_tool`` are being migrated to MCP server
+    services and will be removed on 2026-07-01. Importing this package emits a
+    :class:`DeprecationWarning`; please migrate to the corresponding MCP server tools.
+
 A comprehensive, production-ready web search tool that integrates Google Custom Search API
 with advanced features including:
 
@@ -53,6 +58,7 @@ Usage:
 """
 
 from aiecs.tools import register_tool
+from aiecs.tools._builtin_tool_deprecation import warn_builtin_tool_deprecated
 from .core import SearchTool
 from .constants import (
     SearchType,
@@ -73,6 +79,8 @@ from .constants import (
     ValidationError,
     CacheError,
 )
+
+warn_builtin_tool_deprecated("search_tool")
 
 # Register the tool with the AIECS tool registry
 # Note: Tool is registered as "search" (not "search_tool") for consistency
