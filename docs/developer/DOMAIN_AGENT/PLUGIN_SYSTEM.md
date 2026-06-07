@@ -8,6 +8,7 @@ Developer guide for the AIECS agent plugin framework (`aiecs/domain/agent/plugin
 
 - [PLUGIN_SYSTEM_DESIGN.md](../../../issue_report/new_function_request/PLUGIN_SYSTEM_DESIGN.md) — authoritative spec
 - [PLUGIN_SYSTEM_PHASE3_TASKS.md](../../../issue_report/new_function_request/PLUGIN_SYSTEM_PHASE3_TASKS.md) — Phase 3 task breakdown
+- [DAWP.md](./DAWP.md) — DAWP plugin (`dawp@builtin`): workflows, `dawp_start`, streaming, tests
 
 ---
 

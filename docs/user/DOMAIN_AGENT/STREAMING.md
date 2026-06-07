@@ -346,6 +346,60 @@ async for event in agent.execute_task_streaming(task, context):
         print(f"Execution time: {execution_time}s")
 ```
 
+### DAWP Boundary Events (HybridAgent + DawpPlugin)
+
+When ``DawpPlugin`` is enabled with ``stream_boundary_events: true``, the stream
+includes optional run-level boundary events for SDK/UI panel management. Step
+content still uses homomorphic ``token`` / ``tool_result`` events with
+``loop_scope.kind=dawp`` (see design §8.1).
+
+| Event type | When | Key fields |
+|------------|------|------------|
+| `dawp_run_started` | Before first DAWP step | `run_id`, `workflow_id`, `placement`, `trigger`, `loop_scope` |
+| `dawp_run_completed` | After DAWP run ends | `run_id`, `success`, `step_summaries`, `loop_scope` |
+
+**Pattern: SDK consumer (recommended)**
+
+```python
+from aiecs.domain.agent.plugins.dawp import DawpStreamConsumer, effective_loop_scope
+
+consumer = DawpStreamConsumer(
+    on_run_started=lambda panel: ui.open_dawp_panel(panel.run_id),
+    on_run_completed=lambda panel: ui.close_dawp_panel(panel.run_id),
+)
+
+async for event in agent.execute_task_streaming(task, context):
+    consumer.consume(event)  # handles dawp_run_started / dawp_run_completed
+    scope = effective_loop_scope(event)
+    render_stream_event(event, scope=scope)  # same renderer; style by scope.kind
+```
+
+**Pattern: Manual subscription**
+
+```python
+async for event in agent.execute_task_streaming(task, context):
+    scope = event.get("loop_scope") or {"kind": "main"}
+    if event["type"] == "dawp_run_started":
+        ui.open_dawp_panel(event["run_id"])
+    elif event["type"] == "dawp_run_completed":
+        ui.close_dawp_panel(event["run_id"], success=event["success"])
+    elif event["type"] == "token":
+        print(event["content"], end="", flush=True)
+```
+
+Enable boundary events in plugin config:
+
+```python
+PluginConfig(
+    name="dawp",
+    enabled=True,
+    options={
+        "document_path": "workflows/my-flow.dawp.md",
+        "stream_boundary_events": True,
+    },
+)
+```
+
 ### Error Events
 
 Error events indicate errors during execution.

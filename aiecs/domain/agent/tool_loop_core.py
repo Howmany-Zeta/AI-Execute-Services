@@ -3,9 +3,9 @@
 #  *  Licensed under the Apache-2.0. See License.txt in the project root for license information.
 #  *--------------------------------------------------------------------------------------------*/
 """
-Shared types for HybridAgent tool-loop extraction (§8.4, CUSTOM_REASONING CR-2).
+Shared types for HybridAgent tool-loop extraction (§8.4, DAWP v2.1 DAWP-1).
 
-``HybridAgent._run_tool_loop_with_iteration_hooks`` and Custom Reasoning StepRunner
+``HybridAgent._run_tool_loop_with_iteration_hooks`` and DAWP StepRunner
 share the same LLM+tool iteration semantics; ``ON_ITERATION_*`` hooks use ``plugin_ctx``.
 """
 

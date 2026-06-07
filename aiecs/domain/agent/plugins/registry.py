@@ -62,6 +62,7 @@ class PluginRegistry:
         """
         from aiecs.domain.agent.plugins.builtin import (
             CollaborationPlugin,
+            DawpPlugin,
             KnowledgePlugin,
             MemoryPlugin,
             SkillPlugin,
@@ -122,6 +123,33 @@ class PluginRegistry:
                 version=collaboration_metadata.version,
                 description=collaboration_metadata.description,
                 priority=collaboration_metadata.priority,
+                default_enabled=False,
+            ),
+            origin=PluginOrigin.BUILTIN,
+        )
+
+        dawp_metadata = DawpPlugin.metadata
+        registry.register(
+            "dawp",
+            DawpPlugin,
+            metadata=PluginMetadata(
+                name="dawp",
+                version=dawp_metadata.version,
+                description=dawp_metadata.description,
+                priority=dawp_metadata.priority,
+                default_enabled=False,
+            ),
+            origin=PluginOrigin.BUILTIN,
+        )
+        # Deprecated alias: "custom_reasoning" → DawpPlugin (emits DeprecationWarning on init).
+        registry.register(
+            "custom_reasoning",
+            DawpPlugin,
+            metadata=PluginMetadata(
+                name="custom_reasoning",
+                version=dawp_metadata.version,
+                description=f"[Deprecated alias for 'dawp'] {dawp_metadata.description}",
+                priority=dawp_metadata.priority,
                 default_enabled=False,
             ),
             origin=PluginOrigin.BUILTIN,

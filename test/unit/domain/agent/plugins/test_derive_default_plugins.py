@@ -98,5 +98,23 @@ class TestDeriveDefaultPlugins:
             "temporal_memory",
             "knowledge",
             "collaboration",
+            "dawp",
             "custom_reasoning",
         ]
+
+    def test_dawp_entry_present_and_disabled_by_default(self, mock_agent, plugin_agent_config):
+        """dawp must appear in derive_default_plugins and be disabled by default (§9, D0-05)."""
+        mock_agent._tools_input = ["search"]
+        by_name = _by_name(derive_default_plugins(plugin_agent_config, mock_agent))
+
+        assert "dawp" in by_name
+        assert by_name["dawp"].enabled is False
+        assert by_name["dawp"].options == {}
+
+    def test_custom_reasoning_alias_still_present_and_disabled(self, mock_agent, plugin_agent_config):
+        """Deprecated custom_reasoning alias must remain disabled for backward compatibility."""
+        mock_agent._tools_input = ["search"]
+        by_name = _by_name(derive_default_plugins(plugin_agent_config, mock_agent))
+
+        assert "custom_reasoning" in by_name
+        assert by_name["custom_reasoning"].enabled is False

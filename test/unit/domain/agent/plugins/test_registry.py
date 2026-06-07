@@ -113,6 +113,8 @@ class TestPluginRegistryDefault:
 
         assert formatted == {
             "collaboration@builtin",
+            "custom_reasoning@builtin",  # deprecated alias for dawp
+            "dawp@builtin",
             "knowledge@builtin",
             "memory@builtin",
             "skill@builtin",

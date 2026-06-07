@@ -17,6 +17,7 @@ Uses OpenAI Function Calling for tool use (BetaToolRunner-style loop).
 import asyncio
 import json
 import logging
+import uuid
 from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING, AsyncGenerator, Callable, Awaitable
 from datetime import datetime
 
@@ -42,6 +43,8 @@ if TYPE_CHECKING:
         ConfigManagerProtocol,
         CheckpointerProtocol,
     )
+    from aiecs.domain.agent.plugins.dawp.loop_scope import LoopScope
+    from aiecs.domain.agent.plugins.dawp.budget import TaskIterationBudget
 
 logger = logging.getLogger(__name__)
 
@@ -499,10 +502,29 @@ class HybridAgent(BaseAIAgent):
     ) -> Dict[str, Any]:
         """
         LLM+tool iteration loop with optional ``ON_ITERATION_*`` plugin phases (§8.4).
+
+        The loop is driven by a shared ``TaskIterationBudget`` (D5, §4.4) stored at
+        ``plugin_state["task.iteration_budget"]``.  Each completed LLM+tool round
+        consumes 1 unit; the loop exits when the budget is exhausted or a final
+        response is produced.
         """
+        from aiecs.domain.agent.plugins.dawp.budget import TaskIterationBudget
+
+        _BUDGET_KEY = "task.iteration_budget"
+        if plugin_ctx is not None:
+            budget: TaskIterationBudget = plugin_ctx.plugin_state.get(_BUDGET_KEY)  # type: ignore[assignment]
+            if not isinstance(budget, TaskIterationBudget):
+                budget = TaskIterationBudget(limit=self._max_iterations)
+                plugin_ctx.plugin_state[_BUDGET_KEY] = budget
+        else:
+            budget = TaskIterationBudget(limit=self._max_iterations)
+
         state = ToolLoopRunState()
-        for iteration in range(self._max_iterations):
+        iteration = 0
+        while budget.remaining > 0:
             logger.debug(f"HybridAgent {self.agent_id} - tool loop iteration {iteration + 1}")
+            if plugin_ctx is not None:
+                plugin_ctx.plugin_state["task.current_iteration"] = iteration
 
             if plugin_ctx is not None and self._plugin_manager is not None:
                 await self._plugin_manager.run_phase(
@@ -514,8 +536,36 @@ class HybridAgent(BaseAIAgent):
 
             outcome = await self._run_tool_loop_core_iteration(messages, context, iteration, state)
 
+            budget.consume(1)
+
+            if plugin_ctx is not None:
+                plugin_ctx.plugin_state["task.response_index"] = plugin_ctx.plugin_state.get("task.response_index", 0) + 1
+
+            # D2-08: inline drain (tool-path dawp_start) — parity with streaming path (§6.5).
+            if plugin_ctx is not None:
+                from aiecs.domain.agent.plugins.dawp.schema import DawpAbortMainError
+
+                try:
+                    async for _ in self._drain_pending_dawp_runs("inline", messages, context, plugin_ctx, budget):
+                        pass
+                except DawpAbortMainError as _exc:
+                    logger.warning("HybridAgent (non-streaming): abort_main (inline): %s", _exc)
+                    return self._assemble_loop_result(
+                        {
+                            "success": False,
+                            "output": str(_exc),
+                            "reason": "dawp_abort_main",
+                            "final_response": str(_exc),
+                            "steps": list(state.steps),
+                            "iterations": iteration + 1,
+                            "tool_calls_count": state.tool_calls_count,
+                            "total_tokens": state.total_tokens,
+                        }
+                    )
+
             if plugin_ctx is not None and self._plugin_manager is not None:
                 step = self._iteration_step_payload(outcome, iteration, state)
+                step["response_index"] = plugin_ctx.plugin_state["task.response_index"]
                 await self._plugin_manager.run_phase(
                     PluginPhase.ON_ITERATION_END,
                     ctx=plugin_ctx,
@@ -523,10 +573,35 @@ class HybridAgent(BaseAIAgent):
                     step=step,
                 )
 
+            # D2-08: config-path drain (on_response_trigger) — parity with streaming path.
+            if plugin_ctx is not None:
+                from aiecs.domain.agent.plugins.dawp.schema import DawpAbortMainError as _AbortErr
+
+                try:
+                    async for _ in self._drain_pending_dawp_runs("on_iteration_end", messages, context, plugin_ctx, budget):
+                        pass
+                except _AbortErr as _exc:
+                    logger.warning("HybridAgent (non-streaming): abort_main (on_iteration_end): %s", _exc)
+                    return self._assemble_loop_result(
+                        {
+                            "success": False,
+                            "output": str(_exc),
+                            "reason": "dawp_abort_main",
+                            "final_response": str(_exc),
+                            "steps": list(state.steps),
+                            "iterations": iteration + 1,
+                            "tool_calls_count": state.tool_calls_count,
+                            "total_tokens": state.total_tokens,
+                        }
+                    )
+
             if outcome.kind == "continue":
+                iteration += 1
                 continue
             if outcome.kind in ("final", "stop_match") and outcome.result is not None:
                 return self._assemble_loop_result(outcome.result)
+
+            iteration += 1
 
         return self._assemble_loop_result(self._tool_loop_max_iterations_result(state))
 
@@ -539,7 +614,29 @@ class HybridAgent(BaseAIAgent):
         """
         Tool loop with plugin-aware messages and ``ON_ITERATION_*`` hooks (§8.4).
         """
+        from aiecs.domain.agent.plugins.dawp.budget import TaskIterationBudget
+        from aiecs.domain.agent.plugins.dawp.schema import DawpAbortMainError
+
         messages = await self._build_initial_messages_async(task_description, context, plugin_ctx)
+
+        # D2-08: drain pre_main_loop activations before starting the main loop — parity with
+        # the streaming path (§9, D1-09).  Events are consumed and discarded; only side
+        # effects (message mutation, budget consumption, abort_main) are preserved.
+        _BUDGET_KEY = "task.iteration_budget"
+        budget: TaskIterationBudget = plugin_ctx.plugin_state.get(_BUDGET_KEY)  # type: ignore[assignment]
+        if not isinstance(budget, TaskIterationBudget):
+            budget = TaskIterationBudget(limit=self._max_iterations)
+            plugin_ctx.plugin_state[_BUDGET_KEY] = budget
+
+        try:
+            async for _ in self._drain_pending_dawp_runs("on_iteration_end", messages, context, plugin_ctx, budget):
+                pass  # events discarded in non-streaming path; side effects retained
+        except DawpAbortMainError as _exc:
+            logger.warning("HybridAgent (non-streaming): abort_main (pre_main_loop): %s", _exc)
+            return self._assemble_loop_result(
+                {"success": False, "output": str(_exc), "reason": "dawp_abort_main", "final_response": str(_exc), "steps": [], "iterations": 0, "tool_calls_count": 0, "total_tokens": 0}
+            )
+
         return await self._run_tool_loop_with_iteration_hooks(messages, context, plugin_ctx=plugin_ctx)
 
     async def execute_task(self, task: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
@@ -678,12 +775,40 @@ class HybridAgent(BaseAIAgent):
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Streaming tool loop with async messages and ``ON_ITERATION_*`` hooks (§8.4, §8.5).
+
+        The loop is driven by a shared ``TaskIterationBudget`` (D5, §4.4).  Each
+        completed LLM+tool round consumes 1 unit; ``iteration_start.remaining``
+        reflects the pre-consume budget so downstream consumers can track the shared
+        pool across main and DAWP iterations.
         """
+        from aiecs.domain.agent.plugins.dawp.budget import TaskIterationBudget
+
+        _BUDGET_KEY = "task.iteration_budget"
+        budget: TaskIterationBudget = plugin_ctx.plugin_state.get(_BUDGET_KEY)  # type: ignore[assignment]
+        if not isinstance(budget, TaskIterationBudget):
+            budget = TaskIterationBudget(limit=self._max_iterations)
+            plugin_ctx.plugin_state[_BUDGET_KEY] = budget
+
         messages = await self._build_initial_messages_async(task_description, context, plugin_ctx)
         state = ToolLoopRunState()
+        iteration = 0
 
-        for iteration in range(self._max_iterations):
+        # Drain pre_main_loop activations enqueued by DAWPPlugin.on_pre_main_loop (§9, D1-09).
+        # These runs use drain_mode="on_iteration_end" (config path) and must execute
+        # before the first main-loop iteration so their output appears first (baseworkflow L38).
+        from aiecs.domain.agent.plugins.dawp.schema import DawpAbortMainError
+
+        try:
+            async for dawp_event in self._drain_pending_dawp_runs("on_iteration_end", messages, context, plugin_ctx, budget):
+                yield dawp_event
+        except DawpAbortMainError as _exc:
+            logger.warning("HybridAgent: abort_main triggered (pre_main_loop drain): %s", _exc)
+            yield self._streaming_result_event_from_inner({"success": False, "output": str(_exc), "reason": "dawp_abort_main"})
+            return
+
+        while budget.remaining > 0:
             logger.debug(f"HybridAgent {self.agent_id} - tool loop iteration {iteration + 1}")
+            plugin_ctx.plugin_state["task.current_iteration"] = iteration
 
             if self._plugin_manager is not None:
                 await self._plugin_manager.run_phase(
@@ -696,8 +821,8 @@ class HybridAgent(BaseAIAgent):
             yield {
                 "type": "iteration_start",
                 "iteration": iteration + 1,
-                "max_iterations": self._max_iterations,
-                "remaining": self._max_iterations - iteration - 1,
+                "max_iterations": budget.limit,
+                "remaining": budget.remaining,
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
@@ -705,12 +830,33 @@ class HybridAgent(BaseAIAgent):
             async for event in self._run_tool_loop_core_iteration_streaming(messages, context, iteration, state):
                 yield event
 
+            budget.consume(1)
+
+            plugin_ctx.plugin_state["task.response_index"] = plugin_ctx.plugin_state.get("task.response_index", 0) + 1
+
+            # D2-05: Drain tool-path (dawp_start) inline pending runs immediately after
+            # the iteration's tool processing completes but BEFORE ON_ITERATION_END.
+            # This places DAWP events in the same main-loop iteration as the dawp_start call,
+            # matching the baseworkflow timeline (§6.5): tool_result(ack) → inline drain → continue.
+            _dawp_drained_any = False
+            from aiecs.domain.agent.plugins.dawp.schema import DawpAbortMainError
+
+            try:
+                async for dawp_event in self._drain_pending_dawp_runs("inline", messages, context, plugin_ctx, budget):
+                    _dawp_drained_any = True
+                    yield dawp_event
+            except DawpAbortMainError as _exc:
+                logger.warning("HybridAgent: abort_main triggered (inline drain): %s", _exc)
+                yield self._streaming_result_event_from_inner({"success": False, "output": str(_exc), "reason": "dawp_abort_main"})
+                return
+
             if self._plugin_manager is not None:
                 step = self._iteration_step_payload(
                     state.last_outcome or ToolLoopIterationOutcome(kind="continue"),
                     iteration,
                     state,
                 )
+                step["response_index"] = plugin_ctx.plugin_state["task.response_index"]
                 await self._plugin_manager.run_phase(
                     PluginPhase.ON_ITERATION_END,
                     ctx=plugin_ctx,
@@ -718,11 +864,30 @@ class HybridAgent(BaseAIAgent):
                     step=step,
                 )
 
+            # Drain on_response_trigger activations enqueued during ON_ITERATION_END (§6.5, D1-09).
+            # FIFO until pending empty or budget exhausted; events yielded inline (R2, R3).
+            # Track whether any DAWP events were produced so we can force the main loop
+            # to continue after the drain even when this iteration's outcome was "final"
+            # (the triggering response is part of context but not the task's final answer).
+            try:
+                async for dawp_event in self._drain_pending_dawp_runs("on_iteration_end", messages, context, plugin_ctx, budget):
+                    _dawp_drained_any = True
+                    yield dawp_event
+            except DawpAbortMainError as _exc:
+                logger.warning("HybridAgent: abort_main triggered (on_iteration_end drain): %s", _exc)
+                yield self._streaming_result_event_from_inner({"success": False, "output": str(_exc), "reason": "dawp_abort_main"})
+                return
+
             outcome = state.last_outcome
-            if outcome is None:
+            if outcome is None or outcome.kind == "continue":
+                iteration += 1
                 continue
 
-            if outcome.kind == "continue":
+            # R2: if DAWP drained this iteration, the triggering response is context
+            # — not the final answer.  Force the main loop to continue so the LLM
+            # can produce the actual final response in the next iteration (§6.5).
+            if _dawp_drained_any:
+                iteration += 1
                 continue
 
             if outcome.kind == "stop_match":
@@ -732,7 +897,281 @@ class HybridAgent(BaseAIAgent):
                 yield self._streaming_result_event_from_inner(outcome.result)
                 return
 
+            iteration += 1
+
         yield self._streaming_result_event_from_inner(self._tool_loop_max_iterations_result(state))
+
+    async def _drain_pending_dawp_runs(
+        self,
+        drain_mode: str,
+        messages: List[LLMMessage],
+        context: Dict[str, Any],
+        plugin_ctx: AgentPluginContext,
+        budget: "TaskIterationBudget",
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """FIFO-drain pending DAWP runs matching *drain_mode* (§6.5, D1-09).
+
+        Reads ``plugin_state["dawp.pending"]``, removes entries with the given
+        *drain_mode* one at a time, and calls
+        :func:`~dawp.prompt_chain_runner.run_prompt_chain` for each.  All events
+        are yielded inline to the caller (``_tool_loop_streaming_with_plugins``).
+
+        Draining continues while the queue is non-empty **and** ``budget.remaining > 0``.
+
+        *messages* is passed directly to ``run_prompt_chain``, so assistant messages
+        and tool results produced by DAWP steps are appended in-place (default
+        ``merge_back: append`` — D2).
+
+        Args:
+            drain_mode: ``"on_iteration_end"`` (config path) or ``"inline"`` (tool path,
+                        future D2-05).  Only runs whose :attr:`~schema.DawpPendingRun.drain_mode`
+                        matches are dequeued; others are left for the appropriate drain point.
+            messages:   Conversation history; mutated in-place by the prompt chain runner.
+            context:    Execution context forwarded to the LLM.
+            plugin_ctx: Current plugin context providing ``plugin_state``.
+            budget:     Shared :class:`~dawp.budget.TaskIterationBudget`; passed through
+                        to the prompt chain runner.
+
+        Yields:
+            All streaming events from :func:`~dawp.prompt_chain_runner.run_prompt_chain`,
+            preserving ``loop_scope.kind="dawp"`` tags set by the nested runner.
+        """
+        from aiecs.domain.agent.plugins.dawp.inject import apply_inject_only, messages_for_dawp_run
+        from aiecs.domain.agent.plugins.dawp.loop_scope import (
+            LoopScope,
+            build_dawp_run_completed,
+            build_dawp_run_started,
+        )
+        from aiecs.domain.agent.plugins.dawp.prompt_chain_runner import run_prompt_chain
+
+        pending: List[Any] = plugin_ctx.plugin_state.get("dawp.pending", [])
+
+        skipped_unresolvable: set[int] = set()
+
+        while pending and budget.remaining > 0:
+            # Find the first run matching the drain mode (FIFO), skipping unresolvable this pass
+            run = next(
+                (r for r in pending if r.drain_mode == drain_mode and id(r) not in skipped_unresolvable),
+                None,
+            )
+            if run is None:
+                break
+
+            from aiecs.domain.agent.plugins.dawp.workflow_registry import resolve_workflow_for_run
+
+            workflow = resolve_workflow_for_run(plugin_ctx.plugin_state, run)
+            if workflow is None:
+                logger.warning(
+                    "HybridAgent: no compiled workflow found for pending run" " workflow_id=%r; skipping this pass (D4/D8)",
+                    run.workflow_id,
+                )
+                skipped_unresolvable.add(id(run))
+                continue
+
+            skipped_unresolvable.clear()
+            pending.remove(run)
+
+            scope = LoopScope(
+                kind="dawp",
+                run_id=f"dawp-{uuid.uuid4().hex[:8]}",
+                workflow_id=run.workflow_id,
+            )
+            plugin_ctx.plugin_state["dawp._metrics_run"] = {
+                "workflow_id": run.workflow_id,
+                "trigger": run.trigger,
+                "workflow_source": run.workflow_source,
+            }
+            logger.debug(
+                "HybridAgent[drain=%s]: starting DAWP run %s for workflow=%r (merge_back=%r)",
+                drain_mode,
+                scope.run_id,
+                run.workflow_id,
+                run.merge_back,
+            )
+
+            # §8.1.1: optional boundary events — emitted only when stream_boundary_events=True.
+            emit_boundary = bool(plugin_ctx.plugin_state.get("dawp.stream_boundary_events", False))
+            if drain_mode == "inline":
+                placement = "inline"
+            elif run.config_placement is not None:
+                placement = run.config_placement
+            else:
+                placement = "on_response_trigger"
+            if emit_boundary:
+                yield build_dawp_run_started(scope, placement=placement, trigger=run.trigger)
+
+            # §6.3, D1-12: select message list based on merge_back strategy.
+            # "append" → shared reference (DAWP appends in-place, main loop sees all).
+            # "inject_only" → copy (DAWP messages stay isolated; summary added after).
+            dawp_messages = messages_for_dawp_run(messages, merge_back=run.merge_back)
+
+            # D3: reset success sentinel before each run; run_prompt_chain sets True on dawp_done.
+            plugin_ctx.plugin_state["dawp._run_success"] = False
+
+            run_success = False
+            try:
+                async for event in run_prompt_chain(
+                    workflow,
+                    dawp_messages,
+                    context,
+                    plugin_ctx,
+                    self,
+                    scope=scope,
+                    budget=budget,
+                ):
+                    yield event
+                run_success = plugin_ctx.plugin_state.get("dawp._run_success", False)
+            finally:
+                if emit_boundary:
+                    yield build_dawp_run_completed(scope, success=run_success)
+                from aiecs.domain.agent.plugins.dawp.metrics import get_dawp_metrics
+
+                get_dawp_metrics().record_run(
+                    workflow_id=run.workflow_id,
+                    trigger=run.trigger,
+                    workflow_source=run.workflow_source,
+                    success=run_success,
+                )
+                plugin_ctx.plugin_state["dawp._run_count"] = int(plugin_ctx.plugin_state.get("dawp._run_count", 0)) + 1
+                plugin_ctx.plugin_state.pop("dawp._metrics_run", None)
+
+            # Merge handoff / inject_only summary before abort_main so audit trail
+            # is preserved in main messages (append: handoff already on shared list).
+            handoff = plugin_ctx.plugin_state.pop("dawp._handoff_message", None)
+            if run.merge_back == "inject_only":
+                if handoff:
+                    from aiecs.llm import LLMMessage
+
+                    messages.append(LLMMessage(role="user", content=handoff))
+                elif run_success:
+                    apply_inject_only(messages, workflow_id=run.workflow_id)
+
+            # D3: if abort_main=True and the run did not complete successfully, raise to
+            # signal the main loop to fail the entire task (§7, D3).
+            if run.abort_main and not run_success:
+                from aiecs.domain.agent.plugins.dawp.schema import DawpAbortMainError
+
+                logger.warning(
+                    "HybridAgent[drain=%s]: DAWP run %s for workflow=%r failed " "and abort_main=True; raising DawpAbortMainError (D3)",
+                    drain_mode,
+                    scope.run_id,
+                    run.workflow_id,
+                )
+                raise DawpAbortMainError(run.workflow_id)
+
+    async def _run_tool_loop_nested_streaming(
+        self,
+        messages: List[LLMMessage],
+        context: Dict[str, Any],
+        plugin_ctx: AgentPluginContext,
+        *,
+        scope: "LoopScope",
+        budget: "TaskIterationBudget",
+        step_iteration_cap: Optional[int],
+        all_tools: Optional[List[Any]] = None,
+        run_iteration_hooks: bool = False,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        Nested streaming tool loop for a single DAWP step (§6.4, D1-04).
+
+        All events are tagged with ``loop_scope.kind="dawp"`` via ``_with_loop_scope``.
+        The shared ``budget`` is consumed 1 per iteration; the ``step_iteration_cap``
+        adds a per-step upper bound on top of the shared pool (§4.4, D5).
+
+        ``run_iteration_hooks=False`` (default): ``ON_ITERATION_START`` and
+        ``ON_ITERATION_END`` are **not** fired; the DAWP sub-loop is transparent to
+        plugins (§6.5).
+
+        ``plugin_state["dawp.active_run_id"]`` is set to ``scope.run_id`` on entry and
+        cleared in the ``finally`` block regardless of how the loop exits.
+
+        Tool schemas are filtered via :func:`~dawp.tools_filter.resolve_tools_for_scope`
+        (D10 — ``dawp_start`` excluded inside nested runs).
+        """
+        from aiecs.domain.agent.plugins.dawp.loop_scope import _with_loop_scope
+        from aiecs.domain.agent.plugins.dawp.tools_filter import resolve_tools_for_scope
+
+        # Filter tool schemas for DAWP scope (§4.5, D10 — excludes dawp_start etc.)
+        base_schemas: List[Dict[str, Any]] = all_tools if all_tools is not None else self._tool_schemas
+        filtered_schemas: List[Dict[str, Any]] = resolve_tools_for_scope(base_schemas, scope)
+
+        # Effective cap: min(step_iteration_cap, budget.remaining); None → no extra cap
+        effective_cap: int = budget.allocate_for_step(step_iteration_cap)
+        nested_consumed = 0
+
+        state = ToolLoopRunState()
+        iteration = 0
+
+        plugin_ctx.plugin_state["dawp.active_run_id"] = scope.run_id
+        try:
+            while budget.remaining > 0 and nested_consumed < effective_cap:
+                if run_iteration_hooks and self._plugin_manager is not None:
+                    await self._plugin_manager.run_phase(
+                        PluginPhase.ON_ITERATION_START,
+                        ctx=plugin_ctx,
+                        iteration=iteration,
+                    )
+
+                # §8.1 (R3): DAWP must emit iteration_start to be homomorphic with main loop.
+                yield _with_loop_scope(
+                    {
+                        "type": "iteration_start",
+                        "iteration": iteration + 1,
+                        "max_iterations": effective_cap,
+                        "remaining": budget.remaining,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    },
+                    scope,
+                )
+
+                state.last_outcome = None
+                async for event in self._run_tool_loop_core_iteration_streaming(
+                    messages,
+                    context,
+                    iteration,
+                    state,
+                    tool_schemas_override=filtered_schemas,
+                ):
+                    yield _with_loop_scope(event, scope)
+
+                budget.consume(1)
+                nested_consumed += 1
+
+                if run_iteration_hooks and self._plugin_manager is not None:
+                    step = self._iteration_step_payload(
+                        state.last_outcome or ToolLoopIterationOutcome(kind="continue"),
+                        iteration,
+                        state,
+                    )
+                    await self._plugin_manager.run_phase(
+                        PluginPhase.ON_ITERATION_END,
+                        ctx=plugin_ctx,
+                        iteration=iteration,
+                        step=step,
+                    )
+
+                outcome = state.last_outcome
+                if outcome is None or outcome.kind == "continue":
+                    iteration += 1
+                    continue
+
+                if outcome.kind == "stop_match":
+                    return
+
+                if outcome.kind == "final" and outcome.result is not None:
+                    yield _with_loop_scope(self._streaming_result_event_from_inner(outcome.result), scope)
+                    return
+
+                iteration += 1
+
+        finally:
+            plugin_ctx.plugin_state.pop("dawp.active_run_id", None)
+
+        # Budget exhausted or step cap reached without natural termination (D3)
+        yield _with_loop_scope(
+            self._streaming_result_event_from_inner(self._tool_loop_max_iterations_result(state)),
+            scope,
+        )
 
     async def execute_task_streaming(self, task: Dict[str, Any], context: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
         """
@@ -971,8 +1410,15 @@ class HybridAgent(BaseAIAgent):
         context: Dict[str, Any],
         *,
         streaming: bool = False,
+        tool_schemas_override: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
-        """Build kwargs for ``generate_text`` / ``stream_text`` in the tool loop."""
+        """Build kwargs for ``generate_text`` / ``stream_text`` in the tool loop.
+
+        Args:
+            tool_schemas_override: When provided, use these schemas instead of
+                ``self._tool_schemas`` (e.g. for DAWP nested runs that filter
+                out excluded tools — §4.5, D10).
+        """
         kwargs: Dict[str, Any] = dict(
             messages=messages,
             model=self._config.llm_model,
@@ -981,8 +1427,9 @@ class HybridAgent(BaseAIAgent):
             context=context,
         )
         kwargs.update(self._config.get_llm_call_kwargs())
-        if self._tool_schemas:
-            kwargs["tools"] = [{"type": "function", "function": s} for s in self._tool_schemas]
+        schemas = tool_schemas_override if tool_schemas_override is not None else self._tool_schemas
+        if schemas:
+            kwargs["tools"] = [{"type": "function", "function": s} for s in schemas]
             kwargs["tool_choice"] = "auto"
             if streaming:
                 kwargs["return_chunks"] = True
@@ -1045,12 +1492,58 @@ class HybridAgent(BaseAIAgent):
             )
         )
 
+        # D13 (D2-04): import here so the check below can use it without a per-iteration import.
+        from aiecs.domain.agent.plugins.dawp.tools_filter import DAWP_EXCLUDED_TOOL_NAMES
+
         for i, tool_call in enumerate(tool_calls_to_process):
             tool_name = "unknown"
             tool_call_id = tool_call.get("id") or f"call_{i}"
             try:
                 func_name = tool_call["function"]["name"]
                 func_args = tool_call["function"]["arguments"]
+
+                # D13 (D2-04): dawp_start must be the sole tool_call in its iteration.
+                # Check on raw func_name BEFORE _parse_function_name so that legacy aliases
+                # (dawp_run, dawp_publish_workflow) are caught even when not in _tool_instances.
+                if func_name in DAWP_EXCLUDED_TOOL_NAMES and len(tool_calls_to_process) > 1:
+                    tool_name = func_name  # set for audit / events
+                    rejection: Dict[str, Any] = {
+                        "status": "rejected",
+                        "reason": (
+                            f"'{func_name}' must be the sole tool_call in this iteration; "
+                            f"found {len(tool_calls_to_process)} concurrent tool calls (D13). "
+                            "Call dawp_start alone in a separate turn after other tools complete."
+                        ),
+                    }
+                    state.tool_calls_count += 1
+                    state.steps.append(
+                        {
+                            "type": "action",
+                            "tool": tool_name,
+                            "operation": None,
+                            "parameters": {},
+                            "result": str(rejection),
+                            "iteration": iteration + 1,
+                        }
+                    )
+                    if event_callback is not None:
+                        await event_callback(
+                            {
+                                "type": "tool_result",
+                                "tool_name": tool_name,
+                                "result": rejection,
+                                "timestamp": datetime.utcnow().isoformat(),
+                            }
+                        )
+                    messages.append(
+                        LLMMessage(
+                            role="tool",
+                            content=json.dumps(rejection, ensure_ascii=False),
+                            tool_call_id=tool_call_id,
+                        )
+                    )
+                    continue  # skip _parse_function_name and _execute_tool for this entry
+
                 tool_name, operation = self._parse_function_name(func_name)
 
                 if isinstance(func_args, str):
@@ -1131,6 +1624,16 @@ class HybridAgent(BaseAIAgent):
                         images=tool_images,
                     )
                 )
+
+                # D12 (D2-03): suppress_from_llm=True → remove paired assistant+tool
+                # messages from LLM context before the next call.  Audit (state.steps)
+                # and streaming events were already recorded above — they are retained.
+                if isinstance(tool_result, dict) and tool_result.get("suppress_from_llm"):
+                    from aiecs.domain.agent.plugins.dawp.suppress import (
+                        apply_suppress_from_llm,
+                    )
+
+                    messages[:] = apply_suppress_from_llm(messages, tool_call_id)
 
             except Exception as e:
                 error_msg = f"Tool execution failed: {str(e)}"
@@ -1224,9 +1727,9 @@ class HybridAgent(BaseAIAgent):
         context: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
-        Shared LLM+tool iteration loop without plugin iteration hooks (§8.4, CR-2).
+        Shared LLM+tool iteration loop without plugin iteration hooks (§8.4, DAWP v2.1).
 
-        Custom Reasoning ``StepRunner`` uses this entry; ``_tool_loop_with_plugins``
+        DAWP ``StepRunner`` uses this entry; ``_tool_loop_with_plugins``
         uses :meth:`_run_tool_loop_with_iteration_hooks` instead.
         """
         return await self._run_tool_loop_with_iteration_hooks(messages, context, plugin_ctx=None)
@@ -1237,12 +1740,19 @@ class HybridAgent(BaseAIAgent):
         context: Dict[str, Any],
         iteration: int,
         state: ToolLoopRunState,
+        *,
+        tool_schemas_override: Optional[List[Dict[str, Any]]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """Single streaming tool-loop iteration; yields events then sets ``state.last_outcome``."""
+        """Single streaming tool-loop iteration; yields events then sets ``state.last_outcome``.
+
+        Args:
+            tool_schemas_override: Override the agent's default tool schemas for this
+                iteration (used by DAWP nested runner to filter excluded tools — §4.5, D10).
+        """
         from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
 
         self._require_function_calling_when_tools_configured()
-        kwargs = self._build_tool_loop_llm_kwargs(messages, context, streaming=True)
+        kwargs = self._build_tool_loop_llm_kwargs(messages, context, streaming=True, tool_schemas_override=tool_schemas_override)
         stream_gen = self.llm_client.stream_text(**kwargs)
 
         thought_tokens: List[str] = []
@@ -1337,7 +1847,7 @@ class HybridAgent(BaseAIAgent):
         Execute tool loop (BetaToolRunner-style).
         Append-only messages; native tool_use/tool_result; no iteration labels.
 
-        Delegates iteration to :meth:`_run_tool_loop_core` (§8.4, CR-2).
+        Delegates iteration to :meth:`_run_tool_loop_core` (§8.4, DAWP-1).
 
         Args:
             task: Task description

@@ -39,7 +39,8 @@ def derive_default_plugins(
     """
     Derive builtin plugin configs from legacy ``AgentConfiguration`` fields.
 
-    Returns memory, skill, tool, knowledge, collaboration, and custom_reasoning entries (§6.3.2).
+    Returns memory, skill, tool, temporal_memory, knowledge, collaboration, dawp, and the
+    deprecated custom_reasoning alias entries (§6.3.2).
     """
     return [
         _memory_plugin_config(config),
@@ -48,6 +49,7 @@ def derive_default_plugins(
         _temporal_memory_plugin_config(config),
         _knowledge_plugin_config(config, agent),
         _collaboration_plugin_config(agent),
+        _dawp_plugin_config(),
         _custom_reasoning_plugin_config(),
     ]
 
@@ -152,7 +154,19 @@ def _collaboration_plugin_config(agent: BaseAIAgent) -> PluginConfig:
     )
 
 
+def _dawp_plugin_config() -> PluginConfig:
+    """DAWP plugin — disabled by default (§9). Enable via AgentConfiguration.plugins."""
+    return PluginConfig(name="dawp", enabled=False, options={})
+
+
 def _custom_reasoning_plugin_config() -> PluginConfig:
+    """
+    Deprecated alias for ``dawp``.
+
+    .. deprecated::
+        Use ``PluginConfig(name="dawp", ...)`` instead. This alias will be removed in a future
+        release. Instantiating the plugin via this name emits a :class:`DeprecationWarning`.
+    """
     return PluginConfig(name="custom_reasoning", enabled=False, options={})
 
 
