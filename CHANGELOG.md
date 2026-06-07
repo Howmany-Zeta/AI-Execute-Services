@@ -17,7 +17,11 @@ See also `docs/changelog.rst` for historical release notes.
 - **Optional extra:** `pip install aiecs[temporal-graphiti]` (customer-side `graphiti-core`; not in core wheel per ADR-003)
 - **Docs / example:** [docs/developer/DOMAIN_TEMPORAL_MEMORY.md](docs/developer/DOMAIN_TEMPORAL_MEMORY.md), [examples/temporal_memory/](examples/temporal_memory/)
 
-## [2.0.0] — BREAKING
+## [2.0.0rc1] - 2026-06-07 (Pre-release)
+
+> **Release Candidate 1** for the upcoming **2.0.0** breaking release. This
+> pre-release build is intended for early adopters and integration testing; the
+> stable **2.0.0** final will follow after validation.
 
 ### Removed
 - Embedded knowledge graph implementation (use **private** `aiecs-kg` if licensed)

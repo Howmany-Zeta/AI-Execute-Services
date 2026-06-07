@@ -41,6 +41,57 @@ jobs:
     - name: Verify package
       run: |
         twine check dist/*
+
+    - name: Verify version matches release tag
+      if: github.event_name == 'release'
+      run: |
+        TAG_VERSION="${{ github.event.release.tag_name }}"
+        TAG_VERSION="${TAG_VERSION#v}"
+        PKG_VERSION=$(python - <<'PY'
+        import pathlib
+        import re
+        import zipfile
+
+        wheel = next(pathlib.Path("dist").glob("*.whl"))
+        with zipfile.ZipFile(wheel) as zf:
+            metadata_name = next(name for name in zf.namelist() if name.endswith(".dist-info/METADATA"))
+            metadata = zf.read(metadata_name).decode()
+        match = re.search(r"^Version: (.+)$", metadata, re.MULTILINE)
+        if not match:
+            raise SystemExit("Could not read package version from wheel METADATA")
+        print(match.group(1))
+        PY
+        )
+        echo "Release tag version: ${TAG_VERSION}"
+        echo "Built package version: ${PKG_VERSION}"
+        if [ "${TAG_VERSION}" != "${PKG_VERSION}" ]; then
+          echo "::error::Version mismatch: release tag v${TAG_VERSION} but built package is ${PKG_VERSION}. Fix the git tag or bump pyproject.toml before publishing."
+          exit 1
+        fi
+
+    - name: Check if version already exists on PyPI
+      run: |
+        PKG_VERSION=$(python - <<'PY'
+        import pathlib
+        import re
+        import zipfile
+
+        wheel = next(pathlib.Path("dist").glob("*.whl"))
+        with zipfile.ZipFile(wheel) as zf:
+            metadata_name = next(name for name in zf.namelist() if name.endswith(".dist-info/METADATA"))
+            metadata = zf.read(metadata_name).decode()
+        match = re.search(r"^Version: (.+)$", metadata, re.MULTILINE)
+        if not match:
+            raise SystemExit("Could not read package version from wheel METADATA")
+        print(match.group(1))
+        PY
+        )
+        echo "Checking PyPI for existing release: ${PKG_VERSION}"
+        if curl -fsS "https://pypi.org/pypi/aiecs/${PKG_VERSION}/json" > /dev/null; then
+          echo "::error::Version ${PKG_VERSION} already exists on PyPI. Bump the version before publishing."
+          exit 1
+        fi
+        echo "Version ${PKG_VERSION} is available for upload."
     
     - name: List package contents
       run: |
