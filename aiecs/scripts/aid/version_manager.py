@@ -11,20 +11,56 @@ Updates version numbers in:
 - aiecs/__init__.py (__version__)
 - aiecs/main.py (FastAPI app version and health check version)
 - pyproject.toml (project version)
+- CHANGELOG.md (release section from [Unreleased])
 
 Usage:
     aiecs-version --version 1.2.0
+    aiecs-version --version 2.0.0rc2
     aiecs-version --bump patch
-    aiecs-version --bump minor
-    aiecs-version --bump major
+    aiecs-version --bump rc
     aiecs-version --show
 """
+
+from __future__ import annotations
 
 import argparse
 import re
 import sys
+from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
+
+
+_VERSION_PATTERN = re.compile(
+    r"^(\d+)\.(\d+)\.(\d+)"
+    r"(?:"
+    r"(rc)(\d+)"
+    r"|(a)(\d+)"
+    r"|(b)(\d+)"
+    r"|\.?(dev)(\d+)"
+    r")?$"
+)
+
+
+@dataclass(frozen=True)
+class ParsedVersion:
+    major: int
+    minor: int
+    patch: int
+    prerelease_kind: Optional[str] = None
+    prerelease_num: Optional[int] = None
+
+    @property
+    def base(self) -> str:
+        return f"{self.major}.{self.minor}.{self.patch}"
+
+    def render(self) -> str:
+        if self.prerelease_kind is None or self.prerelease_num is None:
+            return self.base
+        if self.prerelease_kind == "dev":
+            return f"{self.base}.dev{self.prerelease_num}"
+        return f"{self.base}{self.prerelease_kind}{self.prerelease_num}"
 
 
 class VersionManager:
@@ -33,7 +69,6 @@ class VersionManager:
     def __init__(self, project_root: Optional[Path] = None):
         """Initialize the version manager with project root path"""
         if project_root is None:
-            # Find project root by looking for pyproject.toml
             current = Path(__file__).parent
             while current != current.parent:
                 if (current / "pyproject.toml").exists():
@@ -49,6 +84,7 @@ class VersionManager:
             "init": project_root / "aiecs" / "__init__.py",
             "main": project_root / "aiecs" / "main.py",
             "pyproject": project_root / "pyproject.toml",
+            "changelog": project_root / "CHANGELOG.md",
         }
 
     def get_current_version(self) -> str:
@@ -64,38 +100,55 @@ class VersionManager:
 
         return match.group(1)
 
-    def parse_version(self, version: str) -> Tuple[int, int, int]:
-        """Parse version string into major, minor, patch components"""
-        match = re.match(r"^(\d+)\.(\d+)\.(\d+)$", version)
+    def parse_version(self, version: str) -> ParsedVersion:
+        """Parse X.Y.Z or X.Y.ZrcN / X.Y.ZaN / X.Y.ZbN / X.Y.Z.devN."""
+        match = _VERSION_PATTERN.match(version.strip())
         if not match:
-            raise ValueError(f"Invalid version format: {version}. Expected format: X.Y.Z")
+            raise ValueError(
+                f"Invalid version format: {version}. "
+                "Expected X.Y.Z or X.Y.Z with optional rcN, aN, bN, or .devN suffix"
+            )
 
-        return int(match.group(1)), int(match.group(2)), int(match.group(3))
+        major, minor, patch = int(match.group(1)), int(match.group(2)), int(match.group(3))
+        if match.group(4) == "rc":
+            return ParsedVersion(major, minor, patch, "rc", int(match.group(5)))
+        if match.group(6) == "a":
+            return ParsedVersion(major, minor, patch, "a", int(match.group(7)))
+        if match.group(8) == "b":
+            return ParsedVersion(major, minor, patch, "b", int(match.group(9)))
+        if match.group(10) == "dev":
+            return ParsedVersion(major, minor, patch, "dev", int(match.group(11)))
+
+        return ParsedVersion(major, minor, patch)
+
+    def is_prerelease(self, version: str) -> bool:
+        return self.parse_version(version).prerelease_kind is not None
 
     def bump_version(self, current_version: str, bump_type: str) -> str:
-        """Bump version based on type (major, minor, patch)"""
-        major, minor, patch = self.parse_version(current_version)
+        """Bump version based on type (major, minor, patch, rc)."""
+        parsed = self.parse_version(current_version)
+
+        if bump_type == "rc":
+            if parsed.prerelease_kind == "rc" and parsed.prerelease_num is not None:
+                return ParsedVersion(parsed.major, parsed.minor, parsed.patch, "rc", parsed.prerelease_num + 1).render()
+            return ParsedVersion(parsed.major, parsed.minor, parsed.patch, "rc", 1).render()
 
         if bump_type == "major":
-            major += 1
-            minor = 0
-            patch = 0
+            parsed = ParsedVersion(parsed.major + 1, 0, 0)
         elif bump_type == "minor":
-            minor += 1
-            patch = 0
+            parsed = ParsedVersion(parsed.major, parsed.minor + 1, 0)
         elif bump_type == "patch":
-            patch += 1
+            parsed = ParsedVersion(parsed.major, parsed.minor, parsed.patch + 1)
         else:
-            raise ValueError(f"Invalid bump type: {bump_type}. Use 'major', 'minor', or 'patch'")
+            raise ValueError(f"Invalid bump type: {bump_type}. Use 'major', 'minor', 'patch', or 'rc'")
 
-        return f"{major}.{minor}.{patch}"
+        return parsed.render()
 
     def update_init_file(self, new_version: str) -> None:
         """Update version in aiecs/__init__.py"""
         init_file = self.files["init"]
         content = init_file.read_text(encoding="utf-8")
 
-        # Update __version__ line
         content = re.sub(
             r'(__version__\s*=\s*["\'])([^"\']+)(["\'])',
             rf"\g<1>{new_version}\g<3>",
@@ -110,10 +163,7 @@ class VersionManager:
         main_file = self.files["main"]
         content = main_file.read_text(encoding="utf-8")
 
-        # Update FastAPI app version
         content = re.sub(r'(version=")([^"]+)(")', rf"\g<1>{new_version}\g<3>", content)
-
-        # Update health check version
         content = re.sub(r'("version":\s*")([^"]+)(")', rf"\g<1>{new_version}\g<3>", content)
 
         main_file.write_text(content, encoding="utf-8")
@@ -151,18 +201,47 @@ class VersionManager:
         if "tool.poetry" in updated_sections:
             print(f"✓ Updated {pyproject_file.relative_to(self.project_root)}: poetry version")
 
-    def update_version(self, new_version: str) -> None:
-        """Update version in all files"""
-        # Validate version format
+    def update_changelog_file(self, new_version: str, release_date: Optional[date] = None) -> None:
+        """Promote [Unreleased] notes into a dated release section for new_version."""
+        changelog_file = self.files["changelog"]
+        if not changelog_file.exists():
+            raise FileNotFoundError(f"Could not find {changelog_file}")
+
+        content = changelog_file.read_text(encoding="utf-8")
+        if f"## [{new_version}]" in content:
+            raise ValueError(f"CHANGELOG.md already contains section for [{new_version}]")
+
+        release_date = release_date or date.today()
+        suffix = " (Pre-release)" if self.is_prerelease(new_version) else ""
+        header = f"## [{new_version}] - {release_date.isoformat()}{suffix}"
+
+        pattern = r"(## \[Unreleased\]\s*\n)(.*?)(\n## \[)"
+        match = re.search(pattern, content, re.DOTALL)
+        if not match:
+            raise ValueError("Could not find ## [Unreleased] section in CHANGELOG.md")
+
+        unreleased_body = match.group(2).strip()
+        if unreleased_body:
+            replacement = f"{match.group(1)}\n{header}\n\n{unreleased_body}\n\n{match.group(3)}"
+        else:
+            replacement = f"{match.group(1)}\n{header}\n\n{match.group(3)}"
+
+        updated = content[: match.start()] + replacement + content[match.end() :]
+        changelog_file.write_text(updated, encoding="utf-8")
+        print(f"✓ Updated {changelog_file.relative_to(self.project_root)}: added [{new_version}] release section")
+
+    def update_version(self, new_version: str, *, update_changelog: bool = True, release_date: Optional[date] = None) -> None:
+        """Update version in all files and optionally promote CHANGELOG [Unreleased]."""
         self.parse_version(new_version)
 
         print(f"Updating version to {new_version}...")
         print()
 
-        # Update all files
         self.update_init_file(new_version)
         self.update_main_file(new_version)
         self.update_pyproject_file(new_version)
+        if update_changelog:
+            self.update_changelog_file(new_version, release_date=release_date)
 
         print()
         print(f"✓ Successfully updated version to {new_version} in all files!")
@@ -179,8 +258,6 @@ class VersionManager:
 
 def main():
     """Main entry point for the version manager"""
-    # Always use 'aiecs-version' as program name for consistent help text
-    # regardless of how the script is invoked (module or entry point)
     parser = argparse.ArgumentParser(
         prog="aiecs-version",
         description="AIECS Version Manager - Update version numbers across project files",
@@ -188,39 +265,52 @@ def main():
         epilog="""
 Examples:
   aiecs-version --version 1.2.0          # Set specific version
+  aiecs-version --version 2.0.0rc2       # Set pre-release version
   aiecs-version --bump patch             # Bump patch version (1.1.0 -> 1.1.1)
+  aiecs-version --bump rc                # Bump rc (2.0.0rc1 -> 2.0.0rc2; 2.0.0 -> 2.0.0rc1)
   aiecs-version --bump minor             # Bump minor version (1.1.0 -> 1.2.0)
   aiecs-version --bump major             # Bump major version (1.1.0 -> 2.0.0)
   aiecs-version --show                   # Show current version
         """,
     )
 
-    # Create mutually exclusive group for version options
     version_group = parser.add_mutually_exclusive_group(required=True)
-    version_group.add_argument("--version", "-v", type=str, help="Set specific version (e.g., 1.2.0)")
+    version_group.add_argument("--version", "-v", type=str, help="Set specific version (e.g., 1.2.0 or 2.0.0rc2)")
     version_group.add_argument(
         "--bump",
         "-b",
-        choices=["major", "minor", "patch"],
-        help="Bump version: major (X.0.0), minor (X.Y.0), or patch (X.Y.Z)",
+        choices=["major", "minor", "patch", "rc"],
+        help="Bump version: major, minor, patch, or rc (pre-release)",
     )
     version_group.add_argument("--show", "-s", action="store_true", help="Show current version")
+
+    parser.add_argument(
+        "--no-changelog",
+        action="store_true",
+        help="Skip updating CHANGELOG.md",
+    )
+    parser.add_argument(
+        "--release-date",
+        type=str,
+        help="Release date for CHANGELOG section (YYYY-MM-DD; default: today)",
+    )
 
     args = parser.parse_args()
 
     try:
         manager = VersionManager()
+        release_date = date.fromisoformat(args.release_date) if args.release_date else None
 
         if args.show:
             manager.show_version()
         elif args.version:
-            manager.update_version(args.version)
+            manager.update_version(args.version, update_changelog=not args.no_changelog, release_date=release_date)
         elif args.bump:
             current_version = manager.get_current_version()
             new_version = manager.bump_version(current_version, args.bump)
             print(f"Bumping {args.bump} version: {current_version} -> {new_version}")
             print()
-            manager.update_version(new_version)
+            manager.update_version(new_version, update_changelog=not args.no_changelog, release_date=release_date)
 
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
