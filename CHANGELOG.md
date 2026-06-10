@@ -9,6 +9,13 @@ See also `docs/changelog.rst` for historical release notes.
 
 ## [Unreleased]
 
+## [2.0.0rc2] - 2026-06-10 (Pre-release)
+
+### Fixed
+
+- **temporal-graphiti:** Relax `openai` pin for `graphiti-core` compatibility; Vertex-first LLM/embedder for L1 Graphiti
+- Add `temporal-graphiti-neo4j` optional extra for Neo4j-only installs
+
 ### Added
 
 - **L1 temporal memory (Phase 0–2):** `TemporalMemoryStore` Port, `TemporalMemoryEngine`, `create_temporal_memory_store()`, `NoOpTemporalMemoryStore`, optional `GraphitiTemporalMemoryStore` (`TM_BACKEND=graphiti`)
