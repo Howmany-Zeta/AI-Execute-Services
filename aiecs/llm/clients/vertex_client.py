@@ -759,6 +759,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             # each model can use its own API-side defaults when they are not set.
             _top_p = kwargs.pop("top_p", None)
             _top_k = kwargs.pop("top_k", None)
+            _response_mime_type = kwargs.pop("response_mime_type", None)
             _gen_config_params: Dict[str, Any] = {
                 "temperature": temperature,
                 "max_output_tokens": max_tokens or 8192,
@@ -768,6 +769,8 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 "safety_settings": safety_settings,
                 "thinking_config": thinking_config,
             }
+            if _response_mime_type is not None:
+                _gen_config_params["response_mime_type"] = _response_mime_type
             if _top_p is not None:
                 _gen_config_params["top_p"] = _top_p
             if _top_k is not None:

@@ -290,10 +290,13 @@ class GoogleAIClient(BaseLLMClient):
             }
             top_p_val = kwargs.pop("top_p", None)
             top_k_val = kwargs.pop("top_k", None)
+            response_mime_type = kwargs.pop("response_mime_type", None)
             if top_p_val is not None:
                 generate_config_params["top_p"] = top_p_val
             if top_k_val is not None:
                 generate_config_params["top_k"] = top_k_val
+            if response_mime_type is not None:
+                generate_config_params["response_mime_type"] = response_mime_type
             config = types.GenerateContentConfig(**generate_config_params)
 
             # Use async client for async operations

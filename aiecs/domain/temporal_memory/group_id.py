@@ -16,12 +16,18 @@ import re
 from aiecs.config.config import Settings, get_settings
 
 _GRAPHITI_SAFE_SEGMENT = re.compile(r"[^A-Za-z0-9_-]+")
+_GRAPHITI_SAFE_GROUP_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 def _sanitize_segment(value: str) -> str:
     """Map arbitrary ids to Graphiti-safe segments."""
     cleaned = _GRAPHITI_SAFE_SEGMENT.sub("_", (value or "").strip())
     return cleaned or "default"
+
+
+def is_graphiti_safe_group_id(group_id: str) -> bool:
+    """Return True when group_id satisfies Graphiti validate_group_id rules."""
+    return bool(_GRAPHITI_SAFE_GROUP_ID.match(group_id or ""))
 
 
 def build_group_ids(
@@ -34,19 +40,19 @@ def build_group_ids(
     """
     Build group_ids for ingest and search.
 
-    Primary: ``{prefix}:{agent_id}:{session_id}``
-    Optional tenant scope: ``{prefix}:tenant:{tenant_id}`` when tenant_id is set.
+    Primary: ``{prefix}_{agent_id}_{session_id}``
+    Optional tenant scope: ``{prefix}_tenant_{tenant_id}`` when tenant_id is set.
     """
     settings = settings or get_settings()
     prefix = _sanitize_segment(settings.tm_group_id_prefix or "aiecs")
     agent = _sanitize_segment(agent_id)
     session = _sanitize_segment(session_id)
 
-    group_ids = [f"{prefix}:{agent}:{session}"]
+    group_ids = [f"{prefix}_{agent}_{session}"]
 
     if tenant_id:
         tenant = _sanitize_segment(tenant_id)
-        group_ids.append(f"{prefix}:tenant:{tenant}")
+        group_ids.append(f"{prefix}_tenant_{tenant}")
 
     return group_ids
 

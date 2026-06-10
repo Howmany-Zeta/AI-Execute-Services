@@ -28,27 +28,27 @@ class _TenantFactStore:
     def __init__(self) -> None:
         self.search_group_ids: list[str] = []
         self._facts: dict[str, list[TemporalFact]] = {
-            "aiecs:agent-1:sess": [
+            "aiecs_agent-1_sess": [
                 TemporalFact(
                     fact_id="sess-fact",
                     text="session scoped",
-                    group_id="aiecs:agent-1:sess",
+                    group_id="aiecs_agent-1_sess",
                     valid_at=datetime.now(timezone.utc),
                 )
             ],
-            "aiecs:tenant:tenant-a": [
+            "aiecs_tenant_tenant-a": [
                 TemporalFact(
                     fact_id="tenant-a-fact",
                     text="tenant A secret",
-                    group_id="aiecs:tenant:tenant-a",
+                    group_id="aiecs_tenant_tenant-a",
                     valid_at=datetime.now(timezone.utc),
                 )
             ],
-            "aiecs:tenant:tenant-b": [
+            "aiecs_tenant_tenant-b": [
                 TemporalFact(
                     fact_id="tenant-b-fact",
                     text="tenant B secret",
-                    group_id="aiecs:tenant:tenant-b",
+                    group_id="aiecs_tenant_tenant-b",
                     valid_at=datetime.now(timezone.utc),
                 )
             ],
@@ -119,8 +119,8 @@ async def test_tenant_b_search_does_not_see_tenant_a_facts() -> None:
 
     ids_a = engine.resolve_group_ids(ctx_a.agent, ctx_a)
     ids_b = engine.resolve_group_ids(ctx_b.agent, ctx_b)
-    assert "aiecs:tenant:tenant-a" in ids_a
-    assert "aiecs:tenant:tenant-b" in ids_b
+    assert "aiecs_tenant_tenant-a" in ids_a
+    assert "aiecs_tenant_tenant-b" in ids_b
 
     facts_a = await engine.search_for_task(ctx_a.task, ids_a)
     facts_b = await engine.search_for_task(ctx_b.task, ids_b)
@@ -137,7 +137,7 @@ def test_select_search_primary_group_only_omits_tenant_scope() -> None:
     settings = Settings(TM_SEARCH_PRIMARY_GROUP_ONLY=True)
     ids = build_group_ids("agent-1", "sess", "tenant-a", settings=settings)
     search_ids = select_search_group_ids(ids, settings=settings)
-    assert search_ids == ["aiecs:agent-1:sess"]
+    assert search_ids == ["aiecs_agent-1_sess"]
 
 
 def test_select_ingest_all_group_ids_duplicates_episode_targets() -> None:
@@ -165,6 +165,6 @@ async def test_ingest_all_group_ids_writes_each_scope() -> None:
     await engine.ingest_from_task(ctx, {"final_response": "ok"})
 
     assert store.ingest_group_ids == [
-        "aiecs:agent-1:sess",
-        "aiecs:tenant:tenant-a",
+        "aiecs_agent-1_sess",
+        "aiecs_tenant_tenant-a",
     ]

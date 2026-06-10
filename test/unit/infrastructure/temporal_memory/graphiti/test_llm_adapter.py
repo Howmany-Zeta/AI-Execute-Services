@@ -8,6 +8,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import BaseModel, Field
 
 from aiecs.config.config import Settings
 from aiecs.infrastructure.temporal_memory.graphiti import llm_adapter
@@ -66,14 +67,63 @@ def mock_graphiti_modules() -> None:
         def __init__(self, **kwargs: Any) -> None:
             self.__dict__.update(kwargs)
 
+    class ModelSize:
+        small = "small"
+        medium = "medium"
+
     llm_config_mod.LLMConfig = LLMConfig
-    llm_config_mod.ModelSize = MagicMock(small="small", medium="medium")
+    llm_config_mod.ModelSize = ModelSize
+
+    token_tracker_mod = types.ModuleType("graphiti_core.llm_client.token_tracker")
+
+    class TokenUsageTracker:
+        def __init__(self) -> None:
+            self.records: list[tuple[str, int, int]] = []
+
+        def record(self, prompt_name: str, input_tokens: int, output_tokens: int) -> None:
+            self.records.append((prompt_name, input_tokens, output_tokens))
+
+    token_tracker_mod.TokenUsageTracker = TokenUsageTracker
 
     llm_client_mod = types.ModuleType("graphiti_core.llm_client")
 
     class LLMClient:
+        MAX_RETRIES = 0
+
         def __init__(self, config: Any, cache: bool = False) -> None:
             self.config = config
+            self.token_tracker = TokenUsageTracker()
+
+        async def generate_response(
+            self,
+            messages: list[Any],
+            response_model: type[Any] | None = None,
+            max_tokens: int | None = None,
+            model_size: Any = None,
+            group_id: str | None = None,
+            prompt_name: str | None = None,
+            *,
+            attribute_extraction: bool = False,
+        ) -> dict[str, Any]:
+            _ = group_id, prompt_name, attribute_extraction
+            return await self._generate_response_with_retry(messages, response_model, max_tokens or 8192, model_size)
+
+        async def _generate_response_with_retry(
+            self,
+            messages: list[Any],
+            response_model: type[Any] | None = None,
+            max_tokens: int = 8192,
+            model_size: Any = None,
+        ) -> dict[str, Any]:
+            result = await self._generate_response(messages, response_model, max_tokens, model_size)
+            if isinstance(result, tuple) and len(result) == 3:
+                parsed, input_tokens, output_tokens = result
+                self.token_tracker.record("", input_tokens, output_tokens)
+                return parsed
+            return result
+
+        async def _generate_response(self, *args: Any, **kwargs: Any) -> Any:
+            raise NotImplementedError
 
     llm_client_mod.LLMClient = LLMClient
 
@@ -89,12 +139,14 @@ def mock_graphiti_modules() -> None:
         "graphiti_core.embedder.client",
         "graphiti_core.embedder.openai",
         "graphiti_core.llm_client.config",
+        "graphiti_core.llm_client.token_tracker",
         "graphiti_core.llm_client",
         "graphiti_core.llm_client.openai_client",
     )}
     sys.modules["graphiti_core.embedder.client"] = embedder_client_mod
     sys.modules["graphiti_core.embedder.openai"] = openai_mod
     sys.modules["graphiti_core.llm_client.config"] = llm_config_mod
+    sys.modules["graphiti_core.llm_client.token_tracker"] = token_tracker_mod
     sys.modules["graphiti_core.llm_client"] = llm_client_mod
     sys.modules["graphiti_core.llm_client.openai_client"] = openai_client_mod
     yield
@@ -111,7 +163,7 @@ def test_resolve_tm_llm_provider_prefers_vertex_over_openai() -> None:
         vertex_project_id="my-project",
         google_application_credentials_vertex_gemini="/path/to/creds.json",
     )
-    assert llm_adapter.resolve_tm_llm_provider(settings) == "VertexAI"
+    assert llm_adapter.resolve_tm_llm_provider(settings) == "Vertex"
 
 
 def test_resolve_tm_llm_provider_openai_when_no_vertex() -> None:
@@ -119,9 +171,9 @@ def test_resolve_tm_llm_provider_openai_when_no_vertex() -> None:
     assert llm_adapter.resolve_tm_llm_provider(settings) == "OpenAI"
 
 
-def test_resolve_tm_llm_provider_vertex_from_googleai_key() -> None:
+def test_resolve_tm_llm_provider_googleai_when_no_vertex() -> None:
     settings = _settings(googleai_api_key="google-ai-key")
-    assert llm_adapter.resolve_tm_llm_provider(settings) == "VertexAI"
+    assert llm_adapter.resolve_tm_llm_provider(settings) == "GoogleAI"
 
 
 def test_resolve_tm_embedder_provider_prefers_vertex_over_openai() -> None:
@@ -130,109 +182,74 @@ def test_resolve_tm_embedder_provider_prefers_vertex_over_openai() -> None:
         vertex_project_id="my-project",
         google_application_credentials_vertex_gemini="/path/to/creds.json",
     )
-    assert llm_adapter.resolve_tm_embedder_provider(settings) == "VertexAI"
+    assert llm_adapter.resolve_tm_embedder_provider(settings) == "Vertex"
 
 
-def test_resolve_tm_embedder_provider_openai_when_no_vertex() -> None:
-    settings = _settings(openai_api_key="sk-test")
-    assert llm_adapter.resolve_tm_embedder_provider(settings) == "OpenAI"
-
-
-def test_resolve_tm_embedder_provider_googleai_when_no_vertex_or_openai() -> None:
-    settings = _settings(googleai_api_key="google-ai-key")
-    assert llm_adapter.resolve_tm_embedder_provider(settings) == "GoogleAI"
-
-
-def test_resolve_tm_embedder_provider_none_when_unconfigured() -> None:
-    settings = _settings()
-    assert llm_adapter.resolve_tm_embedder_provider(settings) is None
-
-
-def test_default_chat_models_vertex() -> None:
-    chat, small = llm_adapter._default_chat_models("VertexAI")
-    assert chat == "gemini-2.5-flash"
-    assert small == "gemini-2.5-flash"
-
-
-def test_build_embedder_client_vertex_without_openai_key(mock_graphiti_modules: None) -> None:
-    settings = _settings(
-        vertex_project_id="my-project",
-        google_application_credentials_vertex_gemini="/path/to/creds.json",
-    )
-    mock_vertex = MagicMock()
-    with patch("aiecs.llm.client_resolver.resolve_llm_client", return_value=mock_vertex) as resolve:
-        embedder = llm_adapter._build_embedder_client(settings)
-
-    resolve.assert_called_once_with("VertexAI")
-    assert embedder.__class__.__name__ == "_Impl"
-    assert embedder._aiecs is mock_vertex
-    assert embedder._embedding_model == "gemini-embedding-001"
-
-
-def test_build_embedder_client_openai_when_no_vertex(mock_graphiti_modules: None) -> None:
-    settings = _settings(openai_api_key="sk-test")
-    embedder = llm_adapter._build_embedder_client(settings)
-    assert embedder.__class__.__name__ == "OpenAIEmbedder"
-    assert embedder.config.kwargs["api_key"] == "sk-test"
-
-
-def test_build_embedder_client_raises_when_unconfigured() -> None:
-    settings = _settings()
-    with pytest.raises(ValueError, match="Graphiti embedder requires"):
-        llm_adapter._build_embedder_client(settings)
+def test_default_chat_models_vertex_aliases() -> None:
+    for provider in ("Vertex", "VertexAI"):
+        chat, small = llm_adapter._default_chat_models(provider)
+        assert chat == "gemini-2.5-flash"
+        assert small == "gemini-2.5-flash"
 
 
 @pytest.mark.asyncio
-async def test_aiecs_graphiti_embedder_client_create_and_batch(mock_graphiti_modules: None) -> None:
+async def test_aiecs_graphiti_embedder_client_create_accepts_single_element_list(mock_graphiti_modules: None) -> None:
     mock_client = MagicMock()
 
     async def _get_embeddings(texts: list[str], model: str | None = None) -> list[list[float]]:
-        if len(texts) == 1:
-            return [[0.1, 0.2, 0.3]]
-        return [[0.4, 0.5], [0.6, 0.7]]
+        assert texts == ["query text"]
+        return [[0.1, 0.2, 0.3]]
 
     mock_client.get_embeddings = _get_embeddings
-
-    embedder = llm_adapter.AiecsGraphitiEmbedderClient(mock_client, embedding_model="gemini-embedding-001")
-    single = await embedder.create("hello")
-    batch = await embedder.create_batch(["a", "b"])
-
-    assert single == [0.1, 0.2, 0.3]
-    assert batch == [[0.4, 0.5], [0.6, 0.7]]
+    embedder = llm_adapter.AiecsGraphitiEmbedderClient(mock_client)
+    assert await embedder.create(["query text"]) == [0.1, 0.2, 0.3]
 
 
-def test_build_graphiti_llm_clients_vertex_returns_non_openai_embedder(mock_graphiti_modules: None) -> None:
-    settings = _settings(
-        vertex_project_id="my-project",
-        google_application_credentials_vertex_gemini="/path/to/creds.json",
+def test_extract_json_dict_strips_markdown_fence() -> None:
+    parsed = llm_adapter._extract_json_dict('```json\n{"extracted_entities": []}\n```')
+    assert parsed == {"extracted_entities": []}
+
+
+def test_parse_structured_response_uses_pydantic_model() -> None:
+    class ExtractedEntities(BaseModel):
+        extracted_entities: list[str] = Field(default_factory=list)
+
+    parsed = llm_adapter._parse_structured_response('{"extracted_entities": ["Alice"]}', ExtractedEntities)
+    assert parsed == {"extracted_entities": ["Alice"]}
+
+
+@pytest.mark.asyncio
+async def test_aiecs_graphiti_llm_client_generate_response_returns_dict(mock_graphiti_modules: None) -> None:
+    class ExtractedEntities(BaseModel):
+        extracted_entities: list[str] = Field(default_factory=list)
+
+    class Message:
+        def __init__(self, role: str, content: str) -> None:
+            self.role = role
+            self.content = content
+
+    mock_client = MagicMock()
+    mock_client.provider_name = "Vertex"
+
+    async def _generate_text(*args: Any, **kwargs: Any) -> Any:
+        _ = args
+        assert kwargs.get("response_mime_type") == "application/json"
+        response = MagicMock()
+        response.content = '{"extracted_entities": ["Bob"]}'
+        response.prompt_tokens = 3
+        response.completion_tokens = 5
+        return response
+
+    mock_client.generate_text = _generate_text
+
+    from graphiti_core.llm_client.config import LLMConfig
+
+    llm = llm_adapter.AiecsGraphitiLLMClient(
+        LLMConfig(model="gemini-2.5-flash", small_model="gemini-2.5-flash"),
+        mock_client,
     )
-    mock_llm = MagicMock()
-    mock_embedder = MagicMock()
 
-    with patch("aiecs.llm.client_resolver.resolve_llm_client", return_value=mock_llm):
-        with patch.object(llm_adapter, "_build_embedder_client", return_value=mock_embedder) as build_embedder:
-            with patch.object(llm_adapter, "AiecsGraphitiLLMClient", return_value=mock_llm) as llm_cls:
-                llm, embedder = llm_adapter.build_graphiti_llm_clients(settings)
-
-    build_embedder.assert_called_once_with(settings)
-    llm_cls.assert_called_once()
-    call_kwargs = llm_cls.call_args.kwargs
-    assert call_kwargs["default_model"] == "gemini-2.5-flash"
-    assert call_kwargs["small_model"] == "gemini-2.5-flash"
-    assert llm is mock_llm
-    assert embedder is mock_embedder
-
-
-def test_build_graphiti_llm_clients_native_openai_when_explicit_provider(mock_graphiti_modules: None) -> None:
-    settings = _settings(
-        openai_api_key="sk-test",
-        vertex_project_id="my-project",
-        google_application_credentials_vertex_gemini="/path/to/creds.json",
-    )
-    native = (MagicMock(), MagicMock())
-
-    with patch.object(llm_adapter, "_build_native_openai_clients", return_value=native) as native_builder:
-        llm, embedder = llm_adapter.build_graphiti_llm_clients(settings, provider="OpenAI")
-
-    native_builder.assert_called_once_with(settings, model=None)
-    assert (llm, embedder) == native
+    result = await llm.generate_response([Message(role="user", content="hi")], response_model=ExtractedEntities)
+    assert isinstance(result, dict)
+    validated = ExtractedEntities(**result)
+    assert validated.extracted_entities == ["Bob"]

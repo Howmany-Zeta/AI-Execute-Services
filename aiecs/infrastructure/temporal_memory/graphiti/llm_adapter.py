@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Iterable
 from typing import Any, cast
 
@@ -21,13 +22,16 @@ _DEFAULT_OPENAI_SMALL_MODEL = "gpt-4.1-nano"
 _DEFAULT_VERTEX_CHAT_MODEL = "gemini-2.5-flash"
 _DEFAULT_VERTEX_SMALL_MODEL = "gemini-2.5-flash"
 _DEFAULT_VERTEX_EMBEDDING_MODEL = "gemini-embedding-001"
+_JSON_FENCE_PATTERN = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?```\s*$", re.DOTALL | re.IGNORECASE)
 
 
 def resolve_tm_llm_provider(settings: Settings | None = None) -> str:
     """Pick an aiecs LLM provider name from configured credentials (Vertex-first)."""
     settings = settings or get_settings()
-    if settings.has_vertex_gcp_credentials_configured() or (settings.googleai_api_key or "").strip():
-        return "VertexAI"
+    if settings.has_vertex_gcp_credentials_configured():
+        return "Vertex"
+    if (settings.googleai_api_key or "").strip():
+        return "GoogleAI"
     if (settings.openai_api_key or "").strip():
         return "OpenAI"
     if (settings.xai_api_key or settings.grok_api_key or "").strip():
@@ -41,7 +45,7 @@ def resolve_tm_embedder_provider(settings: Settings | None = None) -> str | None
     """Pick an embedder provider from configured credentials (Vertex-first)."""
     settings = settings or get_settings()
     if _has_vertex_embedder_config(settings):
-        return "VertexAI"
+        return "Vertex"
     if (settings.openai_api_key or "").strip():
         return "OpenAI"
     if (settings.googleai_api_key or "").strip():
@@ -55,9 +59,83 @@ def _has_vertex_embedder_config(settings: Settings) -> bool:
 
 
 def _default_chat_models(provider: str) -> tuple[str, str]:
-    if provider == "VertexAI":
+    if provider in ("VertexAI", "Vertex"):
         return _DEFAULT_VERTEX_CHAT_MODEL, _DEFAULT_VERTEX_SMALL_MODEL
     return _DEFAULT_OPENAI_CHAT_MODEL, _DEFAULT_OPENAI_SMALL_MODEL
+
+
+def _strip_json_fences(content: str) -> str:
+    text = content.strip()
+    match = _JSON_FENCE_PATTERN.match(text)
+    if match:
+        return match.group(1).strip()
+    return text
+
+
+def _extract_json_dict(content: str) -> dict[str, Any]:
+    """Parse JSON object from model text, tolerating markdown fences and prose wrappers."""
+    text = _strip_json_fences(content)
+    if not text:
+        return {}
+
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+        return {"value": parsed}
+    except json.JSONDecodeError:
+        pass
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        try:
+            parsed = json.loads(text[start : end + 1])
+            if isinstance(parsed, dict):
+                return parsed
+            return {"value": parsed}
+        except json.JSONDecodeError:
+            pass
+
+    return {"content": content}
+
+
+def _parse_structured_response(content: str, response_model: type[Any] | None) -> dict[str, Any]:
+    text = _strip_json_fences(content)
+    if response_model is not None and text:
+        model_validate_json = getattr(response_model, "model_validate_json", None)
+        if callable(model_validate_json):
+            try:
+                validated = model_validate_json(text)
+                model_dump = getattr(validated, "model_dump", None)
+                if callable(model_dump):
+                    dumped = model_dump()
+                    if isinstance(dumped, dict):
+                        return dumped
+            except Exception:
+                logger.debug("Pydantic model_validate_json failed; falling back to JSON extraction", exc_info=True)
+    return _extract_json_dict(content)
+
+
+def _structured_output_kwargs(aiecs_client: Any) -> dict[str, Any]:
+    provider = (getattr(aiecs_client, "provider_name", None) or "").strip()
+    if provider in ("Vertex", "GoogleAI"):
+        return {"response_mime_type": "application/json"}
+    if provider in ("OpenAI", "OpenRouter", "xAI", "VertexMaaS"):
+        return {"response_format": {"type": "json_object"}}
+    return {}
+
+
+def _embedder_text_from_input(input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]]) -> str:
+    if isinstance(input_data, str):
+        return input_data
+    if isinstance(input_data, list):
+        if not input_data:
+            return ""
+        first = input_data[0]
+        if isinstance(first, str):
+            return first
+    raise TypeError(f"Unsupported embedder input type: {type(input_data).__name__}")
 
 
 def build_graphiti_llm_clients(
@@ -128,10 +206,10 @@ def _build_aiecs_wrapped_clients(
 
 def _build_embedder_client(settings: Settings) -> Any:
     provider = resolve_tm_embedder_provider(settings)
-    if provider == "VertexAI":
+    if provider == "Vertex":
         from aiecs.llm.client_resolver import resolve_llm_client
 
-        aiecs_client = resolve_llm_client("VertexAI")
+        aiecs_client = resolve_llm_client("Vertex")
         return AiecsGraphitiEmbedderClient(aiecs_client, embedding_model=_DEFAULT_VERTEX_EMBEDDING_MODEL)
     if provider == "OpenAI":
         from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
@@ -164,9 +242,8 @@ class AiecsGraphitiEmbedderClient:
                 self,
                 input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]],
             ) -> list[float]:
-                if not isinstance(input_data, str):
-                    raise TypeError(f"AiecsGraphitiEmbedderClient.create expects str, got {type(input_data).__name__}")
-                vectors = await self._aiecs.get_embeddings([input_data], model=self._embedding_model)
+                text = _embedder_text_from_input(input_data)
+                vectors = await self._aiecs.get_embeddings([text], model=self._embedding_model)
                 if not vectors:
                     raise ValueError("No embeddings returned from aiecs embedder client")
                 return cast(list[float], vectors[0])
@@ -216,7 +293,26 @@ class AiecsGraphitiLLMClient:
 
                 if model_size == ModelSize.small:
                     return self.small_model or self._small_model or _DEFAULT_OPENAI_SMALL_MODEL
-                return self.model or self._default_model
+                return getattr(self, "model", None) or self.config.model or self._default_model
+
+            async def _generate_response_with_retry(
+                self,
+                messages: list[Any],
+                response_model: type[Any] | None = None,
+                max_tokens: int = 8192,
+                model_size: Any = None,
+            ) -> dict[str, Any]:
+                """Unwrap token tuple so Graphiti callers receive a plain dict."""
+                result = await self._generate_response(messages, response_model, max_tokens, model_size)
+                if isinstance(result, tuple) and len(result) == 3:
+                    parsed, input_tokens, output_tokens = result
+                    self.token_tracker.record("", input_tokens, output_tokens)
+                    if isinstance(parsed, dict):
+                        return parsed
+                    return {"value": parsed}
+                if isinstance(result, dict):
+                    return result
+                return {"value": result}
 
             async def _generate_response(
                 self,
@@ -232,20 +328,24 @@ class AiecsGraphitiLLMClient:
 
                 aiecs_messages = [LLMMessage(role=m.role, content=m.content or "") for m in messages]
                 model = self._model_for_size(model_size)
+                llm_kwargs: dict[str, Any] = {}
+                if response_model is not None:
+                    llm_kwargs.update(_structured_output_kwargs(self._aiecs))
+                    llm_kwargs.setdefault("temperature", 0.0)
+
                 response = await self._aiecs.generate_text(
                     aiecs_messages,
                     model=model,
                     max_tokens=max_tokens,
-                    temperature=self.temperature,
+                    temperature=self.temperature if response_model is None else llm_kwargs.pop("temperature", 0.0),
+                    **llm_kwargs,
                 )
                 content = (response.content or "").strip()
                 input_tokens = response.prompt_tokens or 0
                 output_tokens = response.completion_tokens or 0
 
                 if response_model is not None:
-                    parsed = json.loads(content) if content else {}
-                    if not isinstance(parsed, dict):
-                        parsed = {"value": parsed}
+                    parsed = _parse_structured_response(content, response_model)
                     return parsed, input_tokens, output_tokens
 
                 try:

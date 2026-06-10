@@ -110,7 +110,7 @@ async def test_ingest_from_task_calls_store() -> None:
     req = store.ingest_calls[0]
     assert "user: What is the weather?" in req.body
     assert "assistant: It is sunny." in req.body
-    assert req.group_id == "aiecs:agent-99:sess-1"
+    assert req.group_id == "aiecs_agent-99_sess-1"
 
 
 @pytest.mark.asyncio
@@ -130,11 +130,11 @@ async def test_search_for_task_delegates_to_store() -> None:
     engine = TemporalMemoryEngine(store, settings=Settings(TM_SEARCH_LIMIT=5))
     facts = await engine.search_for_task(
         {"description": "weather today"},
-        ["aiecs:agent-99:sess-1"],
+        ["aiecs_agent-99_sess-1"],
     )
 
     assert len(facts) == 1
-    assert store.search_calls == [("weather today", ["aiecs:agent-99:sess-1"])]
+    assert store.search_calls == [("weather today", ["aiecs_agent-99_sess-1"])]
 
 
 @pytest.mark.asyncio
@@ -142,10 +142,10 @@ async def test_search_primary_group_only_passes_single_group_id() -> None:
     store = _RecordingStore()
     settings = Settings(TM_SEARCH_PRIMARY_GROUP_ONLY=True)
     engine = TemporalMemoryEngine(store, settings=settings)
-    all_ids = ["aiecs:agent-99:sess-1", "aiecs:tenant:tenant-a"]
+    all_ids = ["aiecs_agent-99_sess-1", "aiecs_tenant_tenant-a"]
     await engine.search_for_task({"description": "weather"}, all_ids)
 
-    assert store.search_calls == [("weather", ["aiecs:agent-99:sess-1"])]
+    assert store.search_calls == [("weather", ["aiecs_agent-99_sess-1"])]
 
 
 @pytest.mark.asyncio
@@ -154,7 +154,7 @@ async def test_resolve_group_ids_includes_tenant() -> None:
     engine = TemporalMemoryEngine(store)
     ctx = _make_ctx(tenant_id="tenant-a")
     ids = engine.resolve_group_ids(ctx.agent, ctx)
-    assert ids == ["aiecs:agent-99:sess-1", "aiecs:tenant:tenant-a"]
+    assert ids == ["aiecs_agent-99_sess-1", "aiecs_tenant_tenant-a"]
 
 
 @pytest.mark.asyncio
