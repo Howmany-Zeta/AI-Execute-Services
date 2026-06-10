@@ -9,6 +9,9 @@ See also `docs/changelog.rst` for historical release notes.
 
 ## [Unreleased]
 
+
+## [2.0.0rc3] - 2026-06-11 (Pre-release)
+
 ## [2.0.0rc2] - 2026-06-10 (Pre-release)
 
 ### Fixed
@@ -23,6 +26,7 @@ See also `docs/changelog.rst` for historical release notes.
 - **Settings:** `TM_ENABLED`, `TM_BACKEND`, `TM_GRAPH_BACKEND`, FalkorDB/Neo4j URLs, `TM_INGEST_ASYNC`, `TM_SEARCH_LIMIT`, `TM_GROUP_ID_PREFIX`; `AgentConfiguration.temporal_memory_enabled`
 - **Optional extra:** `pip install aiecs[temporal-graphiti]` (customer-side `graphiti-core`; not in core wheel per ADR-003)
 - **Docs / example:** [docs/developer/DOMAIN_TEMPORAL_MEMORY.md](docs/developer/DOMAIN_TEMPORAL_MEMORY.md), [examples/temporal_memory/](examples/temporal_memory/)
+
 
 ## [2.0.0rc1] - 2026-06-07 (Pre-release)
 
