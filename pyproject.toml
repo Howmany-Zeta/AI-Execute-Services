@@ -77,7 +77,7 @@ dependencies = [
     # =============================================================================
     # AI and LLM Services
     # =============================================================================
-    "openai (>=1.68.2,<1.76.0)",                    # OpenAI API client for GPT models
+    "openai (>=1.91.0,<2.0.0)",                     # OpenAI API client for GPT models (>=1.91 for graphiti-core)
     "anthropic[vertex] (>=0.40.0,<1.0.0)",          # Anthropic API client (with Vertex AI transport) for Claude models
     "google-cloud-aiplatform (>=1.80.0,<2.0.0)",    # Transitive dependency — no longer directly imported after SDK migration to google-genai. Kept pinned because google-genai pulls it in transitively and >=1.80.0 ensures stable gRPC transport for Vertex AI.
     "google-genai (>=1.0.0,<2.0.0)",                # Google Gen AI SDK for Gemini models (replaces deprecated google-generativeai)
@@ -189,6 +189,7 @@ docs = [
     "sphinx-copybutton>=0.5.0,<1.0.0",
 ]
 temporal-graphiti = ["graphiti-core[falkordb]>=0.29.1"]
+temporal-graphiti-neo4j = ["graphiti-core>=0.29.1,<0.30.0"]
 
 [project.scripts]
 aiecs = "aiecs.__main__:main"

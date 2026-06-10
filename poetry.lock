@@ -213,6 +213,19 @@ files = [
 dev = ["backports.zoneinfo ; python_version < \"3.9\"", "freezegun (>=1.0,<2.0)", "jinja2 (>=3.0)", "pytest (>=6.0)", "pytest-cov", "pytz", "setuptools", "tzdata ; sys_platform == \"win32\""]
 
 [[package]]
+name = "backoff"
+version = "2.2.1"
+description = "Function decoration for backoff and retry"
+optional = true
+python-versions = ">=3.7,<4.0"
+groups = ["main"]
+markers = "extra == \"temporal-graphiti\" or extra == \"temporal-graphiti-neo4j\""
+files = [
+    {file = "backoff-2.2.1-py3-none-any.whl", hash = "sha256:63579f9a0628e06278f7e47b7d7d5b6ce20dc65c5e96a6f3ca99a6adca0396e8"},
+    {file = "backoff-2.2.1.tar.gz", hash = "sha256:03f829f5bb1923180821643f8753b0502c3b682293992485b0eef2807afa5cba"},
+]
+
+[[package]]
 name = "beautifulsoup4"
 version = "4.14.3"
 description = "Screen-scraping library"
@@ -1417,6 +1430,23 @@ files = [
 ]
 
 [[package]]
+name = "falkordb"
+version = "1.2.2"
+description = "Python client for interacting with FalkorDB database"
+optional = true
+python-versions = "<4.0,>=3.8"
+groups = ["main"]
+markers = "extra == \"temporal-graphiti\""
+files = [
+    {file = "falkordb-1.2.2-py3-none-any.whl", hash = "sha256:cc1fcccaa1148be9e3d22d85af03d027f19b398e0f38d04424f3757a02744976"},
+    {file = "falkordb-1.2.2.tar.gz", hash = "sha256:3fc150d3262b971916a0f2c15f419f7fe521a94fe3a672b6f174288d885fd239"},
+]
+
+[package.dependencies]
+python-dateutil = ">=2.9.0,<3.0.0"
+redis = ">=6.0.0,<7.0.0"
+
+[[package]]
 name = "fastapi"
 version = "0.115.14"
 description = "FastAPI framework, high performance, easy to learn, fast to code, ready for production"
@@ -1929,6 +1959,44 @@ protobuf = ">=4.25.8,<8.0.0"
 
 [package.extras]
 grpc = ["grpcio (>=1.44.0,<2.0.0)"]
+
+[[package]]
+name = "graphiti-core"
+version = "0.29.2"
+description = "A temporal graph building library"
+optional = true
+python-versions = "<4,>=3.10"
+groups = ["main"]
+markers = "extra == \"temporal-graphiti\" or extra == \"temporal-graphiti-neo4j\""
+files = [
+    {file = "graphiti_core-0.29.2-py3-none-any.whl", hash = "sha256:536780d1dd5d2e16f50fcc75b29bc1c2f2a53e5d651fb49482c43b7d8c2841d5"},
+    {file = "graphiti_core-0.29.2.tar.gz", hash = "sha256:dd746a2546abfe5ff9025f088f4793a027bce949e044762cb2ea3ec8f1db8e63"},
+]
+
+[package.dependencies]
+falkordb = {version = ">=1.1.2,<2.0.0", optional = true, markers = "extra == \"falkordb\""}
+neo4j = ">=5.26.0"
+numpy = ">=1.0.0"
+openai = ">=1.91.0"
+posthog = ">=3.0.0"
+pydantic = ">=2.11.5"
+python-dotenv = ">=1.0.1"
+tenacity = ">=9.0.0"
+
+[package.extras]
+anthropic = ["anthropic (>=0.49.0)"]
+dev = ["anthropic (>=0.49.0)", "boto3 (>=1.39.16)", "falkordb (>=1.1.2,<2.0.0)", "google-genai (>=1.8.0)", "groq (>=0.2.0)", "ipykernel (>=6.29.5)", "jupyterlab (>=4.2.4)", "kuzu (>=0.11.3)", "langchain-anthropic (>=0.2.4)", "langchain-aws (>=0.2.29)", "langchain-openai (>=0.2.6)", "langgraph (>=1.0.10)", "langsmith (>=0.1.108)", "opensearch-py (>=3.0.0)", "opentelemetry-sdk (>=1.20.0)", "pyright (>=1.1.404)", "pytest (>=8.3.3)", "pytest-asyncio (>=0.24.0)", "pytest-xdist (>=3.6.1)", "ruff (>=0.7.1)", "sentence-transformers (>=3.2.1)", "transformers (>=4.45.2)", "voyageai (>=0.2.3)"]
+falkordb = ["falkordb (>=1.1.2,<2.0.0)"]
+falkordblite = ["falkordblite (>=0.5.0) ; python_version >= \"3.12\"", "redis (<8) ; python_version >= \"3.12\""]
+gliner2 = ["gliner2 (>=1.2.0) ; python_version >= \"3.11\""]
+google-genai = ["google-genai (>=1.62.0)"]
+groq = ["groq (>=0.2.0)"]
+kuzu = ["kuzu (>=0.11.3)"]
+neo4j-opensearch = ["boto3 (>=1.39.16)", "opensearch-py (>=3.0.0)"]
+neptune = ["boto3 (>=1.39.16)", "langchain-aws (>=0.2.29)", "opensearch-py (>=3.0.0)"]
+sentence-transformers = ["sentence-transformers (>=3.2.1)"]
+tracing = ["opentelemetry-api (>=1.20.0)", "opentelemetry-sdk (>=1.20.0)"]
+voyageai = ["voyageai (>=0.2.3)"]
 
 [[package]]
 name = "greenlet"
@@ -3666,6 +3734,27 @@ sql = ["duckdb (>=1.1)", "sqlparse"]
 sqlframe = ["sqlframe (>=3.22.0,!=3.39.3)"]
 
 [[package]]
+name = "neo4j"
+version = "6.2.0"
+description = "Neo4j Bolt driver for Python"
+optional = true
+python-versions = ">=3.10"
+groups = ["main"]
+markers = "extra == \"temporal-graphiti\" or extra == \"temporal-graphiti-neo4j\""
+files = [
+    {file = "neo4j-6.2.0-py3-none-any.whl", hash = "sha256:b87abdd13a5cc2e3bd51026926c2f20ac38fa3febe98c340520dce19e97388d0"},
+    {file = "neo4j-6.2.0.tar.gz", hash = "sha256:e1e246b65b572bd8ea97f9e0e721b7d40a5ce53e53d0007c29aef63e4f9124d9"},
+]
+
+[package.dependencies]
+pytz = "*"
+
+[package.extras]
+numpy = ["numpy (>=1.21.2,<3.0.0)"]
+pandas = ["numpy (>=1.21.2,<3.0.0)", "pandas[timezone] (>=1.1.0,<4.0.0)"]
+pyarrow = ["pyarrow (>=6.0.0,<25.0.0)"]
+
+[[package]]
 name = "nltk"
 version = "3.9.4"
 description = "Natural Language Toolkit"
@@ -3804,14 +3893,14 @@ signedtoken = ["cryptography (>=3.0.0)", "pyjwt (>=2.0.0,<3)"]
 
 [[package]]
 name = "openai"
-version = "1.75.0"
+version = "1.109.1"
 description = "The official Python library for the openai API"
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "openai-1.75.0-py3-none-any.whl", hash = "sha256:fe6f932d2ded3b429ff67cc9ad118c71327db32eb9d32dd723de3acfca337125"},
-    {file = "openai-1.75.0.tar.gz", hash = "sha256:fb3ea907efbdb1bcfd0c44507ad9c961afd7dce3147292b54505ecfd17be8fd1"},
+    {file = "openai-1.109.1-py3-none-any.whl", hash = "sha256:6bcaf57086cf59159b8e27447e4e7dd019db5d29a438072fbd49c290c7e65315"},
+    {file = "openai-1.109.1.tar.gz", hash = "sha256:d173ed8dbca665892a6db099b4a2dfac624f94d20a93f46eb0b56aae940ed869"},
 ]
 
 [package.dependencies]
@@ -3825,6 +3914,7 @@ tqdm = ">4"
 typing-extensions = ">=4.11,<5"
 
 [package.extras]
+aiohttp = ["aiohttp", "httpx-aiohttp (>=0.1.8)"]
 datalib = ["numpy (>=1)", "pandas (>=1.2.3)", "pandas-stubs (>=1.1.0.11)"]
 realtime = ["websockets (>=13,<16)"]
 voice-helpers = ["numpy (>=2.0.2)", "sounddevice (>=0.5.1)"]
@@ -4340,6 +4430,31 @@ files = [
 [package.extras]
 dev = ["pre-commit", "tox"]
 testing = ["coverage", "pytest", "pytest-benchmark"]
+
+[[package]]
+name = "posthog"
+version = "7.18.0"
+description = "Integrate PostHog into any python application."
+optional = true
+python-versions = ">=3.10"
+groups = ["main"]
+markers = "extra == \"temporal-graphiti\" or extra == \"temporal-graphiti-neo4j\""
+files = [
+    {file = "posthog-7.18.0-py3-none-any.whl", hash = "sha256:9913586a958e5e81dbb1cdc4d4bedc8f95a268807b17ad03b5c55d2adff55dd7"},
+    {file = "posthog-7.18.0.tar.gz", hash = "sha256:560230cf9616ac1fde5e3bfba1c666ab69e8488e5417005f86f91f7c6ef74252"},
+]
+
+[package.dependencies]
+backoff = ">=1.10.0"
+distro = ">=1.5.0"
+requests = ">=2.7,<3.0"
+typing-extensions = ">=4.2.0"
+
+[package.extras]
+dev = ["django-stubs", "lxml", "mypy", "mypy-baseline", "packaging", "pre-commit", "pydantic (>=2.12.0)", "ruff", "setuptools", "tomli", "tomli_w", "twine", "types-requests", "types-setuptools", "wheel"]
+langchain = ["langchain (>=0.2.0)"]
+otel = ["opentelemetry-exporter-otlp-proto-http (>=1.20.0)", "opentelemetry-sdk (>=1.20.0)"]
+test = ["anthropic (>=0.72)", "claude-agent-sdk", "coverage", "django (>=5.2.8,<6.0)", "freezegun (==1.5.1)", "google-genai", "langchain-anthropic (>=1.0)", "langchain-community (>=0.4)", "langchain-core (>=1.0)", "langchain-openai (>=1.0)", "langgraph (>=1.0)", "langgraph-checkpoint (>=3.0.1)", "openai (>=2.0)", "opentelemetry-exporter-otlp-proto-http (>=1.20.0)", "opentelemetry-sdk (>=1.20.0)", "parameterized (>=0.8.1)", "pydantic (>=2.12.0)", "pytest", "pytest-asyncio", "pytest-bdd (>=8.1.0)", "pytest-timeout", "python-dateutil (>=2.9.0.post0)", "tiktoken (>=0.12.0)", "tzdata"]
 
 [[package]]
 name = "pre-commit"
@@ -7829,8 +7944,10 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [extras]
 dev = ["black", "deptry", "flake8", "mypy", "psutil", "pytest", "pytest-asyncio", "pytest-cov", "pytest-timeout", "types-aiofiles", "types-bleach", "types-cachetools", "types-colorama", "types-lxml", "types-opentracing", "types-pyyaml", "types-tqdm"]
 docs = ["myst-parser", "sphinx", "sphinx-autodoc-typehints", "sphinx-copybutton", "sphinx-rtd-theme"]
+temporal-graphiti = ["graphiti-core"]
+temporal-graphiti-neo4j = ["graphiti-core"]
 
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.13"
-content-hash = "8a5a5f22335f422e4110a9b9840513d7308a45dfcfe49e549cae63f4586e98ac"
+content-hash = "fe34e150baf69e1d2858419297ba906a28650d7bfb229820085d0fd97362222b"

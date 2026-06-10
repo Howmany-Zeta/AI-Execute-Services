@@ -243,8 +243,8 @@ class Settings(BaseSettings):
             dsn = (self.tm_postgres_url or self.postgres_url or "").strip()
             if not dsn:
                 raise ValueError("TM_BACKEND=postgres requires TM_POSTGRES_URL or POSTGRES_URL when TM_ENABLED=true")
-        if backend == "graphiti" and self.tm_enabled and not (self.openai_api_key or "").strip():
-            logger.debug("TM_BACKEND=graphiti with TM_ENABLED=true but OPENAI_API_KEY unset; " "Graphiti may require an LLM key or aiecs provider credentials")
+        if backend == "graphiti" and self.tm_enabled and not (self.has_vertex_gcp_credentials_configured() or (self.openai_api_key or "").strip() or (self.googleai_api_key or "").strip()):
+            logger.debug("TM_BACKEND=graphiti with TM_ENABLED=true but no Vertex, OpenAI, or Google AI credentials; " "Graphiti LLM/embedder initialization may fail")
         return self
 
     def has_vertex_gcp_credentials_configured(self) -> bool:
