@@ -9,10 +9,13 @@ Defines the core data models for the base AI agent system.
 """
 
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING
 from enum import Enum
 from pydantic import BaseModel, Field, ConfigDict
 import uuid
+
+if TYPE_CHECKING:
+    from aiecs.domain.context.compression.policy import CompressionPolicy
 
 
 class AgentState(str, Enum):
@@ -288,6 +291,10 @@ class AgentConfiguration(BaseModel):
     # Context compression
     context_window_limit: int = Field(default=20000, ge=0, description="Token limit for context window")
     enable_context_compression: bool = Field(default=True, description="Enable automatic context compression")
+    compression_policy: Optional[Any] = Field(
+        default=None,
+        description=("Optional CompressionPolicy override (ADR-007). " "When None, derive from enable_context_compression and context_window_limit."),
+    )
 
     # Knowledge retrieval configuration
     retrieval_strategy: str = Field(
@@ -403,6 +410,22 @@ class AgentConfiguration(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional configuration metadata")
 
     model_config = ConfigDict()
+
+
+def resolve_compression_policy(config: AgentConfiguration) -> "CompressionPolicy":
+    """Resolve effective CompressionPolicy from AgentConfiguration (ADR-007)."""
+    from aiecs.domain.context.compression.policy import CompressionPolicy
+
+    explicit = getattr(config, "compression_policy", None)
+    if explicit is not None:
+        if isinstance(explicit, CompressionPolicy):
+            return explicit
+        if isinstance(explicit, dict):
+            return CompressionPolicy(**explicit)
+    return CompressionPolicy(
+        enabled=config.enable_context_compression,
+        context_window_tokens=config.context_window_limit,
+    )
 
 
 class AgentGoal(BaseModel):

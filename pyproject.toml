@@ -190,6 +190,7 @@ docs = [
 ]
 temporal-graphiti = ["graphiti-core[falkordb]>=0.29.1"]
 temporal-graphiti-neo4j = ["graphiti-core>=0.29.1,<0.30.0"]
+host-compression = ["boto3>=1.34.0,<2.0.0"]
 
 [project.scripts]
 aiecs = "aiecs.__main__:main"
@@ -222,7 +223,7 @@ build-backend = "setuptools.build_meta"
 
 # Pytest configuration
 [tool.deptry]
-pep621_dev_dependency_groups = ["dev", "docs"]
+pep621_dev_dependency_groups = ["dev", "docs", "host-compression"]
 extend_exclude = [
     "issue_report",
     "examples",
@@ -307,6 +308,9 @@ markers = [
     "graphiti: Tests requiring graphiti-core and FalkorDB/Neo4j (deselect with '-m \"not graphiti\"')",
     # L1 temporal memory Postgres backend (optional, not default CI)
     "postgres: Tests requiring TM_POSTGRES_URL (deselect with '-m \"not postgres\"')",
+
+    # Context compression kernel (Phase 0+)
+    "compression: Context compression kernel unit tests",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

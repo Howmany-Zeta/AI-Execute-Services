@@ -6,10 +6,16 @@
 Context Compression
 
 Smart context compression for token limits.
+
+.. note::
+    This module delegates to ``aiecs.domain.context.compression`` kernel primitives.
+    It remains for backward compatibility and will be deprecated after one release
+    once all call sites migrate to the shared kernel / orchestrator APIs.
 """
 
+import asyncio
 import logging
-from typing import List, Optional, Set
+from typing import List, Optional, Any
 from enum import Enum
 
 from aiecs.llm import LLMMessage
@@ -40,6 +46,7 @@ class ContextCompressor:
         max_tokens: int = 4000,
         strategy: CompressionStrategy = CompressionStrategy.PRESERVE_RECENT,
         preserve_system: bool = True,
+        llm_client: Any = None,
     ):
         """
         Initialize context compressor.
@@ -48,10 +55,12 @@ class ContextCompressor:
             max_tokens: Maximum token limit
             strategy: Compression strategy
             preserve_system: Always preserve system messages
+            llm_client: Optional LLM client for SUMMARIZE strategy (ADR-008)
         """
         self.max_tokens = max_tokens
         self.strategy = strategy
         self.preserve_system = preserve_system
+        self.llm_client = llm_client
 
     def compress_messages(
         self,
@@ -68,131 +77,112 @@ class ContextCompressor:
         Returns:
             Compressed message list
         """
-        # Estimate tokens
         total_tokens = self._estimate_tokens(messages)
 
         if total_tokens <= self.max_tokens:
             return messages
 
-        logger.debug(f"Compressing {len(messages)} messages from ~{total_tokens} to ~{self.max_tokens} tokens")
-
-        # Apply compression strategy
-        if self.strategy == CompressionStrategy.PRESERVE_RECENT:
-            return self._compress_preserve_recent(messages, priority_indices)
-        elif self.strategy == CompressionStrategy.TRUNCATE_MIDDLE:
-            return self._compress_truncate_middle(messages, priority_indices)
-        elif self.strategy == CompressionStrategy.TRUNCATE_START:
-            return self._compress_truncate_start(messages)
-        else:
-            # Default: preserve recent
-            return self._compress_preserve_recent(messages, priority_indices)
-
-    def _compress_preserve_recent(self, messages: List[LLMMessage], priority_indices: Optional[List[int]]) -> List[LLMMessage]:
-        """Preserve recent messages and priority messages."""
-        priority_indices_set: Set[int] = set(priority_indices or [])
-        compressed: List[LLMMessage] = []
-
-        # Always include system messages if enabled
-        if self.preserve_system:
-            system_msgs = [msg for msg in messages if msg.role == "system"]
-            compressed.extend(system_msgs)
-
-        # Calculate remaining budget
-        remaining_tokens = self.max_tokens - self._estimate_tokens(compressed)
-
-        # Add priority messages
-        for idx in priority_indices_set:
-            if idx < len(messages) and messages[idx] not in compressed:
-                msg_tokens = self._estimate_tokens([messages[idx]])
-                if msg_tokens <= remaining_tokens:
-                    compressed.append(messages[idx])
-                    remaining_tokens -= msg_tokens
-
-        # Add recent messages (from end)
-        for msg in reversed(messages):
-            if msg not in compressed:
-                msg_tokens = self._estimate_tokens([msg])
-                if msg_tokens <= remaining_tokens:
-                    compressed.insert(len(compressed), msg)
-                    remaining_tokens -= msg_tokens
-                else:
-                    break
-
-        return compressed
-
-    def _compress_truncate_middle(self, messages: List[LLMMessage], priority_indices: Optional[List[int]]) -> List[LLMMessage]:
-        """Keep start and end messages, truncate middle."""
-        if len(messages) <= 4:
-            return messages
-
-        # Keep first 2 and last 2 by default
-        keep_start = 2
-        keep_end = 2
-
-        # Adjust based on token budget
-        start_msgs = messages[:keep_start]
-        end_msgs = messages[-keep_end:]
-
-        compressed = (
-            start_msgs
-            + [
-                LLMMessage(
-                    role="system",
-                    content="[... conversation history compressed ...]",
-                )
-            ]
-            + end_msgs
+        logger.debug(
+            "Compressing %d messages from ~%d to ~%d tokens",
+            len(messages),
+            total_tokens,
+            self.max_tokens,
         )
 
-        return compressed
+        if self.strategy == CompressionStrategy.PRESERVE_RECENT:
+            return self._compress_preserve_recent(messages, priority_indices)
+        if self.strategy == CompressionStrategy.TRUNCATE_MIDDLE:
+            return self._compress_truncate_middle(messages, priority_indices)
+        if self.strategy == CompressionStrategy.TRUNCATE_START:
+            return self._compress_truncate_start(messages)
+        if self.strategy == CompressionStrategy.SUMMARIZE:
+            return self._compress_summarize(messages, priority_indices)
+        return self._compress_preserve_recent(messages, priority_indices)
+
+    def _compress_preserve_recent(
+        self,
+        messages: List[LLMMessage],
+        priority_indices: Optional[List[int]],
+    ) -> List[LLMMessage]:
+        from aiecs.domain.context.compression.truncation import compress_preserve_recent
+
+        return compress_preserve_recent(
+            messages,
+            max_tokens=self.max_tokens,
+            priority_indices=set(priority_indices or []),
+            preserve_system=self.preserve_system,
+        )
+
+    def _compress_summarize(
+        self,
+        messages: List[LLMMessage],
+        priority_indices: Optional[List[int]],
+    ) -> List[LLMMessage]:
+        """Delegate SUMMARIZE to the shared compression kernel (ADR-008)."""
+        _ = priority_indices
+        if self.llm_client is None:
+            from aiecs.domain.context.compression.legacy import compact_messages
+
+            preserve_recent = max(2, min(6, len(messages) // 3 or 2))
+            return compact_messages(messages, preserve_recent=preserve_recent)
+
+        from aiecs.domain.context.compression.llm_compact import compact_conversation
+        from aiecs.domain.context.compression.result import build_post_compact_messages
+
+        preserve_recent = max(2, min(6, len(messages) // 3 or 2))
+
+        async def _run() -> List[LLMMessage]:
+            result = await compact_conversation(
+                messages,
+                llm_client=self.llm_client,
+                preserve_recent=preserve_recent,
+            )
+            return build_post_compact_messages(result)
+
+        return asyncio.run(_run())
+
+    def _compress_truncate_middle(
+        self,
+        messages: List[LLMMessage],
+        priority_indices: Optional[List[int]],
+    ) -> List[LLMMessage]:
+        _ = priority_indices
+        from aiecs.domain.context.compression.truncation import (
+            compress_to_token_limit,
+        )
+        from aiecs.domain.context.compression.types import TruncationMode
+
+        return compress_to_token_limit(
+            messages,
+            max_tokens=self.max_tokens,
+            mode=TruncationMode.TRUNCATE_MIDDLE,
+            preserve_system=self.preserve_system,
+        )
 
     def _compress_truncate_start(self, messages: List[LLMMessage]) -> List[LLMMessage]:
-        """Keep recent messages, truncate start."""
-        compressed: List[LLMMessage] = []
-        remaining_tokens = self.max_tokens
+        from aiecs.domain.context.compression.truncation import (
+            compress_with_earlier_placeholder,
+        )
 
-        # Process from end
-        for msg in reversed(messages):
-            msg_tokens = self._estimate_tokens([msg])
-            if msg_tokens <= remaining_tokens:
-                compressed.insert(0, msg)
-                remaining_tokens -= msg_tokens
-            else:
-                break
-
-        return compressed
+        return compress_with_earlier_placeholder(
+            messages,
+            max_tokens=self.max_tokens,
+            preserve_system=self.preserve_system,
+        )
 
     def _estimate_tokens(self, messages: List[LLMMessage]) -> int:
-        """
-        Estimate token count for messages.
+        from aiecs.domain.context.compression.tokens import estimate_message_tokens
 
-        Args:
-            messages: List of messages
-
-        Returns:
-            Estimated token count
-        """
-        total_chars = sum(len(msg.content or "") for msg in messages)
-        # Rough estimate: 4 chars ≈ 1 token
-        return total_chars // 4
+        return estimate_message_tokens(messages)
 
     def compress_text(self, text: str, max_tokens: int) -> str:
-        """
-        Compress text to fit within token limit.
+        from aiecs.domain.context.compression.tokens import estimate_tokens
 
-        Args:
-            text: Text to compress
-            max_tokens: Maximum tokens
-
-        Returns:
-            Compressed text
-        """
-        estimated_tokens = len(text) // 4
+        estimated_tokens = estimate_tokens(text)
 
         if estimated_tokens <= max_tokens:
             return text
 
-        # Truncate to fit
         max_chars = max_tokens * 4
         if len(text) <= max_chars:
             return text

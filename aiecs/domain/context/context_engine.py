@@ -27,7 +27,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, cast
+from typing import Dict, Any, List, Optional, cast, Tuple
 from dataclasses import dataclass, asdict, is_dataclass
 
 
@@ -501,6 +501,10 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         compression_config: Optional[CompressionConfig] = None,
         llm_client: Optional[Any] = None,
         permanent_backend: Optional[IPermanentStorageBackend] = None,
+        compression_policy: Optional[Any] = None,
+        compress_on_append: bool = False,
+        hook_executor: Optional[Any] = None,
+        progress_emitter: Optional[Any] = None,
     ):
         """
         Initialize ContextEngine.
@@ -512,6 +516,10 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             llm_client: Optional LLM client for summarization and embeddings (must implement LLMClientProtocol)
             permanent_backend: Optional backend for dual-write disk persistence (e.g. ClickHouse).
                               Writes are fire-and-forget; failures do not block Redis path.
+            compression_policy: O8 token-based CompressionPolicy for compress-on-append
+            compress_on_append: When True, run auto_compact_if_needed after each append
+            hook_executor: Optional HookExecutor for PRE/POST compact hooks (O6)
+            progress_emitter: Optional CompactProgressEmitter for O7 progress delivery
         """
         self.use_existing_redis = use_existing_redis
         self.redis_client: Optional[redis.Redis] = None
@@ -532,6 +540,13 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         # Compression configuration (Phase 6)
         self.compression_config = compression_config or CompressionConfig()
         self.llm_client = llm_client
+        from aiecs.domain.context.compression.policy import CompressionPolicy as _CompressionPolicy
+
+        self.compression_policy: Optional[_CompressionPolicy] = compression_policy
+        self.compress_on_append = compress_on_append
+        self.hook_executor = hook_executor
+        self.progress_emitter = progress_emitter
+        self._auto_compact_states: Dict[str, Any] = {}
 
         # Metrics
         self._global_metrics = {
@@ -796,8 +811,15 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         role: str,
         content: str,
         metadata: Optional[Dict[str, Any]] = None,
+        *,
+        strategy: str | Tuple[str, ...] | None = None,
     ) -> bool:
-        """Add message to conversation history."""
+        """Add message to conversation history.
+
+        When ``compress_on_append`` is enabled (O8), runs token-based
+        ``auto_compact_if_needed`` after append. Optional *strategy* overrides
+        ``compression_policy.chain`` (legacy CE strategy names or explicit chain).
+        """
         message = ConversationMessage(
             role=role,
             content=content,
@@ -814,24 +836,26 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         # Update global metrics
         self._global_metrics["total_messages"] += 1
 
+        if self.compress_on_append:
+            await self.compress_on_append_if_needed(session_id, strategy=strategy)
+
         return True
 
-    async def get_conversation_history(self, session_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    async def get_conversation_history(self, session_id: str, limit: int = 50) -> List[ConversationMessage]:  # type: ignore[override]
         """Get conversation history for a session."""
         if self.redis_client:
             try:
                 messages_data = await self.redis_client.lrange(f"conversation:{session_id}", -limit, -1)  # type: ignore[misc]
                 # Since lpush adds to the beginning, we need to reverse to get
                 # chronological order
-                messages = [ConversationMessage.from_dict(json.loads(msg)) for msg in reversed(messages_data)]
-                return [msg.to_dict() for msg in messages]
+                return [ConversationMessage.from_dict(json.loads(msg)) for msg in reversed(messages_data)]
             except Exception as e:
                 logger.error(f"Failed to get conversation from Redis: {e}")
 
         # Fallback to memory
         messages = self._memory_conversations.get(session_id, [])
         message_list = messages[-limit:] if limit > 0 else messages
-        return [msg.to_dict() for msg in message_list]
+        return list(message_list)
 
     async def _store_conversation_message(self, session_id: str, message: ConversationMessage):
         """Store conversation message to Redis or memory."""
@@ -1486,12 +1510,9 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         # Filter by message types if specified
         if message_types:
-            filtered_messages = []
+            filtered_messages: list[dict[str, Any]] = []
             for msg in messages:
-                if hasattr(msg, "to_dict"):
-                    msg_dict = msg.to_dict()
-                else:
-                    msg_dict = msg
+                msg_dict: dict[str, Any] = msg.to_dict()
 
                 msg_metadata = msg_dict.get("metadata", {})
                 msg_type = msg_metadata.get("message_type", "communication")
@@ -1501,8 +1522,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
             return filtered_messages
 
-        # Convert messages to dict format
-        return [msg.to_dict() if hasattr(msg, "to_dict") else msg for msg in messages]
+        return [msg.to_dict() for msg in messages]
 
     async def _store_conversation_session(self, session_key: str, conversation_session) -> None:
         """Store conversation session metadata."""
@@ -1626,9 +1646,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         try:
             # Get current conversation
-            messages_dict = await self.get_conversation_history(session_id)
-            # Convert dict list to ConversationMessage list
-            messages = [ConversationMessage.from_dict(msg) for msg in messages_dict]
+            messages = await self.get_conversation_history(session_id)
             original_count = len(messages)
 
             if original_count == 0:
@@ -1685,40 +1703,33 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         """
         Compress by truncating old messages (fast, no LLM required).
 
-        Keeps the most recent N messages based on config.keep_recent.
-
-        Args:
-            messages: List of conversation messages
-            config: Compression configuration
-
-        Returns:
-            Truncated list of messages
+        Uses W1 ``split_preserving_tool_pairs`` before dropping head messages.
         """
         if len(messages) <= config.keep_recent:
             return messages
 
-        # Keep most recent messages
-        truncated = messages[-config.keep_recent :]
+        from aiecs.domain.context.compression.adapters.conversation_message import (
+            conversation_messages_to_llm_messages,
+        )
+        from aiecs.domain.context.compression.pairs import split_preserving_tool_pairs
 
-        logger.debug(f"Truncation: kept {len(truncated)} most recent messages " f"(removed {len(messages) - len(truncated)})")
+        llm_messages = conversation_messages_to_llm_messages(messages)
+        split_index = split_preserving_tool_pairs(
+            llm_messages,
+            len(llm_messages) - config.keep_recent,
+        )
+        truncated = messages[split_index:]
 
+        logger.debug(
+            "Truncation: kept %d most recent messages (removed %d)",
+            len(truncated),
+            len(messages) - len(truncated),
+        )
         return truncated
 
     async def _compress_with_summarization(self, messages: List[ConversationMessage], config: CompressionConfig) -> List[ConversationMessage]:
         """
-        Compress using LLM-based summarization.
-
-        Creates a summary of older messages and keeps recent messages intact.
-
-        Args:
-            messages: List of conversation messages
-            config: Compression configuration
-
-        Returns:
-            List with summary message + recent messages
-
-        Raises:
-            ValueError: If no LLM client configured
+        Compress using LLM-based summarization via the shared compression kernel.
         """
         if not self.llm_client:
             raise ValueError("LLM client required for summarization compression. " "Provide llm_client parameter to ContextEngine.")
@@ -1726,38 +1737,63 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         if len(messages) <= config.keep_recent:
             return messages
 
-        # Split into messages to summarize and messages to keep
-        messages_to_summarize = messages[: -config.keep_recent]
-        messages_to_keep = messages[-config.keep_recent :]
+        from aiecs.domain.context.compression.adapters.conversation_message import (
+            conversation_messages_to_llm_messages,
+            llm_messages_to_conversation_messages,
+        )
+        from aiecs.domain.context.compression.llm_compact import compact_conversation
 
-        # Build summary prompt
-        summary_prompt = self._build_summary_prompt(messages_to_summarize, config)
+        llm_messages = conversation_messages_to_llm_messages(messages)
+        custom_instructions = None
+        if config.summary_prompt_template:
+            messages_text = "\n\n".join(f"{msg.role}: {msg.content}" for msg in messages[: -config.keep_recent])
+            custom_instructions = config.summary_prompt_template.format(messages=messages_text)
 
-        # Generate summary using LLM
-        from aiecs.llm.clients.base_client import LLMMessage
-
-        llm_messages = [LLMMessage(role="user", content=summary_prompt)]
-
-        response = await self.llm_client.generate_text(messages=llm_messages, max_tokens=config.summary_max_tokens)
-
-        summary_text = response.content
-
-        # Create summary message
-        summary_message = ConversationMessage(
-            role="system",
-            content=f"[Summary of {len(messages_to_summarize)} previous messages]\n\n{summary_text}",
-            timestamp=datetime.utcnow(),
-            metadata={"type": "summary", "summarized_count": len(messages_to_summarize)},
+        result = await compact_conversation(
+            llm_messages,
+            llm_client=self.llm_client,
+            preserve_recent=config.keep_recent,
+            summary_role="system",
+            custom_instructions=custom_instructions,
+            summary_max_tokens=config.summary_max_tokens,
         )
 
-        # Combine summary + recent messages
+        summarized_count = len(messages) - config.keep_recent
         if config.include_summary_in_history:
-            compressed = [summary_message] + messages_to_keep
+            compacted_llm = list(result.summary_messages) + list(result.messages_to_keep)
         else:
-            compressed = messages_to_keep
+            compacted_llm = list(result.messages_to_keep)
 
-        logger.debug(f"Summarization: {len(messages_to_summarize)} messages -> 1 summary, " f"kept {len(messages_to_keep)} recent messages")
+        compressed: List[ConversationMessage] = []
+        for llm_msg in compacted_llm:
+            conv = llm_messages_to_conversation_messages(
+                [llm_msg],
+                timestamp=datetime.utcnow(),
+            )[0]
+            if llm_msg in result.summary_messages:
+                content = conv.content or ""
+                if not content.startswith("[Summary of"):
+                    content = f"[Summary of {summarized_count} previous messages]\n\n{content}"
+                compressed.append(
+                    ConversationMessage(
+                        role=conv.role,
+                        content=content,
+                        timestamp=conv.timestamp,
+                        metadata={
+                            "type": "summary",
+                            "summarized_count": summarized_count,
+                        },
+                    )
+                )
+            else:
+                compressed.append(conv)
 
+        logger.debug(
+            "Summarization via kernel: %d messages -> %d messages (preserve_recent=%d)",
+            len(messages),
+            len(compressed),
+            config.keep_recent,
+        )
         return compressed
 
     def _build_summary_prompt(self, messages: List[ConversationMessage], config: CompressionConfig) -> str:
@@ -1963,29 +1999,13 @@ Summary:"""
         """
         Automatically compress conversation if it exceeds threshold.
 
-        Checks if conversation exceeds auto_compress_threshold and compresses
-        to auto_compress_target if needed.
-
-        Args:
-            session_id: Session ID to check
-
-        Returns:
-            Compression result dict if compression was triggered, None otherwise
-
-        Example:
-            # Configure auto-compression
-            config = CompressionConfig(
-                auto_compress_enabled=True,
-                auto_compress_threshold=100,
-                auto_compress_target=50
-            )
-            engine = ContextEngine(compression_config=config)
-
-            # Check and auto-compress if needed
-            result = await engine.auto_compress_on_limit(session_id)
-            if result:
-                print(f"Auto-compressed: {result['original_count']} -> {result['compressed_count']}")
+        When ``compress_on_append`` or ``compression_policy`` is configured, delegates
+        to token-based ``compress_on_append_if_needed`` (O8). Otherwise uses legacy
+        message-count threshold from ``CompressionConfig``.
         """
+        if self.compress_on_append or (self.compression_policy is not None and self.compression_policy.enabled):
+            return await self.compress_on_append_if_needed(session_id)
+
         if not self.compression_config.auto_compress_enabled:
             return None
 
@@ -1997,14 +2017,92 @@ Summary:"""
         if message_count <= self.compression_config.auto_compress_threshold:
             return None
 
-        logger.info(f"Auto-compression triggered for {session_id}: " f"{message_count} messages exceeds threshold of " f"{self.compression_config.auto_compress_threshold}")
+        logger.info(
+            "Auto-compression triggered for %s: %s messages exceeds threshold of %s",
+            session_id,
+            message_count,
+            self.compression_config.auto_compress_threshold,
+        )
 
         # Compress conversation
         result = await self.compress_conversation(session_id)
 
         if result.get("success"):
-            logger.info(f"Auto-compression complete for {session_id}: " f"{result['original_count']} -> {result['compressed_count']} messages")
+            logger.info(
+                "Auto-compression complete for %s: %s -> %s messages",
+                session_id,
+                result["original_count"],
+                result["compressed_count"],
+            )
 
+        return result
+
+    async def compress_on_append_if_needed(
+        self,
+        session_id: str,
+        *,
+        strategy: str | Tuple[str, ...] | None = None,
+    ) -> Optional[Dict[str, Any]]:
+        """O8: token-based compress-on-append via ``auto_compact_if_needed``."""
+        from aiecs.domain.context.compression.adapters.conversation_message import (
+            conversation_messages_to_llm_messages,
+            llm_messages_to_conversation_messages,
+        )
+        from aiecs.domain.context.compression.orchestrator import auto_compact_if_needed
+        from aiecs.domain.context.compression.policy import CompressionPolicy, resolve_compact_chain
+        from aiecs.domain.context.compression.state import AutoCompactState
+
+        policy = self.compression_policy or CompressionPolicy(enabled=False)
+        if not policy.enabled and not self.compress_on_append:
+            return None
+
+        messages = await self.get_conversation_history(session_id, limit=0)
+        if not messages:
+            return None
+
+        original_count = len(messages)
+        llm_messages = conversation_messages_to_llm_messages(messages)
+        state = self._auto_compact_states.setdefault(session_id, AutoCompactState())
+        resolved_chain = resolve_compact_chain(policy, strategy)
+
+        if self.llm_client is None and "llm" in resolved_chain:
+            logger.debug(
+                "compress_on_append: skipping llm chain step (no llm_client) for %s",
+                session_id,
+            )
+
+        compacted, did_compact = await auto_compact_if_needed(
+            llm_messages,
+            policy=policy,
+            state=state,
+            llm_client=self.llm_client,
+            session_id=session_id,
+            strategy=strategy,
+            hooks=self.hook_executor,
+            progress=self.progress_emitter,
+        )
+
+        if not did_compact:
+            return None
+
+        conv_messages = llm_messages_to_conversation_messages(compacted)
+        await self._replace_conversation_history(session_id, conv_messages)
+
+        result = {
+            "success": True,
+            "strategy": strategy or policy.chain,
+            "resolved_chain": resolved_chain,
+            "original_count": original_count,
+            "compressed_count": len(conv_messages),
+            "compression_ratio": 1.0 - (len(conv_messages) / original_count) if original_count else 0.0,
+        }
+        logger.info(
+            "compress_on_append for %s: %s -> %s messages (chain=%s)",
+            session_id,
+            original_count,
+            len(conv_messages),
+            resolved_chain,
+        )
         return result
 
     async def get_compressed_context(
@@ -2057,16 +2155,12 @@ Summary:"""
             # Format as string
             lines = []
             for msg in messages:
-                # messages is List[Dict[str, Any]] from get_conversation_history
-                timestamp = msg.get("timestamp", "").strftime("%Y-%m-%d %H:%M:%S") if isinstance(msg.get("timestamp"), datetime) else str(msg.get("timestamp", ""))
-                role = msg.get("role", "")
-                content = msg.get("content", "")
-                lines.append(f"[{timestamp}] {role}: {content}")
+                timestamp = msg.timestamp.strftime("%Y-%m-%d %H:%M:%S") if isinstance(msg.timestamp, datetime) else str(msg.timestamp)
+                lines.append(f"[{timestamp}] {msg.role}: {msg.content}")
             return "\n\n".join(lines)
 
         elif format == "dict":
-            # Return as list of dicts (already dicts from get_conversation_history)
-            return [self._sanitize_for_json(msg) for msg in messages]
+            return [self._sanitize_for_json(msg.to_dict()) for msg in messages]
 
         else:
             raise ValueError(f"Invalid format '{format}'. Must be 'messages', 'string', or 'dict'")

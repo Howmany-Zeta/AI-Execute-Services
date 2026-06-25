@@ -15,6 +15,7 @@ from typing import Any, ClassVar
 
 from aiecs.domain.agent.memory.conversation import ConversationMemory
 from aiecs.domain.agent.plugins.base import BaseAgentPlugin
+from aiecs.domain.agent.models import resolve_compression_policy
 from aiecs.domain.temporal_memory.constants import (
     PLUGIN_STATE_PENDING_ASSISTANT,
     build_l0_temporal_metadata,
@@ -214,6 +215,7 @@ class MemoryPlugin(BaseAgentPlugin):
                     session_id=session_id,
                     metadata=build_l0_temporal_metadata(ctx.plugin_state),
                 )
+            await self._compress_on_append_if_configured(session_id)
             return result
 
         # LLMAgent / ToolAgent: keep agent._conversation_history authoritative (§7.2)
@@ -236,6 +238,7 @@ class MemoryPlugin(BaseAgentPlugin):
                     metadata=build_l0_temporal_metadata(ctx.plugin_state),
                 )
 
+        await self._compress_on_append_if_configured(session_id or "")
         return result
 
     async def on_agent_shutdown(self, ctx: AgentPluginContext) -> None:
@@ -282,6 +285,40 @@ class MemoryPlugin(BaseAgentPlugin):
             )
         else:
             self._memory.add_message(sid, role, content)
+
+    def _resolve_agent_compression_policy(self):
+        """Return effective CompressionPolicy from agent config (O8), or None."""
+        config = getattr(self._agent, "_config", None)
+        if config is None:
+            return None
+        if not getattr(config, "enable_context_compression", False) and getattr(config, "compression_policy", None) is None:
+            return None
+        return resolve_compression_policy(config)
+
+    async def _compress_on_append_if_configured(
+        self,
+        session_id: str,
+        *,
+        strategy: str | tuple[str, ...] | None = None,
+    ) -> None:
+        """O8: optional post-append compact via ContextEngine token policy."""
+        if not session_id or self._memory is None:
+            return
+        policy = self._resolve_agent_compression_policy()
+        if policy is None or not policy.enabled:
+            return
+        context_engine = self._memory.context_engine
+        if context_engine is None:
+            return
+
+        if getattr(context_engine, "compression_policy", None) is None:
+            context_engine.compression_policy = policy
+
+        resolved_strategy = strategy or policy.chain
+        compress = getattr(context_engine, "compress_on_append_if_needed", None)
+        if compress is None:
+            return
+        await compress(session_id, strategy=resolved_strategy)
 
     def _resolve_session_id(self, ctx: AgentPluginContext) -> str | None:
         session_key = str(self._config.options.get("session_key", DEFAULT_SESSION_KEY))

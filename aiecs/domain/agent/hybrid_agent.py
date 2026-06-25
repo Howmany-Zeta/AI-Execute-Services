@@ -26,9 +26,16 @@ from aiecs.tools import BaseTool
 from aiecs.domain.agent.tools.schema_generator import ToolSchemaGenerator
 
 from .base_agent import BaseAIAgent
-from .models import AgentType, AgentConfiguration, ToolObservation
+from .models import AgentType, AgentConfiguration, ToolObservation, resolve_compression_policy
 from .exceptions import TaskExecutionError, ToolAccessDeniedError
-from .tool_loop_core import ToolLoopIterationOutcome, ToolLoopRunState
+from .tool_loop_core import (
+    ToolLoopCompressionContext,
+    ToolLoopIterationOutcome,
+    ToolLoopRunState,
+    apply_tool_output_management,
+    maybe_compact_before_llm,
+    maybe_reactive_compact_on_ptl,
+)
 from .tool_result_matcher import matches_stop_condition
 from aiecs.domain.agent.plugins.context import AgentPluginContext, PluginShortCircuitResult
 from aiecs.domain.agent.plugins.builtin.knowledge_plugin import (
@@ -306,6 +313,12 @@ class HybridAgent(BaseAIAgent):
         self._conversation_history: List[LLMMessage] = []
         self._tool_schemas: List[Dict[str, Any]] = []
         self._use_function_calling: bool = False  # Set in _initialize() via _check_function_calling_support()
+        self._tool_budget_store: Optional[Any] = None
+        self._tool_artifact_port: Optional[Any] = None
+        self._session_memory_port: Optional[Any] = None
+        self._compression_hook_executor: Optional[Any] = None
+        self._compression_progress_emitter: Optional[Any] = None
+        self._auto_compact_state: Optional[Any] = None
 
         logger.info(f"HybridAgent initialized: {agent_id} with LLM ({self.llm_client.provider_name}) " f"and {len(tools) if isinstance(tools, (list, dict)) else 0} tools")
 
@@ -1448,6 +1461,84 @@ class HybridAgent(BaseAIAgent):
             "total_tokens": state.total_tokens,
         }
 
+    def _build_tool_loop_compression_context(self, context: Dict[str, Any]) -> ToolLoopCompressionContext:
+        """Build W8/W11 compression context from AgentConfiguration (ADR-007, ADR-009)."""
+        from aiecs.domain.context.compression.hooks import HookExecutor, HookRegistry
+        from aiecs.domain.context.compression.progress import CompactProgressEmitter
+        from aiecs.domain.context.compression.state import AutoCompactState
+        from aiecs.domain.context.compression.tool_budget import InMemoryToolBudgetStore
+        from aiecs.domain.context.compression.types import (
+            InMemorySessionMemoryPort,
+            SessionMemoryPort,
+            ToolArtifactPort,
+        )
+
+        policy = resolve_compression_policy(self._config)
+        enabled = bool(self._config.enable_context_compression and policy.enabled)
+        session_id = str(context.get("session_id") or self.agent_id or "")
+        if enabled and self._tool_budget_store is None:
+            self._tool_budget_store = InMemoryToolBudgetStore()
+        if enabled and self._session_memory_port is None:
+            self._session_memory_port = InMemorySessionMemoryPort()
+        if enabled and self._auto_compact_state is None:
+            self._auto_compact_state = AutoCompactState()
+        if enabled and self._compression_hook_executor is None:
+            self._compression_hook_executor = HookExecutor(HookRegistry())
+        if enabled and self._compression_progress_emitter is None:
+            self._compression_progress_emitter = CompactProgressEmitter()
+
+        session_memory = context.get("session_memory_port")
+        if session_memory is not None and not isinstance(session_memory, SessionMemoryPort):
+            session_memory = None
+        if session_memory is None and enabled:
+            session_memory = self._session_memory_port
+
+        hooks = context.get("compression_hook_executor") or context.get("hook_executor")
+        if hooks is not None and not isinstance(hooks, HookExecutor):
+            hooks = None
+        if hooks is None and enabled:
+            hooks = self._compression_hook_executor
+
+        progress = context.get("compression_progress_emitter")
+        if progress is None:
+            on_progress = context.get("on_compact_progress")
+            if callable(on_progress):
+                progress = CompactProgressEmitter(on_progress=on_progress)
+        if progress is None and enabled:
+            progress = self._compression_progress_emitter
+
+        artifact_port = context.get("tool_artifact_port") or context.get("artifact_port")
+        if artifact_port is not None and not isinstance(artifact_port, ToolArtifactPort):
+            artifact_port = None
+        if artifact_port is None and enabled:
+            artifact_port = self._tool_artifact_port
+
+        return ToolLoopCompressionContext(
+            enabled=enabled,
+            policy=policy,
+            session_id=session_id,
+            artifact_port=artifact_port if enabled else None,
+            budget_store=self._tool_budget_store if enabled else None,
+            session_memory=session_memory if enabled else None,
+            hooks=hooks if enabled else None,
+            progress=progress if enabled else None,
+            llm_client=self.llm_client,
+            auto_compact_state=self._auto_compact_state if enabled else None,
+        )
+
+    async def _apply_pre_llm_compression(
+        self,
+        messages: List[LLMMessage],
+        context: Dict[str, Any],
+    ) -> None:
+        """Run W8/W11 pre-LLM compression in-place on ``messages``."""
+        compression_ctx = self._build_tool_loop_compression_context(context)
+        compacted = await maybe_compact_before_llm(
+            messages,
+            compression_ctx=compression_ctx,
+        )
+        messages[:] = compacted
+
     def _normalize_tool_calls_from_response(
         self,
         tool_calls: Any,
@@ -1478,12 +1569,16 @@ class HybridAgent(BaseAIAgent):
         iteration: int,
         state: ToolLoopRunState,
         event_callback: Optional[Any] = None,
+        compression_ctx: Optional[ToolLoopCompressionContext] = None,
     ) -> ToolLoopIterationOutcome:
         """
         Execute a batch of tool calls, append messages, and update ``state``.
 
         When ``event_callback`` is provided (streaming), it is awaited with event dicts.
         """
+        if compression_ctx is None:
+            compression_ctx = ToolLoopCompressionContext(enabled=False)
+
         messages.append(
             LLMMessage(
                 role="assistant",
@@ -1616,10 +1711,17 @@ class HybridAgent(BaseAIAgent):
                 if isinstance(tool_result, dict) and tool_result.get("_image_b64"):
                     media_type = tool_result.get("_image_media_type", "image/png")
                     tool_images = [f"data:{media_type};base64,{tool_result['_image_b64']}"]
+                tool_content = json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result)
+                tool_content = await apply_tool_output_management(
+                    tool_name=tool_name,
+                    tool_call_id=tool_call_id,
+                    tool_output=tool_content,
+                    compression_ctx=compression_ctx,
+                )
                 messages.append(
                     LLMMessage(
                         role="tool",
-                        content=json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result),
+                        content=tool_content,
                         tool_call_id=tool_call_id,
                         images=tool_images,
                     )
@@ -1673,8 +1775,21 @@ class HybridAgent(BaseAIAgent):
     ) -> ToolLoopIterationOutcome:
         """Single non-streaming tool-loop iteration (LLM call + tool batch)."""
         self._require_function_calling_when_tools_configured()
+        await self._apply_pre_llm_compression(messages, context)
+        compression_ctx = self._build_tool_loop_compression_context(context)
         kwargs = self._build_tool_loop_llm_kwargs(messages, context, streaming=False)
-        response = await self.llm_client.generate_text(**kwargs)
+        try:
+            response = await self.llm_client.generate_text(**kwargs)
+        except Exception as exc:
+            if await maybe_reactive_compact_on_ptl(
+                exc,
+                messages=messages,
+                compression_ctx=compression_ctx,
+            ):
+                kwargs = self._build_tool_loop_llm_kwargs(messages, context, streaming=False)
+                response = await self.llm_client.generate_text(**kwargs)
+            else:
+                raise
 
         thought_raw = response.content or ""
         state.total_tokens += getattr(response, "total_tokens", 0)
@@ -1708,6 +1823,7 @@ class HybridAgent(BaseAIAgent):
                 messages=messages,
                 iteration=iteration,
                 state=state,
+                compression_ctx=compression_ctx,
             )
 
         return ToolLoopIterationOutcome(
@@ -1752,8 +1868,26 @@ class HybridAgent(BaseAIAgent):
         from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
 
         self._require_function_calling_when_tools_configured()
+        await self._apply_pre_llm_compression(messages, context)
+        compression_ctx = self._build_tool_loop_compression_context(context)
         kwargs = self._build_tool_loop_llm_kwargs(messages, context, streaming=True, tool_schemas_override=tool_schemas_override)
-        stream_gen = self.llm_client.stream_text(**kwargs)
+        try:
+            stream_gen = self.llm_client.stream_text(**kwargs)
+        except Exception as exc:
+            if await maybe_reactive_compact_on_ptl(
+                exc,
+                messages=messages,
+                compression_ctx=compression_ctx,
+            ):
+                kwargs = self._build_tool_loop_llm_kwargs(
+                    messages,
+                    context,
+                    streaming=True,
+                    tool_schemas_override=tool_schemas_override,
+                )
+                stream_gen = self.llm_client.stream_text(**kwargs)
+            else:
+                raise
 
         thought_tokens: List[str] = []
         tool_calls_from_stream = None
@@ -1810,6 +1944,7 @@ class HybridAgent(BaseAIAgent):
                 iteration=iteration,
                 state=state,
                 event_callback=_emit,
+                compression_ctx=compression_ctx,
             )
             for event in events:
                 yield event

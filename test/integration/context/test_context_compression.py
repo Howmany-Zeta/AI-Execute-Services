@@ -1602,3 +1602,37 @@ async def test_compression_performance():
 
     await engine.close()
 
+
+# ==================== Test O8: compress_on_append strategy override ====================
+
+
+@pytest.mark.asyncio
+async def test_compress_on_append_strategy_override_memory_engine():
+    """O8: add_conversation_message passes strategy override to compress_on_append."""
+    from unittest.mock import AsyncMock, patch
+
+    from aiecs.domain.context.compression.policy import CompressionPolicy
+
+    policy = CompressionPolicy(enabled=True, chain=("microcompact", "llm"))
+    engine = ContextEngine(
+        compression_policy=policy,
+        compress_on_append=True,
+    )
+    await engine.initialize()
+
+    session_id = "o8_strategy_override"
+    with patch(
+        "aiecs.domain.context.compression.orchestrator.auto_compact_if_needed",
+        new=AsyncMock(return_value=([], False)),
+    ) as mock_compact:
+        await engine.add_conversation_message(
+            session_id,
+            role="user",
+            content="Strategy override probe",
+            strategy=("microcompact",),
+        )
+
+    mock_compact.assert_awaited_once()
+    assert mock_compact.await_args.kwargs["strategy"] == ("microcompact",)
+
+    await engine.close()

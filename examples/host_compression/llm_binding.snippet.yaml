@@ -1,0 +1,24 @@
+# CC-091: enable aiecs M3 compression on Multi-Task subagents (host repo)
+#
+# Apply in python-middleware:
+#   1. pyproject.toml — pin editable/path or PyPI aiecs >= 2.1.0
+#   2. config/llm_binding.yaml — subagent entries below
+
+subagents:
+  researcher:
+    enable_context_compression: true
+    context_window_limit: 200000
+    # Optional full policy override (ADR-007):
+    # compression_policy:
+    #   enabled: true
+    #   preserve_recent: 12
+    #   chain: [microcompact, collapse, session_memory, llm]
+
+  executor:
+    enable_context_compression: true
+    context_window_limit: 128000
+
+# Host env (CC-095 / CC-092):
+# USE_AIECS_COMPRESSION=1
+# AIECS_TOOL_ARTIFACT_BUCKET=multi-task-tool-artifacts
+# AIECS_TOOL_ARTIFACT_ENDPOINT_URL=http://minio:9000

@@ -21,6 +21,24 @@ from aiecs.domain.agent.base_agent import BaseAIAgent
 logger = logging.getLogger(__name__)
 
 
+def _conversation_message_to_dict(msg: Any) -> dict[str, Any]:
+    if isinstance(msg, dict):
+        return msg
+    timestamp = getattr(msg, "timestamp", None)
+    if isinstance(timestamp, datetime):
+        timestamp_str = timestamp.isoformat()
+    elif timestamp is not None:
+        timestamp_str = str(timestamp)
+    else:
+        timestamp_str = ""
+    return {
+        "role": getattr(msg, "role", ""),
+        "content": getattr(msg, "content", ""),
+        "timestamp": timestamp_str,
+        "metadata": getattr(msg, "metadata", {}),
+    }
+
+
 class ContextEngineAdapter:
     """
     Adapter for persisting agent state to ContextEngine.
@@ -186,21 +204,7 @@ class ContextEngineAdapter:
         """
         messages = await self.context_engine.get_conversation_history(session_id=session_id, limit=limit)
 
-        # Convert ConversationMessage objects to dictionaries
-        # messages is List[Dict[str, Any]] from get_conversation_history
-        result = []
-        for msg in messages:
-            if isinstance(msg, dict):
-                result.append(msg)
-            else:
-                result.append(
-                    {
-                        "role": getattr(msg, "role", ""),
-                        "content": getattr(msg, "content", ""),
-                        "timestamp": (getattr(msg, "timestamp", "").isoformat() if hasattr(getattr(msg, "timestamp", None), "isoformat") else str(getattr(msg, "timestamp", ""))),
-                        "metadata": getattr(msg, "metadata", {}),
-                    }
-                )
+        result: list[dict[str, Any]] = [_conversation_message_to_dict(msg) for msg in messages]
 
         logger.debug(f"Loaded {len(result)} messages from session {session_id}")
         return result
@@ -480,21 +484,7 @@ class ContextEngineAdapter:
         try:
             messages = await self.context_engine.get_conversation_history(session_id=session_id, limit=limit or 50)
 
-            # Convert ConversationMessage objects to dictionaries
-            result = []
-            for msg in messages:
-                # messages is List[Dict[str, Any]] from get_conversation_history
-                if isinstance(msg, dict):
-                    result.append(msg)
-                else:
-                    result.append(
-                        {
-                            "role": getattr(msg, "role", ""),
-                            "content": getattr(msg, "content", ""),
-                            "timestamp": (getattr(msg, "timestamp", "").isoformat() if hasattr(getattr(msg, "timestamp", None), "isoformat") else str(getattr(msg, "timestamp", ""))),
-                            "metadata": getattr(msg, "metadata", {}),
-                        }
-                    )
+            result: list[dict[str, Any]] = [_conversation_message_to_dict(msg) for msg in messages]
 
             logger.debug(f"Retrieved {len(result)} messages from session {session_id}")
             return result
