@@ -7,10 +7,10 @@
 ## ✨ 特性
 
 ### 1. 自动工具发现
-- ✅ 自动扫描 `aiecs/tools/task_tools/`、`aiecs/tools/docs/`、`aiecs/tools/statistics/` 目录
+- ✅ 自动扫描 `aiecs/tools/task_tools/`、`aiecs/tools/search_tool/` 目录
 - ✅ 自动识别所有 `@register_tool` 装饰器
 - ✅ 自动提取工具名称和描述
-- ✅ 自动分类（task/docs/statistics）
+- ✅ 自动分类（task/search）
 
 ### 2. 零维护成本
 - ✅ 添加新工具：只需在工具类上添加 `@register_tool("tool_name")` 装饰器
@@ -172,8 +172,7 @@ poetry run python -m aiecs.scripts.tools_develop.verify_tools
 ```python
 tool_dirs = [
     ('task_tools', 'task'),
-    ('docs', 'docs'),
-    ('statistics', 'statistics'),
+    ('search_tool', 'task'),
     ('ml_tools', 'ml'),  # 新增
 ]
 ```
@@ -182,8 +181,7 @@ tool_dirs = [
 ```python
 tool_dirs = {
     'task_tools': 'aiecs.tools.task_tools',
-    'docs': 'aiecs.tools.docs',
-    'statistics': 'aiecs.tools.statistics',
+    'search_tool': 'aiecs.tools.search_tool',
     'ml_tools': 'aiecs.tools.ml_tools',  # 新增
 }
 ```
@@ -192,7 +190,7 @@ tool_dirs = {
 
 ### Q: 工具没有被发现？
 **A:** 检查以下几点：
-1. 文件是否在支持的目录中（task_tools/docs/statistics）
+1. 文件是否在支持的目录中（task_tools/search_tool）
 2. 是否使用了 `@register_tool("name")` 装饰器
 3. 文件名是否以 `.py` 结尾且不是 `__init__.py`
 

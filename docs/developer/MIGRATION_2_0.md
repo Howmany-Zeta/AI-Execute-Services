@@ -48,20 +48,20 @@ await agent.initialize()
 | `aiecs.tools.scraper_tool` | Same |
 | `aiecs.tools.statistics` | Same |
 | `aiecs.tools.knowledge_graph` | Use private L2 + `KnowledgePlugin`, not built-in KG tools |
+| `aiecs.tools.docs` | MCP server document tools or custom `BaseTool` |
 
 ### Auto-discovery allowlist
 
 Only these tool trees are discovered by default:
 
 - `aiecs.tools.task_tools`
-- `aiecs.tools.docs`
 - `aiecs.tools.search_tool`
 
 Do not re-add removed directories to `tool_dirs` in application bootstrap code.
 
-### Document parser
+### Document tools (MCP migration)
 
-`DocumentParserTool` no longer imports `scraper_tool`. URL fetch uses **httpx** only. Ensure `httpx` is available in your environment.
+Built-in document tools under `aiecs.tools.docs` were removed (2026-06-26). Use MCP server document services or fork from `test/archived/mcp_migration_2026/aiecs_tools_docs/`.
 
 ### Scraper-related Python packages (removed from core)
 

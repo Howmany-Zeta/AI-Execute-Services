@@ -48,7 +48,6 @@ def display_tools_by_category(tools: List[Dict]):
     # 显示每个类别
     category_names = {
         "task": "任务工具",
-        "docs": "文档工具",
         "statistics": "数据统计工具",
         "unknown": "其他工具",
     }
@@ -56,7 +55,7 @@ def display_tools_by_category(tools: List[Dict]):
     tool_index = 1
     tool_map = {}  # 用于存储序号到工具名的映射
 
-    for category in ["task", "docs", "statistics", "unknown"]:
+    for category in ["task", "statistics", "unknown"]:
         if category not in categories:
             continue
 
@@ -94,7 +93,6 @@ def auto_discover_tool_modules():
     # Phase 1 allowlist only (ADR-002); deprecated dirs excluded from scans
     tool_dirs = {
         "task_tools": "aiecs.tools.task_tools",
-        "docs": "aiecs.tools.docs",
         "search_tool": "aiecs.tools.search_tool",
     }
 

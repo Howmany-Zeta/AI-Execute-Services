@@ -25,29 +25,9 @@ Base Tool
 Document Tools
 --------------
 
-Document Parser
-~~~~~~~~~~~~~~~
-
-.. automodule:: aiecs.tools.docs.document_parser_tool
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Document Creator
-~~~~~~~~~~~~~~~~
-
-.. automodule:: aiecs.tools.docs.document_creator_tool
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Document Writer
-~~~~~~~~~~~~~~~
-
-.. automodule:: aiecs.tools.docs.document_writer_tool
-   :members:
-   :undoc-members:
-   :show-inheritance:
+Built-in document tools (`aiecs.tools.docs`) were removed in favor of MCP server
+services. See :doc:`../developer/MIGRATION_2_0` and archived docs under
+``docs/archived/deprecated_tools_mcp/``.
 
 Search Tool
 -----------

@@ -54,7 +54,7 @@ When using `BaseSettings`, configuration values are resolved in the following pr
 
 1. **Explicitly passed parameters** (highest priority)
    ```python
-   tool = DocumentParserTool(config={'gcs_project_id': 'my-project'})
+   tool = get_tool("image", config={"timeout": 60})
    ```
 
 2. **Environment Variables**
@@ -83,19 +83,17 @@ load_dotenv()  # Must be called before importing tools
 
 from aiecs.tools import get_tool
 
-# Automatically reads DOC_PARSER_GCS_PROJECT_ID from environment variables
-tool = get_tool("document_parser")
-print(tool.config.gcs_project_id)  # Output: your-project-id
+# Automatically reads tool-specific env vars when configured on the tool class
+tool = get_tool("image")
 ```
 
 ### Method 2: Explicitly Passing Configuration
 
 ```python
-from aiecs.tools.docs.document_parser_tool import DocumentParserTool
+from aiecs.tools import get_tool
 
-tool = DocumentParserTool(config={
-    'gcs_project_id': 'my-project',
-    'gcs_bucket_name': 'my-bucket'
+tool = get_tool("image", config={
+    'timeout': 60,
 })
 ```
 
@@ -103,18 +101,18 @@ tool = DocumentParserTool(config={
 
 ```python
 # .env file
-DOC_PARSER_GCS_BUCKET_NAME=default-bucket
+IMAGE_TOOL_TIMEOUT=60
 
 # Code
 from dotenv import load_dotenv
 load_dotenv()
 
-from aiecs.tools.docs.document_parser_tool import DocumentParserTool
+from aiecs.tools import get_tool
 
-# gcs_bucket_name read from environment variables
-# gcs_project_id passed from code (higher priority)
-tool = DocumentParserTool(config={
-    'gcs_project_id': 'override-project'
+# timeout read from environment variables when supported by tool config
+# explicit config passed from code (higher priority)
+tool = get_tool("image", config={
+    'timeout': 90,
 })
 ```
 

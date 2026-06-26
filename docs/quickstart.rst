@@ -66,20 +66,8 @@ AIECS provides a rich set of tools for various tasks.
 Document Processing
 ~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: python
-
-   from aiecs.tools.docs.document_parser_tool import DocumentParserTool
-
-   # Initialize the tool
-   parser = DocumentParserTool()
-   
-   # Parse a document
-   result = await parser.execute({
-       "operation": "parse_document",
-       "document_path": "/path/to/document.pdf"
-   })
-   
-   print(result["content"])
+Built-in document tools were removed from AIECS core (MCP server migration).
+See :doc:`../developer/MIGRATION_2_0` and ``docs/archived/deprecated_tools_mcp/``.
 
 Web Scraping
 ~~~~~~~~~~~~

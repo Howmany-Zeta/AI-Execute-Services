@@ -188,11 +188,11 @@ poetry run python -m aiecs.scripts.tools_develop.check_all_tools_config
 检查结果
 ================================================================================
 
-✅ 正确配置 (29 个):
-  ✓ DocumentParserTool
-    aiecs/tools/docs/document_parser_tool.py
-  ✓ DocumentWriterTool
-    aiecs/tools/docs/document_writer_tool.py
+✅ 正确配置 (示例):
+  ✓ ImageTool
+    aiecs/tools/task_tools/image_tool.py
+  ✓ OfficeTool
+    aiecs/tools/task_tools/office_tool.py
   ...
 
 ================================================================================

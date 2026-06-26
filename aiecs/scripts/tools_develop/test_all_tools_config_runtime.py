@@ -65,14 +65,6 @@ def main():
     # Deprecated tool packages removed in 2.0.0 (knowledge_graph, etc.)
     # excluded per ADR-002 Phase 1 allowlist.
     tools_to_test = [
-        # Document Tools
-        ("DocumentParserTool", "aiecs.tools.docs.document_parser_tool", "DocumentParserTool"),
-        ("DocumentWriterTool", "aiecs.tools.docs.document_writer_tool", "DocumentWriterTool"),
-        ("DocumentCreatorTool", "aiecs.tools.docs.document_creator_tool", "DocumentCreatorTool"),
-        ("DocumentLayoutTool", "aiecs.tools.docs.document_layout_tool", "DocumentLayoutTool"),
-        ("ContentInsertionTool", "aiecs.tools.docs.content_insertion_tool", "ContentInsertionTool"),
-        ("AIDocumentOrchestrator", "aiecs.tools.docs.ai_document_orchestrator", "AIDocumentOrchestrator"),
-        ("AIDocumentWriterOrchestrator", "aiecs.tools.docs.ai_document_writer_orchestrator", "AIDocumentWriterOrchestrator"),
         # Task Tools
         ("ImageTool", "aiecs.tools.task_tools.image_tool", "ImageTool"),
         ("OfficeTool", "aiecs.tools.task_tools.office_tool", "OfficeTool"),

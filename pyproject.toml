@@ -129,7 +129,6 @@ dependencies = [
     # =============================================================================
     # Web Scraping and Content Extraction
     # =============================================================================
-    "beautifulsoup4 (>=4.13.4,<5.0.0)",             # HTML/XML parsing library
     "lxml (>=5.4.0,<6.0.0)",                        # Fast XML and HTML processing
     "pytesseract (>=0.3.13,<0.4.0)",                # OCR (Optical Character Recognition) wrapper
     "pillow (>=11.2.1,<12.0.0)",                    # Image processing library (PIL fork)

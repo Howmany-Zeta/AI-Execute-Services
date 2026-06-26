@@ -192,7 +192,6 @@ def _auto_discover_tools():
     # Define tool directories and their categories
     tool_dirs = [
         ("task_tools", "task"),
-        ("docs", "docs"),
         ("search_tool", "task"),
     ]
 

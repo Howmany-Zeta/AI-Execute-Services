@@ -9,6 +9,10 @@ See also `docs/changelog.rst` for historical release notes.
 
 ## [Unreleased]
 
+### Removed
+
+- **`aiecs.tools.docs`**: built-in document tools (parser, creator, writer, layout, content insertion, AI orchestrators, PPT). Migrated to MCP server services; source snapshot at `test/archived/mcp_migration_2026/aiecs_tools_docs/`. Tests/examples archived under `test/archived/mcp_migration_2026/` and `examples/archived/mcp_migration_2026/`.
+
 ### Added
 
 - **`aiecs.domain.context.compression`** (Phase 0 / M1 alpha in development): constants, `ContentBlock` model, Port + NoOp stubs, and LLMMessage / ConversationMessage adapters (ADR-011 foundation)
@@ -97,7 +101,7 @@ Importing or instantiating these surfaces emits `DeprecationWarning` until Phase
 | `KnowledgeAwareAgent` | `HybridAgent` + `knowledge@builtin` |
 | `GraphAwareAgentMixin` | `KnowledgePlugin` |
 
-**Tool auto-discovery allowlist:** `task_tools`, `docs`, `search_tool` only (`aiecs/tools/__init__.py`).
+**Tool auto-discovery allowlist:** `task_tools`, `search_tool` only (`aiecs/tools/__init__.py`).
 
 ### Added (Phase 2 — L2 integration shell)
 

@@ -13,11 +13,6 @@ import warnings
 BUILTIN_TOOL_MCP_MIGRATION_DATE = "2026-07-01"
 
 _BUILTIN_TOOL_DEPRECATION_MESSAGES = {
-    "docs": (
-        f"aiecs.tools.docs is deprecated and will be removed on {BUILTIN_TOOL_MCP_MIGRATION_DATE}. "
-        "Document tools are being migrated to MCP server services; "
-        "please migrate to the corresponding MCP server tools."
-    ),
     "search_tool": (
         f"aiecs.tools.search_tool is deprecated and will be removed on {BUILTIN_TOOL_MCP_MIGRATION_DATE}. "
         "Search tools are being migrated to MCP server services; "
