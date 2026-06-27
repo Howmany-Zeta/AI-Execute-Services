@@ -9,6 +9,9 @@ See also `docs/changelog.rst` for historical release notes.
 
 ## [Unreleased]
 
+
+## [2.1.0rc1] - 2026-06-27 (Pre-release)
+
 ### Removed
 
 - **`aiecs.tools.docs`**: built-in document tools (parser, creator, writer, layout, content insertion, AI orchestrators, PPT). Migrated to MCP server services; source snapshot at `test/archived/mcp_migration_2026/aiecs_tools_docs/`. Tests/examples archived under `test/archived/mcp_migration_2026/` and `examples/archived/mcp_migration_2026/`.
@@ -24,6 +27,7 @@ See also `docs/changelog.rst` for historical release notes.
 - **Phase 5 Epic 2 orchestrator (O1–O5, M3 prep):** `should_compress`, `AutoCompactState`, `auto_compact_if_needed`, `on_prompt_too_long`; `maybe_compact_before_llm` delegates to O3 (CC-073–CC-077).
 - **Phase 6 Epic 2 GA (O6–O10, M3 / 2.1.0):** `HookRegistry` / `HookExecutor` (PRE/POST compact), `CompactProgressEvent` + callback/async iterator, public `CompactionResult` exports, ContextEngine `compress_on_append` with token policy and strategy override, MemoryPlugin O8 wiring, host integration guide (CC-083–CC-090).
 - **Phase 7 host migration helpers (M4, CC-091–095 in aiecs):** `aiecs.host.compression` (S3 `ToolArtifactPort`, SSE payload bridge, L2 MC adapter, `USE_AIECS_COMPRESSION`), `examples/host_compression/`, `scripts/validate_l3_compression_e2e.py`, `docs/developer/HOST_MIGRATION_M4.md`.
+
 
 ## [2.1.0] - 2026-06-25
 

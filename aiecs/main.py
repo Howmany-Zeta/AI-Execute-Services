@@ -165,7 +165,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="AIECS - AI Execute Services",
     description="Middleware service for AI-powered task execution and tool orchestration",
-    version="2.0.0rc3",
+    version="2.1.0rc1",
     lifespan=lifespan,
 )
 
@@ -187,7 +187,7 @@ socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "service": "aiecs", "version": "2.0.0rc3"}
+    return {"status": "healthy", "service": "aiecs", "version": "2.1.0rc1"}
 
 
 # Metrics health check endpoint
