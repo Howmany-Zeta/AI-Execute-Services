@@ -9,6 +9,9 @@ See also `docs/changelog.rst` for historical release notes.
 
 ## [Unreleased]
 
+
+## [2.1.0rc2] - 2026-06-28 (Pre-release)
+
 ### Added
 
 - **Agent HookPlugin v2 (V2.0–V2.1):** `permission_checker` protocol, `permission_request` / `permission_denied` (H22), `post_tool_use_failure`, PreToolUse `updated_input` / `permissionDecision`, MCP H2 `updated_mcp_output`; hooks.json `notification` executable when `HookPlugin.options.enable_v2_hooks=true`.
@@ -22,6 +25,7 @@ See also `docs/changelog.rst` for historical release notes.
 
 - **HybridAgent task kernel order:** H5 → `PRE_TASK` → `BUILD_MESSAGES` → H5b → `PRE_MAIN_LOOP` (sync + streaming).
 - **H3/H4 hook payloads:** include `layer`, `formatted_transcript`, `estimated_tokens` when F2/F7 metadata present.
+
 
 ## [2.1.0rc1] - 2026-06-27 (Pre-release)
 

@@ -20,7 +20,7 @@ exclude = '''
 # Poetry 2.x 配置 - 需要基本的 metadata (使用 PEP 621 格式时保持最小配置)
 [tool.poetry]
 name = "aiecs"
-version = "2.1.0rc1"
+version = "2.1.0rc2"
 description = "AI Execute Services - A middleware framework for AI-powered task execution and tool orchestration"
 authors = ["AIECS Team <iretbl@gmail.com>"]
 readme = "README.md"
@@ -28,7 +28,7 @@ packages = [{include = "aiecs"}]
 
 [project]
 name = "aiecs"
-version = "2.1.0rc1"
+version = "2.1.0rc2"
 description = "AI Execute Services - A middleware framework for AI-powered task execution and tool orchestration"
 authors = [
     {name = "AIECS Team", email = "iretbl@gmail.com"}
