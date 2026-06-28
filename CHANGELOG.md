@@ -9,6 +9,9 @@ See also `docs/changelog.rst` for historical release notes.
 
 ## [Unreleased]
 
+
+## [2.1.0rc3] - 2026-06-28 (Pre-release)
+
 ### Added
 
 - **Epic 4 context compression polish (G1–G7):** F4 turnkey `AgentConfiguration.compact_after_tool_batch` + batch-end compaction in HybridAgent; F6 host integration guide packaged in wheel (`aiecs/docs/host/context_compression_integration.md`); G3 legacy L2 adapter redirect to F1; G4 ContextEngine O8 `layer=CE` metadata and `CompressionPolicy.summary_role`; G5 `estimate_transcript_tokens` re-export from `aiecs.host.compression`; **G7 A5** `CompressionPolicy.summary_chunk_size` chunked LLM summarization.
