@@ -208,4 +208,4 @@ class TestCollectManifestsFromConfig:
         )
         manifests = collect_manifests_from_config(config)
         assert len(manifests) == 1
-        assert manifests[0].name == "sample-audit"
+        assert manifests[0][0].name == "sample-audit"

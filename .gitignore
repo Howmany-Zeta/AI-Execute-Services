@@ -214,7 +214,11 @@ ehthumbs.db
 
 # bug_report
 bug_report/
-issue_report/
+# issue_report (local drafts); exception: agent hook reference excerpts for OpenSpec
+issue_report/**
+!issue_report/agent/
+!issue_report/agent/reference/
+!issue_report/agent/reference/**
 
 # openspec
 openspec/

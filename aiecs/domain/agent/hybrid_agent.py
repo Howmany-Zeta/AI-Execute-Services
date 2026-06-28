@@ -38,6 +38,21 @@ from .tool_loop_core import (
 )
 from .tool_result_matcher import matches_stop_condition
 from aiecs.domain.agent.plugins.context import AgentPluginContext, PluginShortCircuitResult
+from aiecs.domain.agent.plugins.hooks.task_boundary import (
+    apply_hook_additional_context,
+    dispatch_build_messages_hook,
+    dispatch_iteration_start_hook,
+    dispatch_max_iterations_hook,
+    dispatch_prompt_too_long_hook,
+    dispatch_llm_error_hook,
+    dispatch_stop_hook_for_outcome,
+    dispatch_user_prompt_in_history_hook,
+    last_assistant_message_preview,
+    prepare_and_dispatch_task_entry_hooks,
+    run_post_task_phase_with_hooks,
+    task_rejection_from_hook_result,
+)
+from aiecs.domain.agent.plugins.hooks.types import AggregatedHookResult
 from aiecs.domain.agent.plugins.builtin.knowledge_plugin import (
     effective_task_description,
     inject_iteration_knowledge_into_messages,
@@ -457,11 +472,27 @@ class HybridAgent(BaseAIAgent):
         )
         self._apply_task_plugin_configs(task=task, context=context)
 
+        h5_result = await prepare_and_dispatch_task_entry_hooks(plugin_ctx, task_description=task_description)
+        h5_rejection = task_rejection_from_hook_result(h5_result, source="user_prompt_submit")
+        if h5_rejection is not None:
+            if self._plugin_manager is not None:
+                return await run_post_task_phase_with_hooks(self._plugin_manager, plugin_ctx, h5_rejection)
+            return h5_rejection
+
+        initial_messages: Optional[List[LLMMessage]] = None
+        short = None
+
         if self._plugin_manager is not None:
             await self._plugin_manager.run_phase(PluginPhase.PRE_TASK, ctx=plugin_ctx)
+            initial_messages = await self._build_initial_messages_async(task_description, context, plugin_ctx)
+            h5b_result = await dispatch_user_prompt_in_history_hook(plugin_ctx, initial_messages)
+            apply_hook_additional_context(plugin_ctx, initial_messages, h5b_result)
+            h5b_rejection = task_rejection_from_hook_result(h5b_result, source="user_prompt_in_history")
+            if h5b_rejection is not None:
+                return await run_post_task_phase_with_hooks(self._plugin_manager, plugin_ctx, h5b_rejection)
             short = await self._plugin_manager.run_phase(PluginPhase.PRE_MAIN_LOOP, ctx=plugin_ctx)
         else:
-            short = None
+            initial_messages = await self._build_initial_messages_async(task_description, context, plugin_ctx)
 
         task_for_loop = effective_task_description(plugin_ctx, task_description)
 
@@ -473,13 +504,14 @@ class HybridAgent(BaseAIAgent):
                 task_for_loop,
                 context,
                 plugin_ctx,
+                initial_messages=initial_messages,
             )
 
         if self._plugin_manager is not None:
-            loop_result = await self._plugin_manager.run_phase(
-                PluginPhase.POST_TASK,
-                ctx=plugin_ctx,
-                result=loop_result,
+            loop_result = await run_post_task_phase_with_hooks(
+                self._plugin_manager,
+                plugin_ctx,
+                loop_result,
             )
         return loop_result
 
@@ -546,21 +578,23 @@ class HybridAgent(BaseAIAgent):
                     iteration=iteration,
                 )
                 messages = inject_iteration_knowledge_into_messages(messages, plugin_ctx)
+                await dispatch_iteration_start_hook(plugin_ctx, iteration)
 
-            outcome = await self._run_tool_loop_core_iteration(messages, context, iteration, state)
+            outcome = await self._run_tool_loop_core_iteration(messages, context, iteration, state, plugin_ctx=plugin_ctx)
 
             budget.consume(1)
 
             if plugin_ctx is not None:
                 plugin_ctx.plugin_state["task.response_index"] = plugin_ctx.plugin_state.get("task.response_index", 0) + 1
 
-            # D2-08: inline drain (tool-path dawp_start) — parity with streaming path (§6.5).
+            _dawp_drained_any = False
+            # D2-08 / H2-01a: inline drain — parity with streaming path (§6.5, §7.1.3.1).
             if plugin_ctx is not None:
                 from aiecs.domain.agent.plugins.dawp.schema import DawpAbortMainError
 
                 try:
                     async for _ in self._drain_pending_dawp_runs("inline", messages, context, plugin_ctx, budget):
-                        pass
+                        _dawp_drained_any = True
                 except DawpAbortMainError as _exc:
                     logger.warning("HybridAgent (non-streaming): abort_main (inline): %s", _exc)
                     return self._assemble_loop_result(
@@ -586,13 +620,13 @@ class HybridAgent(BaseAIAgent):
                     step=step,
                 )
 
-            # D2-08: config-path drain (on_response_trigger) — parity with streaming path.
+            # D2-08 / H2-01a: config-path drain (on_response_trigger) — parity with streaming path.
             if plugin_ctx is not None:
                 from aiecs.domain.agent.plugins.dawp.schema import DawpAbortMainError as _AbortErr
 
                 try:
                     async for _ in self._drain_pending_dawp_runs("on_iteration_end", messages, context, plugin_ctx, budget):
-                        pass
+                        _dawp_drained_any = True
                 except _AbortErr as _exc:
                     logger.warning("HybridAgent (non-streaming): abort_main (on_iteration_end): %s", _exc)
                     return self._assemble_loop_result(
@@ -611,11 +645,28 @@ class HybridAgent(BaseAIAgent):
             if outcome.kind == "continue":
                 iteration += 1
                 continue
+
+            if _dawp_drained_any:
+                iteration += 1
+                continue
+
             if outcome.kind in ("final", "stop_match") and outcome.result is not None:
+                if plugin_ctx is not None:
+                    prevent = await dispatch_stop_hook_for_outcome(plugin_ctx, outcome, iteration, messages=messages)
+                    if prevent:
+                        iteration += 1
+                        continue
                 return self._assemble_loop_result(outcome.result)
 
             iteration += 1
 
+        if plugin_ctx is not None:
+            await dispatch_max_iterations_hook(
+                plugin_ctx,
+                state,
+                iteration=iteration,
+                max_iterations=self._max_iterations,
+            )
         return self._assemble_loop_result(self._tool_loop_max_iterations_result(state))
 
     async def _tool_loop_with_plugins(
@@ -623,6 +674,8 @@ class HybridAgent(BaseAIAgent):
         task_description: str,
         context: Dict[str, Any],
         plugin_ctx: AgentPluginContext,
+        *,
+        initial_messages: Optional[List[LLMMessage]] = None,
     ) -> Dict[str, Any]:
         """
         Tool loop with plugin-aware messages and ``ON_ITERATION_*`` hooks (§8.4).
@@ -630,7 +683,10 @@ class HybridAgent(BaseAIAgent):
         from aiecs.domain.agent.plugins.dawp.budget import TaskIterationBudget
         from aiecs.domain.agent.plugins.dawp.schema import DawpAbortMainError
 
-        messages = await self._build_initial_messages_async(task_description, context, plugin_ctx)
+        if initial_messages is not None:
+            messages = list(initial_messages)
+        else:
+            messages = await self._build_initial_messages_async(task_description, context, plugin_ctx)
 
         # D2-08: drain pre_main_loop activations before starting the main loop — parity with
         # the streaming path (§9, D1-09).  Events are consumed and discarded; only side
@@ -785,6 +841,8 @@ class HybridAgent(BaseAIAgent):
         task_description: str,
         context: Dict[str, Any],
         plugin_ctx: AgentPluginContext,
+        *,
+        initial_messages: Optional[List[LLMMessage]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Streaming tool loop with async messages and ``ON_ITERATION_*`` hooks (§8.4, §8.5).
@@ -802,7 +860,7 @@ class HybridAgent(BaseAIAgent):
             budget = TaskIterationBudget(limit=self._max_iterations)
             plugin_ctx.plugin_state[_BUDGET_KEY] = budget
 
-        messages = await self._build_initial_messages_async(task_description, context, plugin_ctx)
+        messages = list(initial_messages) if initial_messages is not None else await self._build_initial_messages_async(task_description, context, plugin_ctx)
         state = ToolLoopRunState()
         iteration = 0
 
@@ -823,13 +881,14 @@ class HybridAgent(BaseAIAgent):
             logger.debug(f"HybridAgent {self.agent_id} - tool loop iteration {iteration + 1}")
             plugin_ctx.plugin_state["task.current_iteration"] = iteration
 
-            if self._plugin_manager is not None:
+            if plugin_ctx is not None and self._plugin_manager is not None:
                 await self._plugin_manager.run_phase(
                     PluginPhase.ON_ITERATION_START,
                     ctx=plugin_ctx,
                     iteration=iteration,
                 )
                 messages = inject_iteration_knowledge_into_messages(messages, plugin_ctx)
+                await dispatch_iteration_start_hook(plugin_ctx, iteration)
 
             yield {
                 "type": "iteration_start",
@@ -840,7 +899,7 @@ class HybridAgent(BaseAIAgent):
             }
 
             state.last_outcome = None
-            async for event in self._run_tool_loop_core_iteration_streaming(messages, context, iteration, state):
+            async for event in self._run_tool_loop_core_iteration_streaming(messages, context, iteration, state, plugin_ctx=plugin_ctx):
                 yield event
 
             budget.consume(1)
@@ -904,14 +963,31 @@ class HybridAgent(BaseAIAgent):
                 continue
 
             if outcome.kind == "stop_match":
+                if plugin_ctx is not None:
+                    prevent = await dispatch_stop_hook_for_outcome(plugin_ctx, outcome, iteration, messages=messages)
+                    if prevent:
+                        iteration += 1
+                        continue
                 return
 
             if outcome.kind == "final" and outcome.result is not None:
+                if plugin_ctx is not None:
+                    prevent = await dispatch_stop_hook_for_outcome(plugin_ctx, outcome, iteration, messages=messages)
+                    if prevent:
+                        iteration += 1
+                        continue
                 yield self._streaming_result_event_from_inner(outcome.result)
                 return
 
             iteration += 1
 
+        if plugin_ctx is not None:
+            await dispatch_max_iterations_hook(
+                plugin_ctx,
+                state,
+                iteration=iteration,
+                max_iterations=self._max_iterations,
+            )
         yield self._streaming_result_event_from_inner(self._tool_loop_max_iterations_result(state))
 
     async def _drain_pending_dawp_runs(
@@ -984,9 +1060,10 @@ class HybridAgent(BaseAIAgent):
             skipped_unresolvable.clear()
             pending.remove(run)
 
+            run_id = f"dawp-{uuid.uuid4().hex[:8]}"
             scope = LoopScope(
                 kind="dawp",
-                run_id=f"dawp-{uuid.uuid4().hex[:8]}",
+                run_id=run_id,
                 workflow_id=run.workflow_id,
             )
             plugin_ctx.plugin_state["dawp._metrics_run"] = {
@@ -1013,6 +1090,38 @@ class HybridAgent(BaseAIAgent):
             if emit_boundary:
                 yield build_dawp_run_started(scope, placement=placement, trigger=run.trigger)
 
+            from aiecs.domain.agent.plugins.hooks.dispatch import dispatch_agent_hook
+            from aiecs.domain.agent.plugins.hooks.events import AgentHookEvent
+            from aiecs.domain.agent.plugins.hooks.payload import (
+                build_dawp_run_end_payload,
+                build_dawp_run_start_payload,
+                build_subagent_start_payload,
+            )
+
+            await dispatch_agent_hook(
+                plugin_ctx,
+                AgentHookEvent.SUBAGENT_START,
+                build_subagent_start_payload(
+                    agent_id=self.agent_id,
+                    workflow_id=run.workflow_id,
+                    run_id=run_id,
+                    placement=placement,
+                    trigger=run.trigger,
+                ),
+            )
+
+            await dispatch_agent_hook(
+                plugin_ctx,
+                AgentHookEvent.DAWP_RUN_START,
+                build_dawp_run_start_payload(
+                    agent_id=self.agent_id,
+                    workflow_id=run.workflow_id,
+                    run_id=run_id,
+                    placement=placement,
+                    trigger=run.trigger,
+                ),
+            )
+
             # §6.3, D1-12: select message list based on merge_back strategy.
             # "append" → shared reference (DAWP appends in-place, main loop sees all).
             # "inject_only" → copy (DAWP messages stay isolated; summary added after).
@@ -1035,6 +1144,20 @@ class HybridAgent(BaseAIAgent):
                     yield event
                 run_success = plugin_ctx.plugin_state.get("dawp._run_success", False)
             finally:
+                transcript_path = context.get("agent_transcript_path")
+                await dispatch_agent_hook(
+                    plugin_ctx,
+                    AgentHookEvent.DAWP_RUN_END,
+                    build_dawp_run_end_payload(
+                        agent_id=self.agent_id,
+                        workflow_id=run.workflow_id,
+                        run_id=run_id,
+                        status="success" if run_success else "failed",
+                        abort_main=bool(run.abort_main),
+                        last_assistant_message=last_assistant_message_preview(dawp_messages),
+                        agent_transcript_path=str(transcript_path) if isinstance(transcript_path, str) else None,
+                    ),
+                )
                 if emit_boundary:
                     yield build_dawp_run_completed(scope, success=run_success)
                 from aiecs.domain.agent.plugins.dawp.metrics import get_dawp_metrics
@@ -1144,6 +1267,7 @@ class HybridAgent(BaseAIAgent):
                     iteration,
                     state,
                     tool_schemas_override=filtered_schemas,
+                    plugin_ctx=plugin_ctx,
                 ):
                     yield _with_loop_scope(event, scope)
 
@@ -1240,6 +1364,29 @@ class HybridAgent(BaseAIAgent):
             )
             self._apply_task_plugin_configs(task=task, context=context)
 
+            h5_result = await prepare_and_dispatch_task_entry_hooks(plugin_ctx, task_description=task_description)
+            h5_rejection = task_rejection_from_hook_result(h5_result, source="user_prompt_submit")
+            if h5_rejection is not None:
+                execution_time = (datetime.utcnow() - start_time).total_seconds()
+                loop_result = h5_rejection
+                if self._plugin_manager is not None:
+                    loop_result = await run_post_task_phase_with_hooks(
+                        self._plugin_manager,
+                        plugin_ctx,
+                        loop_result,
+                    )
+                async for plugin_event in self._yield_pending_plugin_events(pending_plugin_events):
+                    yield plugin_event
+                result_event = self._streaming_result_event_from_inner(loop_result, execution_time=execution_time)
+                yield result_event
+                yield {
+                    "type": "completed",
+                    "success": False,
+                    "execution_time": execution_time,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+                return
+
             plugin_configs, merge_log = self._resolve_plugin_configs(task=task, context=context)
             yield {
                 "type": "plugin_config_resolved",
@@ -1248,12 +1395,38 @@ class HybridAgent(BaseAIAgent):
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
+            initial_messages: Optional[List[LLMMessage]] = None
+            short = None
+
             if self._plugin_manager is not None:
                 async for plugin_event in self._yield_pending_plugin_events(pending_plugin_events):
                     yield plugin_event
                 await self._plugin_manager.run_phase(PluginPhase.PRE_TASK, ctx=plugin_ctx)
                 async for plugin_event in self._yield_pending_plugin_events(pending_plugin_events):
                     yield plugin_event
+
+                initial_messages = await self._build_initial_messages_async(task_description, context, plugin_ctx)
+                h5b_result = await dispatch_user_prompt_in_history_hook(plugin_ctx, initial_messages)
+                apply_hook_additional_context(plugin_ctx, initial_messages, h5b_result)
+                h5b_rejection = task_rejection_from_hook_result(h5b_result, source="user_prompt_in_history")
+                if h5b_rejection is not None:
+                    execution_time = (datetime.utcnow() - start_time).total_seconds()
+                    loop_result = await run_post_task_phase_with_hooks(
+                        self._plugin_manager,
+                        plugin_ctx,
+                        h5b_rejection,
+                    )
+                    async for plugin_event in self._yield_pending_plugin_events(pending_plugin_events):
+                        yield plugin_event
+                    result_event = self._streaming_result_event_from_inner(loop_result, execution_time=execution_time)
+                    yield result_event
+                    yield {
+                        "type": "completed",
+                        "success": False,
+                        "execution_time": execution_time,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                    return
 
                 short = await self._plugin_manager.run_phase(PluginPhase.PRE_MAIN_LOOP, ctx=plugin_ctx)
                 async for plugin_event in self._yield_pending_plugin_events(pending_plugin_events):
@@ -1262,14 +1435,13 @@ class HybridAgent(BaseAIAgent):
                 if isinstance(short, PluginShortCircuitResult):
                     execution_time = (datetime.utcnow() - start_time).total_seconds()
                     loop_result = dict(short.result)
-                    if self._plugin_manager is not None:
-                        loop_result = await self._plugin_manager.run_phase(
-                            PluginPhase.POST_TASK,
-                            ctx=plugin_ctx,
-                            result=loop_result,
-                        )
-                        async for plugin_event in self._yield_pending_plugin_events(pending_plugin_events):
-                            yield plugin_event
+                    loop_result = await run_post_task_phase_with_hooks(
+                        self._plugin_manager,
+                        plugin_ctx,
+                        loop_result,
+                    )
+                    async for plugin_event in self._yield_pending_plugin_events(pending_plugin_events):
+                        yield plugin_event
 
                     result_event = self._streaming_result_event_from_inner(loop_result, execution_time=execution_time)
                     task_success = result_event.get("success", True)
@@ -1290,6 +1462,8 @@ class HybridAgent(BaseAIAgent):
                         "timestamp": datetime.utcnow().isoformat(),
                     }
                     return
+            else:
+                initial_messages = await self._build_initial_messages_async(task_description, context, plugin_ctx)
 
             task_for_loop = effective_task_description(plugin_ctx, task_description)
 
@@ -1310,6 +1484,7 @@ class HybridAgent(BaseAIAgent):
                         task_for_loop,
                         context,
                         plugin_ctx,
+                        initial_messages=initial_messages,
                     ):
                         async for plugin_event in self._yield_pending_plugin_events(pending_plugin_events):
                             yield plugin_event
@@ -1329,14 +1504,13 @@ class HybridAgent(BaseAIAgent):
             if stream_result_event is not None:
                 execution_time = (datetime.utcnow() - start_time).total_seconds()
                 loop_result = self._loop_result_from_streaming_event(stream_result_event)
-                if self._plugin_manager is not None:
-                    loop_result = await self._plugin_manager.run_phase(
-                        PluginPhase.POST_TASK,
-                        ctx=plugin_ctx,
-                        result=loop_result,
-                    )
-                    async for plugin_event in self._yield_pending_plugin_events(pending_plugin_events):
-                        yield plugin_event
+                loop_result = await run_post_task_phase_with_hooks(
+                    self._plugin_manager,
+                    plugin_ctx,
+                    loop_result,
+                )
+                async for plugin_event in self._yield_pending_plugin_events(pending_plugin_events):
+                    yield plugin_event
                 formatted_result = self._streaming_result_event_from_inner(loop_result, execution_time=execution_time)
                 yield formatted_result
 
@@ -1461,7 +1635,12 @@ class HybridAgent(BaseAIAgent):
             "total_tokens": state.total_tokens,
         }
 
-    def _build_tool_loop_compression_context(self, context: Dict[str, Any]) -> ToolLoopCompressionContext:
+    def _build_tool_loop_compression_context(
+        self,
+        context: Dict[str, Any],
+        *,
+        policy: Any | None = None,
+    ) -> ToolLoopCompressionContext:
         """Build W8/W11 compression context from AgentConfiguration (ADR-007, ADR-009)."""
         from aiecs.domain.context.compression.hooks import HookExecutor, HookRegistry
         from aiecs.domain.context.compression.progress import CompactProgressEmitter
@@ -1473,8 +1652,8 @@ class HybridAgent(BaseAIAgent):
             ToolArtifactPort,
         )
 
-        policy = resolve_compression_policy(self._config)
-        enabled = bool(self._config.enable_context_compression and policy.enabled)
+        resolved_policy = policy or resolve_compression_policy(self._config)
+        enabled = bool(self._config.enable_context_compression and resolved_policy.enabled)
         session_id = str(context.get("session_id") or self.agent_id or "")
         if enabled and self._tool_budget_store is None:
             self._tool_budget_store = InMemoryToolBudgetStore()
@@ -1515,7 +1694,7 @@ class HybridAgent(BaseAIAgent):
 
         return ToolLoopCompressionContext(
             enabled=enabled,
-            policy=policy,
+            policy=resolved_policy,
             session_id=session_id,
             artifact_port=artifact_port if enabled else None,
             budget_store=self._tool_budget_store if enabled else None,
@@ -1526,16 +1705,35 @@ class HybridAgent(BaseAIAgent):
             auto_compact_state=self._auto_compact_state if enabled else None,
         )
 
+    async def _build_tool_loop_compression_context_async(
+        self,
+        context: Dict[str, Any],
+    ) -> ToolLoopCompressionContext:
+        """Build compression context with optional F3 layer policy resolver (L3)."""
+        from aiecs.domain.context.compression.metadata import LAYER_L3
+        from aiecs.domain.context.compression.policy_resolver import resolve_layer_compression_policy
+
+        base_policy = resolve_compression_policy(self._config)
+        resolved = await resolve_layer_compression_policy(
+            LAYER_L3,
+            context=context,
+            config=self._config,
+            base_policy=base_policy,
+        )
+        return self._build_tool_loop_compression_context(context, policy=resolved)
+
     async def _apply_pre_llm_compression(
         self,
         messages: List[LLMMessage],
         context: Dict[str, Any],
+        plugin_ctx: Optional[AgentPluginContext] = None,
     ) -> None:
         """Run W8/W11 pre-LLM compression in-place on ``messages``."""
-        compression_ctx = self._build_tool_loop_compression_context(context)
+        compression_ctx = await self._build_tool_loop_compression_context_async(context)
         compacted = await maybe_compact_before_llm(
             messages,
             compression_ctx=compression_ctx,
+            plugin_ctx=plugin_ctx,
         )
         messages[:] = compacted
 
@@ -1570,6 +1768,8 @@ class HybridAgent(BaseAIAgent):
         state: ToolLoopRunState,
         event_callback: Optional[Any] = None,
         compression_ctx: Optional[ToolLoopCompressionContext] = None,
+        plugin_ctx: Optional[AgentPluginContext] = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> ToolLoopIterationOutcome:
         """
         Execute a batch of tool calls, append messages, and update ``state``.
@@ -1578,6 +1778,17 @@ class HybridAgent(BaseAIAgent):
         """
         if compression_ctx is None:
             compression_ctx = ToolLoopCompressionContext(enabled=False)
+
+        from aiecs.domain.agent.plugins.hooks.tool_dispatch import dispatch_tool_with_hooks
+
+        batch_count = len(tool_calls_to_process)
+        event_sink_backup = plugin_ctx.event_sink if plugin_ctx is not None else None
+        if plugin_ctx is not None and event_callback is not None:
+
+            async def _hook_event_sink(event: Dict[str, Any]) -> None:
+                await event_callback(event)
+
+            plugin_ctx.event_sink = _hook_event_sink
 
         messages.append(
             LLMMessage(
@@ -1590,181 +1801,287 @@ class HybridAgent(BaseAIAgent):
         # D13 (D2-04): import here so the check below can use it without a per-iteration import.
         from aiecs.domain.agent.plugins.dawp.tools_filter import DAWP_EXCLUDED_TOOL_NAMES
 
-        for i, tool_call in enumerate(tool_calls_to_process):
-            tool_name = "unknown"
-            tool_call_id = tool_call.get("id") or f"call_{i}"
-            try:
-                func_name = tool_call["function"]["name"]
-                func_args = tool_call["function"]["arguments"]
+        try:
+            for i, tool_call in enumerate(tool_calls_to_process):
+                tool_name = "unknown"
+                tool_call_id = tool_call.get("id") or f"call_{i}"
+                try:
+                    func_name = tool_call["function"]["name"]
+                    func_args = tool_call["function"]["arguments"]
 
-                # D13 (D2-04): dawp_start must be the sole tool_call in its iteration.
-                # Check on raw func_name BEFORE _parse_function_name so that legacy aliases
-                # (dawp_run, dawp_publish_workflow) are caught even when not in _tool_instances.
-                if func_name in DAWP_EXCLUDED_TOOL_NAMES and len(tool_calls_to_process) > 1:
-                    tool_name = func_name  # set for audit / events
-                    rejection: Dict[str, Any] = {
-                        "status": "rejected",
-                        "reason": (
-                            f"'{func_name}' must be the sole tool_call in this iteration; "
-                            f"found {len(tool_calls_to_process)} concurrent tool calls (D13). "
-                            "Call dawp_start alone in a separate turn after other tools complete."
-                        ),
-                    }
+                    # D13 (D2-04): dawp_start must be the sole tool_call in its iteration.
+                    if func_name in DAWP_EXCLUDED_TOOL_NAMES and batch_count > 1:
+                        tool_name = func_name
+                        rejection: Dict[str, Any] = {
+                            "status": "rejected",
+                            "reason": (
+                                f"'{func_name}' must be the sole tool_call in this iteration; "
+                                f"found {batch_count} concurrent tool calls (D13). "
+                                "Call dawp_start alone in a separate turn after other tools complete."
+                            ),
+                        }
+                        if plugin_ctx is not None:
+                            hook_result = await dispatch_tool_with_hooks(
+                                plugin_ctx,
+                                tool_name=tool_name,
+                                tool_input={},
+                                tool_call_id=tool_call_id,
+                                iteration=iteration,
+                                batch_tool_call_count=batch_count,
+                                batch_index=i,
+                                assistant_turn_committed=True,
+                                offload=False,
+                                kernel_rejection=rejection,
+                            )
+                            tool_content = hook_result.tool_content or json.dumps(rejection, ensure_ascii=False)
+                        else:
+                            tool_content = json.dumps(rejection, ensure_ascii=False)
+
+                        state.tool_calls_count += 1
+                        state.steps.append(
+                            {
+                                "type": "action",
+                                "tool": tool_name,
+                                "operation": None,
+                                "parameters": {},
+                                "result": str(rejection),
+                                "iteration": iteration + 1,
+                            }
+                        )
+                        if event_callback is not None:
+                            await event_callback(
+                                {
+                                    "type": "tool_result",
+                                    "tool_name": tool_name,
+                                    "result": rejection,
+                                    "timestamp": datetime.utcnow().isoformat(),
+                                }
+                            )
+                        messages.append(
+                            LLMMessage(
+                                role="tool",
+                                content=tool_content,
+                                tool_call_id=tool_call_id,
+                            )
+                        )
+                        continue
+
+                    tool_name, operation = self._parse_function_name(func_name)
+
+                    if isinstance(func_args, str):
+                        parameters = json.loads(func_args)
+                    else:
+                        parameters = func_args if func_args else {}
+
+                    if event_callback is not None:
+                        await event_callback(
+                            {
+                                "type": "tool_call",
+                                "tool_name": tool_name,
+                                "operation": operation,
+                                "parameters": parameters,
+                                "timestamp": datetime.utcnow().isoformat(),
+                            }
+                        )
+
+                    async def _execute(
+                        _tool_name: str = tool_name,
+                        _operation: str | None = operation,
+                        _parameters: Dict[str, Any] = parameters,
+                    ) -> Any:
+                        return await self._execute_tool(_tool_name, _operation, _parameters)
+
+                    if plugin_ctx is not None:
+                        nested_hooks = bool(plugin_ctx.plugin_state.get("dawp.active_run_id"))
+                        hook_result = await dispatch_tool_with_hooks(
+                            plugin_ctx,
+                            tool_name=tool_name,
+                            tool_input=parameters,
+                            tool_call_id=tool_call_id,
+                            iteration=iteration,
+                            batch_tool_call_count=batch_count,
+                            batch_index=i,
+                            assistant_turn_committed=True,
+                            offload=True,
+                            compression_ctx=compression_ctx,
+                            execute_tool=_execute,
+                            nested=nested_hooks,
+                        )
+                    else:
+                        hook_result = await self._dispatch_tool_without_hooks(
+                            tool_name=tool_name,
+                            operation=operation,
+                            parameters=parameters,
+                            tool_call_id=tool_call_id,
+                            compression_ctx=compression_ctx,
+                        )
+
+                    if hook_result.blocked or hook_result.error_message:
+                        error_content = hook_result.tool_content or hook_result.error_message or hook_result.block_reason
+                        state.tool_calls_count += 1
+                        state.steps.append(
+                            {
+                                "type": "observation",
+                                "content": error_content,
+                                "iteration": iteration + 1,
+                                "has_error": True,
+                            }
+                        )
+                        if event_callback is not None:
+                            await event_callback(
+                                {
+                                    "type": "tool_error",
+                                    "tool_name": tool_name,
+                                    "error": error_content,
+                                    "timestamp": datetime.utcnow().isoformat(),
+                                }
+                            )
+                        messages.append(
+                            LLMMessage(
+                                role="tool",
+                                content=error_content,
+                                tool_call_id=tool_call_id,
+                            )
+                        )
+                        continue
+
+                    tool_result = hook_result.tool_output
                     state.tool_calls_count += 1
                     state.steps.append(
                         {
                             "type": "action",
                             "tool": tool_name,
-                            "operation": None,
-                            "parameters": {},
-                            "result": str(rejection),
+                            "operation": operation,
+                            "parameters": parameters,
+                            "result": str(tool_result),
                             "iteration": iteration + 1,
                         }
                     )
+
                     if event_callback is not None:
                         await event_callback(
                             {
                                 "type": "tool_result",
                                 "tool_name": tool_name,
-                                "result": rejection,
+                                "result": tool_result,
+                                "timestamp": datetime.utcnow().isoformat(),
+                            }
+                        )
+
+                    if self._config.tool_result_stop_conditions and matches_stop_condition(tool_result, self._config.tool_result_stop_conditions):
+                        final_output = json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result)
+                        result = {
+                            "final_response": final_output,
+                            "steps": state.steps,
+                            "iterations": iteration + 1,
+                            "tool_calls_count": state.tool_calls_count,
+                            "total_tokens": state.total_tokens,
+                            "stop_reason": "tool_result_matched",
+                        }
+                        if event_callback is not None:
+                            await event_callback(
+                                {
+                                    "type": "result",
+                                    "success": True,
+                                    "output": final_output,
+                                    "reasoning_steps": state.steps,
+                                    "tool_calls_count": state.tool_calls_count,
+                                    "iterations": iteration + 1,
+                                    "total_tokens": state.total_tokens,
+                                    "stop_reason": "tool_result_matched",
+                                    "timestamp": datetime.utcnow().isoformat(),
+                                }
+                            )
+                        return ToolLoopIterationOutcome(kind="stop_match", result=result)
+
+                    tool_images: List[Union[str, Dict[str, Any]]] = []
+                    if isinstance(tool_result, dict) and tool_result.get("_image_b64"):
+                        media_type = tool_result.get("_image_media_type", "image/png")
+                        tool_images = [f"data:{media_type};base64,{tool_result['_image_b64']}"]
+                    tool_content = hook_result.tool_content or (json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result))
+                    messages.append(
+                        LLMMessage(
+                            role="tool",
+                            content=tool_content,
+                            tool_call_id=tool_call_id,
+                            images=tool_images,
+                        )
+                    )
+
+                    if isinstance(tool_result, dict) and tool_result.get("suppress_from_llm"):
+                        from aiecs.domain.agent.plugins.dawp.suppress import apply_suppress_from_llm
+
+                        messages[:] = apply_suppress_from_llm(messages, tool_call_id)
+
+                except Exception as e:
+                    error_msg = f"Tool execution failed: {str(e)}"
+                    state.steps.append(
+                        {
+                            "type": "observation",
+                            "content": error_msg,
+                            "iteration": iteration + 1,
+                            "has_error": True,
+                        }
+                    )
+                    if event_callback is not None:
+                        await event_callback(
+                            {
+                                "type": "tool_error",
+                                "tool_name": tool_name,
+                                "error": str(e),
                                 "timestamp": datetime.utcnow().isoformat(),
                             }
                         )
                     messages.append(
                         LLMMessage(
                             role="tool",
-                            content=json.dumps(rejection, ensure_ascii=False),
+                            content=error_msg,
                             tool_call_id=tool_call_id,
                         )
                     )
-                    continue  # skip _parse_function_name and _execute_tool for this entry
+        finally:
+            if plugin_ctx is not None:
+                plugin_ctx.event_sink = event_sink_backup
 
-                tool_name, operation = self._parse_function_name(func_name)
-
-                if isinstance(func_args, str):
-                    parameters = json.loads(func_args)
-                else:
-                    parameters = func_args if func_args else {}
-
-                if event_callback is not None:
-                    await event_callback(
-                        {
-                            "type": "tool_call",
-                            "tool_name": tool_name,
-                            "operation": operation,
-                            "parameters": parameters,
-                            "timestamp": datetime.utcnow().isoformat(),
-                        }
-                    )
-
-                tool_result = await self._execute_tool(tool_name, operation, parameters)
-                state.tool_calls_count += 1
-
-                state.steps.append(
-                    {
-                        "type": "action",
-                        "tool": tool_name,
-                        "operation": operation,
-                        "parameters": parameters,
-                        "result": str(tool_result),
-                        "iteration": iteration + 1,
-                    }
-                )
-
-                if event_callback is not None:
-                    await event_callback(
-                        {
-                            "type": "tool_result",
-                            "tool_name": tool_name,
-                            "result": tool_result,
-                            "timestamp": datetime.utcnow().isoformat(),
-                        }
-                    )
-
-                if self._config.tool_result_stop_conditions and matches_stop_condition(tool_result, self._config.tool_result_stop_conditions):
-                    final_output = json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result)
-                    result = {
-                        "final_response": final_output,
-                        "steps": state.steps,
-                        "iterations": iteration + 1,
-                        "tool_calls_count": state.tool_calls_count,
-                        "total_tokens": state.total_tokens,
-                        "stop_reason": "tool_result_matched",
-                    }
-                    if event_callback is not None:
-                        await event_callback(
-                            {
-                                "type": "result",
-                                "success": True,
-                                "output": final_output,
-                                "reasoning_steps": state.steps,
-                                "tool_calls_count": state.tool_calls_count,
-                                "iterations": iteration + 1,
-                                "total_tokens": state.total_tokens,
-                                "stop_reason": "tool_result_matched",
-                                "timestamp": datetime.utcnow().isoformat(),
-                            }
-                        )
-                    return ToolLoopIterationOutcome(kind="stop_match", result=result)
-
-                tool_images: List[Union[str, Dict[str, Any]]] = []
-                if isinstance(tool_result, dict) and tool_result.get("_image_b64"):
-                    media_type = tool_result.get("_image_media_type", "image/png")
-                    tool_images = [f"data:{media_type};base64,{tool_result['_image_b64']}"]
-                tool_content = json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result)
-                tool_content = await apply_tool_output_management(
-                    tool_name=tool_name,
-                    tool_call_id=tool_call_id,
-                    tool_output=tool_content,
-                    compression_ctx=compression_ctx,
-                )
-                messages.append(
-                    LLMMessage(
-                        role="tool",
-                        content=tool_content,
-                        tool_call_id=tool_call_id,
-                        images=tool_images,
-                    )
-                )
-
-                # D12 (D2-03): suppress_from_llm=True → remove paired assistant+tool
-                # messages from LLM context before the next call.  Audit (state.steps)
-                # and streaming events were already recorded above — they are retained.
-                if isinstance(tool_result, dict) and tool_result.get("suppress_from_llm"):
-                    from aiecs.domain.agent.plugins.dawp.suppress import (
-                        apply_suppress_from_llm,
-                    )
-
-                    messages[:] = apply_suppress_from_llm(messages, tool_call_id)
-
-            except Exception as e:
-                error_msg = f"Tool execution failed: {str(e)}"
-                state.steps.append(
-                    {
-                        "type": "observation",
-                        "content": error_msg,
-                        "iteration": iteration + 1,
-                        "has_error": True,
-                    }
-                )
-                if event_callback is not None:
-                    await event_callback(
-                        {
-                            "type": "tool_error",
-                            "tool_name": tool_name,
-                            "error": str(e),
-                            "timestamp": datetime.utcnow().isoformat(),
-                        }
-                    )
-                messages.append(
-                    LLMMessage(
-                        role="tool",
-                        content=error_msg,
-                        tool_call_id=tool_call_id,
-                    )
-                )
+        if plugin_ctx is not None and self._plugin_manager is not None:
+            await self._plugin_manager.run_phase(
+                PluginPhase.ON_TOOL_BATCH_END,
+                ctx=plugin_ctx,
+                iteration=iteration,
+                messages=messages,
+            )
 
         return ToolLoopIterationOutcome(kind="continue")
+
+    async def _dispatch_tool_without_hooks(
+        self,
+        *,
+        tool_name: str,
+        operation: str | None,
+        parameters: Dict[str, Any],
+        tool_call_id: str,
+        compression_ctx: ToolLoopCompressionContext,
+    ):
+        """Legacy tool path when no plugin context is available."""
+        from aiecs.domain.agent.plugins.hooks.tool_dispatch import ToolHookDispatchResult
+
+        tool_result = await self._execute_tool(tool_name, operation, parameters)
+        raw_content = json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result)
+        tool_content = await apply_tool_output_management(
+            tool_name=tool_name,
+            tool_call_id=tool_call_id,
+            tool_output=raw_content,
+            compression_ctx=compression_ctx,
+        )
+        return ToolHookDispatchResult(
+            pre_result=AggregatedHookResult.empty(),
+            post_result=AggregatedHookResult.empty(),
+            blocked=False,
+            block_reason="",
+            executed=True,
+            tool_output=tool_result,
+            tool_content=tool_content,
+        )
 
     async def _run_tool_loop_core_iteration(
         self,
@@ -1772,15 +2089,18 @@ class HybridAgent(BaseAIAgent):
         context: Dict[str, Any],
         iteration: int,
         state: ToolLoopRunState,
+        plugin_ctx: Optional[AgentPluginContext] = None,
     ) -> ToolLoopIterationOutcome:
         """Single non-streaming tool-loop iteration (LLM call + tool batch)."""
         self._require_function_calling_when_tools_configured()
-        await self._apply_pre_llm_compression(messages, context)
-        compression_ctx = self._build_tool_loop_compression_context(context)
+        await self._apply_pre_llm_compression(messages, context, plugin_ctx=plugin_ctx)
+        compression_ctx = await self._build_tool_loop_compression_context_async(context)
         kwargs = self._build_tool_loop_llm_kwargs(messages, context, streaming=False)
         try:
             response = await self.llm_client.generate_text(**kwargs)
         except Exception as exc:
+            if plugin_ctx is not None:
+                await dispatch_prompt_too_long_hook(plugin_ctx, exc, iteration)
             if await maybe_reactive_compact_on_ptl(
                 exc,
                 messages=messages,
@@ -1789,6 +2109,8 @@ class HybridAgent(BaseAIAgent):
                 kwargs = self._build_tool_loop_llm_kwargs(messages, context, streaming=False)
                 response = await self.llm_client.generate_text(**kwargs)
             else:
+                if plugin_ctx is not None:
+                    await dispatch_llm_error_hook(plugin_ctx, exc, iteration)
                 raise
 
         thought_raw = response.content or ""
@@ -1824,6 +2146,8 @@ class HybridAgent(BaseAIAgent):
                 iteration=iteration,
                 state=state,
                 compression_ctx=compression_ctx,
+                plugin_ctx=plugin_ctx,
+                context=context,
             )
 
         return ToolLoopIterationOutcome(
@@ -1858,6 +2182,7 @@ class HybridAgent(BaseAIAgent):
         state: ToolLoopRunState,
         *,
         tool_schemas_override: Optional[List[Dict[str, Any]]] = None,
+        plugin_ctx: Optional[AgentPluginContext] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Single streaming tool-loop iteration; yields events then sets ``state.last_outcome``.
 
@@ -1868,12 +2193,14 @@ class HybridAgent(BaseAIAgent):
         from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
 
         self._require_function_calling_when_tools_configured()
-        await self._apply_pre_llm_compression(messages, context)
-        compression_ctx = self._build_tool_loop_compression_context(context)
+        await self._apply_pre_llm_compression(messages, context, plugin_ctx=plugin_ctx)
+        compression_ctx = await self._build_tool_loop_compression_context_async(context)
         kwargs = self._build_tool_loop_llm_kwargs(messages, context, streaming=True, tool_schemas_override=tool_schemas_override)
         try:
             stream_gen = self.llm_client.stream_text(**kwargs)
         except Exception as exc:
+            if plugin_ctx is not None:
+                await dispatch_prompt_too_long_hook(plugin_ctx, exc, iteration)
             if await maybe_reactive_compact_on_ptl(
                 exc,
                 messages=messages,
@@ -1887,6 +2214,8 @@ class HybridAgent(BaseAIAgent):
                 )
                 stream_gen = self.llm_client.stream_text(**kwargs)
             else:
+                if plugin_ctx is not None:
+                    await dispatch_llm_error_hook(plugin_ctx, exc, iteration)
                 raise
 
         thought_tokens: List[str] = []
@@ -1945,6 +2274,8 @@ class HybridAgent(BaseAIAgent):
                 state=state,
                 event_callback=_emit,
                 compression_ctx=compression_ctx,
+                plugin_ctx=plugin_ctx,
+                context=context,
             )
             for event in events:
                 yield event
@@ -2095,6 +2426,7 @@ class HybridAgent(BaseAIAgent):
                 ctx=plugin_ctx,
                 messages=messages,
             )
+        await dispatch_build_messages_hook(plugin_ctx, messages)
         return self._append_initial_messages_context_and_task(task, context, messages)
 
     def _build_initial_messages(self, task: str, context: Dict[str, Any]) -> List[LLMMessage]:

@@ -40,6 +40,19 @@ def test_compact_progress_event_to_sse_payload() -> None:
     assert payload["pre_tokens"] == 1000
 
 
+def test_compact_progress_retry_phases_set_retry_flag() -> None:
+    from aiecs.host.compression.progress_bridge import (
+        RETRY_COMPACT_PROGRESS_PHASES,
+        is_known_compact_progress_phase,
+    )
+
+    assert "compact_retry" in RETRY_COMPACT_PROGRESS_PHASES
+    event = CompactProgressEvent(phase="compact_retry_prompt_too_long")
+    payload = compact_progress_event_to_sse_payload(event)
+    assert payload["retry"] is True
+    assert is_known_compact_progress_phase("compact_retry")
+
+
 @pytest.mark.asyncio
 async def test_l2_adapter_noop_when_flag_off(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("USE_AIECS_COMPRESSION", raising=False)

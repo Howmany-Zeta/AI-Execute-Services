@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, TYPE_CHECKING
 
 from aiecs.llm import LLMMessage
 
@@ -24,9 +24,11 @@ from aiecs.domain.context.compression.orchestrator import (
     on_prompt_too_long,
 )
 from aiecs.domain.context.compression.hooks import HookExecutor
+from aiecs.domain.context.compression.metadata import build_pre_compact_metadata
 from aiecs.domain.context.compression.policy import CompressionPolicy
 from aiecs.domain.context.compression.progress import CompactProgressEmitter
 from aiecs.domain.context.compression.state import AutoCompactState
+from aiecs.domain.context.compression.tokens import estimate_message_tokens
 from aiecs.domain.context.compression.tool_budget import (
     enforce_tool_result_budget,
     offload_tool_output_if_needed,
@@ -40,6 +42,9 @@ from aiecs.domain.context.compression.types import (
 )
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from aiecs.domain.agent.plugins.context import AgentPluginContext
 
 
 @dataclass
@@ -104,10 +109,12 @@ async def maybe_compact_before_llm(
     messages: list[LLMMessage],
     *,
     compression_ctx: ToolLoopCompressionContext,
+    plugin_ctx: Optional["AgentPluginContext"] = None,
 ) -> list[LLMMessage]:
     """W8d (M3): delegate proactive compact to ``auto_compact_if_needed`` (O3).
 
     Order: A8 budget enforcement → O3 orchestrator. W8e fail-open on error.
+    When HookPlugin is enabled, H3/H4 fire via ``bridge_compression`` (§6.7.1).
     """
     if not compression_ctx.enabled:
         return messages
@@ -115,6 +122,10 @@ async def maybe_compact_before_llm(
     policy = compression_ctx.policy or CompressionPolicy(enabled=False)
     if not policy.enabled:
         return messages
+
+    from aiecs.domain.agent.plugins.hooks.bridge_compression import resolve_bridged_compression_hooks
+
+    hooks = resolve_bridged_compression_hooks(compression_ctx.hooks, plugin_ctx)
 
     working = list(messages)
     try:
@@ -141,8 +152,15 @@ async def maybe_compact_before_llm(
             llm_client=compression_ctx.llm_client,
             session_id=compression_ctx.session_id,
             session_memory=compression_ctx.session_memory,
-            hooks=compression_ctx.hooks,
+            hooks=hooks,
             progress=compression_ctx.progress,
+            compact_metadata=build_pre_compact_metadata(
+                layer="L3",
+                session_id=compression_ctx.session_id,
+                agent_id=str(getattr(plugin_ctx.agent, "agent_id", "")) if plugin_ctx is not None else "",
+                formatted_transcript=False,
+                estimated_tokens=estimate_message_tokens(working),
+            ),
         )
         return compacted
     except Exception as exc:

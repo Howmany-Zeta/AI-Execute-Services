@@ -14,6 +14,7 @@ from aiecs.domain.context.compression.constants import (
 from aiecs.domain.context.compression.tokens import (
     estimate_message_tokens,
     estimate_tokens,
+    estimate_transcript_tokens,
     get_autocompact_threshold,
     should_compress_messages,
 )
@@ -32,6 +33,21 @@ def test_estimate_message_tokens_text_only() -> None:
     expected_raw = estimate_tokens("abcd") + estimate_tokens("abcdefgh")
     expected = int(expected_raw * TOKEN_ESTIMATION_PADDING)
     assert estimate_message_tokens(messages) == expected
+
+
+def test_estimate_transcript_tokens_f7() -> None:
+    history = [
+        {"role": "user", "content": "abcd"},
+        {"role": "assistant", "content": "efgh"},
+    ]
+    assert estimate_transcript_tokens(history) == estimate_message_tokens(
+        [
+            LLMMessage(role="user", content="abcd"),
+            LLMMessage(role="assistant", content="efgh"),
+        ]
+    )
+    assert estimate_transcript_tokens([]) == 0
+    assert estimate_transcript_tokens([{"role": "user", "content": ""}]) >= 0
 
 
 def test_estimate_message_tokens_image_budget(monkeypatch) -> None:

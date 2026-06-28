@@ -2,7 +2,7 @@
 #  *  Copyright (c) IRETBL Corporation. All rights reserved.
 #  *  Licensed under the Apache-2.0. See License.txt in the project root for license information.
 #  *--------------------------------------------------------------------------------------------*/
-"""Map aiecs CompactProgressEvent → host SSE payload (CC-094).
+"""Map aiecs CompactProgressEvent → host SSE payload (CC-094, Epic 3 F5).
 
 Emits the host event name ``context_compact_progress``; SSE transport stays in
 python-middleware (``app/services/multi_task/``).
@@ -12,7 +12,23 @@ from __future__ import annotations
 
 from typing import Any
 
-from aiecs.domain.context.compression.progress import CompactProgressEvent
+from aiecs.domain.context.compression.progress import (
+    COMPACT_PROGRESS_PHASES,
+    CompactProgressEvent,
+)
+
+# Phases that indicate a retry path (F5) for Host UI badges / analytics.
+RETRY_COMPACT_PROGRESS_PHASES: frozenset[str] = frozenset(
+    {
+        "compact_retry",
+        "compact_retry_prompt_too_long",
+    }
+)
+
+
+def is_known_compact_progress_phase(phase: str) -> bool:
+    """Return True when ``phase`` is a documented ``COMPACT_PROGRESS_PHASES`` value."""
+    return phase in COMPACT_PROGRESS_PHASES
 
 
 def compact_progress_event_to_sse_payload(
@@ -22,7 +38,7 @@ def compact_progress_event_to_sse_payload(
     task_id: str = "",
 ) -> dict[str, Any]:
     """Build a dict suitable for host SSE ``context_compact_progress``."""
-    return {
+    payload: dict[str, Any] = {
         "event": "context_compact_progress",
         "session_id": session_id,
         "task_id": task_id,
@@ -32,3 +48,6 @@ def compact_progress_event_to_sse_payload(
         "post_tokens": event.post_tokens,
         "metadata": dict(event.metadata),
     }
+    if event.phase in RETRY_COMPACT_PROGRESS_PHASES:
+        payload["retry"] = True
+    return payload

@@ -10,6 +10,7 @@ Phase 2 fills business logic; stubs are metadata-only for Phase 1.
 
 from aiecs.domain.agent.plugins.builtin.collaboration_plugin import CollaborationPlugin
 from aiecs.domain.agent.plugins.builtin.dawp_plugin import DawpPlugin
+from aiecs.domain.agent.plugins.builtin.hook_plugin import HookPlugin
 from aiecs.domain.agent.plugins.builtin.knowledge_plugin import KnowledgePlugin
 from aiecs.domain.agent.plugins.builtin.memory_plugin import MemoryPlugin
 from aiecs.domain.agent.plugins.builtin.skill_plugin import SkillPlugin
@@ -19,6 +20,7 @@ from aiecs.domain.agent.plugins.builtin.tool_plugin import ToolPlugin
 __all__ = [
     "CollaborationPlugin",
     "DawpPlugin",
+    "HookPlugin",
     "KnowledgePlugin",
     "MemoryPlugin",
     "SkillPlugin",

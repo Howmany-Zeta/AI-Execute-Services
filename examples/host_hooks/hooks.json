@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "hooks": {
+    "user_prompt_submit": [
+      {
+        "type": "http",
+        "url": "https://audit.example.internal/hooks/user-prompt",
+        "block_on_failure": false,
+        "priority": 10
+      }
+    ],
+    "pre_tool_use": [
+      {
+        "type": "http",
+        "url": "https://audit.example.internal/hooks/pre-tool",
+        "matcher": "write_*",
+        "block_on_failure": true,
+        "priority": 20
+      },
+      {
+        "type": "http",
+        "url": "https://audit.example.internal/hooks/pre-tool-read",
+        "matcher": "read_*",
+        "block_on_failure": false,
+        "priority": 5
+      }
+    ],
+    "post_tool_use": [
+      {
+        "type": "http",
+        "url": "https://audit.example.internal/hooks/post-tool",
+        "block_on_failure": false
+      }
+    ],
+    "pre_compact": [
+      {
+        "type": "prompt",
+        "prompt": "Audit pre-compact trigger:\n$ARGUMENTS",
+        "block_on_failure": false
+      }
+    ],
+    "post_compact": [
+      {
+        "type": "http",
+        "url": "https://audit.example.internal/hooks/post-compact",
+        "block_on_failure": false
+      }
+    ]
+  }
+}

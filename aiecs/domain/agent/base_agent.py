@@ -10,6 +10,7 @@ Abstract base class for all AI agents in the AIECS system.
 
 from abc import ABC, abstractmethod
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Any, Optional, Callable, Union, TYPE_CHECKING, AsyncGenerator, Set, cast
 from dataclasses import dataclass
 import logging
@@ -767,6 +768,8 @@ class BaseAIAgent(SkillCapableMixin, ABC):
 
         self._plugin_registry = plugin_registry or PluginRegistry.default()
         self._loaded_plugin_manifests: list[PluginManifest] = []
+        self._manifest_dirs: dict[str, Path] = {}
+        self._load_plugin_manifests_for_derive()
         plugin_configs, _ = self._resolve_plugin_configs()
         self._plugin_manager = PluginManager(
             agent=self,
@@ -786,7 +789,14 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         """
         from aiecs.domain.agent.plugins.defaults import derive_plugin_configs
 
-        return derive_plugin_configs(self._config, self, task=task, context=context)
+        return derive_plugin_configs(
+            self._config,
+            self,
+            task=task,
+            context=context,
+            manifests=getattr(self, "_loaded_plugin_manifests", None) or [],
+            manifest_dirs=getattr(self, "_manifest_dirs", None) or {},
+        )
 
     def _resolve_manifest_plugin_class(
         self,
@@ -802,6 +812,14 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         """
         return None
 
+    def _load_plugin_manifests_for_derive(self) -> None:
+        """Load manifests for derive_plugin_configs without dependency validation."""
+        from aiecs.domain.agent.plugins.manifest_loader import collect_manifests_from_config
+
+        manifests_with_dirs = collect_manifests_from_config(self._config)
+        self._loaded_plugin_manifests = [manifest for manifest, _ in manifests_with_dirs]
+        self._manifest_dirs = {manifest.name: manifest_dir for manifest, manifest_dir in manifests_with_dirs}
+
     def _apply_plugin_manifest_paths(self) -> None:
         """Load manifest files from config and validate dependency order (§9.1)."""
         from aiecs.domain.agent.plugins.manifest_loader import (
@@ -809,10 +827,14 @@ class BaseAIAgent(SkillCapableMixin, ABC):
             sort_manifests_by_dependencies,
         )
 
-        manifests = collect_manifests_from_config(self._config)
-        if not manifests:
+        manifests_with_dirs = collect_manifests_from_config(self._config)
+        if not manifests_with_dirs:
             self._loaded_plugin_manifests = []
+            self._manifest_dirs = {}
             return
+
+        manifests = [item[0] for item in manifests_with_dirs]
+        self._manifest_dirs = {manifest.name: manifest_dir for manifest, manifest_dir in manifests_with_dirs}
 
         registry = self._plugin_registry or PluginRegistry.default()
         ordered = sort_manifests_by_dependencies(manifests, registry)

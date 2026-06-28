@@ -66,3 +66,11 @@ class BaseAgentPlugin:
         step: dict[str, Any],
     ) -> None:
         return None
+
+    async def on_tool_batch_end(
+        self,
+        ctx: AgentPluginContext,
+        iteration: int,
+        messages: list[LLMMessage],
+    ) -> None:
+        return None

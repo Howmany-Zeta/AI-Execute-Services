@@ -9,6 +9,19 @@ See also `docs/changelog.rst` for historical release notes.
 
 ## [Unreleased]
 
+### Added
+
+- **Agent HookPlugin v2 (V2.0–V2.1):** `permission_checker` protocol, `permission_request` / `permission_denied` (H22), `post_tool_use_failure`, PreToolUse `updated_input` / `permissionDecision`, MCP H2 `updated_mcp_output`; hooks.json `notification` executable when `HookPlugin.options.enable_v2_hooks=true`.
+- **Hook lifecycle v2.1:** H5b `user_prompt_in_history`, H5/H5b `continue:false` task rejection, H6 `preventContinuation`, `subagent_start`, enriched `dawp_run_end`, `stop_failure`, `task_completed`; session hooks include Host `session_id` / `reason`.
+- **Plugin phase `ON_TOOL_BATCH_END`:** fires after each tool batch in HybridAgent (plugin extension only, not hooks.json).
+- **Compression Epic 3 (F1–F7):** `compact_formatted_transcript` (L2), F2 layer metadata on H3/H4, `CompressionPolicyResolver` (L2/L3), `compact_retry` / `compact_retry_prompt_too_long` progress phases, `estimate_transcript_tokens`, Host SSE mapping in `progress_bridge.py`; extended [CONTEXT_COMPRESSION_HOST_INTEGRATION.md](docs/developer/CONTEXT_COMPRESSION_HOST_INTEGRATION.md).
+- **Agent HookPlugin (H0–H4):** `hook@builtin` declarative hooks (`hooks.json` subset), unified `dispatch_agent_hook` / `dispatch_tool_with_hooks`, compression bridge (H3/H4), loop/task boundary hooks (H5–H21), DAWP run hooks (H16/H17).
+- **Host hook migration (H4):** `aiecs.host.hooks` SSE payload bridge, `examples/host_hooks/`, `docs/developer/HOST_MIGRATION_HOOKS.md`.
+
+### Changed
+
+- **HybridAgent task kernel order:** H5 → `PRE_TASK` → `BUILD_MESSAGES` → H5b → `PRE_MAIN_LOOP` (sync + streaming).
+- **H3/H4 hook payloads:** include `layer`, `formatted_transcript`, `estimated_tokens` when F2/F7 metadata present.
 
 ## [2.1.0rc1] - 2026-06-27 (Pre-release)
 

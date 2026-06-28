@@ -22,6 +22,8 @@ COMPACT_PROGRESS_PHASES: tuple[str, ...] = (
     "compact_start",
     "compact_done",
     "compact_failed",
+    "compact_retry",
+    "compact_retry_prompt_too_long",
 )
 
 

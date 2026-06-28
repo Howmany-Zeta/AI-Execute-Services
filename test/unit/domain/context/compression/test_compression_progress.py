@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -53,6 +53,8 @@ def test_compact_progress_phases_include_required_set() -> None:
         "compact_start",
         "compact_done",
         "compact_failed",
+        "compact_retry",
+        "compact_retry_prompt_too_long",
     }
     assert required.issubset(set(COMPACT_PROGRESS_PHASES))
 
@@ -142,3 +144,60 @@ async def test_compact_failed_emits_progress_phase() -> None:
     assert did_compact is False
     assert compacted == messages
     assert "compact_failed" in callback_phases
+
+
+@pytest.mark.asyncio
+async def test_compact_retry_emitted_after_prior_failure() -> None:
+    messages = [LLMMessage(role="user", content="word " * 400)] * 8
+    policy = CompressionPolicy(
+        context_window_tokens=500,
+        preserve_recent=2,
+        chain=("llm",),
+        max_consecutive_failures=5,
+    )
+    state = AutoCompactState(consecutive_failures=1)
+    phases: list[str] = []
+    progress = CompactProgressEmitter(on_progress=lambda e: phases.append(e.phase))
+
+    with patch(
+        "aiecs.domain.context.compression.orchestrator.compact_conversation",
+        new=AsyncMock(side_effect=RuntimeError("compact boom")),
+    ):
+        compacted, did_compact = await auto_compact_if_needed(
+            messages,
+            policy=policy,
+            state=state,
+            llm_client=AsyncMock(),
+            progress=progress,
+            force=True,
+        )
+
+    assert did_compact is False
+    assert phases.index("compact_retry") < phases.index("compact_failed")
+
+
+@pytest.mark.asyncio
+async def test_compact_retry_prompt_too_long_on_reactive_ptl() -> None:
+    from aiecs.domain.context.compression.orchestrator import on_prompt_too_long
+
+    messages = [LLMMessage(role="user", content="x" * 1000)]
+    policy = CompressionPolicy(enabled=True, chain=("llm",))
+    state = AutoCompactState()
+    phases: list[str] = []
+    progress = CompactProgressEmitter(on_progress=lambda e: phases.append(e.phase))
+
+    with patch(
+        "aiecs.domain.context.compression.orchestrator.auto_compact_if_needed",
+        new=AsyncMock(return_value=(messages, True)),
+    ):
+        did = await on_prompt_too_long(
+            RuntimeError("prompt too long for model context window"),
+            messages=messages,
+            policy=policy,
+            state=state,
+            llm_client=AsyncMock(),
+            progress=progress,
+        )
+
+    assert did is True
+    assert "compact_retry_prompt_too_long" in phases

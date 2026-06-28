@@ -353,3 +353,25 @@ class TestPluginManagerRunPhase:
             await manager.initialize()
 
         assert isinstance(exc_info.value.error, PluginInitError)
+
+    async def test_on_agent_init_failure_removes_plugin_from_registry(self, mock_agent):
+        class BrokenOnInitPlugin(BaseAgentPlugin):
+            metadata = PluginMetadata(name="broken_on_init", version="1", description="broken")
+
+            async def on_agent_init(self, ctx: AgentPluginContext) -> None:
+                raise RuntimeError("on_agent_init failed")
+
+        registry = PluginRegistry()
+        registry.register("broken_on_init", BrokenOnInitPlugin)
+
+        manager = PluginManager(
+            mock_agent,
+            [PluginConfig(name="broken_on_init", enabled=True)],
+            registry=registry,
+        )
+
+        with pytest.raises(PluginErrorException) as exc_info:
+            await manager.initialize()
+
+        assert isinstance(exc_info.value.error, PluginInitError)
+        assert manager.get_plugin("broken_on_init") is None

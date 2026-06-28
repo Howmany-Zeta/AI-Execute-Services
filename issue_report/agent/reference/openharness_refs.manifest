@@ -1,0 +1,25 @@
+# OpenHarness vendored reference manifest (§13 / H0-07)
+# Repo-relative from python-middleware-dev root.
+# Update HEAD + re-run verify_openharness_refs.sh after refreshing excerpts.
+
+HEAD=9b2efd795c6aa09f88b0c257d269a9e518da6ae7
+ROOT=issue_report/new_function_request/OpenHarness
+
+# Hook package (all modules cited in OPENHARNESS_HOOKS_REFERENCE.md §0)
+PATH=src/openharness/hooks/loader.py
+PATH=src/openharness/hooks/executor.py
+PATH=src/openharness/hooks/schemas.py
+PATH=src/openharness/hooks/events.py
+PATH=src/openharness/hooks/types.py
+
+# Agent loop + integration tests
+PATH=src/openharness/engine/query.py
+PATH=tests/test_engine/test_query_engine.py
+
+# Optional anchor strings — drift fails verify (update reference doc line numbers when upstream moves)
+ANCHOR=src/openharness/hooks/loader.py:Hooks with a higher
+ANCHOR=src/openharness/hooks/executor.py:async def execute(self, event: HookEvent
+ANCHOR=src/openharness/hooks/executor.py:def _inject_arguments
+ANCHOR=src/openharness/engine/query.py:HookEvent.PRE_TOOL_USE
+ANCHOR=src/openharness/engine/query.py:HookEvent.STOP
+ANCHOR=src/openharness/engine/query.py:requires_confirmation and context.permission_prompt

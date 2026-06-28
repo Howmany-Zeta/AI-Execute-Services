@@ -1,0 +1,47 @@
+name: hook_baseline
+description: HybridAgent with HookPlugin enabled — H5/H13/H12 baseline (H2-03)
+agent:
+  tools:
+  - parity_search
+config:
+  goal: Hook plugin parity baseline agent
+  llm_model: parity-mock
+  system_prompt: You are a hook parity baseline agent.
+  skills_enabled: false
+  memory_enabled: false
+  enable_prompt_caching: false
+  plugins:
+  - name: hook
+    enabled: true
+    options:
+      inline_hooks:
+        user_prompt_submit:
+        - type: prompt
+          prompt: "Audit: $ARGUMENTS"
+          block_on_failure: false
+task:
+  description: Hook baseline task
+context: {}
+capture:
+  mock_final_output: Hook baseline final response.
+expect:
+  messages_normalized:
+  - role: system
+    content: You are a hook parity baseline agent.
+  - role: system
+    content: 'Available tools: parity_search'
+  - role: user
+    content: 'Task: Hook baseline task'
+  tool_schema_names:
+  - parity_search
+  plugin_state_keys: []
+  execute_task_response:
+    iterations: 1
+    output: Hook baseline final response.
+    reason: null
+    reasoning_steps:
+    - content: Hook baseline final response.
+      iteration: 1
+      type: thought
+    success: true
+    tool_calls_count: 0

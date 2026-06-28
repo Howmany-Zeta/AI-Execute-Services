@@ -18,9 +18,11 @@ policy lock are rejected and recorded in ``merge_log``.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from aiecs.domain.agent.plugins.models import PluginConfig
+from aiecs.domain.agent.plugins.schema.manifest import PluginManifest
 from aiecs.infrastructure.knowledge import NoOpGraphStore, create_graph_store
 from aiecs.infrastructure.temporal_memory import NoOpTemporalMemoryStore, create_temporal_memory_store
 
@@ -187,6 +189,8 @@ def derive_plugin_configs(
     agent: BaseAIAgent,
     task: dict[str, Any] | None = None,
     context: dict[str, Any] | None = None,
+    manifests: list[PluginManifest] | None = None,
+    manifest_dirs: dict[str, Path] | None = None,
 ) -> tuple[list[PluginConfig], list[str]]:
     """
     Merge plugin configs from policy, config, task/context, and defaults (§6.3.1–§6.3.4).
@@ -204,6 +208,13 @@ def derive_plugin_configs(
     merged = _merge_config_plugins(config, defaults_by_name, defaults, merge_log)
     merged = _apply_runtime_plugin_overlays(merged, task, context, merge_log, policy_by_name=policy_by_name)
     merged = _apply_policy_plugins(merged, config.policy_plugins, merge_log)
+    merged = _merge_manifest_hook_configs(
+        merged,
+        manifests or [],
+        manifest_dirs or {},
+        config,
+        merge_log,
+    )
 
     return _sort_plugin_configs(merged), merge_log
 
@@ -345,3 +356,99 @@ def _sort_plugin_configs(merged: dict[str, PluginConfig]) -> list[PluginConfig]:
         return (len(_SORT_ORDER), plugin.name)
 
     return sorted(merged.values(), key=sort_key)
+
+
+def _merge_manifest_hook_configs(
+    merged: dict[str, PluginConfig],
+    manifests: list[PluginManifest],
+    manifest_dirs: dict[str, Path],
+    config: AgentConfiguration,
+    merge_log: list[str],
+) -> dict[str, PluginConfig]:
+    """Merge manifest hooks into hook PluginConfig (§9.1.1 scenarios A–F)."""
+    hook_manifests = [manifest for manifest in manifests if manifest.hooks is not None]
+    if not hook_manifests:
+        return merged
+
+    result = dict(merged)
+    existing = result.get("hook")
+    policy_hook = next((plugin for plugin in config.policy_plugins if plugin.name == "hook"), None)
+
+    paths: list[str] = []
+    inline_hooks: dict[str, Any] = {}
+    manifest_dir_map: dict[str, str] = {}
+
+    prepend_paths: list[str] = []
+    if policy_hook and policy_hook.policy_locked:
+        for raw_path in policy_hook.options.get("paths") or []:
+            resolved = str(Path(str(raw_path)).resolve())
+            if resolved not in prepend_paths:
+                prepend_paths.append(resolved)
+
+    for manifest in hook_manifests:
+        hooks_value = manifest.hooks
+        manifest_dir = manifest_dirs.get(manifest.name, Path.cwd())
+        if isinstance(hooks_value, str):
+            resolved_path = (manifest_dir / hooks_value).resolve()
+            path_str = str(resolved_path)
+            if path_str not in paths and path_str not in prepend_paths:
+                paths.append(path_str)
+                manifest_dir_map[path_str] = str(manifest_dir)
+        elif isinstance(hooks_value, dict):
+            for event, hooks in hooks_value.items():
+                inline_hooks.setdefault(str(event), [])
+                if isinstance(hooks, list):
+                    inline_hooks[str(event)].extend(hooks)
+
+    if existing is None:
+        if policy_hook and policy_hook.policy_locked:
+            enabled = True
+        else:
+            enabled = True
+        hook_options: dict[str, Any] = {
+            "paths": prepend_paths + paths,
+            "inline_hooks": inline_hooks,
+            "_manifest_dirs": manifest_dir_map,
+        }
+        result["hook"] = PluginConfig(name="hook", enabled=enabled, options=hook_options)
+        merge_log.append(f"manifest.hooks: auto-enabled hook plugin from {len(hook_manifests)} manifest(s)")
+        return result
+
+    merged_options = dict(existing.options)
+    merged_paths = list(prepend_paths)
+    for path in existing.options.get("paths") or []:
+        resolved = str(Path(str(path)).resolve())
+        if resolved not in merged_paths:
+            merged_paths.append(resolved)
+    for path in paths:
+        if path not in merged_paths:
+            merged_paths.append(path)
+    merged_options["paths"] = merged_paths
+
+    existing_inline = merged_options.get("inline_hooks")
+    if not isinstance(existing_inline, dict):
+        existing_inline = {}
+    for event, hooks in inline_hooks.items():
+        existing_inline.setdefault(event, [])
+        if isinstance(hooks, list):
+            existing_inline[event].extend(hooks)
+    if existing_inline:
+        merged_options["inline_hooks"] = existing_inline
+
+    dir_map = merged_options.get("_manifest_dirs")
+    if not isinstance(dir_map, dict):
+        dir_map = {}
+    dir_map.update(manifest_dir_map)
+    if dir_map:
+        merged_options["_manifest_dirs"] = dir_map
+
+    enabled = existing.enabled
+    if existing.enabled is False:
+        merge_log.append("manifest.hooks: hook plugin disabled; paths merged but registry will not build (§9.1.2)")
+    elif policy_hook and policy_hook.policy_locked:
+        enabled = True
+        merge_log.append("policy.plugins: policy_locked hook manifest paths prepended")
+
+    result["hook"] = existing.model_copy(update={"enabled": enabled, "options": merged_options})
+    merge_log.append(f"manifest.hooks: merged into existing hook config ({len(hook_manifests)} manifest(s))")
+    return result

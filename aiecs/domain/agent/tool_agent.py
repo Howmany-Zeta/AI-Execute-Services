@@ -22,6 +22,11 @@ from .base_agent import BaseAIAgent
 from .models import AgentType, AgentConfiguration
 from .exceptions import TaskExecutionError, ToolAccessDeniedError
 from .plugins.context import AgentPluginContext, PluginShortCircuitResult
+from .plugins.hooks.task_boundary import (
+    dispatch_build_messages_hook,
+    prepare_and_dispatch_task_entry_hooks,
+    run_post_task_phase_with_hooks,
+)
 from .plugins.models import PluginPhase
 
 if TYPE_CHECKING:
@@ -472,13 +477,40 @@ class ToolAgent(BaseAIAgent):
         )
         self._apply_task_plugin_configs(task=task, context=context)
 
+        await prepare_and_dispatch_task_entry_hooks(plugin_ctx, task_description=task_description)
+
         if self._plugin_manager is not None:
             await self._plugin_manager.run_phase(PluginPhase.PRE_TASK, ctx=plugin_ctx)
 
         self._transition_state(self.state.__class__.BUSY)
         self._current_task_id = task.get("task_id")
 
-        result = await self._execute_tool(tool_name, operation, parameters)
+        from aiecs.domain.agent.plugins.hooks.tool_dispatch import dispatch_tool_with_hooks
+
+        tool_call_id = task.get("task_id") or "direct_tool_call"
+
+        async def _execute() -> Any:
+            return await self._execute_tool(tool_name, operation, parameters)
+
+        hook_result = await dispatch_tool_with_hooks(
+            plugin_ctx,
+            tool_name=tool_name,
+            tool_input=parameters if isinstance(parameters, dict) else {},
+            tool_call_id=str(tool_call_id),
+            iteration=0,
+            batch_tool_call_count=1,
+            batch_index=0,
+            assistant_turn_committed=False,
+            offload=False,
+            execute_tool=_execute,
+        )
+        if hook_result.blocked or hook_result.error_message:
+            raise TaskExecutionError(
+                hook_result.error_message or hook_result.block_reason or f"Tool {tool_name} blocked",
+                agent_id=self.agent_id,
+                task_id=task.get("task_id"),
+            )
+        result = hook_result.tool_output
 
         execution_time = (datetime.utcnow() - start_time).total_seconds()
         self.update_metrics(execution_time=execution_time, success=True, tool_calls=1)
@@ -496,10 +528,10 @@ class ToolAgent(BaseAIAgent):
         }
 
         if self._plugin_manager is not None:
-            inner = await self._plugin_manager.run_phase(
-                PluginPhase.POST_TASK,
-                ctx=plugin_ctx,
-                result=inner,
+            inner = await run_post_task_phase_with_hooks(
+                self._plugin_manager,
+                plugin_ctx,
+                inner,
             )
 
         return {
@@ -527,6 +559,8 @@ class ToolAgent(BaseAIAgent):
         )
         self._apply_task_plugin_configs(task=task, context=context)
 
+        await prepare_and_dispatch_task_entry_hooks(plugin_ctx, task_description=task_description)
+
         if self._plugin_manager is not None:
             await self._plugin_manager.run_phase(PluginPhase.PRE_TASK, ctx=plugin_ctx)
             short = await self._plugin_manager.run_phase(
@@ -535,12 +569,12 @@ class ToolAgent(BaseAIAgent):
             )
             if isinstance(short, PluginShortCircuitResult):
                 inner = dict(short.result)
-                post_result = await self._plugin_manager.run_phase(
-                    PluginPhase.POST_TASK,
-                    ctx=plugin_ctx,
-                    result=inner,
+                inner = await run_post_task_phase_with_hooks(
+                    self._plugin_manager,
+                    plugin_ctx,
+                    inner,
                 )
-                return dict(post_result) if isinstance(post_result, dict) else inner
+                return inner
 
         if self._should_use_legacy_messages(task, context):
             messages = self._build_messages(task_description, context)
@@ -553,14 +587,11 @@ class ToolAgent(BaseAIAgent):
 
         inner = await self._run_fc_loop_with_plugins(messages, context, plugin_ctx)
 
-        if self._plugin_manager is not None:
-            inner = await self._plugin_manager.run_phase(
-                PluginPhase.POST_TASK,
-                ctx=plugin_ctx,
-                result=inner,
-            )
-
-        return inner
+        return await run_post_task_phase_with_hooks(
+            self._plugin_manager,
+            plugin_ctx,
+            inner,
+        )
 
     async def _run_fc_loop_with_plugins(
         self,
@@ -577,7 +608,7 @@ class ToolAgent(BaseAIAgent):
                 iteration=iteration,
             )
 
-        inner = await self._execute_fc_iteration(messages, context)
+        inner = await self._execute_fc_iteration(messages, context, plugin_ctx)
 
         if self._plugin_manager is not None:
             step = {
@@ -592,14 +623,38 @@ class ToolAgent(BaseAIAgent):
                 step=step,
             )
 
+        from aiecs.domain.agent.plugins.hooks.dispatch import dispatch_agent_hook
+        from aiecs.domain.agent.plugins.hooks.events import AgentHookEvent
+        from aiecs.domain.agent.plugins.hooks.payload import build_stop_payload
+
+        tool_calls_count = inner.get("tool_calls_count", 0)
+        if tool_calls_count == 0:
+            stop_reason = "tool_uses_empty"
+            preview = str(inner.get("llm_response") or inner.get("output") or "")
+        else:
+            stop_reason = "fc_tools_complete"
+            preview = str(inner.get("output") or inner.get("llm_response") or "")
+        await dispatch_agent_hook(
+            plugin_ctx,
+            AgentHookEvent.STOP,
+            build_stop_payload(
+                stop_reason=stop_reason,
+                iteration=iteration,
+                final_response_preview=preview,
+            ),
+        )
+
         return inner
 
     async def _execute_fc_iteration(
         self,
         messages: List[LLMMessage],
         context: Dict[str, Any],
+        plugin_ctx: AgentPluginContext | None = None,
     ) -> Dict[str, Any]:
         """One LLM Function Calling round + tool execution (legacy ToolAgent semantics)."""
+        from aiecs.domain.agent.plugins.hooks.tool_dispatch import dispatch_tool_with_hooks
+
         tool_calls_count = 0
         tool_results: List[Dict[str, Any]] = []
 
@@ -634,9 +689,10 @@ class ToolAgent(BaseAIAgent):
                     }
                 ]
 
-            for tool_call in calls_to_process:
+            for index, tool_call in enumerate(calls_to_process):
                 func_name = "unknown"
                 tool_name: str = "unknown"
+                tool_call_id = tool_call.get("id") or f"call_{index}"
                 try:
                     func_name = tool_call["function"]["name"]
                     func_args = tool_call["function"]["arguments"]
@@ -647,7 +703,45 @@ class ToolAgent(BaseAIAgent):
                     else:
                         parameters = func_args if func_args else {}
 
-                    tool_result = await self._execute_tool(tool_name, operation, parameters)
+                    async def _execute(
+                        _tool_name: str = tool_name,
+                        _operation: str | None = operation,
+                        _parameters: Dict[str, Any] = parameters,
+                    ) -> Any:
+                        return await self._execute_tool(_tool_name, _operation, _parameters)
+
+                    if plugin_ctx is not None:
+                        hook_result = await dispatch_tool_with_hooks(
+                            plugin_ctx,
+                            tool_name=tool_name,
+                            tool_input=parameters,
+                            tool_call_id=tool_call_id,
+                            iteration=0,
+                            batch_tool_call_count=len(calls_to_process),
+                            batch_index=index,
+                            assistant_turn_committed=False,
+                            offload=False,
+                            execute_tool=_execute,
+                        )
+                    else:
+                        tool_result = await self._execute_tool(tool_name, operation, parameters)
+                        hook_result = None
+
+                    if hook_result is not None and (hook_result.blocked or hook_result.error_message):
+                        error_content = hook_result.tool_content or hook_result.error_message or hook_result.block_reason
+                        tool_calls_count += 1
+                        tool_results.append(
+                            {
+                                "tool": tool_name,
+                                "operation": operation,
+                                "parameters": parameters,
+                                "error": error_content,
+                                "success": False,
+                            }
+                        )
+                        continue
+
+                    tool_result = hook_result.tool_output if hook_result is not None else tool_result
                     tool_calls_count += 1
                     self._update_tool_stats(tool_name, success=True)
 
@@ -721,6 +815,7 @@ class ToolAgent(BaseAIAgent):
                 ctx=plugin_ctx,
                 messages=messages,
             )
+        await dispatch_build_messages_hook(plugin_ctx, messages)
         return self._append_tool_user_message(task_description, context, messages)
 
     def _build_messages_system(self) -> List[LLMMessage]:

@@ -115,6 +115,7 @@ class TestPluginRegistryDefault:
             "collaboration@builtin",
             "custom_reasoning@builtin",  # deprecated alias for dawp
             "dawp@builtin",
+            "hook@builtin",
             "knowledge@builtin",
             "memory@builtin",
             "skill@builtin",

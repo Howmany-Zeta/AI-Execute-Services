@@ -63,6 +63,7 @@ class PluginRegistry:
         from aiecs.domain.agent.plugins.builtin import (
             CollaborationPlugin,
             DawpPlugin,
+            HookPlugin,
             KnowledgePlugin,
             MemoryPlugin,
             SkillPlugin,
@@ -123,6 +124,20 @@ class PluginRegistry:
                 version=collaboration_metadata.version,
                 description=collaboration_metadata.description,
                 priority=collaboration_metadata.priority,
+                default_enabled=False,
+            ),
+            origin=PluginOrigin.BUILTIN,
+        )
+
+        hook_metadata = HookPlugin.metadata
+        registry.register(
+            hook_metadata.name,
+            HookPlugin,
+            metadata=PluginMetadata(
+                name=hook_metadata.name,
+                version=hook_metadata.version,
+                description=hook_metadata.description,
+                priority=hook_metadata.priority,
                 default_enabled=False,
             ),
             origin=PluginOrigin.BUILTIN,

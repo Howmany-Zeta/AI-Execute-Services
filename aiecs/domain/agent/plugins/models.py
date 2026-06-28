@@ -25,6 +25,7 @@ class PluginPhase(str, Enum):
     PRE_MAIN_LOOP = "pre_main_loop"
     ON_ITERATION_START = "on_iteration_start"
     ON_ITERATION_END = "on_iteration_end"
+    ON_TOOL_BATCH_END = "on_tool_batch_end"
     POST_TASK = "post_task"
 
 

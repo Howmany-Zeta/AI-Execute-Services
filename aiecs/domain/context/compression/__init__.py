@@ -72,6 +72,7 @@ from aiecs.domain.context.compression.ptl import truncate_head_for_ptl_retry
 from aiecs.domain.context.compression.tokens import (
     estimate_message_tokens,
     estimate_tokens,
+    estimate_transcript_tokens,
     should_compress_messages,
 )
 from aiecs.domain.context.compression.truncation import (
@@ -157,6 +158,7 @@ __all__ = [
     "compress_with_earlier_placeholder",
     "estimate_message_tokens",
     "estimate_tokens",
+    "estimate_transcript_tokens",
     "get_autocompact_threshold",
     "should_compress_messages",
 ]

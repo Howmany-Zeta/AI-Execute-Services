@@ -18,6 +18,11 @@ from .base_agent import BaseAIAgent
 from .models import AgentType, AgentConfiguration
 from .exceptions import TaskExecutionError
 from .plugins.context import AgentPluginContext
+from .plugins.hooks.task_boundary import (
+    dispatch_build_messages_hook,
+    prepare_and_dispatch_task_entry_hooks,
+    run_post_task_phase_with_hooks,
+)
 from .plugins.models import PluginPhase
 
 if TYPE_CHECKING:
@@ -405,6 +410,8 @@ class LLMAgent(BaseAIAgent):
         )
         self._apply_task_plugin_configs(task=task, context=context)
 
+        await prepare_and_dispatch_task_entry_hooks(plugin_ctx, task_description=task_description)
+
         if self._plugin_manager is not None:
             await self._plugin_manager.run_phase(PluginPhase.PRE_TASK, ctx=plugin_ctx)
 
@@ -434,13 +441,12 @@ class LLMAgent(BaseAIAgent):
             "tokens_used": getattr(response, "total_tokens", None),
         }
 
-        if self._plugin_manager is not None:
-            inner = await self._plugin_manager.run_phase(
-                PluginPhase.POST_TASK,
-                ctx=plugin_ctx,
-                result=inner,
-            )
-        elif self._config.memory_enabled:
+        inner = await run_post_task_phase_with_hooks(
+            self._plugin_manager,
+            plugin_ctx,
+            inner,
+        )
+        if self._plugin_manager is None and self._config.memory_enabled:
             self._conversation_history.append(LLMMessage(role="user", content=task_description))
             self._conversation_history.append(LLMMessage(role="assistant", content=inner.get("output") or ""))
 
@@ -493,6 +499,7 @@ class LLMAgent(BaseAIAgent):
                 ctx=plugin_ctx,
                 messages=messages,
             )
+        await dispatch_build_messages_hook(plugin_ctx, messages)
         return self._append_messages_context_and_user(task_description, context, messages)
 
     def _build_messages_system(self) -> List[LLMMessage]:

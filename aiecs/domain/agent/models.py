@@ -295,6 +295,10 @@ class AgentConfiguration(BaseModel):
         default=None,
         description=("Optional CompressionPolicy override (ADR-007). " "When None, derive from enable_context_compression and context_window_limit."),
     )
+    compression_policy_resolver: Optional[Any] = Field(
+        default=None,
+        description="Optional F3 layer policy resolver (L2 vs L3). Callable or CompressionPolicyResolver protocol.",
+    )
 
     # Knowledge retrieval configuration
     retrieval_strategy: str = Field(

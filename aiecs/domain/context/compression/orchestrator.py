@@ -33,6 +33,10 @@ from aiecs.domain.context.compression.session_memory import (
 )
 from aiecs.domain.context.compression.state import AutoCompactState
 from aiecs.domain.context.compression.tokens import estimate_message_tokens
+from aiecs.domain.context.compression.metadata import (
+    build_post_compact_metadata,
+    merge_pre_compact_metadata,
+)
 from aiecs.domain.context.compression.types import (
     CompactionResult,
     PostCompactContext,
@@ -101,6 +105,7 @@ async def _finish_chain_early_exit(
     hooks: HookExecutor | None,
     progress: CompactProgressEmitter | None,
     metadata: dict[str, Any] | None = None,
+    pre_meta: dict[str, Any] | None = None,
 ) -> tuple[list[LLMMessage], bool]:
     post_tokens = estimate_message_tokens(working)
     state.consecutive_failures = 0
@@ -120,7 +125,17 @@ async def _finish_chain_early_exit(
             checkpoint=checkpoint,
             metadata=metadata,
         )
-        await hooks.execute_post_compact(PostCompactContext(summary_text="", result=result))
+        await hooks.execute_post_compact(
+            PostCompactContext(
+                summary_text="",
+                result=result,
+                metadata=build_post_compact_metadata(
+                    layer=str((pre_meta or metadata or {}).get("layer") or ""),
+                    checkpoint=checkpoint,
+                    extra=metadata,
+                ),
+            )
+        )
     if progress is not None:
         progress.finish_stream()
     return working, True
@@ -139,6 +154,7 @@ async def auto_compact_if_needed(
     strategy: str | tuple[str, ...] | None = None,
     hooks: HookExecutor | None = None,
     progress: CompactProgressEmitter | None = None,
+    compact_metadata: dict[str, Any] | None = None,
 ) -> tuple[list[LLMMessage], bool]:
     """O3: run configurable compact chain when threshold exceeded.
 
@@ -165,11 +181,26 @@ async def auto_compact_if_needed(
     state.last_trigger = trigger
     working = list(messages)
     pre_tokens = estimate_message_tokens(working)
+    pre_meta = merge_pre_compact_metadata(
+        compact_metadata,
+        {"estimated_tokens": pre_tokens},
+    )
+
+    if state.consecutive_failures > 0:
+        _emit_progress(
+            progress,
+            "compact_retry",
+            pre_tokens=pre_tokens,
+            metadata={
+                "consecutive_failures": state.consecutive_failures,
+                "trigger": trigger,
+            },
+        )
 
     try:
         if hooks is not None and hooks.registry.pre_hooks:
             _emit_progress(progress, "hooks_start", pre_tokens=pre_tokens)
-            hook_result = await hooks.execute_pre_compact(PreCompactContext(messages=working, trigger=trigger))
+            hook_result = await hooks.execute_pre_compact(PreCompactContext(messages=working, trigger=trigger, metadata=pre_meta))
             if hook_result.block:
                 logger.info("Pre-compact hook blocked compaction (trigger=%s)", trigger)
                 return working, False
@@ -211,6 +242,7 @@ async def auto_compact_if_needed(
                         hooks=hooks,
                         progress=progress,
                         metadata={"tokens_freed": tokens_freed},
+                        pre_meta=pre_meta,
                     )
 
             elif step == "collapse":
@@ -242,6 +274,7 @@ async def auto_compact_if_needed(
                             state=state,
                             hooks=hooks,
                             progress=progress,
+                            pre_meta=pre_meta,
                         )
                 else:
                     _emit_progress(
@@ -289,6 +322,10 @@ async def auto_compact_if_needed(
                             PostCompactContext(
                                 summary_text=summary_text,
                                 result=sm_result,
+                                metadata=build_post_compact_metadata(
+                                    layer=str(pre_meta.get("layer") or ""),
+                                    checkpoint="session_memory",
+                                ),
                             )
                         )
                     await persist_turn_summary(
@@ -328,6 +365,10 @@ async def auto_compact_if_needed(
                         PostCompactContext(
                             summary_text=summary_text,
                             result=llm_result,
+                            metadata=build_post_compact_metadata(
+                                layer=str(pre_meta.get("layer") or ""),
+                                checkpoint="llm",
+                            ),
                         )
                     )
                 await persist_turn_summary(
@@ -393,6 +434,11 @@ async def on_prompt_too_long(
     if state.reactive_compact_used:
         return False
     state.reactive_compact_used = True
+    _emit_progress(
+        progress,
+        "compact_retry_prompt_too_long",
+        metadata={"error": str(exc)[:500], "trigger": "reactive"},
+    )
     compacted, did_compact = await auto_compact_if_needed(
         messages,
         policy=policy,

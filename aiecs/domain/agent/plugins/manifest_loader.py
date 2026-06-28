@@ -80,25 +80,32 @@ def discover_manifest_paths(directory: Path | str) -> list[Path]:
     return paths
 
 
-def collect_manifests_from_config(config: AgentConfiguration) -> list[PluginManifest]:
+def collect_manifests_from_config(config: AgentConfiguration) -> list[tuple[PluginManifest, Path]]:
     """Load manifests referenced by ``plugin_manifest_paths`` and ``extra_plugin_dirs``."""
-    manifests: list[PluginManifest] = []
+    manifests: list[tuple[PluginManifest, Path]] = []
     seen_names: set[str] = set()
 
     for raw_path in config.plugin_manifest_paths:
-        manifest = load_manifest_from_path(raw_path)
+        manifest_path = Path(raw_path)
+        if manifest_path.is_dir():
+            resolved = _manifest_file_in_directory(manifest_path)
+            if resolved is None:
+                continue
+            manifest_path = resolved
+        manifest = load_manifest_from_path(manifest_path)
         if manifest.name in seen_names:
             continue
         seen_names.add(manifest.name)
-        manifests.append(manifest)
+        manifests.append((manifest, manifest_path.parent))
 
     for raw_dir in config.extra_plugin_dirs:
-        for manifest_path in discover_manifest_paths(raw_dir):
+        root = Path(raw_dir)
+        for manifest_path in discover_manifest_paths(root):
             manifest = load_manifest_from_path(manifest_path)
             if manifest.name in seen_names:
                 continue
             seen_names.add(manifest.name)
-            manifests.append(manifest)
+            manifests.append((manifest, manifest_path.parent))
 
     return manifests
 

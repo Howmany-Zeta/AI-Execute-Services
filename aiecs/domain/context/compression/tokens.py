@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import os
-from typing import Sequence
+from typing import Any, Sequence
 
 from aiecs.llm import LLMMessage
 
@@ -62,6 +62,14 @@ def estimate_message_tokens(messages: Sequence[LLMMessage]) -> int:
             elif isinstance(block, ImageBlock):
                 total += image_token_estimate
     return int(total * TOKEN_ESTIMATION_PADDING)
+
+
+def estimate_transcript_tokens(history: list[dict[str, Any]]) -> int:
+    """Estimate tokens for formatted ``{role, content}`` transcript rows (F7 preview)."""
+    from aiecs.llm import LLMMessage
+
+    messages = [LLMMessage(role=str(row.get("role", "user")), content=row.get("content")) for row in history if isinstance(row, dict)]
+    return estimate_message_tokens(messages)
 
 
 def get_autocompact_threshold(

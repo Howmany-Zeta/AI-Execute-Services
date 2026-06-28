@@ -32,6 +32,7 @@ _MANIFEST_TOP_LEVEL_KEYS = frozenset(
         "dependencies",
         "phases",
         "options_schema",
+        "hooks",
     }
 )
 
@@ -52,6 +53,7 @@ class PluginManifest(BaseModel):
     dependencies: list[DependencyRef] = Field(default_factory=list)
     phases: list[PluginPhase] = Field(default_factory=list)
     options_schema: dict[str, Any] | None = None
+    hooks: str | dict[str, Any] | None = None
 
     @model_validator(mode="before")
     @classmethod

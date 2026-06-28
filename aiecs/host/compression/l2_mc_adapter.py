@@ -12,16 +12,18 @@ compact remain host policy.
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any, Sequence
+from typing import TYPE_CHECKING, Any, Sequence
 
 from aiecs.llm import LLMMessage
 
 from aiecs.domain.context.compression.hooks import HookExecutor
+from aiecs.domain.context.compression.metadata import LAYER_L2
 from aiecs.domain.context.compression.orchestrator import auto_compact_if_needed
 from aiecs.domain.context.compression.policy import (
     CompressionPolicy,
     resolve_compact_chain,
 )
+from aiecs.domain.context.compression.policy_resolver import resolve_layer_compression_policy
 from aiecs.domain.context.compression.progress import CompactProgressEmitter
 from aiecs.domain.context.compression.state import AutoCompactState
 from aiecs.domain.context.compression.tool_budget import enforce_tool_result_budget
@@ -32,6 +34,9 @@ from aiecs.domain.context.compression.types import (
     ToolBudgetStore,
 )
 from aiecs.host.compression.config import use_aiecs_compression
+
+if TYPE_CHECKING:
+    from aiecs.domain.agent.models import AgentConfiguration
 
 
 def _history_to_llm_messages(
@@ -69,6 +74,8 @@ async def compact_at_mc_recursive_boundary(
     progress: CompactProgressEmitter | None = None,
     artifact_port: ToolArtifactPort | None = None,
     budget_store: ToolBudgetStore | None = None,
+    context: dict[str, Any] | None = None,
+    config: AgentConfiguration | None = None,
 ) -> tuple[list[LLMMessage], bool]:
     """Run O3 compact on MC history when host L2 boundary fires.
 
@@ -84,10 +91,17 @@ async def compact_at_mc_recursive_boundary(
 
     messages = _history_to_llm_messages(formatted_history)
     compact_state = state or AutoCompactState()
-    chain = resolve_compact_chain(policy, strategy)
     mc_policy = policy
-    if chain != policy.chain:
-        mc_policy = replace(policy, chain=chain)
+    if context is not None and config is not None:
+        mc_policy = await resolve_layer_compression_policy(
+            LAYER_L2,
+            context=context,
+            config=config,
+            base_policy=policy,
+        )
+    chain = resolve_compact_chain(mc_policy, strategy)
+    if chain != mc_policy.chain:
+        mc_policy = replace(mc_policy, chain=chain)
 
     working = list(messages)
     if budget_store is not None and not isinstance(budget_store, NoOpToolBudgetStore):

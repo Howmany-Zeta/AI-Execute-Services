@@ -93,9 +93,14 @@ class PluginManager:
             plugin = self._registry.create(config, self._agent)
             plugin_id = self._plugin_id(config.name)
 
+            # Register before on_agent_init so phase callbacks (e.g. H8 session_start)
+            # can resolve this plugin via ctx.get_plugin() during initialize().
+            self._plugins[config.name] = plugin
+
             try:
                 await plugin.on_agent_init(init_ctx)
             except Exception as exc:
+                self._plugins.pop(config.name, None)
                 raise PluginErrorException(
                     PluginInitError(
                         message=f"on_agent_init failed for {config.name!r}: {exc}",
@@ -104,7 +109,6 @@ class PluginManager:
                     )
                 ) from exc
 
-            self._plugins[config.name] = plugin
             self._load_order.append(config.name)
             self._enabled_names.add(config.name)
             result.enabled.append(plugin_id)
@@ -189,6 +193,20 @@ class PluginManager:
                 )
                 if isinstance(short, PluginShortCircuitResult):
                     return short
+            return None
+
+        if phase == PluginPhase.ON_TOOL_BATCH_END:
+            messages = list(kwargs.get("messages") or [])
+            iteration = int(kwargs.get("iteration", 0))
+            for plugin in plugins:
+                await self._invoke_hook(
+                    plugin,
+                    "on_tool_batch_end",
+                    phase,
+                    ctx,
+                    iteration=iteration,
+                    messages=messages,
+                )
             return None
 
         hook_map = {
