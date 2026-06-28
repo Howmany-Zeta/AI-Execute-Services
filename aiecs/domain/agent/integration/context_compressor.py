@@ -9,12 +9,15 @@ Smart context compression for token limits.
 
 .. note::
     This module delegates to ``aiecs.domain.context.compression`` kernel primitives.
-    It remains for backward compatibility and will be deprecated after one release
-    once all call sites migrate to the shared kernel / orchestrator APIs.
+    **Deprecated:** ``ContextCompressor`` emits :class:`DeprecationWarning` on
+    construction; scheduled removal in **aiecs 2.2.0**. New code should use
+    ``auto_compact_if_needed``, ``compact_formatted_transcript``, or
+    ``maybe_compact_before_llm`` (see ``aiecs/docs/host/context_compression_integration.md``).
 """
 
 import asyncio
 import logging
+import warnings
 from typing import List, Optional, Any
 from enum import Enum
 
@@ -24,7 +27,13 @@ logger = logging.getLogger(__name__)
 
 
 class CompressionStrategy(Enum):
-    """Context compression strategies."""
+    """Context compression strategies (legacy integration API).
+
+    Maps to kernel primitives in ``aiecs.domain.context.compression``:
+    ``PRESERVE_RECENT`` / ``TRUNCATE_START`` → truncation helpers;
+    ``TRUNCATE_MIDDLE`` → ``TruncationMode.TRUNCATE_MIDDLE``;
+    ``SUMMARIZE`` → ``compact_conversation`` / orchestrator llm step.
+    """
 
     TRUNCATE_MIDDLE = "truncate_middle"
     TRUNCATE_START = "truncate_start"
@@ -57,6 +66,11 @@ class ContextCompressor:
             preserve_system: Always preserve system messages
             llm_client: Optional LLM client for SUMMARIZE strategy (ADR-008)
         """
+        warnings.warn(
+            "ContextCompressor is deprecated and will be removed in aiecs 2.2.0. " "Use auto_compact_if_needed, compact_formatted_transcript, or " "maybe_compact_before_llm instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.max_tokens = max_tokens
         self.strategy = strategy
         self.preserve_system = preserve_system

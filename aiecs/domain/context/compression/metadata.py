@@ -10,6 +10,7 @@ from typing import Any
 
 LAYER_L2 = "L2"
 LAYER_L3 = "L3"
+LAYER_CE = "CE"
 
 KEY_LAYER = "layer"
 KEY_FORMATTED_TRANSCRIPT = "formatted_transcript"

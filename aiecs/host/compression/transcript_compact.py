@@ -5,8 +5,9 @@
 """L2 formatted transcript compact API (Epic 3 F1).
 
 Prefer :func:`compact_formatted_transcript` for MC formatted history rows.
-:func:`aiecs.host.compression.compact_at_mc_recursive_boundary` with
-``strategy="summarize"`` may still run microcompact via legacy chain resolution.
+Formatted transcript text dumps routed through
+:func:`aiecs.host.compression.compact_at_mc_recursive_boundary` delegate here (G3)
+and use the llm-only chain — not legacy microcompact resolution.
 """
 
 from __future__ import annotations
@@ -28,8 +29,7 @@ from aiecs.llm import LLMMessage
 if TYPE_CHECKING:
     from aiecs.domain.agent.models import AgentConfiguration
 
-# F1-04: prefer this API over ``compact_at_mc_recursive_boundary(..., strategy="summarize")``
-# which still resolves legacy chains that may include microcompact.
+# F1-04: text dumps via compact_at_mc_recursive_boundary always land here (G3 redirect).
 
 
 def _transcript_to_llm_messages(

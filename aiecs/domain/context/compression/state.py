@@ -16,3 +16,4 @@ class AutoCompactState:
     consecutive_failures: int = 0
     last_trigger: str | None = None
     reactive_compact_used: bool = False
+    proactive_compact_used_this_iteration: bool = False

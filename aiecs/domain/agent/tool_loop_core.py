@@ -145,7 +145,7 @@ async def maybe_compact_before_llm(
         if compression_ctx.auto_compact_state is None:
             compression_ctx.auto_compact_state = AutoCompactState()
 
-        compacted, _did_compact = await auto_compact_if_needed(
+        compacted, did_compact = await auto_compact_if_needed(
             working,
             policy=policy,
             state=compression_ctx.auto_compact_state,
@@ -162,6 +162,8 @@ async def maybe_compact_before_llm(
                 estimated_tokens=estimate_message_tokens(working),
             ),
         )
+        if did_compact and compression_ctx.auto_compact_state is not None:
+            compression_ctx.auto_compact_state.proactive_compact_used_this_iteration = True
         return compacted
     except Exception as exc:
         logger.warning(

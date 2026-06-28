@@ -5,8 +5,13 @@
 """M4 host migration helpers for python-middleware (H0–H3).
 
 Copy or import from ``app/services/multi_task/`` — L1/L2 policy stays in the host.
+
+Packaged host integration guide (F6):
+``aiecs/docs/host/context_compression_integration.md`` (also under site-packages
+after ``pip install aiecs``).
 """
 
+from aiecs.domain.context.compression.tokens import estimate_transcript_tokens
 from aiecs.host.compression.config import use_aiecs_compression
 from aiecs.host.compression.l2_mc_adapter import compact_at_mc_recursive_boundary
 from aiecs.host.compression.progress_bridge import (
@@ -23,6 +28,7 @@ __all__ = [
     "compact_at_mc_recursive_boundary",
     "compact_formatted_transcript",
     "compact_progress_event_to_sse_payload",
+    "estimate_transcript_tokens",
     "is_known_compact_progress_phase",
     "use_aiecs_compression",
 ]

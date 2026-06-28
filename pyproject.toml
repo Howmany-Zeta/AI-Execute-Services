@@ -211,7 +211,7 @@ include = ["aiecs*"]
 exclude = ["test*", "tests*", "htmlcov*", "*.log"]
 
 [tool.setuptools.package-data]
-aiecs = ["scripts/*.md", "scripts/*.sh"]
+aiecs = ["scripts/*.md", "scripts/*.sh", "docs/host/*.md"]
 
 [tool.setuptools]
 py-modules = []
@@ -352,5 +352,6 @@ exclude = [
 [dependency-groups]
 dev = [
     "pre-commit (>=4.5.1,<5.0.0)",
-    "types-python-dateutil (>=2.9.0.20260408,<3.0.0.0)"
+    "types-python-dateutil (>=2.9.0.20260408,<3.0.0.0)",
+    "build (>=1.5.0,<2.0.0)"
 ]

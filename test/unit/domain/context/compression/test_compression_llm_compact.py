@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from aiecs.llm import LLMMessage
 
-from aiecs.domain.context.compression.llm_compact import compact_conversation
+from aiecs.domain.context.compression.llm_compact import (
+    _split_messages_by_token_budget,
+    compact_conversation,
+)
+from aiecs.domain.context.compression.tokens import estimate_message_tokens
 from aiecs.domain.context.compression.result import build_post_compact_messages
+from aiecs.domain.context.compression.state import AutoCompactState
 from aiecs.domain.context.compression.types import (
+    CompactionResult,
     PostCompactContext,
     PostCompactHook,
     PreCompactContext,
@@ -144,3 +151,136 @@ async def test_hook_stubs_are_invoked() -> None:
     )
     assert post.called
     assert "condensed history" in post.summary_text
+
+
+@pytest.mark.asyncio
+async def test_summary_chunk_size_none_uses_single_summarize_call() -> None:
+    messages = [LLMMessage(role="user", content="segment " * 200)] * 10
+    client = _MockLLMClient()
+
+    await compact_conversation(
+        messages,
+        llm_client=client,
+        preserve_recent=2,
+        summary_chunk_size=None,
+    )
+
+    assert len(client.calls) == 1
+
+
+def test_split_messages_by_token_budget_splits_oversized_single_message() -> None:
+    huge_tool_dump = LLMMessage(role="tool", content="output " * 4000, tool_call_id="call-1")
+    chunks = _split_messages_by_token_budget([huge_tool_dump], max_tokens=500)
+
+    assert len(chunks) >= 2
+    for chunk in chunks:
+        assert estimate_message_tokens(chunk) <= 500
+
+
+def test_split_messages_by_token_budget_splits_oversized_user_message() -> None:
+    huge_message = LLMMessage(role="user", content="segment " * 3000)
+    chunks = _split_messages_by_token_budget([huge_message], max_tokens=400)
+
+    assert len(chunks) >= 2
+    for chunk in chunks:
+        assert estimate_message_tokens(chunk) <= 400
+
+
+@pytest.mark.asyncio
+async def test_summary_chunk_size_splits_oversized_single_message_into_multiple_calls() -> None:
+    messages = [
+        LLMMessage(role="tool", content="dump " * 5000, tool_call_id="call-1"),
+        LLMMessage(role="user", content="follow-up question"),
+        LLMMessage(role="assistant", content="recent answer"),
+    ]
+    client = _MockLLMClient()
+
+    result = await compact_conversation(
+        messages,
+        llm_client=client,
+        preserve_recent=2,
+        summary_chunk_size=500,
+    )
+
+    assert len(client.calls) >= 2
+    assert len(result.summary_messages) == 1
+
+
+@pytest.mark.asyncio
+async def test_summary_chunk_size_splits_into_multiple_summarize_calls() -> None:
+    messages = [
+        LLMMessage(role="user" if index % 2 == 0 else "assistant", content="token " * 300)
+        for index in range(12)
+    ]
+    client = _MockLLMClient()
+
+    result = await compact_conversation(
+        messages,
+        llm_client=client,
+        preserve_recent=2,
+        summary_chunk_size=500,
+    )
+
+    assert len(client.calls) >= 2
+    assert len(result.summary_messages) == 1
+    assert "continued from a previous conversation" in (result.summary_messages[0].content or "")
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_llm_step_passes_summary_chunk_size() -> None:
+    from aiecs.domain.context.compression.orchestrator import auto_compact_if_needed
+    from aiecs.domain.context.compression.policy import CompressionPolicy
+
+    policy = CompressionPolicy(
+        enabled=True,
+        chain=("llm",),
+        preserve_recent=2,
+        summary_chunk_size=500,
+        auto_compact_threshold_tokens=1,
+    )
+    messages = [LLMMessage(role="user", content="word " * 300)] * 8
+
+    with patch(
+        "aiecs.domain.context.compression.orchestrator.compact_conversation",
+        new=AsyncMock(),
+    ) as mock_compact:
+        mock_compact.return_value = CompactionResult(
+            trigger="auto",
+            compact_kind="full",
+            boundary_marker=LLMMessage(role="user", content="boundary"),
+            summary_messages=[LLMMessage(role="user", content="summary")],
+            messages_to_keep=messages[-2:],
+        )
+
+        await auto_compact_if_needed(
+            messages,
+            policy=policy,
+            state=AutoCompactState(),
+            llm_client=_MockLLMClient(),
+            force=True,
+        )
+
+    assert mock_compact.await_args.kwargs["summary_chunk_size"] == 500
+
+
+@pytest.mark.asyncio
+@pytest.mark.compression
+async def test_a5_integration_token_drop_and_single_summary() -> None:
+    messages = [
+        LLMMessage(role="user" if index % 2 == 0 else "assistant", content=f"segment-{index} " + ("word " * 250))
+        for index in range(14)
+    ]
+    client = _MockLLMClient(content="<summary>coverage of older segments</summary>")
+
+    result = await compact_conversation(
+        messages,
+        llm_client=client,
+        preserve_recent=2,
+        summary_chunk_size=500,
+    )
+    rebuilt = build_post_compact_messages(result)
+
+    assert len(rebuilt) < len(messages)
+    assert len(result.summary_messages) == 1
+    assert len(client.calls) >= 2
+    assert "coverage of older segments" in (result.summary_messages[0].content or "")

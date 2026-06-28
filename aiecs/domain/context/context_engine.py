@@ -27,7 +27,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, cast, Tuple
+from typing import Dict, Any, List, Optional, cast, Tuple, Literal
 from dataclasses import dataclass, asdict, is_dataclass
 
 
@@ -503,6 +503,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         permanent_backend: Optional[IPermanentStorageBackend] = None,
         compression_policy: Optional[Any] = None,
         compress_on_append: bool = False,
+        compression_summary_role: Optional[Literal["user", "system"]] = None,
         hook_executor: Optional[Any] = None,
         progress_emitter: Optional[Any] = None,
     ):
@@ -518,6 +519,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                               Writes are fire-and-forget; failures do not block Redis path.
             compression_policy: O8 token-based CompressionPolicy for compress-on-append
             compress_on_append: When True, run auto_compact_if_needed after each append
+            compression_summary_role: Optional CE override for summary message role (Scholar migration)
             hook_executor: Optional HookExecutor for PRE/POST compact hooks (O6)
             progress_emitter: Optional CompactProgressEmitter for O7 progress delivery
         """
@@ -544,6 +546,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         self.compression_policy: Optional[_CompressionPolicy] = compression_policy
         self.compress_on_append = compress_on_append
+        self.compression_summary_role = compression_summary_role
         self.hook_executor = hook_executor
         self.progress_emitter = progress_emitter
         self._auto_compact_states: Dict[str, Any] = {}
@@ -1727,6 +1730,14 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         )
         return truncated
 
+    def _resolve_summary_role(self) -> Literal["user", "system"]:
+        """Honor CompressionPolicy.summary_role with optional CE override (G4)."""
+        if self.compression_summary_role is not None:
+            return self.compression_summary_role
+        if self.compression_policy is not None:
+            return self.compression_policy.summary_role
+        return "user"
+
     async def _compress_with_summarization(self, messages: List[ConversationMessage], config: CompressionConfig) -> List[ConversationMessage]:
         """
         Compress using LLM-based summarization via the shared compression kernel.
@@ -1753,7 +1764,8 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             llm_messages,
             llm_client=self.llm_client,
             preserve_recent=config.keep_recent,
-            summary_role="system",
+            summary_role=self._resolve_summary_role(),
+            summary_chunk_size=(self.compression_policy.summary_chunk_size if self.compression_policy is not None else None),
             custom_instructions=custom_instructions,
             summary_max_tokens=config.summary_max_tokens,
         )
@@ -2051,6 +2063,8 @@ Summary:"""
         from aiecs.domain.context.compression.orchestrator import auto_compact_if_needed
         from aiecs.domain.context.compression.policy import CompressionPolicy, resolve_compact_chain
         from aiecs.domain.context.compression.state import AutoCompactState
+        from aiecs.domain.context.compression.metadata import LAYER_CE, build_pre_compact_metadata
+        from aiecs.domain.context.compression.tokens import estimate_message_tokens
 
         policy = self.compression_policy or CompressionPolicy(enabled=False)
         if not policy.enabled and not self.compress_on_append:
@@ -2071,6 +2085,12 @@ Summary:"""
                 session_id,
             )
 
+        compact_metadata = build_pre_compact_metadata(
+            layer=LAYER_CE,
+            session_id=session_id,
+            estimated_tokens=estimate_message_tokens(llm_messages),
+        )
+
         compacted, did_compact = await auto_compact_if_needed(
             llm_messages,
             policy=policy,
@@ -2080,6 +2100,7 @@ Summary:"""
             strategy=strategy,
             hooks=self.hook_executor,
             progress=self.progress_emitter,
+            compact_metadata=compact_metadata,
         )
 
         if not did_compact:

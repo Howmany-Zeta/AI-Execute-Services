@@ -299,6 +299,15 @@ class AgentConfiguration(BaseModel):
         default=None,
         description="Optional F3 layer policy resolver (L2 vs L3). Callable or CompressionPolicyResolver protocol.",
     )
+    compact_after_tool_batch: bool = Field(
+        default=False,
+        description="F4 turnkey: run proactive compaction after each tool batch (post ON_TOOL_BATCH_END plugins).",
+    )
+    compact_after_tool_batch_min_tokens: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="Optional extra gate: batch-end compact only when estimated message tokens >= this value.",
+    )
 
     # Knowledge retrieval configuration
     retrieval_strategy: str = Field(

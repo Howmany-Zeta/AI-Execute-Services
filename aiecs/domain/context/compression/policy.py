@@ -32,6 +32,7 @@ class CompressionPolicy:
     preserve_recent: int = 12
     chain: tuple[str, ...] = ("microcompact", "collapse", "session_memory", "llm")
     summary_role: Literal["user", "system"] = "user"
+    summary_chunk_size: int | None = None
     truncation_mode: TruncationMode = TruncationMode.EARLIER_PLACEHOLDER
 
 

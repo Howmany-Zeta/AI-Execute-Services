@@ -356,6 +356,7 @@ async def auto_compact_if_needed(
                     llm_client=llm_client,
                     preserve_recent=effective_policy.preserve_recent,
                     summary_role=effective_policy.summary_role,
+                    summary_chunk_size=effective_policy.summary_chunk_size,
                     trigger=trigger,
                 )
                 compacted = build_post_compact_messages(llm_result)

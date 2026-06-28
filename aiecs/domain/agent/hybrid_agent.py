@@ -1729,7 +1729,55 @@ class HybridAgent(BaseAIAgent):
         plugin_ctx: Optional[AgentPluginContext] = None,
     ) -> None:
         """Run W8/W11 pre-LLM compression in-place on ``messages``."""
+        if self._auto_compact_state is not None:
+            self._auto_compact_state.proactive_compact_used_this_iteration = False
+
         compression_ctx = await self._build_tool_loop_compression_context_async(context)
+        compacted = await maybe_compact_before_llm(
+            messages,
+            compression_ctx=compression_ctx,
+            plugin_ctx=plugin_ctx,
+        )
+        messages[:] = compacted
+
+    async def _maybe_compact_after_tool_batch(
+        self,
+        messages: List[LLMMessage],
+        *,
+        compression_ctx: ToolLoopCompressionContext,
+        context: Dict[str, Any],
+        plugin_ctx: Optional[AgentPluginContext] = None,
+    ) -> None:
+        """F4 turnkey: compact after tool batch when config enabled (post plugin phase)."""
+        if not self._config.compact_after_tool_batch:
+            return
+        if not compression_ctx.enabled:
+            return
+
+        policy = compression_ctx.policy or resolve_compression_policy(self._config)
+        if not policy.enabled:
+            return
+
+        min_tokens = self._config.compact_after_tool_batch_min_tokens
+        if min_tokens is not None:
+            from aiecs.domain.context.compression.tokens import estimate_message_tokens
+
+            if estimate_message_tokens(messages) < min_tokens:
+                return
+
+        from aiecs.domain.context.compression.policy import should_compress
+        from aiecs.domain.context.compression.state import AutoCompactState
+
+        if compression_ctx.auto_compact_state is None:
+            compression_ctx.auto_compact_state = self._auto_compact_state or AutoCompactState()
+
+        state = compression_ctx.auto_compact_state
+        if state.proactive_compact_used_this_iteration:
+            return
+
+        if not should_compress(messages, policy, state=state):
+            return
+
         compacted = await maybe_compact_before_llm(
             messages,
             compression_ctx=compression_ctx,
@@ -2049,6 +2097,17 @@ class HybridAgent(BaseAIAgent):
                 ctx=plugin_ctx,
                 iteration=iteration,
                 messages=messages,
+            )
+
+        if self._config.compact_after_tool_batch:
+            batch_ctx = compression_ctx
+            if batch_ctx is None or not batch_ctx.enabled:
+                batch_ctx = await self._build_tool_loop_compression_context_async(context or {})
+            await self._maybe_compact_after_tool_batch(
+                messages,
+                compression_ctx=batch_ctx,
+                context=context or {},
+                plugin_ctx=plugin_ctx,
             )
 
         return ToolLoopIterationOutcome(kind="continue")

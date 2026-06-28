@@ -1,5 +1,10 @@
 # Context compression — host integration guide (O10)
 
+> **Canonical source (wheel):** [`aiecs/docs/host/context_compression_integration.md`](../../aiecs/docs/host/context_compression_integration.md)
+>
+> This repo-local copy is kept for developer browsing. PyPI installs expose the packaged
+> path under `site-packages/aiecs/docs/host/context_compression_integration.md`.
+
 This document explains how **python-middleware** (and other hosts) integrate with
 `aiecs.domain.context.compression` without duplicating OpenHarness `run_query` or
 Claude Code UI/SSE layers.
@@ -130,8 +135,9 @@ rows, did = await compact_formatted_transcript(
 )
 ```
 
-Prefer this over `compact_at_mc_recursive_boundary(..., strategy="summarize")` when
-you need guaranteed llm-only L2 semantics (F1-04).
+Prefer F1 directly for new L2 code. Formatted transcript text dumps passed to
+`compact_at_mc_recursive_boundary` delegate to F1 (G3); structured tool history still
+uses the orchestrator path with the requested strategy.
 
 ### F3 — CompressionPolicyResolver
 

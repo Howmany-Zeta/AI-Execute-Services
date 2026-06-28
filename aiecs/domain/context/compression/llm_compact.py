@@ -171,7 +171,6 @@ async def _summarize_old_messages(
     summary_max_tokens: int,
     system_prompt: str = "",
 ) -> str:
-    """Call the LLM to summarize older messages (ContextEngine-compatible helper)."""
     retry_messages = list(messages)
     ptl_retries = 0
     last_exc: Exception | None = None
@@ -199,6 +198,172 @@ async def _summarize_old_messages(
     if last_exc is not None:
         raise last_exc
     raise RuntimeError(ERROR_MESSAGE_INCOMPLETE_RESPONSE)
+
+
+def _split_text_for_token_budget(text: str, max_tokens: int) -> list[str]:
+    """Split *text* into contiguous parts each estimated within *max_tokens*."""
+    if not text:
+        return [""]
+
+    def _fits(chunk: str) -> bool:
+        return estimate_message_tokens([LLMMessage(role="user", content=chunk)]) <= max_tokens
+
+    if _fits(text):
+        return [text]
+
+    parts: list[str] = []
+    start = 0
+    length = len(text)
+    while start < length:
+        low, high = 1, length - start
+        best = 1
+        while low <= high:
+            mid = (low + high) // 2
+            if _fits(text[start : start + mid]):
+                best = mid
+                low = mid + 1
+            else:
+                high = mid - 1
+        parts.append(text[start : start + best])
+        start += best
+    return parts
+
+
+def _truncate_text_for_token_budget(text: str, max_tokens: int) -> str:
+    """Head-truncate *text* with a marker when it cannot be split further."""
+    marker_prefix = "\n...[truncated "
+    marker_suffix = " chars for summarize chunk]..."
+
+    def _within_budget(candidate: str) -> bool:
+        return estimate_message_tokens([LLMMessage(role="user", content=candidate)]) <= max_tokens
+
+    if _within_budget(text):
+        return text
+
+    low, high = 0, len(text)
+    while low < high:
+        mid = (low + high + 1) // 2
+        omitted = len(text) - mid
+        candidate = text[:mid] + f"{marker_prefix}{omitted}{marker_suffix}"
+        if _within_budget(candidate):
+            low = mid
+        else:
+            high = mid - 1
+
+    if low == 0:
+        return text[: max(1, len(text) // 10)] + marker_suffix
+    omitted = len(text) - low
+    return text[:low] + f"{marker_prefix}{omitted}{marker_suffix}"
+
+
+def _expand_oversized_message(message: LLMMessage, max_tokens: int) -> list[LLMMessage]:
+    """Split or truncate a single message that exceeds *max_tokens* (A5 intra-message)."""
+    if estimate_message_tokens([message]) <= max_tokens:
+        return [message]
+
+    if message.role == "tool":
+        parts = _split_text_for_token_budget(message.content or "", max_tokens)
+        return [LLMMessage(role="tool", content=part, tool_call_id=message.tool_call_id) for part in parts]
+
+    if message.content and not message.images and not message.tool_calls:
+        parts = _split_text_for_token_budget(message.content, max_tokens)
+        return [LLMMessage(role=message.role, content=part) for part in parts]
+
+    truncated = _truncate_text_for_token_budget(message.content or "", max_tokens)
+    candidate = LLMMessage(
+        role=message.role,
+        content=truncated or None,
+        images=list(message.images or []),
+        tool_calls=message.tool_calls,
+        tool_call_id=message.tool_call_id,
+        cache_control=message.cache_control,
+    )
+    if estimate_message_tokens([candidate]) <= max_tokens:
+        return [candidate]
+    return [
+        LLMMessage(
+            role=message.role,
+            content=truncated or None,
+            tool_call_id=message.tool_call_id,
+        )
+    ]
+
+
+def _split_messages_by_token_budget(
+    messages: list[LLMMessage],
+    max_tokens: int,
+) -> list[list[LLMMessage]]:
+    """Split *messages* into contiguous chunks each within *max_tokens* (A5)."""
+    if max_tokens <= 0 or not messages:
+        return [list(messages)]
+
+    expanded: list[LLMMessage] = []
+    for message in messages:
+        expanded.extend(_expand_oversized_message(message, max_tokens))
+
+    chunks: list[list[LLMMessage]] = []
+    current: list[LLMMessage] = []
+    current_tokens = 0
+    for message in expanded:
+        message_tokens = estimate_message_tokens([message])
+        if current and current_tokens + message_tokens > max_tokens:
+            chunks.append(current)
+            current = []
+            current_tokens = 0
+        current.append(message)
+        current_tokens += message_tokens
+    if current:
+        chunks.append(current)
+    return chunks or [[]]
+
+
+async def _summarize_older_messages(
+    llm_client: Any,
+    older: list[LLMMessage],
+    *,
+    summary_chunk_size: int | None,
+    summary_max_tokens: int,
+    system_prompt: str,
+    custom_instructions: str | None,
+) -> str:
+    """Summarize *older* segment; chunk + merge when A5 ``summary_chunk_size`` is set."""
+    compact_prompt = get_compact_prompt(custom_instructions)
+    older_tokens = estimate_message_tokens(older)
+    if summary_chunk_size is None or older_tokens <= summary_chunk_size:
+        summarize_batch = replace_images_for_compaction(list(older)) + [LLMMessage(role="user", content=compact_prompt)]
+        return await _summarize_old_messages(
+            llm_client,
+            summarize_batch,
+            summary_max_tokens=summary_max_tokens,
+            system_prompt=system_prompt,
+        )
+
+    chunk_summaries: list[str] = []
+    for chunk in _split_messages_by_token_budget(older, summary_chunk_size):
+        summarize_batch = replace_images_for_compaction(list(chunk)) + [LLMMessage(role="user", content=compact_prompt)]
+        chunk_summaries.append(
+            await _summarize_old_messages(
+                llm_client,
+                summarize_batch,
+                summary_max_tokens=summary_max_tokens,
+                system_prompt=system_prompt,
+            )
+        )
+
+    if len(chunk_summaries) == 1:
+        return chunk_summaries[0]
+
+    merge_prompt = (
+        "Merge the following section summaries of a long conversation into one "
+        "coherent structured summary. Preserve all key facts, file paths, errors, "
+        "and pending tasks. Respond with <analysis> followed by <summary>.\n\n" + "\n\n---\n\n".join(f"Section {index + 1}:\n{summary}" for index, summary in enumerate(chunk_summaries))
+    )
+    return await _summarize_old_messages(
+        llm_client,
+        [LLMMessage(role="user", content=merge_prompt)],
+        summary_max_tokens=summary_max_tokens,
+        system_prompt=system_prompt,
+    )
 
 
 async def _run_pre_compact_hook(
@@ -235,6 +400,7 @@ async def compact_conversation(
     summary_role: Literal["user", "system"] = "user",
     custom_instructions: str | None = None,
     summary_max_tokens: int = MAX_OUTPUT_TOKENS_FOR_SUMMARY,
+    summary_chunk_size: int | None = None,
     suppress_follow_up: bool = True,
     trigger: CompactTrigger = "manual",
     system_prompt: str = "",
@@ -276,13 +442,13 @@ async def compact_conversation(
     if hook_result.append_instructions:
         instructions = f"{instructions}\n{hook_result.append_instructions}" if instructions else hook_result.append_instructions
 
-    compact_prompt = get_compact_prompt(instructions)
-    summarize_batch = replace_images_for_compaction(list(older)) + [LLMMessage(role="user", content=compact_prompt)]
-    summary_text = await _summarize_old_messages(
+    summary_text = await _summarize_older_messages(
         llm_client,
-        summarize_batch,
+        list(older),
+        summary_chunk_size=summary_chunk_size,
         summary_max_tokens=summary_max_tokens,
         system_prompt=system_prompt,
+        custom_instructions=instructions,
     )
 
     summary_content = build_compact_summary_message(
