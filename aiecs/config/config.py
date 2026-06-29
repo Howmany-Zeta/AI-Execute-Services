@@ -154,6 +154,11 @@ class Settings(BaseSettings):
     tm_neo4j_uri: str = Field(default="", alias="TM_NEO4J_URI")
     tm_neo4j_user: str = Field(default="", alias="TM_NEO4J_USER")
     tm_neo4j_password: str = Field(default="", alias="TM_NEO4J_PASSWORD")
+    tm_neo4j_database: str = Field(
+        default="neo4j",
+        alias="TM_NEO4J_DATABASE",
+        description="Neo4j database name when TM_GRAPH_BACKEND=neo4j",
+    )
     tm_ingest_async: bool = Field(
         default=True,
         alias="TM_INGEST_ASYNC",

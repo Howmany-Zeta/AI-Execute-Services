@@ -40,6 +40,7 @@ TM_GRAPH_BACKEND=neo4j
 TM_NEO4J_URI=bolt://localhost:7687
 TM_NEO4J_USER=neo4j
 TM_NEO4J_PASSWORD=password
+TM_NEO4J_DATABASE=neo4j
 ```
 
 ## Not included (ADR-003)

@@ -207,3 +207,67 @@ async def test_health_check_not_ready_on_failure() -> None:
         health = await store.health_check()
     assert health["ready"] is False
     assert "error" in health
+
+
+def test_ensure_graphiti_neo4j_uses_configured_database() -> None:
+    settings = Settings(
+        TM_GRAPH_BACKEND="neo4j",
+        TM_NEO4J_URI="bolt://localhost:7687",
+        TM_NEO4J_USER="neo4j",
+        TM_NEO4J_PASSWORD="secret",
+        TM_NEO4J_DATABASE="aiecs-graph",
+    )
+    store = GraphitiTemporalMemoryStore(settings=settings)
+    mock_driver = MagicMock()
+    mock_graphiti = MagicMock()
+
+    with patch(
+        "aiecs.infrastructure.temporal_memory.graphiti.llm_adapter.build_graphiti_llm_clients",
+        return_value=(MagicMock(), MagicMock()),
+    ):
+        with patch(
+            "graphiti_core.driver.neo4j_driver.Neo4jDriver",
+            return_value=mock_driver,
+        ) as neo4j_cls:
+            with patch(
+                "graphiti_core.graphiti.Graphiti",
+                return_value=mock_graphiti,
+            ) as graphiti_cls:
+                result = store._ensure_graphiti()
+
+    assert result is mock_graphiti
+    neo4j_cls.assert_called_once_with(
+        "bolt://localhost:7687",
+        "neo4j",
+        "secret",
+        database="aiecs-graph",
+    )
+    assert graphiti_cls.call_args.kwargs["graph_driver"] is mock_driver
+
+
+def test_ensure_graphiti_neo4j_defaults_database_to_neo4j() -> None:
+    settings = Settings(
+        TM_GRAPH_BACKEND="neo4j",
+        TM_NEO4J_URI="bolt://localhost:7687",
+        TM_NEO4J_USER="neo4j",
+        TM_NEO4J_PASSWORD="secret",
+    )
+    store = GraphitiTemporalMemoryStore(settings=settings)
+
+    with patch(
+        "aiecs.infrastructure.temporal_memory.graphiti.llm_adapter.build_graphiti_llm_clients",
+        return_value=(MagicMock(), MagicMock()),
+    ):
+        with patch(
+            "graphiti_core.driver.neo4j_driver.Neo4jDriver",
+            return_value=MagicMock(),
+        ) as neo4j_cls:
+            with patch("graphiti_core.graphiti.Graphiti", return_value=MagicMock()):
+                store._ensure_graphiti()
+
+    neo4j_cls.assert_called_once_with(
+        "bolt://localhost:7687",
+        "neo4j",
+        "secret",
+        database="neo4j",
+    )

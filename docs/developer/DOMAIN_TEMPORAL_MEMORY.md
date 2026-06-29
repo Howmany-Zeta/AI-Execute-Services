@@ -88,6 +88,7 @@ Settings live in `aiecs/config/config.py` (env aliases in `.env.example`).
 | `tm_neo4j_uri` | `TM_NEO4J_URI` | `""` | Neo4j bolt URI |
 | `tm_neo4j_user` | `TM_NEO4J_USER` | `""` | Neo4j user |
 | `tm_neo4j_password` | `TM_NEO4J_PASSWORD` | `""` | Neo4j password |
+| `tm_neo4j_database` | `TM_NEO4J_DATABASE` | `neo4j` | Neo4j database name (required when default `neo4j` DB is absent) |
 | `tm_ingest_async` | `TM_INGEST_ASYNC` | `true` | POST_TASK ingest via background asyncio queue |
 | `tm_store_raw_episode` | `TM_STORE_RAW_EPISODE` | `false` | Persist raw episode text in Graphiti (PII caution) |
 | `tm_search_limit` | `TM_SEARCH_LIMIT` | `10` | Default fact search limit |

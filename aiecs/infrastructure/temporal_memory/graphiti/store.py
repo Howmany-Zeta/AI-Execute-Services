@@ -99,6 +99,9 @@ class GraphitiTemporalMemoryStore:
         graph_backend = (settings.tm_graph_backend or "falkordb").strip().lower()
         store_raw = bool(settings.tm_store_raw_episode)
 
+        from graphiti_core.driver.driver import GraphDriver
+
+        graph_driver: GraphDriver
         if graph_backend == "falkordb":
             from graphiti_core.driver.falkordb_driver import FalkorDriver
 
@@ -107,29 +110,26 @@ class GraphitiTemporalMemoryStore:
             host = parsed.hostname or "localhost"
             port = parsed.port or 6379
             password = parsed.password or None
-            driver = FalkorDriver(host=host, port=port, password=password)
-            self._graphiti = Graphiti(
-                graph_driver=driver,
-                llm_client=llm_client,
-                embedder=embedder,
-                store_raw_episode_content=store_raw,
-            )
+            graph_driver = FalkorDriver(host=host, port=port, password=password)
         elif graph_backend == "neo4j":
+            from graphiti_core.driver.neo4j_driver import Neo4jDriver
+
             uri = settings.tm_neo4j_uri or ""
             user = settings.tm_neo4j_user or ""
             password = settings.tm_neo4j_password or ""
+            database = (settings.tm_neo4j_database or "neo4j").strip() or "neo4j"
             if not uri:
                 raise ValueError("TM_NEO4J_URI is required when TM_GRAPH_BACKEND=neo4j")
-            self._graphiti = Graphiti(
-                uri=uri,
-                user=user,
-                password=password,
-                llm_client=llm_client,
-                embedder=embedder,
-                store_raw_episode_content=store_raw,
-            )
+            graph_driver = Neo4jDriver(uri, user, password, database=database)
         else:
             raise ValueError(f"Unsupported TM_GRAPH_BACKEND: {graph_backend}")
+
+        self._graphiti = Graphiti(
+            graph_driver=graph_driver,
+            llm_client=llm_client,
+            embedder=embedder,
+            store_raw_episode_content=store_raw,
+        )
 
         return self._graphiti
 

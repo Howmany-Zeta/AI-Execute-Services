@@ -295,26 +295,7 @@ class AiecsGraphitiLLMClient:
                     return self.small_model or self._small_model or _DEFAULT_OPENAI_SMALL_MODEL
                 return getattr(self, "model", None) or self.config.model or self._default_model
 
-            async def _generate_response_with_retry(
-                self,
-                messages: list[Any],
-                response_model: type[Any] | None = None,
-                max_tokens: int = 8192,
-                model_size: Any = None,
-            ) -> dict[str, Any]:
-                """Unwrap token tuple so Graphiti callers receive a plain dict."""
-                result = await self._generate_response(messages, response_model, max_tokens, model_size)
-                if isinstance(result, tuple) and len(result) == 3:
-                    parsed, input_tokens, output_tokens = result
-                    self.token_tracker.record("", input_tokens, output_tokens)
-                    if isinstance(parsed, dict):
-                        return parsed
-                    return {"value": parsed}
-                if isinstance(result, dict):
-                    return result
-                return {"value": result}
-
-            async def _generate_response(
+            async def _generate_response_with_tokens(
                 self,
                 messages: list[Any],
                 response_model: type[Any] | None = None,
@@ -355,5 +336,16 @@ class AiecsGraphitiLLMClient:
                 except json.JSONDecodeError:
                     pass
                 return {"content": content}, input_tokens, output_tokens
+
+            async def _generate_response(
+                self,
+                messages: list[Any],
+                response_model: type[Any] | None = None,
+                max_tokens: int = 8192,
+                model_size: Any = None,
+            ) -> dict[str, Any]:
+                parsed, input_tokens, output_tokens = await self._generate_response_with_tokens(messages, response_model, max_tokens, model_size)
+                self.token_tracker.record("", input_tokens, output_tokens)
+                return parsed
 
         return _Impl(config, aiecs_client, default_model=default_model, small_model=small_model)
