@@ -9,6 +9,9 @@ See also `docs/changelog.rst` for historical release notes.
 
 ## [Unreleased]
 
+
+## [2.1.0rc5] - 2026-07-02 (Pre-release)
+
 ### GVR — Consumer API / Contract (M-8)
 
 - **`aiecs/docs/gvr_consumer_api.md`:** GVR-facing symbol list, semver policy, breaking-change review process, ADR-018 adoption matrix (A/B/C).
