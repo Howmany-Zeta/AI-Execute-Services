@@ -8,7 +8,7 @@ Agent Domain Exceptions
 Defines agent-specific exceptions for the base AI agent model.
 """
 
-from typing import Optional
+from typing import Any, Optional
 
 
 class AgentException(Exception):
@@ -101,3 +101,11 @@ class AgentInitializationError(AgentException):
 
     def __init__(self, message: str, agent_id: Optional[str] = None):
         super().__init__(message, agent_id)
+
+
+class VerificationExhausted(AgentException):
+    """Raised when verification_policy exhausts max_refines_per_goal (A-2)."""
+
+    def __init__(self, verdict: Any, message: Optional[str] = None, agent_id: Optional[str] = None):
+        self.verdict = verdict
+        super().__init__(message or "Verification refine budget exhausted", agent_id)

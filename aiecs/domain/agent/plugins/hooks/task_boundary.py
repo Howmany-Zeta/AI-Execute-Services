@@ -301,7 +301,17 @@ async def dispatch_stop_hook_for_outcome(
     H6 — after H15 and both DAWP drains when loop is stopping.
 
     Returns True when hook aggregate requests preventContinuation (§17 v2.1).
+    When ``messages`` is provided and blocking feedback is present, injects a
+    data-only user message to continue the FC refine loop (A-8).
+
+    When ``verification_policy.when_to_verify=on_stop`` is enabled, policy runs
+    before the STOP hook (A-2 > A-8).
     """
+    from aiecs.domain.agent.plugins.hooks.gvr_blocking import (
+        inject_blocking_user_message,
+        resolve_blocking_from_hook,
+    )
+
     stop_reason = canonical_stop_reason(outcome)
     if stop_reason is None:
         return False
@@ -319,33 +329,72 @@ async def dispatch_stop_hook_for_outcome(
         if isinstance(transcript_path, str) and transcript_path:
             payload["agent_transcript_path"] = transcript_path
 
-    try:
-        result = await dispatch_agent_hook(
-            plugin_ctx,
-            AgentHookEvent.STOP,
-            payload,
-        )
-    except Exception as exc:
-        await dispatch_stop_failure_hook(
-            plugin_ctx,
-            iteration=iteration,
-            error=str(exc),
-            stop_reason=stop_reason,
-        )
-        return False
+    async def _dispatch_stop_hook() -> AggregatedHookResult:
+        try:
+            result = await dispatch_agent_hook(
+                plugin_ctx,
+                AgentHookEvent.STOP,
+                payload,
+            )
+        except Exception as exc:
+            await dispatch_stop_failure_hook(
+                plugin_ctx,
+                iteration=iteration,
+                error=str(exc),
+                stop_reason=stop_reason,
+            )
+            return AggregatedHookResult.empty()
 
-    if not isinstance(result, AggregatedHookResult):
-        return False
+        if not isinstance(result, AggregatedHookResult):
+            return AggregatedHookResult.empty()
 
-    failed = [entry for entry in result.results if not entry.success]
-    if failed:
-        await dispatch_stop_failure_hook(
-            plugin_ctx,
+        failed = [entry for entry in result.results if not entry.success]
+        if failed:
+            await dispatch_stop_failure_hook(
+                plugin_ctx,
+                iteration=iteration,
+                error=failed[0].reason or failed[0].output or "stop hook failed",
+                stop_reason=stop_reason,
+            )
+
+        if result.prevent_continuation and messages is not None:
+            block, message, _ = resolve_blocking_from_hook(result)
+            if block and message:
+                inject_blocking_user_message(messages, message)
+
+        return result
+
+    if messages is not None:
+        from aiecs.domain.agent.verification.policy_runner import run_stop_hook_with_policy_fallback
+
+        inner = outcome.result if isinstance(outcome.result, dict) else {"final_response": str(outcome.result or "")}
+        return await run_stop_hook_with_policy_fallback(
+            agent=plugin_ctx.agent,
+            plugin_ctx=plugin_ctx,
+            messages=messages,
+            loop_result=inner,
             iteration=iteration,
-            error=failed[0].reason or failed[0].output or "stop hook failed",
-            stop_reason=stop_reason,
+            hook_result_handler=_dispatch_stop_hook,
         )
+
+    result = await _dispatch_stop_hook()
     return result.prevent_continuation
+
+
+async def dispatch_loop_detected_hook(
+    plugin_ctx: AgentPluginContext,
+    signal: Any,
+    iteration: int,
+) -> None:
+    """A-7 — optional hook when repeated tool triple threshold is met."""
+    payload: dict[str, Any] = {
+        "event": AgentHookEvent.ON_LOOP_DETECTED.value,
+        "agent_id": _agent_id(plugin_ctx),
+        "task_id": _task_id(plugin_ctx),
+        "iteration": iteration,
+        "signal": signal.to_dict() if hasattr(signal, "to_dict") else signal,
+    }
+    await dispatch_agent_hook(plugin_ctx, AgentHookEvent.ON_LOOP_DETECTED, payload)
 
 
 async def dispatch_max_iterations_hook(

@@ -227,6 +227,30 @@ Block from either source skips compaction. H3/H4 payloads are **metadata pass-th
 **not** a hooks.json event. Custom plugins implement `on_tool_batch_end` for optional
 mid-iteration compaction; the builtin turnkey runs **after** the plugin phase.
 
+### GVR compression boundaries (A-10)
+
+Long sub-goals inside one FC iteration can grow context before the next GVR goal
+boundary. Use **two complementary strategies**:
+
+| Boundary | Mechanism | When |
+|----------|-----------|------|
+| **GVR goal boundary (L1)** | Host `compact_formatted_transcript` / F1 on formatted history | Between goals, REFINE cycles, session checkpoints |
+| **Tool-batch boundary (L2)** | `compact_after_tool_batch=true` + F4 turnkey | Mid-iteration after each tool batch in HybridAgent |
+
+**Recommendation:** enable F4 for spawn-long-await or multi-batch sub-goals; keep F1 at
+GVR boundaries for cross-goal continuity. Both can be active — F4 debounces against
+proactive pre-LLM compact within the same iteration.
+
+**GVR preservation:** microcompact skips tool results whose content references
+`deliverable_refs`, `acceptance_criteria`, `criterion_id`, or `success_criteria` (see
+`aiecs.domain.context.compression.gvr_preserve`). Criteria-related evidence MUST NOT
+be cleared during mid-iteration compaction.
+
+**F1 compatibility:** `compact_formatted_transcript` (F1) remains the host-facing L2
+formatted-history path at GVR boundaries. F4 batch-end compaction uses the same
+orchestrator chain (`maybe_compact_before_llm`) and respects the same GVR preservation
+rules — F1 and F4 are complementary, not mutually exclusive.
+
 ### Turnkey batch-end compaction (G1)
 
 Enable on agent bootstrap — host maps `AIECS_COMPACT_AFTER_TOOL_BATCH` to config:

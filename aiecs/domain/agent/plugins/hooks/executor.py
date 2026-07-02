@@ -332,6 +332,15 @@ def _extract_hook_fields(parsed: dict[str, Any]) -> dict[str, Any]:
     prevent = parsed.get("preventContinuation") or parsed.get("prevent_continuation")
     if prevent is True:
         fields["prevent_continuation"] = True
+    action = parsed.get("action")
+    if isinstance(action, str) and action.strip():
+        fields["action"] = action.strip().lower()
+    feedback = parsed.get("feedback")
+    if feedback is not None:
+        fields["feedback"] = feedback
+    feedback_items = parsed.get("feedback_items") or parsed.get("feedbackItems")
+    if isinstance(feedback_items, list):
+        fields["feedback_items"] = feedback_items
     if parsed.get("blocked") is True:
         fields["continue_allowed"] = False
     return fields
@@ -363,6 +372,9 @@ def _hook_result_from_fields(
         additional_context=parsed.get("additional_context"),
         continue_allowed=parsed.get("continue_allowed"),
         prevent_continuation=parsed.get("prevent_continuation"),
+        action=parsed.get("action"),
+        feedback=parsed.get("feedback"),
+        feedback_items=parsed.get("feedback_items"),
     )
 
 

@@ -11,7 +11,7 @@ including brainstorming, problem-solving, and knowledge synthesis.
 
 import logging
 from datetime import datetime
-from typing import Dict, List, Any, Optional, TYPE_CHECKING
+from typing import Any, Awaitable, Callable, Dict, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .community_manager import CommunityManager
@@ -23,6 +23,18 @@ from .models.community_models import CollaborationSession
 from .exceptions import CommunityValidationError as TaskValidationError
 
 logger = logging.getLogger(__name__)
+
+# GVR A-11: canonical review_refinement phase (resource_creation workflow phase 3).
+# Roles run sequentially (fact→style) — never parallel SSE.
+REVIEW_REFINEMENT_PHASE_CONFIG: Dict[str, Any] = {
+    "instructions": "Review and refine the created resource",
+    "time_limit_minutes": 15,
+    "peer_review": True,
+    "roles": ["fact", "style"],
+    "sequential": True,
+}
+
+SpawnVerifierCallback = Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]
 
 
 class CollaborativeWorkflowEngine:
@@ -412,15 +424,11 @@ class CollaborativeWorkflowEngine:
             },
         )
 
-        # Phase 3: Review and Refinement
+        # Phase 3: Review and Refinement (GVR A-11 template)
         await self._execute_phase(
             session,
             "review_refinement",
-            {
-                "instructions": "Review and refine the created resource",
-                "time_limit_minutes": 15,
-                "peer_review": True,
-            },
+            REVIEW_REFINEMENT_PHASE_CONFIG,
         )
 
     async def _peer_review_workflow(self, session: CollaborationSession) -> None:
@@ -573,6 +581,74 @@ class CollaborativeWorkflowEngine:
                 "document_agreement": True,
             },
         )
+
+    async def review_refinement(
+        self,
+        *,
+        task: Dict[str, Any],
+        result: Dict[str, Any],
+        criteria: List[Any],
+        spawn_verifier: SpawnVerifierCallback,
+    ) -> Dict[str, Any]:
+        """
+        Run the review_refinement template sequentially (fact→style).
+
+        Each role invokes ``spawn_verifier(review_task)`` — the aiecs analogue of
+        host ``spawn_subagent(verifier)``. No parallel SSE streams.
+
+        Returns phase metadata plus merged A-1 ``Verdict`` payload under ``verdict``.
+        """
+        from aiecs.domain.agent.verification.models import AcceptanceCriterion
+        from aiecs.domain.agent.verification.review_refinement import (
+            build_review_refinement_task,
+            review_refinement_response_to_verdict,
+        )
+        from aiecs.domain.agent.verification.verifier import merge_verdicts
+
+        normalized: List[AcceptanceCriterion] = []
+        for item in criteria:
+            if isinstance(item, AcceptanceCriterion):
+                normalized.append(item)
+            elif isinstance(item, dict):
+                normalized.append(AcceptanceCriterion.from_dict(item))
+            else:
+                normalized.append(AcceptanceCriterion(criterion_id=str(item), description=str(item)))
+
+        roles: List[str] = list(REVIEW_REFINEMENT_PHASE_CONFIG.get("roles") or ["fact", "style"])
+        phase_record: Dict[str, Any] = {
+            "phase_name": "review_refinement",
+            "started_at": datetime.utcnow().isoformat(),
+            "config": dict(REVIEW_REFINEMENT_PHASE_CONFIG),
+            "roles_executed": [],
+        }
+
+        verdicts = []
+        for role in roles:
+            review_task = build_review_refinement_task(
+                role=role,  # type: ignore[arg-type]
+                task=task,
+                result=result,
+                criteria=normalized,
+            )
+            review_payload = await spawn_verifier(review_task)
+            phase_record["roles_executed"].append({"role": role, "task_id": review_task.get("task_id"), "spawn": "sequential"})
+            verdicts.append(
+                review_refinement_response_to_verdict(
+                    review_payload,
+                    role=role,  # type: ignore[arg-type]
+                    criteria=normalized,
+                )
+            )
+
+        phase_record["completed_at"] = datetime.utcnow().isoformat()
+        phase_record["status"] = "completed"
+
+        merged = merge_verdicts(verdicts)
+        return {
+            "phase": phase_record,
+            "verdict": merged.to_dict(),
+            "role_reviews": [v.to_dict() for v in verdicts],
+        }
 
     async def _execute_phase(
         self,

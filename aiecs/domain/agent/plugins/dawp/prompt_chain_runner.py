@@ -175,6 +175,10 @@ async def run_prompt_chain(
 
     step_messages = inject_temporal_memory_facts_into_messages(step_messages, plugin_ctx)
 
+    plugin_state = plugin_ctx.plugin_state
+    plugin_state["dawp._steps_completed"] = []
+    plugin_state.pop("dawp._failed_step_index", None)
+
     from aiecs.domain.agent.plugins.dawp.step_handlers import (
         StepIterationContext,
         evaluate_step_completion,
@@ -198,6 +202,7 @@ async def run_prompt_chain(
                 failed_step_index=step_idx,
                 reason=_REASON_BUDGET_BEFORE_STEP,
             )
+            plugin_state["dawp._failed_step_index"] = step_idx
             return
 
         is_last = step_idx == len(workflow.steps) - 1
@@ -295,6 +300,7 @@ async def run_prompt_chain(
                         failed_step_index=step_idx,
                         reason=_REASON_BUDGET_MID_STEP,
                     )
+                    plugin_state["dawp._failed_step_index"] = step_idx
                     return
 
                 if result_success:
@@ -327,6 +333,7 @@ async def run_prompt_chain(
                     #   - Last step mis-labelled with prompt_marker (§6.0.2 末步规则)
 
         if step_advanced:
+            plugin_state.setdefault("dawp._steps_completed", []).append(step_idx)
             yield build_dawp_step_completed(step_scope, success=True)
             continue
 
@@ -343,4 +350,5 @@ async def run_prompt_chain(
             failed_step_index=step_idx,
             reason=_REASON_CAP_WITHOUT_MARKER,
         )
+        plugin_state["dawp._failed_step_index"] = step_idx
         return

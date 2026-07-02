@@ -66,6 +66,13 @@ jobs:
             --tb=short \
             -v \
             --ignore=test/archived
+
+      - name: Run GVR consumer contract tests (M-8)
+        run: |
+          poetry run pytest tests/contract/ \
+            -m contract \
+            --tb=short \
+            -v
       
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.11'

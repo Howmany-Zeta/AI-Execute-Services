@@ -211,7 +211,7 @@ include = ["aiecs*"]
 exclude = ["test*", "tests*", "htmlcov*", "*.log"]
 
 [tool.setuptools.package-data]
-aiecs = ["scripts/*.md", "scripts/*.sh", "docs/host/*.md"]
+aiecs = ["scripts/*.md", "scripts/*.sh", "docs/host/*.md", "docs/gvr_consumer_api.md", "docs/migration_2.1.0rc4_to_ga.md", "docs/gvr_verdict_field_mapping.md", "docs/gvr_gate_semantics.md"]
 
 [tool.setuptools]
 py-modules = []
@@ -258,7 +258,8 @@ testpaths = [
     "test/unit",
     "test/integration", 
     "test/e2e",
-    "test/performance"
+    "test/performance",
+    "tests/contract",
 ]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
@@ -299,6 +300,10 @@ markers = [
     # Legacy markers (backward compatibility)
     "asyncio: Async tests (automatically applied by pytest-asyncio)",
     "security: Security-related tests",
+
+    # GVR consumer contract (M-8)
+    "contract: GVR consumer API contract tests (baseline + GA target)",
+    "gvr_ga: GVR GA symbols not yet implemented (skipped via importorskip)",
 
     # Agent plugin system (Phase 2–3 parity gate, §12.1)
     "plugin_parity: Golden snapshot parity for Hybrid/LLM/Tool agents; run test/unit/domain/agent/plugins/test_plugin_parity.py -m plugin_parity",

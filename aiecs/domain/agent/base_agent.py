@@ -682,6 +682,8 @@ class BaseAIAgent(SkillCapableMixin, ABC):
 
         # Goals
         self._goals: Dict[str, AgentGoal] = {}
+        self._current_goal_id: Optional[str] = None
+        self._goal_graph: Optional[Any] = None
 
         # Capabilities
         self._capabilities: Dict[str, AgentCapabilityDeclaration] = {}
@@ -1605,7 +1607,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
 
     def set_goal(
         self,
-        description: str,
+        description_or_goal: Union[str, AgentGoal],
         priority: GoalPriority = GoalPriority.MEDIUM,
         success_criteria: Optional[str] = None,
         deadline: Optional[datetime] = None,
@@ -1613,24 +1615,58 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         """
         Set a new goal for the agent.
 
+        Accepts a legacy string description (rc4) or a pre-built ``AgentGoal`` /
+        GoalGraph node (A-3). Does not mutate MasterController system prompt.
+
         Args:
-            description: Goal description
-            priority: Goal priority
-            success_criteria: Success criteria
+            description_or_goal: Goal description or ``AgentGoal`` instance
+            priority: Goal priority (ignored when passing ``AgentGoal``)
+            success_criteria: Success criteria string (legacy rc4 path)
             deadline: Goal deadline
 
         Returns:
             Goal ID
         """
-        goal = AgentGoal(  # type: ignore[call-arg]
-            description=description,
-            priority=priority,
-            success_criteria=success_criteria,
-            deadline=deadline,
-        )
+        if isinstance(description_or_goal, AgentGoal):
+            goal = description_or_goal
+        else:
+            goal = AgentGoal(  # type: ignore[call-arg]
+                description=description_or_goal,
+                priority=priority,
+                success_criteria=success_criteria,
+                deadline=deadline,
+            )
         self._goals[goal.goal_id] = goal
-        logger.info(f"Agent {self.agent_id} set goal: {goal.goal_id} ({priority.value})")
+        self._current_goal_id = goal.goal_id
+        logger.info(f"Agent {self.agent_id} set goal: {goal.goal_id} ({goal.priority.value})")
         return goal.goal_id
+
+    def set_goal_graph(self, graph: Any) -> None:
+        """Attach a GoalGraph and register its nodes in agent goal storage (A-3)."""
+        from aiecs.domain.agent.goal_graph import GoalGraph
+
+        if not isinstance(graph, GoalGraph):
+            raise TypeError(f"Expected GoalGraph, got {type(graph)!r}")
+        self._goal_graph = graph
+        for goal_id, goal in graph.sync_to_agent_goals().items():
+            self._goals[goal_id] = goal
+        open_goal = graph.next_open_goal()
+        if open_goal is not None:
+            self._current_goal_id = open_goal.goal_id
+
+    def get_current_goal(self) -> Optional[AgentGoal]:
+        """Return the active goal for GVR/tool-loop context without system prompt writes."""
+        if self._current_goal_id and self._current_goal_id in self._goals:
+            return self._goals[self._current_goal_id]
+        if self._goal_graph is not None:
+            open_goal = cast(Optional[AgentGoal], self._goal_graph.next_open_goal())
+            if open_goal is not None:
+                return open_goal
+        in_progress = self.get_goals(status=GoalStatus.IN_PROGRESS)
+        if in_progress:
+            return in_progress[0]
+        goals = self.get_goals()
+        return goals[0] if goals else None
 
     def get_goals(self, status: Optional[GoalStatus] = None) -> List[AgentGoal]:
         """
@@ -3168,7 +3204,9 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         task: Dict[str, Any],
         result: Dict[str, Any],
         reviewer_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        *,
+        criteria: Optional[Any] = None,
+    ) -> Any:
         """
         Request peer review of a task result.
 
@@ -3176,22 +3214,42 @@ class BaseAIAgent(SkillCapableMixin, ABC):
             task: Original task specification
             result: Task execution result to review
             reviewer_id: Specific reviewer agent ID (if None, selects automatically)
+            criteria: Optional acceptance criteria (``AcceptanceCriterion`` or dicts).
+                When ``peer_review_policy.enabled`` is true, criteria count MUST be
+                within ``max_criteria`` and below 5 (full verifier required).
 
         Returns:
-            Review result with 'approved' (bool), 'feedback' (str), 'reviewer_id' (str)
+            ``Verdict`` mini subset (A-5) parseable via ``Verdict.from_dict()``.
 
         Example:
             ```python
             result = await agent.execute_task(task, context)
-            review = await agent.request_peer_review(task, result)
-            if review['approved']:
-                print(f"Approved: {review['feedback']}")
-            else:
-                print(f"Needs revision: {review['feedback']}")
+            review = await agent.request_peer_review(
+                task,
+                result,
+                criteria=[{"criterion_id": "c1", "description": "has summary"}],
+            )
+            if review.passed:
+                print(review.feedback)
             ```
         """
+        from aiecs.domain.agent.verification.models import Verdict
+        from aiecs.domain.agent.verification.peer_review import (
+            assert_peer_review_eligible,
+            build_peer_review_fallback_prompt,
+            build_peer_review_task,
+            coerce_criteria,
+            peer_review_response_to_verdict,
+        )
+        from aiecs.domain.agent.verification.peer_review_policy_models import resolve_peer_review_policy
+
         if not self._collaboration_enabled:
             raise ValueError("Agent collaboration is not enabled")
+
+        normalized_criteria = coerce_criteria(criteria, task=task)
+        policy = resolve_peer_review_policy(getattr(self._config, "peer_review_policy", None))
+        if normalized_criteria:
+            assert_peer_review_eligible(normalized_criteria, policy)
 
         # Find reviewer
         if reviewer_id:
@@ -3199,7 +3257,6 @@ class BaseAIAgent(SkillCapableMixin, ABC):
             if not reviewer:
                 raise ValueError(f"Reviewer {reviewer_id} not found in registry")
         else:
-            # Select first available agent (excluding self)
             available_reviewers = [agent for agent_id, agent in self._agent_registry.items() if agent_id != self.agent_id]
             if not available_reviewers:
                 raise ValueError("No reviewers available")
@@ -3207,27 +3264,38 @@ class BaseAIAgent(SkillCapableMixin, ABC):
 
         logger.info(f"Agent {self.agent_id} requesting review from {reviewer.agent_id}")
 
-        # Request review
+        review_task = build_peer_review_task(task=task, result=result, criteria=normalized_criteria)
+
         try:
             if hasattr(reviewer, "review_result"):
-                review = await reviewer.review_result(task, result)
+                raw = await reviewer.review_result(review_task, result)
             else:
-                # Fallback: use execute_task with review prompt
-                task_desc = task.get("description", "")
-                task_result = result.get("output", "")
+                fallback_prompt = build_peer_review_fallback_prompt(
+                    task=task,
+                    result=result,
+                    criteria=normalized_criteria,
+                )
                 review_task = {
-                    "description": (f"Review this task result:\nTask: {task_desc}\nResult: {task_result}"),
-                    "task_id": f"review_{task.get('task_id', 'unknown')}",
+                    "description": fallback_prompt,
+                    "task_id": review_task["task_id"],
+                    "review_contract": "gvr_peer_review_v1",
                 }
                 review_result = await reviewer.execute_task(review_task, context={})
-                review = {
-                    "approved": True,  # Assume approved if no explicit review method
+                raw = {
+                    "approved": bool(review_result.get("success", True)),
                     "feedback": review_result.get("output", ""),
                     "reviewer_id": reviewer.agent_id,
                 }
 
-            logger.info(f"Review received from {reviewer.agent_id}")
-            return cast(Dict[str, Any], review)
+            if isinstance(raw, Verdict):
+                verdict = raw
+            elif isinstance(raw, dict):
+                verdict = peer_review_response_to_verdict(raw, criteria=normalized_criteria)
+            else:
+                raise TypeError(f"Unexpected peer review response type: {type(raw)!r}")
+
+            logger.info(f"Review received from {reviewer.agent_id} — kind={verdict.kind}")
+            return verdict
         except Exception as e:
             logger.error(f"Peer review failed: {e}")
             raise
@@ -4243,7 +4311,9 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         task: Dict[str, Any],
         context: Dict[str, Any],
         strategies: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        *,
+        structured: bool = False,
+    ) -> Any:
         """
         Execute task with advanced error recovery strategies.
 
@@ -4252,31 +4322,33 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         2. Simplify task and retry
         3. Use fallback approach
         4. Delegate to another agent
+        5. Abort (terminal — propagates ``VerificationExhausted`` for host ESCALATE)
 
         Args:
             task: Task specification
             context: Execution context
             strategies: List of strategy names to try (uses default chain if None)
+            structured: When True, return :class:`RecoveryResult` instead of raw dict
 
         Returns:
-            Task execution result
+            Task execution result dict, or ``RecoveryResult`` when ``structured=True``
 
         Raises:
-            TaskExecutionError: If all recovery strategies fail
+            TaskExecutionError: If all recovery strategies fail (``structured=False``)
+            VerificationExhausted: When encountered and ABORT strategy applies (A-9)
 
         Example:
             ```python
             result = await agent.execute_with_recovery(
                 task={"description": "Complex analysis"},
                 context={},
-                strategies=["retry", "simplify", "delegate"]
+                strategies=["retry", "simplify", "abort"],
             )
             ```
         """
-        from .models import RecoveryStrategy
-        from .exceptions import TaskExecutionError
+        from .models import RecoveryStrategy, RecoveryResult
+        from .exceptions import TaskExecutionError, VerificationExhausted
 
-        # Default strategy chain
         if strategies is None:
             strategies = [
                 RecoveryStrategy.RETRY,
@@ -4285,53 +4357,200 @@ class BaseAIAgent(SkillCapableMixin, ABC):
                 RecoveryStrategy.DELEGATE,
             ]
 
-        errors = []
+        errors: list[dict[str, str]] = []
+        attempted: list[str] = []
+        verification_exhausted: Optional[VerificationExhausted] = None
 
         for strategy in strategies:
+            attempted.append(str(strategy))
             try:
                 logger.info(f"Attempting recovery strategy: {strategy}")
 
-                if strategy == RecoveryStrategy.RETRY:
-                    # Retry with exponential backoff (using existing retry mechanism)
-                    result = await self._execute_with_retry(self.execute_task, task, context)
-                    logger.info(f"Recovery successful with strategy: {strategy}")
-                    return cast(Dict[str, Any], result)
+                if strategy == RecoveryStrategy.ABORT:
+                    if verification_exhausted is not None:
+                        if structured:
+                            verdict = verification_exhausted.verdict
+                            payload = verdict.to_dict() if hasattr(verdict, "to_dict") else {"feedback": str(verdict)}
+                            return RecoveryResult(
+                                success=False,
+                                strategies_attempted=attempted,
+                                errors=errors,
+                                escalation_reason="verification_exhausted",
+                                verdict=payload,
+                                terminal_error=str(verification_exhausted),
+                            )
+                        raise verification_exhausted
+                    break
 
+                if strategy == RecoveryStrategy.RETRY:
+                    result = await self._execute_with_retry(self.execute_task, task, context)
                 elif strategy == RecoveryStrategy.SIMPLIFY:
-                    # Simplify task and retry
                     simplified_task = await self._simplify_task(task)
                     result = await self.execute_task(simplified_task, context)
-                    logger.info(f"Recovery successful with strategy: {strategy}")
-                    return result
-
                 elif strategy == RecoveryStrategy.FALLBACK:
-                    # Use fallback approach
                     result = await self._execute_with_fallback(task, context)
-                    logger.info(f"Recovery successful with strategy: {strategy}")
-                    return result
-
                 elif strategy == RecoveryStrategy.DELEGATE:
-                    # Delegate to another agent
-                    if self._collaboration_enabled:
-                        result = await self._delegate_to_capable_agent(task, context)
-                        logger.info(f"Recovery successful with strategy: {strategy}")
-                        return result
-                    else:
+                    if not self._collaboration_enabled:
                         logger.warning("Delegation not available (collaboration disabled)")
                         continue
+                    result = await self._delegate_to_capable_agent(task, context)
+                else:
+                    continue
 
+                logger.info(f"Recovery successful with strategy: {strategy}")
+                if structured:
+                    return RecoveryResult(
+                        success=True,
+                        result=cast(Dict[str, Any], result),
+                        strategies_attempted=attempted,
+                        errors=errors,
+                    )
+                return cast(Dict[str, Any], result)
+
+            except VerificationExhausted as exc:
+                verification_exhausted = exc
+                errors.append({"strategy": str(strategy), "error": "verification_exhausted"})
+                logger.warning(f"Recovery strategy {strategy} hit VerificationExhausted")
+                if RecoveryStrategy.ABORT in strategies:
+                    if structured:
+                        verdict = exc.verdict
+                        payload = verdict.to_dict() if hasattr(verdict, "to_dict") else {"feedback": str(verdict)}
+                        return RecoveryResult(
+                            success=False,
+                            strategies_attempted=attempted,
+                            errors=errors,
+                            escalation_reason="verification_exhausted",
+                            verdict=payload,
+                            terminal_error=str(exc),
+                        )
+                    raise
+                continue
             except Exception as e:
                 logger.warning(f"Recovery strategy {strategy} failed: {e}")
-                errors.append({"strategy": strategy, "error": str(e)})
+                errors.append({"strategy": str(strategy), "error": str(e)})
                 continue
 
-        # All strategies failed
+        if verification_exhausted is not None and structured:
+            verdict = verification_exhausted.verdict
+            payload = verdict.to_dict() if hasattr(verdict, "to_dict") else {"feedback": str(verdict)}
+            return RecoveryResult(
+                success=False,
+                strategies_attempted=attempted,
+                errors=errors,
+                escalation_reason="verification_exhausted",
+                verdict=payload,
+                terminal_error=str(verification_exhausted),
+            )
+        if verification_exhausted is not None:
+            raise verification_exhausted
+
         error_summary = "; ".join([f"{e['strategy']}: {e['error']}" for e in errors])
+        if structured:
+            return RecoveryResult(
+                success=False,
+                strategies_attempted=attempted,
+                errors=errors,
+                terminal_error=error_summary or "all recovery strategies failed",
+            )
         raise TaskExecutionError(
             f"All recovery strategies failed. Errors: {error_summary}",
             agent_id=self.agent_id,
             task_id=task.get("task_id"),
         )
+
+    async def execute_with_recovery_streaming(
+        self,
+        task: Dict[str, Any],
+        context: Dict[str, Any],
+        strategies: Optional[List[str]] = None,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        Streaming recovery over :meth:`execute_task_streaming` (A-9).
+
+        Each strategy starts a fresh streaming session. Yields all task events, then
+        a terminal ``recovery_result`` event when a strategy succeeds or the chain ends.
+
+        ``VerificationExhausted`` is re-raised after emitting ``recovery_result`` with
+        ``escalation_reason=verification_exhausted`` for host DECIDE ESCALATE mapping.
+        """
+        from .models import RecoveryStrategy, RecoveryResult
+        from .exceptions import VerificationExhausted
+
+        if strategies is None:
+            strategies = [
+                RecoveryStrategy.RETRY,
+                RecoveryStrategy.SIMPLIFY,
+                RecoveryStrategy.FALLBACK,
+                RecoveryStrategy.DELEGATE,
+            ]
+
+        errors: list[dict[str, str]] = []
+        attempted: list[str] = []
+        verification_exhausted: Optional[VerificationExhausted] = None
+
+        for strategy in strategies:
+            attempted.append(str(strategy))
+            try:
+                if strategy == RecoveryStrategy.ABORT:
+                    if verification_exhausted is not None:
+                        payload = RecoveryResult(
+                            success=False,
+                            strategies_attempted=attempted,
+                            errors=errors,
+                            escalation_reason="verification_exhausted",
+                            verdict=(verification_exhausted.verdict.to_dict() if hasattr(verification_exhausted.verdict, "to_dict") else None),
+                            terminal_error=str(verification_exhausted),
+                        )
+                        yield {"type": "recovery_result", "recovery": payload.model_dump(mode="json")}
+                        raise verification_exhausted
+                    break
+
+                task_variant = task
+                if strategy == RecoveryStrategy.SIMPLIFY:
+                    task_variant = await self._simplify_task(task)
+
+                final_event: Optional[Dict[str, Any]] = None
+                async for event in self.execute_task_streaming(task_variant, context):
+                    yield event
+                    if event.get("type") == "result":
+                        final_event = event
+
+                if final_event is not None and final_event.get("success", True):
+                    payload = RecoveryResult(
+                        success=True,
+                        result=final_event,
+                        strategies_attempted=attempted,
+                        errors=errors,
+                    )
+                    yield {"type": "recovery_result", "recovery": payload.model_dump(mode="json")}
+                    return
+
+            except VerificationExhausted as exc:
+                verification_exhausted = exc
+                errors.append({"strategy": str(strategy), "error": "verification_exhausted"})
+                payload = RecoveryResult(
+                    success=False,
+                    strategies_attempted=attempted,
+                    errors=errors,
+                    escalation_reason="verification_exhausted",
+                    verdict=exc.verdict.to_dict() if hasattr(exc.verdict, "to_dict") else None,
+                    terminal_error=str(exc),
+                )
+                yield {"type": "recovery_result", "recovery": payload.model_dump(mode="json")}
+                if RecoveryStrategy.ABORT in strategies:
+                    raise
+                continue
+            except Exception as exc:
+                errors.append({"strategy": str(strategy), "error": str(exc)})
+                continue
+
+        payload = RecoveryResult(
+            success=False,
+            strategies_attempted=attempted,
+            errors=errors,
+            terminal_error="all recovery strategies failed",
+        )
+        yield {"type": "recovery_result", "recovery": payload.model_dump(mode="json")}
 
     async def _simplify_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """

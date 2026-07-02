@@ -1,0 +1,100 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aiecs.dev/schemas/gvr_verdict_v1.json",
+  "title": "GVR Verdict v1",
+  "description": "Shared interchange schema co-owned with python-middleware work_state.Verdict (M-8 / A-1).",
+  "type": "object",
+  "required": [
+    "passed",
+    "kind",
+    "failed_criteria",
+    "feedback",
+    "feedback_items",
+    "missing",
+    "evidence"
+  ],
+  "properties": {
+    "passed": {
+      "type": "boolean",
+      "description": "Overall pass/fail for the verification checkpoint"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["PASS", "FAIL", "PARTIAL", "NA"]
+    },
+    "score": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Optional aggregate score from Gate registry"
+    },
+    "failed_criteria": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "feedback": {
+      "type": "string",
+      "description": "REFINE summary (maps to host work_state.Verdict.feedback)"
+    },
+    "feedback_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["criterion_id", "gap", "fix", "severity"],
+        "properties": {
+          "criterion_id": { "type": "string" },
+          "gap": { "type": "string" },
+          "fix": { "type": "string" },
+          "severity": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "missing": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "EXPAND structural gaps"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["criterion_id", "pass", "artifact_ref", "quote"],
+        "properties": {
+          "criterion_id": { "type": "string" },
+          "pass": { "type": "boolean" },
+          "artifact_ref": { "type": "string" },
+          "quote": { "type": "string", "maxLength": 120 }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "passed": false,
+      "kind": "FAIL",
+      "score": 72.0,
+      "failed_criteria": ["criterion_spec_structure"],
+      "feedback": "Deliverable missing GIVEN/WHEN/THEN sections.",
+      "feedback_items": [
+        {
+          "criterion_id": "criterion_spec_structure",
+          "gap": "No GIVEN block in output.md",
+          "fix": "Add GIVEN/WHEN/THEN headings per acceptance template",
+          "severity": "high"
+        }
+      ],
+      "missing": ["acceptance_section_given"],
+      "evidence": [
+        {
+          "criterion_id": "criterion_spec_structure",
+          "pass": false,
+          "artifact_ref": "output.md",
+          "quote": "Summary only; no structured acceptance blocks."
+        }
+      ]
+    }
+  ]
+}

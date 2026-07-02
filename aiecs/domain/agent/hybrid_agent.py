@@ -26,7 +26,7 @@ from aiecs.tools import BaseTool
 from aiecs.domain.agent.tools.schema_generator import ToolSchemaGenerator
 
 from .base_agent import BaseAIAgent
-from .models import AgentType, AgentConfiguration, ToolObservation, resolve_compression_policy
+from .models import AgentType, AgentConfiguration, AgentGoal, ToolObservation, resolve_compression_policy
 from .exceptions import TaskExecutionError, ToolAccessDeniedError
 from .tool_loop_core import (
     ToolLoopCompressionContext,
@@ -58,6 +58,9 @@ from aiecs.domain.agent.plugins.builtin.knowledge_plugin import (
     inject_iteration_knowledge_into_messages,
 )
 from aiecs.domain.agent.plugins.models import PluginPhase
+from aiecs.domain.agent.verification.policy_runner import run_gvr_pre_exit
+from aiecs.domain.agent.exceptions import VerificationExhausted
+from aiecs.domain.agent.loop_detection import LoopSignal, resolve_loop_detection_config
 
 if TYPE_CHECKING:
     from aiecs.llm.protocols import LLMClientProtocol
@@ -246,6 +249,7 @@ class HybridAgent(BaseAIAgent):
         learning_enabled: bool = False,
         resource_limits: Optional[Any] = None,
         plugin_registry: Optional[Any] = None,
+        verifiers: Optional[List[Any]] = None,
     ):
         """
         Initialize Hybrid agent.
@@ -334,6 +338,13 @@ class HybridAgent(BaseAIAgent):
         self._compression_hook_executor: Optional[Any] = None
         self._compression_progress_emitter: Optional[Any] = None
         self._auto_compact_state: Optional[Any] = None
+        self._verifiers: List[Any] = list(verifiers or [])
+        from aiecs.domain.agent.verification.gates.registry import build_gate_registry_from_config
+
+        self._gate_registry = build_gate_registry_from_config(config.deterministic_gates)
+        from aiecs.domain.agent.loop_detection import LoopDetectionService, resolve_loop_detection_config
+
+        self._loop_detection = LoopDetectionService(resolve_loop_detection_config(config.loop_detection))
 
         logger.info(f"HybridAgent initialized: {agent_id} with LLM ({self.llm_client.provider_name}) " f"and {len(tools) if isinstance(tools, (list, dict)) else 0} tools")
 
@@ -524,6 +535,74 @@ class HybridAgent(BaseAIAgent):
         """
         return dict(result)
 
+    def _current_goal_for_gvr(self) -> Optional[AgentGoal]:
+        return self.get_current_goal()
+
+    def get_loop_signals(self) -> LoopSignal:
+        """Read-only loop stall signals for host DECIDE (A-7)."""
+        return self._loop_detection.get_signal()
+
+    async def _track_tool_loop_detection(
+        self,
+        *,
+        tool_name: str,
+        parameters: Any,
+        tool_result: Any,
+        iteration: int,
+        plugin_ctx: Optional[AgentPluginContext],
+    ) -> None:
+        signal = self._loop_detection.record_tool_call(
+            tool_name=tool_name,
+            args=parameters,
+            result=tool_result,
+        )
+        if signal is None:
+            return
+        if plugin_ctx is not None:
+            plugin_ctx.plugin_state["gvr.loop_signal"] = signal.to_dict()
+        cfg = resolve_loop_detection_config(self._config.loop_detection)
+        if cfg is not None and cfg.hook_on_detect and plugin_ctx is not None:
+            from aiecs.domain.agent.plugins.hooks.task_boundary import dispatch_loop_detected_hook
+
+            await dispatch_loop_detected_hook(plugin_ctx, signal, iteration)
+
+    async def _handle_pre_exit_gvr(
+        self,
+        plugin_ctx: Optional[AgentPluginContext],
+        messages: List[LLMMessage],
+        loop_result: Dict[str, Any],
+        *,
+        trigger: str = "on_task_completed",
+        iteration: int = 0,
+    ) -> bool:
+        """Run verification_policy (A-2) or gate/hook pre-exit (A-8); True = continue refine."""
+        if plugin_ctx is None:
+            return False
+        return await run_gvr_pre_exit(
+            agent=self,
+            plugin_ctx=plugin_ctx,
+            messages=messages,
+            loop_result=loop_result,
+            trigger=trigger,  # type: ignore[arg-type]
+            iteration=iteration,
+        )
+
+    def _verification_exhausted_result(self, exc: VerificationExhausted, state: ToolLoopRunState, iteration: int) -> Dict[str, Any]:
+        verdict = exc.verdict
+        feedback = verdict.feedback if hasattr(verdict, "feedback") else str(verdict)
+        payload = verdict.to_dict() if hasattr(verdict, "to_dict") else {"feedback": feedback}
+        return {
+            "success": False,
+            "reason": "verification_exhausted",
+            "output": feedback,
+            "final_response": feedback,
+            "verdict": payload,
+            "steps": list(state.steps),
+            "iterations": iteration + 1,
+            "tool_calls_count": state.tool_calls_count,
+            "total_tokens": state.total_tokens,
+        }
+
     def _iteration_step_payload(
         self,
         outcome: ToolLoopIterationOutcome,
@@ -565,9 +644,11 @@ class HybridAgent(BaseAIAgent):
             budget = TaskIterationBudget(limit=self._max_iterations)
 
         state = ToolLoopRunState()
+        self._loop_detection.reset()
         iteration = 0
         while budget.remaining > 0:
             logger.debug(f"HybridAgent {self.agent_id} - tool loop iteration {iteration + 1}")
+            tool_calls_at_iteration_start = state.tool_calls_count
             if plugin_ctx is not None:
                 plugin_ctx.plugin_state["task.current_iteration"] = iteration
 
@@ -581,6 +662,8 @@ class HybridAgent(BaseAIAgent):
                 await dispatch_iteration_start_hook(plugin_ctx, iteration)
 
             outcome = await self._run_tool_loop_core_iteration(messages, context, iteration, state, plugin_ctx=plugin_ctx)
+
+            self._loop_detection.record_iteration(had_tool_call=state.tool_calls_count > tool_calls_at_iteration_start)
 
             budget.consume(1)
 
@@ -652,7 +735,19 @@ class HybridAgent(BaseAIAgent):
 
             if outcome.kind in ("final", "stop_match") and outcome.result is not None:
                 if plugin_ctx is not None:
-                    prevent = await dispatch_stop_hook_for_outcome(plugin_ctx, outcome, iteration, messages=messages)
+                    try:
+                        if await self._handle_pre_exit_gvr(
+                            plugin_ctx,
+                            messages,
+                            outcome.result,
+                            trigger="on_task_completed",
+                            iteration=iteration,
+                        ):
+                            iteration += 1
+                            continue
+                        prevent = await dispatch_stop_hook_for_outcome(plugin_ctx, outcome, iteration, messages=messages)
+                    except VerificationExhausted as exc:
+                        return self._assemble_loop_result(self._verification_exhausted_result(exc, state, iteration))
                     if prevent:
                         iteration += 1
                         continue
@@ -862,6 +957,7 @@ class HybridAgent(BaseAIAgent):
 
         messages = list(initial_messages) if initial_messages is not None else await self._build_initial_messages_async(task_description, context, plugin_ctx)
         state = ToolLoopRunState()
+        self._loop_detection.reset()
         iteration = 0
 
         # Drain pre_main_loop activations enqueued by DAWPPlugin.on_pre_main_loop (§9, D1-09).
@@ -899,8 +995,11 @@ class HybridAgent(BaseAIAgent):
             }
 
             state.last_outcome = None
+            tool_calls_at_iteration_start = state.tool_calls_count
             async for event in self._run_tool_loop_core_iteration_streaming(messages, context, iteration, state, plugin_ctx=plugin_ctx):
                 yield event
+
+            self._loop_detection.record_iteration(had_tool_call=state.tool_calls_count > tool_calls_at_iteration_start)
 
             budget.consume(1)
 
@@ -964,7 +1063,21 @@ class HybridAgent(BaseAIAgent):
 
             if outcome.kind == "stop_match":
                 if plugin_ctx is not None:
-                    prevent = await dispatch_stop_hook_for_outcome(plugin_ctx, outcome, iteration, messages=messages)
+                    inner = outcome.result or {}
+                    try:
+                        if await self._handle_pre_exit_gvr(
+                            plugin_ctx,
+                            messages,
+                            inner,
+                            trigger="on_task_completed",
+                            iteration=iteration,
+                        ):
+                            iteration += 1
+                            continue
+                        prevent = await dispatch_stop_hook_for_outcome(plugin_ctx, outcome, iteration, messages=messages)
+                    except VerificationExhausted as exc:
+                        yield self._streaming_result_event_from_inner(self._verification_exhausted_result(exc, state, iteration))
+                        return
                     if prevent:
                         iteration += 1
                         continue
@@ -972,7 +1085,20 @@ class HybridAgent(BaseAIAgent):
 
             if outcome.kind == "final" and outcome.result is not None:
                 if plugin_ctx is not None:
-                    prevent = await dispatch_stop_hook_for_outcome(plugin_ctx, outcome, iteration, messages=messages)
+                    try:
+                        if await self._handle_pre_exit_gvr(
+                            plugin_ctx,
+                            messages,
+                            outcome.result,
+                            trigger="on_task_completed",
+                            iteration=iteration,
+                        ):
+                            iteration += 1
+                            continue
+                        prevent = await dispatch_stop_hook_for_outcome(plugin_ctx, outcome, iteration, messages=messages)
+                    except VerificationExhausted as exc:
+                        yield self._streaming_result_event_from_inner(self._verification_exhausted_result(exc, state, iteration))
+                        return
                     if prevent:
                         iteration += 1
                         continue
@@ -989,6 +1115,11 @@ class HybridAgent(BaseAIAgent):
                 max_iterations=self._max_iterations,
             )
         yield self._streaming_result_event_from_inner(self._tool_loop_max_iterations_result(state))
+
+    def _should_emit_dawp_result(self, context: Dict[str, Any]) -> bool:
+        if context.get("dawp_emit_structured_result") is True:
+            return True
+        return bool(getattr(self._config, "dawp_emit_structured_result", False))
 
     async def _drain_pending_dawp_runs(
         self,
@@ -1129,6 +1260,8 @@ class HybridAgent(BaseAIAgent):
 
             # D3: reset success sentinel before each run; run_prompt_chain sets True on dawp_done.
             plugin_ctx.plugin_state["dawp._run_success"] = False
+            plugin_ctx.plugin_state["dawp._steps_completed"] = []
+            plugin_ctx.plugin_state.pop("dawp._failed_step_index", None)
 
             run_success = False
             try:
@@ -1170,6 +1303,29 @@ class HybridAgent(BaseAIAgent):
                 )
                 plugin_ctx.plugin_state["dawp._run_count"] = int(plugin_ctx.plugin_state.get("dawp._run_count", 0)) + 1
                 plugin_ctx.plugin_state.pop("dawp._metrics_run", None)
+
+            handoff = plugin_ctx.plugin_state.get("dawp._handoff_message")
+            if self._should_emit_dawp_result(context):
+                from aiecs.domain.agent.verification.dawp_result import (
+                    build_dawp_result,
+                    dawp_result_terminal_event,
+                )
+
+                dawp_result = build_dawp_result(
+                    workflow=workflow,
+                    run_id=run_id,
+                    run_success=run_success,
+                    plugin_state=plugin_ctx.plugin_state,
+                    handoff=handoff,
+                    abort_main=bool(run.abort_main),
+                )
+                terminal = dawp_result_terminal_event(dawp_result)
+                yield terminal
+                callback = context.get("dawp_result_callback")
+                if callable(callback):
+                    maybe = callback(dawp_result)
+                    if hasattr(maybe, "__await__"):
+                        await maybe
 
             # Merge handoff / inject_only summary before abort_main so audit trail
             # is preserved in main messages (append: handoff already on shared list).
@@ -1995,6 +2151,13 @@ class HybridAgent(BaseAIAgent):
 
                     tool_result = hook_result.tool_output
                     state.tool_calls_count += 1
+                    await self._track_tool_loop_detection(
+                        tool_name=tool_name,
+                        parameters=parameters,
+                        tool_result=tool_result,
+                        iteration=iteration,
+                        plugin_ctx=plugin_ctx,
+                    )
                     state.steps.append(
                         {
                             "type": "action",
@@ -2692,6 +2855,74 @@ class HybridAgent(BaseAIAgent):
             )
 
         return candidate_tool, candidate_op
+
+    # ==================== GVR Verification (A-1) ====================
+
+    def register_verifier(self, verifier: Any) -> None:
+        """Register a Verifier implementation for :meth:`verify`."""
+        self._verifiers.append(verifier)
+
+    async def verify(
+        self,
+        result: Dict[str, Any],
+        criteria: List[Any],
+        *,
+        goal: Optional[Union[AgentGoal, Dict[str, Any]]] = None,
+        phase: str = "explicit",
+        iteration: Optional[int] = None,
+    ) -> Any:
+        """
+        Optional verification hook — runs registered Verifiers without mutating executor prompt.
+
+        Args:
+            result: Task execution result (ExecResult-compatible dict).
+            criteria: Acceptance criteria list (``AcceptanceCriterion`` or dicts).
+            goal: Optional goal context; defaults to first active goal if omitted.
+            phase: Verification phase label for context packet.
+            iteration: Optional FC loop iteration index.
+
+        Returns:
+            Structured :class:`~aiecs.domain.agent.verification.models.Verdict`.
+        """
+        from aiecs.domain.agent.verification.context_builder import build_verification_context
+        from aiecs.domain.agent.verification.models import AcceptanceCriterion, Verdict
+        from aiecs.domain.agent.verification.verifier import merge_verdicts
+
+        if goal is None:
+            active = self.get_goals()
+            goal = active[0] if active else None
+
+        normalized: List[AcceptanceCriterion] = []
+        for item in criteria:
+            if isinstance(item, AcceptanceCriterion):
+                normalized.append(item)
+            elif isinstance(item, dict):
+                normalized.append(AcceptanceCriterion.from_dict(item))
+            else:
+                normalized.append(AcceptanceCriterion(criterion_id=str(item), description=str(item)))
+
+        verifier_ids = [getattr(v, "kind", type(v).__name__) for v in self._verifiers]
+        context = build_verification_context(
+            result=result,
+            goal=goal,
+            registered_verifier_ids=verifier_ids,
+            iteration=iteration,
+            phase=phase,  # type: ignore[arg-type]
+        )
+
+        if not self._verifiers:
+            return Verdict(passed=True, kind="NA", feedback="No verifiers registered.")
+
+        verdicts: List[Verdict] = []
+        for verifier in self._verifiers:
+            verdict = await verifier.verify(
+                goal=goal or {},
+                result=result,
+                criteria=normalized,
+                context=context,
+            )
+            verdicts.append(verdict)
+        return merge_verdicts(verdicts)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "HybridAgent":

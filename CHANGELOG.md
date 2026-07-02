@@ -9,6 +9,58 @@ See also `docs/changelog.rst` for historical release notes.
 
 ## [Unreleased]
 
+### GVR — Consumer API / Contract (M-8)
+
+- **`aiecs/docs/gvr_consumer_api.md`:** GVR-facing symbol list, semver policy, breaking-change review process, ADR-018 adoption matrix (A/B/C).
+- **`aiecs/docs/migration_2.1.0rc4_to_ga.md`:** Upgrade guide for python-middleware GVR integrators.
+- **`tests/contract/test_aiecs_gvr_surface.py`:** Baseline (rc4) + GA-target contract tiers; CI contract job.
+- **`tests/fixtures/gvr_verdict_v1.json`:** Shared Verdict JSON Schema skeleton (co-owned with host `work_state.Verdict`).
+
+### GVR — Verdict / Verification (A-1, A-2, A-4, A-5, A-11)
+
+- **`aiecs.domain.agent.verification`:** `Verdict`, `FeedbackItem`, `EvidenceItem`, `AcceptanceCriterion`, `VerificationContext`, `Verifier` protocol, `normalize_acceptance_criteria`, `ReadOnlyAdversarialVerifier` example.
+- **`HybridAgent.verify()` / `register_verifier()`:** optional L1/L2 verification hook (defaults off when not invoked).
+- **`aiecs/docs/gvr_verdict_field_mapping.md`:** 1:1 mapping to python-middleware `work_state.Verdict`.
+- **`aiecs.domain.agent.verification.gates`:** `GateRegistry`, `SpecGate`, `CitationUrlGate`, `gate_aggregate_to_verdict`; config via `deterministic_gates`.
+- **`aiecs/docs/gvr_gate_semantics.md`:** aggregate score + skip_threshold (OpenDraft ≥85).
+- **`VerificationPolicy` / `run_gvr_pre_exit`:** engine verify-fix loop with `VerificationExhausted` at max refines.
+- **`PeerReviewPolicy` / `request_peer_review` → `Verdict`:** QUICK-path mini-Verdict (≥5 criteria blocked).
+- **`CweVerifier` / `review_refinement` template (A-11):** sequential fact→style H1 multi-perspective verifier; `cwe_verifier.enabled` default off.
+
+### GVR — HookPlugin blocking (A-8)
+
+- Hook JSON schema: `{action, feedback, feedback_items}` on `TASK_COMPLETED` / `STOP`.
+- In-loop pre-exit `TASK_COMPLETED` + gate fail injects data-only user message and continues FC loop.
+- Enriched hook payload: `goal_id`, `gate_scores`, `failed_criteria`.
+
+### GVR — GoalGraph (A-3)
+
+- **`AgentGoal` GVR extensions:** `verdict_history`, `origin`, `id`/`parent_id` read aliases; union `success_criteria`.
+- **`GoalGraph` API:** `add_goal`, `close_goal`, `next_open_goal`, `spawn_subgoals`, `decompose` (host `decomposer=` only).
+- **`aiecs/docs/gvr_goal_graph_mapping.md`:** WorkState / GoalNode field mapping.
+
+### GVR — Loop detection (A-7)
+
+- **`LoopDetectionService` / `LoopSignal`:** sliding-window triple repeat detection; optional `ON_LOOP_DETECTED` hook.
+- **`aiecs/docs/gvr_loop_detection.md`:** hybrid use with host EC=0 rules.
+
+### GVR — DAWPResult (A-6)
+
+- **`DAWPResult`:** structured terminal handoff (`status`, `deliverable_refs`, `criteria_progress`, …).
+- **`dawp_emit_structured_result`:** opt-in streaming terminal event; partial/failed does not silent-pass.
+- **`aiecs/docs/gvr_dawp_result.md`:** L2 prompt-chain handoff; host adapter sample.
+
+### GVR — Recovery (A-9)
+
+- **`RecoveryResult` / `execute_with_recovery_streaming`:** structured recovery outcomes.
+- **ABORT + `VerificationExhausted`:** propagates to host ESCALATE contract.
+- **`aiecs/docs/gvr_recovery_semantics.md`:** strategy semantics for streaming paths.
+
+### GVR — Compression (A-10)
+
+- **GVR preservation in microcompact:** `gvr_preserve` skips tool results referencing `deliverable_refs` / acceptance criteria.
+- **Docs:** GVR goal-boundary (F1) vs tool-batch-boundary (F4) strategy in `context_compression_integration.md`.
+- **F4 + F1 compatibility:** mid-iteration `compact_after_tool_batch` complements boundary F1 compaction.
 
 
 ## [2.1.0rc4] - 2026-06-29 (Pre-release)

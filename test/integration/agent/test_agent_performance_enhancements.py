@@ -775,18 +775,15 @@ async def test_request_peer_review(collaborative_agents):
     # Request peer review from analyst1
     review = await main_agent.request_peer_review(task, result, reviewer_id="analyst1")
 
-    # Verify review structure
-    assert "approved" in review, "Review should have 'approved' field"
-    assert "feedback" in review, "Review should have 'feedback' field"
-    assert "reviewer_id" in review, "Review should have 'reviewer_id' field"
+    # Verify review structure (A-5 Verdict)
+    from aiecs.domain.agent.verification.models import Verdict
 
-    # Verify review content
-    assert review["approved"] is True, "Review should be approved (result has output)"
-    assert review["reviewer_id"] == "analyst1", f"Reviewer should be analyst1, got {review['reviewer_id']}"
-    assert "analyst1" in review["feedback"], "Feedback should mention reviewer"
-    assert "Approved" in review["feedback"], "Feedback should indicate approval"
+    assert isinstance(review, Verdict), "Review should be a Verdict"
+    assert review.passed is True, "Review should pass (result has output)"
+    assert review.kind == "PASS"
+    assert "analyst1" in review.feedback or review.passed
 
-    print(f"✓ Task 2.13.14: Peer review workflow completed - {review['feedback']}")
+    print(f"✓ Task 2.13.14: Peer review workflow completed - {review.feedback}")
 
 
 # Task 2.13.15: Test collaborate_on_task with parallel strategy

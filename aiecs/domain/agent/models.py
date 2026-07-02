@@ -9,13 +9,23 @@ Defines the core data models for the base AI agent system.
 """
 
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING
+from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING, Literal
 from enum import Enum
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import AliasChoices, BaseModel, Field, ConfigDict, field_validator
 import uuid
 
 if TYPE_CHECKING:
     from aiecs.domain.context.compression.policy import CompressionPolicy
+
+GoalOrigin = Literal["root", "decompose", "exploration", "expand"]
+
+
+class GoalGraphConfig(BaseModel):
+    """GoalGraph engine configuration (A-3)."""
+
+    default_decomposer: Literal["none"] = "none"
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class AgentState(str, Enum):
@@ -154,6 +164,20 @@ class RecoveryStrategy(str, Enum):
     ABORT = "abort"  # Abort execution
 
 
+class RecoveryResult(BaseModel):
+    """Structured outcome from ``execute_with_recovery`` (A-9)."""
+
+    success: bool
+    result: Optional[Dict[str, Any]] = None
+    strategies_attempted: List[str] = Field(default_factory=list)
+    errors: List[Dict[str, str]] = Field(default_factory=list)
+    terminal_error: Optional[str] = None
+    escalation_reason: Optional[str] = None
+    verdict: Optional[Dict[str, Any]] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class RetryPolicy(BaseModel):
     """Retry policy configuration for agent operations."""
 
@@ -238,6 +262,45 @@ class AgentConfiguration(BaseModel):
         "'html_document' requires no pattern – it matches when the result is a complete HTML document "
         "(contains '<!DOCTYPE html>' or '<html' AND '</html>'). "
         "Example: [{'type': 'html_document'}, {'type': 'regex', 'pattern': r'FINAL_ANSWER:'}].",
+    )
+    deterministic_gates: Optional[List[str]] = Field(
+        default=None,
+        description="GVR deterministic gate ids for L2 pre-exit scoring (A-4). "
+        "Built-in reference ids: spec_gate, citation_gate, citation_url_gate — "
+        "heuristic contract-test gates only; NOT production-grade validators. "
+        "Production hosts MUST register custom DeterministicGate implementations "
+        "and/or rely on L1 VERIFY + LLM Verifier paths. "
+        "Empty or None disables gate registry (rc4 default).",
+    )
+    gvr_gate_skip_threshold: float = Field(
+        default=85.0,
+        ge=0.0,
+        le=100.0,
+        description="OpenDraft-style aggregate skip threshold for deterministic gates (≥85 pass pattern).",
+    )
+    verification_policy: Optional[Any] = Field(
+        default=None,
+        description="GVR engine verify-fix loop (A-2). VerificationPolicy dict or model; default None/disabled.",
+    )
+    peer_review_policy: Optional[Any] = Field(
+        default=None,
+        description="GVR peer review eligibility (A-5). PeerReviewPolicy dict or model; default None/disabled.",
+    )
+    loop_detection: Optional[Any] = Field(
+        default=None,
+        description="GVR tool-loop stall signals (A-7). LoopDetectionConfig dict or model; default None/disabled.",
+    )
+    goal_graph: Optional[Any] = Field(
+        default=None,
+        description="GoalGraph config (A-3). GoalGraphConfig dict or model; default_decomposer=none only.",
+    )
+    dawp_emit_structured_result: bool = Field(
+        default=False,
+        description="Emit DAWPResult terminal streaming event after DAWP runs (A-6). Default off (rc4).",
+    )
+    cwe_verifier: Optional[Any] = Field(
+        default=None,
+        description="GVR CWE multi-perspective verifier (A-11). CweVerifierPolicy dict or model; default off.",
     )
 
     # Memory configuration
@@ -442,11 +505,12 @@ def resolve_compression_policy(config: AgentConfiguration) -> "CompressionPolicy
 
 
 class AgentGoal(BaseModel):
-    """Model representing an agent goal."""
+    """Model representing an agent goal (GVR-extended in place, D1-A)."""
 
     goal_id: str = Field(
         default_factory=lambda: str(uuid.uuid4()),
         description="Unique goal identifier",
+        validation_alias=AliasChoices("goal_id", "id"),
     )
     description: str = Field(..., description="Goal description")
     status: GoalStatus = Field(default=GoalStatus.PENDING, description="Current goal status")
@@ -458,13 +522,27 @@ class AgentGoal(BaseModel):
         description="Progress percentage (0-100)",
     )
 
-    # Success criteria
-    success_criteria: Optional[str] = Field(None, description="Criteria for goal achievement")
+    # Success criteria — legacy string OR structured list (D1-A)
+    success_criteria: Optional[Union[str, List[Any]]] = Field(
+        default=None,
+        description="Criteria for goal achievement (string legacy or list[AcceptanceCriterion])",
+    )
     deadline: Optional[datetime] = Field(None, description="Goal deadline")
 
     # Dependencies
-    parent_goal_id: Optional[str] = Field(None, description="Parent goal ID if this is a sub-goal")
+    parent_goal_id: Optional[str] = Field(
+        None,
+        description="Parent goal ID if this is a sub-goal",
+        validation_alias=AliasChoices("parent_goal_id", "parent_id"),
+    )
     depends_on: List[str] = Field(default_factory=list, description="List of goal IDs this depends on")
+
+    # GVR extensions (A-3)
+    verdict_history: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Append-only verification verdict history",
+    )
+    origin: GoalOrigin = Field(default="root", description="Goal origin (root|decompose|exploration|expand)")
 
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Goal creation timestamp")
@@ -474,7 +552,46 @@ class AgentGoal(BaseModel):
     # Metadata
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional goal metadata")
 
-    model_config = ConfigDict()
+    model_config = ConfigDict(populate_by_name=True)
+
+    @field_validator("success_criteria", mode="before")
+    @classmethod
+    def _coerce_success_criteria(cls, value: Any) -> Any:
+        if value is None or isinstance(value, str):
+            return value
+        if isinstance(value, list):
+            from aiecs.domain.agent.verification.models import AcceptanceCriterion
+
+            out: list[Any] = []
+            for item in value:
+                if isinstance(item, AcceptanceCriterion):
+                    out.append(item)
+                elif isinstance(item, dict):
+                    out.append(AcceptanceCriterion.from_dict(item))
+                else:
+                    out.append(item)
+            return out
+        return value
+
+    @property
+    def id(self) -> str:
+        """GVR alias for ``goal_id`` (read-only)."""
+        return self.goal_id
+
+    @property
+    def parent_id(self) -> Optional[str]:
+        """GVR alias for ``parent_goal_id`` (read-only)."""
+        return self.parent_goal_id
+
+    def append_verdict(self, verdict: Any) -> None:
+        """Append a verdict entry without mutating prior history."""
+        if hasattr(verdict, "to_dict"):
+            payload = verdict.to_dict()
+        elif isinstance(verdict, dict):
+            payload = dict(verdict)
+        else:
+            raise TypeError(f"Unsupported verdict type: {type(verdict)!r}")
+        self.verdict_history = [*self.verdict_history, payload]
 
 
 class AgentCapabilityDeclaration(BaseModel):
@@ -1062,5 +1179,8 @@ class ToolObservation(BaseModel):
 
 
 from aiecs.domain.agent.plugins.models import PluginConfig  # noqa: E402
+from aiecs.domain.agent.verification.policy_models import VerificationPolicy, WhenToVerify  # noqa: E402,F401
+from aiecs.domain.agent.verification.peer_review_policy_models import PeerReviewPolicy  # noqa: E402,F401
+from aiecs.domain.agent.loop_detection import LoopDetectionConfig  # noqa: E402,F401
 
 AgentConfiguration.model_rebuild()

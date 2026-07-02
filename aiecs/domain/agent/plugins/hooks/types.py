@@ -26,6 +26,9 @@ class HookResult:
     additional_context: str | None = None
     continue_allowed: bool | None = None
     prevent_continuation: bool | None = None
+    action: str | None = None
+    feedback: str | dict[str, Any] | None = None
+    feedback_items: list[dict[str, Any]] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -115,9 +118,32 @@ class AggregatedHookResult:
         for result in reversed(self.results):
             if result.prevent_continuation is True:
                 return True
+            if result.action == "block":
+                return True
             if result.continue_allowed is False:
                 return True
         return False
+
+    @property
+    def gvr_action(self) -> str | None:
+        for result in reversed(self.results):
+            if result.action:
+                return result.action
+        return None
+
+    @property
+    def gvr_feedback(self) -> str | dict[str, Any] | None:
+        for result in reversed(self.results):
+            if result.feedback is not None:
+                return result.feedback
+        return None
+
+    @property
+    def gvr_feedback_items(self) -> list[dict[str, Any]]:
+        for result in reversed(self.results):
+            if result.feedback_items:
+                return list(result.feedback_items)
+        return []
 
 
 @dataclass

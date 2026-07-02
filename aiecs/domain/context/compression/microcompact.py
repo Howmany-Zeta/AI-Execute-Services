@@ -15,6 +15,7 @@ from aiecs.domain.context.compression.constants import (
     DEFAULT_KEEP_RECENT,
     TIME_BASED_MC_CLEARED_MESSAGE,
 )
+from aiecs.domain.context.compression.gvr_preserve import is_gvr_protected_tool_content
 
 DEFAULT_MICROCOMPACT_TOOL_RESULT_CHARS = 4_000
 
@@ -96,10 +97,13 @@ def _collect_compactable_tool_ids(
     compactable_ids = [
         tool_id
         for tool_id in ordered_ids
-        if tool_names.get(tool_id, "") in COMPACTABLE_TOOLS
-        or is_microcompactable_tool_result(
-            tool_names.get(tool_id, ""),
-            result_content.get(tool_id, ""),
+        if not is_gvr_protected_tool_content(result_content.get(tool_id, ""))
+        and (
+            tool_names.get(tool_id, "") in COMPACTABLE_TOOLS
+            or is_microcompactable_tool_result(
+                tool_names.get(tool_id, ""),
+                result_content.get(tool_id, ""),
+            )
         )
     ]
     return compactable_ids, tool_names, result_content
