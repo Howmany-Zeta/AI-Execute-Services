@@ -41,6 +41,7 @@ class AgentHookEvent(str, Enum):
     STOP_FAILURE = "stop_failure"
     TASK_COMPLETED = "task_completed"
     ON_LOOP_DETECTED = "on_loop_detected"
+    ON_SEARCH_BURST_DETECTED = "on_search_burst_detected"
 
     @classmethod
     def executable_in_hooks_json(cls) -> frozenset[AgentHookEvent]:
@@ -76,5 +77,6 @@ class AgentHookEvent(str, Enum):
                 cls.STOP_FAILURE,
                 cls.TASK_COMPLETED,
                 cls.ON_LOOP_DETECTED,
+                cls.ON_SEARCH_BURST_DETECTED,
             }
         )

@@ -10,7 +10,8 @@ understanding query intent, and generating result summaries.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, cast
+import re
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from .constants import QueryIntentType, CredibilityLevel
 
@@ -50,6 +51,32 @@ class ResultQualityAnalyzer:
         # Encyclopedia
         "wikipedia.org": 0.75,
     }
+
+    # Social / forum domains — demote in ranking (M-D.1)
+    SOCIAL_NOISE_DOMAINS = {
+        "facebook.com": 0.12,
+        "m.facebook.com": 0.12,
+        "reddit.com": 0.18,
+        "www.reddit.com": 0.18,
+        "old.reddit.com": 0.18,
+        "twitter.com": 0.15,
+        "x.com": 0.15,
+        "instagram.com": 0.12,
+        "tiktok.com": 0.12,
+    }
+
+    # Survey / institutional sources — boost for research intents
+    INSTITUTIONAL_DOMAINS = {
+        "yougov.com": 0.92,
+        "kpmg.com": 0.88,
+        "pewresearch.org": 0.90,
+        "statista.com": 0.85,
+        "mckinsey.com": 0.88,
+        "gartner.com": 0.85,
+        "deloitte.com": 0.85,
+    }
+
+    LOW_SIGNAL_QUALITY_THRESHOLD = 0.45
 
     # Low quality indicators
     LOW_QUALITY_INDICATORS = [
@@ -154,13 +181,27 @@ class ResultQualityAnalyzer:
 
     def _calculate_authority_score(self, domain: str) -> float:
         """Calculate domain authority score"""
+        domain_lower = domain.lower()
+
+        if domain_lower in self.SOCIAL_NOISE_DOMAINS:
+            return self.SOCIAL_NOISE_DOMAINS[domain_lower]
+        for social_domain, score in self.SOCIAL_NOISE_DOMAINS.items():
+            if domain_lower.endswith(social_domain):
+                return score
+
+        if domain_lower in self.INSTITUTIONAL_DOMAINS:
+            return self.INSTITUTIONAL_DOMAINS[domain_lower]
+        for inst_domain, score in self.INSTITUTIONAL_DOMAINS.items():
+            if domain_lower.endswith(inst_domain):
+                return score
+
         # Exact match
-        if domain in self.AUTHORITATIVE_DOMAINS:
-            return self.AUTHORITATIVE_DOMAINS[domain]
+        if domain_lower in self.AUTHORITATIVE_DOMAINS:
+            return self.AUTHORITATIVE_DOMAINS[domain_lower]
 
         # Suffix match
         for auth_domain, score in self.AUTHORITATIVE_DOMAINS.items():
-            if domain.endswith(auth_domain):
+            if domain_lower.endswith(auth_domain):
                 return score
 
         # Default medium authority
@@ -277,6 +318,144 @@ class ResultQualityAnalyzer:
             )
 
 
+def partition_search_results(
+    quality_analyzer: ResultQualityAnalyzer,
+    results: List[Dict[str, Any]],
+    *,
+    num_results: int,
+    low_signal_threshold: float = ResultQualityAnalyzer.LOW_SIGNAL_QUALITY_THRESHOLD,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Re-rank results and split primary hits from low-signal noise."""
+    if not results:
+        return [], [], []
+
+    ranked = quality_analyzer.rank_results(results, "balanced")
+    primary: List[Dict[str, Any]] = []
+    low_signal: List[Dict[str, Any]] = []
+
+    for result in ranked:
+        quality = result.get("_quality", {})
+        summary = result.get("_quality_summary", {})
+        quality_score = quality.get("quality_score", 0.0)
+        is_relevant = summary.get("is_relevant", False)
+
+        if quality_score < low_signal_threshold or (not is_relevant and quality_score < 0.55):
+            low_signal.append(result)
+        else:
+            primary.append(result)
+
+    if not primary:
+        primary = ranked[:num_results]
+        low_signal = ranked[num_results:]
+
+    primary = primary[:num_results]
+    must_scrape_urls = build_must_scrape_urls(ranked)
+    return primary, low_signal, must_scrape_urls
+
+
+def merge_batch_search_results(
+    quality_analyzer: ResultQualityAnalyzer,
+    per_query_buckets: List[Dict[str, Any]],
+    *,
+    merged_num_results: int,
+    deduplicator: Any | None = None,
+    similarity_threshold: float = 0.85,
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Merge per-query primary hits into one ranked list (M-D.1 batch)."""
+    combined: List[Dict[str, Any]] = []
+    for bucket in per_query_buckets:
+        source_query = bucket.get("_metadata", {}).get("query") or bucket.get("query", "")
+        for result in bucket.get("results", []):
+            merged = dict(result)
+            merged["_batch_source_query"] = source_query
+            combined.append(merged)
+
+    if not combined:
+        return [], [], []
+
+    if deduplicator is not None:
+        combined = deduplicator.deduplicate_results(combined, similarity_threshold)
+
+    return partition_search_results(
+        quality_analyzer,
+        combined,
+        num_results=merged_num_results,
+    )
+
+
+def build_batch_intent_analysis(per_query_buckets: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Pick a representative intent analysis for merged batch next_steps."""
+    for bucket in per_query_buckets:
+        metadata = bucket.get("_search_metadata") or bucket.get("_metadata") or {}
+        intent_type = metadata.get("intent_type")
+        if intent_type and intent_type != QueryIntentType.GENERAL.value:
+            return {
+                "intent_type": intent_type,
+                "confidence": metadata.get("intent_confidence", metadata.get("confidence", 0.0)),
+            }
+    if per_query_buckets:
+        metadata = per_query_buckets[0].get("_search_metadata") or per_query_buckets[0].get("_metadata") or {}
+        if metadata.get("intent_type"):
+            return {
+                "intent_type": metadata["intent_type"],
+                "confidence": metadata.get("intent_confidence", metadata.get("confidence", 0.0)),
+            }
+    return None
+
+
+def build_must_scrape_urls(results: List[Dict[str, Any]], top_k: int = 3) -> List[Dict[str, Any]]:
+    """Select top URLs the consumer should scrape next."""
+    candidates: List[Dict[str, Any]] = []
+    for result in results:
+        quality = result.get("_quality", {})
+        summary = result.get("_quality_summary", {})
+        quality_score = quality.get("quality_score", 0.0)
+        authority_score = quality.get("authority_score", 0.0)
+        is_relevant = summary.get("is_relevant", False)
+
+        if not (is_relevant or authority_score >= 0.75 or quality_score >= 0.65):
+            continue
+
+        reasons: List[str] = []
+        if is_relevant:
+            reasons.append("high relevance")
+        if summary.get("is_authoritative") or authority_score >= 0.8:
+            reasons.append("high domain_authority")
+        if summary.get("is_fresh"):
+            reasons.append("fresh content")
+
+        candidates.append(
+            {
+                "url": result.get("link", ""),
+                "score": round(quality_score, 2),
+                "reason": " / ".join(reasons) if reasons else "quality score",
+            }
+        )
+
+    candidates.sort(key=lambda item: item["score"], reverse=True)
+    return [item for item in candidates[:top_k] if item.get("url")]
+
+
+def build_search_next_steps(
+    must_scrape_urls: List[Dict[str, Any]],
+    intent_analysis: Optional[Dict[str, Any]],
+) -> List[str]:
+    """Actionable next steps for agent consumers."""
+    steps: List[str] = []
+    if must_scrape_urls:
+        steps.append("scrape must_scrape_urls before issuing another web_search")
+
+    intent_type = (intent_analysis or {}).get("intent_type", QueryIntentType.GENERAL.value)
+    if intent_type == QueryIntentType.DEMOGRAPHIC.value:
+        steps.append("prefer allowed_domains for survey publishers when intent=demographic")
+    elif intent_type == QueryIntentType.CAUSAL.value:
+        steps.append("prefer institutional or survey sources explaining causal factors")
+    elif intent_type == QueryIntentType.BRAND.value:
+        steps.append("prefer brand perception and reputation studies over social chatter")
+
+    return steps
+
+
 # ============================================================================
 # Query Intent Analyzer
 # ============================================================================
@@ -284,6 +463,84 @@ class ResultQualityAnalyzer:
 
 class QueryIntentAnalyzer:
     """Analyzer for understanding query intent and optimizing queries"""
+
+    _STOP_WORDS = frozenset(
+        {
+            "a",
+            "an",
+            "the",
+            "and",
+            "or",
+            "of",
+            "in",
+            "on",
+            "for",
+            "to",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "among",
+            "affecting",
+            "about",
+            "with",
+            "from",
+            "that",
+            "this",
+            "their",
+            "why",
+            "how",
+            "what",
+            "when",
+            "where",
+            "who",
+        }
+    )
+
+    _QUESTION_STARTERS = ("why ", "how ", "what ", "when ", "where ", "who ")
+
+    _DEMOGRAPHIC_PHRASES = (
+        "young people",
+        "gen z",
+        "gen-z",
+        "millennials",
+        "generation z",
+        "youth",
+        "teenagers",
+        "demographic",
+        "cohort",
+        "age group",
+    )
+
+    _CAUSAL_PHRASES = (
+        "why is",
+        "why are",
+        "what causes",
+        "reasons for",
+        "factors behind",
+    )
+
+    _CAUSAL_WORDS = frozenset(
+        {
+            "why",
+            "cause",
+            "reason",
+            "popular",
+            "popularity",
+            "trend",
+            "impact",
+            "driving",
+            "factors",
+        }
+    )
+
+    _BRAND_PHRASES = ("brand image", "brand perception", "brand reputation")
+    _BRAND_WORDS = frozenset({"brand", "reputation", "perception", "image"})
+
+    _COMMA_STACK_FILLER = frozenset({"reports", "articles", "information", "data", "sources"})
 
     # Intent patterns with keywords and enhancements
     INTENT_PATTERNS = {
@@ -341,6 +598,46 @@ class QueryIntentAnalyzer:
             "query_enhancement": "review OR comparison",
             "suggested_params": {"num_results": 15},
         },
+        QueryIntentType.CAUSAL.value: {
+            "keywords": [
+                "why",
+                "cause",
+                "reason",
+                "factor",
+                "driving",
+                "lead to",
+                "impact",
+                "popular",
+                "popularity",
+            ],
+            "query_enhancement": "",
+            "suggested_params": {"num_results": 10},
+        },
+        QueryIntentType.DEMOGRAPHIC.value: {
+            "keywords": [
+                "young people",
+                "gen z",
+                "millennials",
+                "youth",
+                "demographic",
+                "generation",
+                "cohort",
+                "teen",
+            ],
+            "query_enhancement": "",
+            "suggested_params": {"num_results": 10},
+        },
+        QueryIntentType.BRAND.value: {
+            "keywords": [
+                "brand",
+                "reputation",
+                "perception",
+                "image",
+                "company",
+            ],
+            "query_enhancement": "",
+            "suggested_params": {"num_results": 10},
+        },
     }
 
     def analyze_query_intent(self, query: str) -> Dict[str, Any]:
@@ -364,6 +661,7 @@ class QueryIntentAnalyzer:
             "query_entities": [],
             "query_modifiers": [],
             "suggestions": [],
+            "rewrite_applied": False,
         }
 
         # Detect intent type
@@ -383,16 +681,59 @@ class QueryIntentAnalyzer:
         analysis["intent_type"] = detected_intent
         analysis["confidence"] = max_confidence
 
-        # Enhance query if intent detected
-        if detected_intent != QueryIntentType.GENERAL.value:
+        cohort_present = any(phrase in query_lower for phrase in self._DEMOGRAPHIC_PHRASES)
+        if cohort_present and (detected_intent in (QueryIntentType.CAUSAL.value, QueryIntentType.GENERAL.value) or "popular" in query_lower or "popularity" in query_lower):
+            detected_intent = QueryIntentType.DEMOGRAPHIC.value
+            max_confidence = max(max_confidence, 0.72)
+            analysis["intent_type"] = detected_intent
+            analysis["confidence"] = max_confidence
+            intent_config = self.INTENT_PATTERNS[detected_intent]
+            analysis["suggested_params"] = cast(Dict[str, Any], intent_config["suggested_params"]).copy()
+
+        if detected_intent == QueryIntentType.GENERAL.value:
+            research_intent, research_confidence = self._detect_research_intent(query_lower)
+            if research_intent != QueryIntentType.GENERAL.value:
+                detected_intent = research_intent
+                max_confidence = max(max_confidence, research_confidence)
+                analysis["intent_type"] = detected_intent
+                analysis["confidence"] = max_confidence
+                intent_config = self.INTENT_PATTERNS[detected_intent]
+                analysis["suggested_params"] = cast(Dict[str, Any], intent_config["suggested_params"]).copy()
+
+        should_keyword_rewrite = detected_intent in {
+            QueryIntentType.CAUSAL.value,
+            QueryIntentType.DEMOGRAPHIC.value,
+            QueryIntentType.BRAND.value,
+        } or (detected_intent == QueryIntentType.GENERAL.value and self._should_heuristic_rewrite(query))
+        if should_keyword_rewrite:
+            rewritten = self._rewrite_to_keywords(query, detected_intent)
+            if rewritten and rewritten.strip().lower() != query.strip().lower():
+                analysis["enhanced_query"] = rewritten
+                if analysis["confidence"] <= 0.0:
+                    analysis["confidence"] = 0.35
+
+        analysis["rewrite_applied"] = analysis["enhanced_query"].strip().lower() != query.strip().lower()
+
+        if detected_intent != QueryIntentType.GENERAL.value and not analysis["suggested_params"]:
+            intent_config = self.INTENT_PATTERNS[detected_intent]
+            analysis["suggested_params"] = cast(Dict[str, Any], intent_config["suggested_params"]).copy()
+
+        # Legacy boolean-style enhancement for non-research intents
+        if (
+            detected_intent != QueryIntentType.GENERAL.value
+            and detected_intent
+            not in {
+                QueryIntentType.CAUSAL.value,
+                QueryIntentType.DEMOGRAPHIC.value,
+                QueryIntentType.BRAND.value,
+            }
+            and not analysis["rewrite_applied"]
+        ):
             intent_config = self.INTENT_PATTERNS[detected_intent]
             enhancement = intent_config["query_enhancement"]
-
             if enhancement:
                 analysis["enhanced_query"] = f"{query} {enhancement}"
-
-            suggested_params = cast(Dict[str, Any], intent_config["suggested_params"])
-            analysis["suggested_params"] = suggested_params.copy()
+                analysis["rewrite_applied"] = True
 
         # Extract entities and modifiers
         analysis["query_entities"] = self._extract_entities(query)
@@ -402,6 +743,119 @@ class QueryIntentAnalyzer:
         analysis["suggestions"] = self._generate_suggestions(query, detected_intent)
 
         return analysis
+
+    def _detect_research_intent(self, query_lower: str) -> Tuple[str, float]:
+        """Detect causal / demographic / brand intents missed by keyword patterns."""
+        demographic_score = sum(1.5 for phrase in self._DEMOGRAPHIC_PHRASES if phrase in query_lower)
+        causal_score = sum(2.0 for phrase in self._CAUSAL_PHRASES if phrase in query_lower)
+        causal_score += sum(0.75 for word in self._CAUSAL_WORDS if word in query_lower.split())
+        brand_score = sum(2.0 for phrase in self._BRAND_PHRASES if phrase in query_lower)
+        brand_score += sum(0.75 for word in self._BRAND_WORDS if word in query_lower.split())
+
+        scores = {
+            QueryIntentType.DEMOGRAPHIC.value: demographic_score,
+            QueryIntentType.CAUSAL.value: causal_score,
+            QueryIntentType.BRAND.value: brand_score,
+        }
+        best_intent, best_score = max(scores.items(), key=lambda item: item[1])
+        if best_score <= 0:
+            return QueryIntentType.GENERAL.value, 0.0
+
+        has_cohort = any(phrase in query_lower for phrase in self._DEMOGRAPHIC_PHRASES)
+        has_popularity = "popular" in query_lower or "popularity" in query_lower
+        if has_cohort and (causal_score > 0 or has_popularity):
+            confidence = min(1.0, 0.55 + demographic_score * 0.1 + min(causal_score, 2.0) * 0.05)
+            return QueryIntentType.DEMOGRAPHIC.value, confidence
+
+        if demographic_score > 0 and causal_score > 0 and demographic_score >= causal_score:
+            best_intent = QueryIntentType.DEMOGRAPHIC.value
+            best_score = demographic_score + (causal_score * 0.25)
+        elif causal_score > demographic_score:
+            best_intent = QueryIntentType.CAUSAL.value
+            best_score = causal_score
+
+        confidence = min(1.0, 0.45 + best_score * 0.12)
+        return best_intent, confidence
+
+    def _should_heuristic_rewrite(self, query: str) -> bool:
+        stripped = query.strip()
+        lowered = stripped.lower()
+        if stripped.endswith("?"):
+            return True
+        if stripped.count(",") >= 2:
+            return True
+        return any(lowered.startswith(starter) for starter in self._QUESTION_STARTERS)
+
+    def _rewrite_to_keywords(self, query: str, intent_type: str) -> str:
+        raw = self._normalize_query_text(query.strip().rstrip("?").strip())
+        if raw.count(",") >= 2:
+            fragments = [fragment.strip() for fragment in raw.split(",") if fragment.strip()]
+            terms: List[str] = []
+            for fragment in fragments:
+                terms.extend(self._tokenize_keywords(fragment))
+        else:
+            terms = self._tokenize_keywords(raw)
+
+        terms = self._dedupe_terms_preserve_order(terms)
+        terms = self._inject_intent_terms(terms, intent_type)
+        return " ".join(terms) if terms else query
+
+    def _normalize_query_text(self, text: str) -> str:
+        normalized = text.replace("'s", "").replace("'", " ")
+        normalized = re.sub(r"\bgen\s*-?\s*z\b", "GenZ", normalized, flags=re.IGNORECASE)
+        return normalized
+
+    def _tokenize_keywords(self, text: str) -> List[str]:
+        cleaned = self._normalize_query_text(text).replace("-", " ")
+        tokens: List[str] = []
+        for word in cleaned.split():
+            normalized = word.strip('.,;:!?()[]"')
+            if not normalized:
+                continue
+            if normalized == "GenZ":
+                tokens.append("Gen Z")
+                continue
+            lower = normalized.lower()
+            if lower in self._STOP_WORDS or lower in self._COMMA_STACK_FILLER:
+                continue
+            if normalized[0].isupper() and len(normalized) > 1:
+                tokens.append(normalized)
+            elif lower not in self._STOP_WORDS:
+                tokens.append(normalized)
+        return tokens
+
+    def _dedupe_terms_preserve_order(self, terms: List[str]) -> List[str]:
+        seen: set[str] = set()
+        deduped: List[str] = []
+        for term in terms:
+            key = term.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(term)
+        return deduped
+
+    def _inject_intent_terms(self, terms: List[str], intent_type: str) -> List[str]:
+        lowered = {term.lower() for term in terms}
+        current_year = datetime.now().year
+        year_range = f"{current_year - 2}..{current_year}"
+
+        if intent_type == QueryIntentType.DEMOGRAPHIC.value:
+            for extra in ("Gen Z", "Millennials", "survey", year_range):
+                if extra.lower() not in lowered:
+                    terms.append(extra)
+                    lowered.add(extra.lower())
+        elif intent_type == QueryIntentType.CAUSAL.value:
+            for extra in ("reasons", "factors", year_range):
+                if extra.lower() not in lowered:
+                    terms.append(extra)
+                    lowered.add(extra.lower())
+        elif intent_type == QueryIntentType.BRAND.value:
+            for extra in ("brand", "reputation", year_range):
+                if extra.lower() not in lowered:
+                    terms.append(extra)
+                    lowered.add(extra.lower())
+        return terms
 
     def _extract_entities(self, query: str) -> List[str]:
         """Extract potential entities from query (simplified)"""
@@ -458,6 +912,15 @@ class QueryIntentAnalyzer:
 
         elif intent_type == QueryIntentType.RECENT_NEWS.value:
             suggestions.append("Results will be filtered to last week for freshness")
+
+        elif intent_type == QueryIntentType.DEMOGRAPHIC.value:
+            suggestions.append("Prefer survey publishers and cohort-specific sources")
+
+        elif intent_type == QueryIntentType.CAUSAL.value:
+            suggestions.append("Prefer reports explaining reasons and contributing factors")
+
+        elif intent_type == QueryIntentType.BRAND.value:
+            suggestions.append("Prefer brand perception and reputation studies")
 
         # General suggestions
         if len(query.split()) < 3:

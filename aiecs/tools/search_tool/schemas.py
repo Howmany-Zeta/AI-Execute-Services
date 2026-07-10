@@ -207,10 +207,10 @@ class SearchPaginatedSchema(BaseModel):
 class SearchBatchSchema(BaseModel):
     """Schema for search_batch operation"""
 
-    queries: List[str] = Field(description="List of search queries to execute in batch")
+    queries: List[str] = Field(description="List of orthogonal search queries (1–3 recommended)")
     search_type: str = Field(
         default="web",
-        description="Type of search: 'web', 'images', 'news', or 'videos'",
+        description="Batch search type; currently only 'web' is supported",
     )
     num_results: int = Field(
         default=10,
@@ -218,24 +218,46 @@ class SearchBatchSchema(BaseModel):
         le=100,
         description="Number of results per query (1-100)",
     )
+    merged_num_results: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=100,
+        description="Merged ranked result count across all queries (defaults to num_results)",
+    )
+    language: str = Field(default="en", description="Language code for results")
+    country: str = Field(default="us", description="Country code for geolocation")
+    safe_search: str = Field(default="medium", description="Safe search level")
+    date_restrict: Optional[str] = Field(default=None, description="Date restriction for each query")
+    file_type: Optional[str] = Field(default=None, description="File type filter for each query")
+    exclude_terms: Optional[str] = Field(default=None, description="Terms to exclude from each query")
+    auto_enhance: bool = Field(default=True, description="Apply intent rewrite to each query")
 
     @field_validator("queries")
     @classmethod
     def validate_queries(cls, v: List[str]) -> List[str]:
         """Validate queries list"""
-        if not v:
+        cleaned = [query.strip() for query in v if query and query.strip()]
+        if not cleaned:
             raise ValueError("queries list cannot be empty")
-        if len(v) > 50:
-            raise ValueError("Maximum 50 queries allowed in batch")
-        return v
+        if len(cleaned) > 3:
+            raise ValueError("Maximum 3 queries allowed in batch")
+        return cleaned
 
     @field_validator("search_type")
     @classmethod
     def validate_search_type(cls, v: str) -> str:
         """Validate search type"""
-        allowed = ["web", "images", "news", "videos"]
+        allowed = ["web"]
         if v not in allowed:
-            raise ValueError(f"search_type must be one of {allowed}")
+            raise ValueError("search_type must be one of ['web']")
+        return v
+
+    @field_validator("safe_search")
+    @classmethod
+    def validate_safe_search(cls, v: str) -> str:
+        allowed = ["off", "medium", "high"]
+        if v not in allowed:
+            raise ValueError(f"safe_search must be one of {allowed}")
         return v
 
 

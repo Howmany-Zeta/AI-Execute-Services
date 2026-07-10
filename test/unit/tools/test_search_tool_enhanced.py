@@ -200,6 +200,91 @@ class TestQueryIntentAnalyzer:
         # Short query should get suggestion to add more terms
         assert any('short' in s.lower() for s in analysis['suggestions'])
 
+    def test_demographic_causal_fixture_rewrite(self):
+        """M-D.1a: research queries get non-idle intent and keyword rewrite."""
+        analysis = self.analyzer.analyze_query_intent('Why is Tesla popular among young people?')
+
+        assert analysis['intent_type'] == QueryIntentType.DEMOGRAPHIC.value
+        assert analysis['confidence'] > 0
+        assert analysis['rewrite_applied'] is True
+        assert analysis['enhanced_query'] != analysis['original_query']
+        assert '?' not in analysis['enhanced_query']
+        assert 'Tesla' in analysis['enhanced_query']
+        assert 'survey' in analysis['enhanced_query'].lower()
+
+    def test_comma_stack_fixture_rewrite(self):
+        """M-D.1a: comma-stacked prose is rewritten, not passed verbatim."""
+        query = (
+            "criticisms of Tesla and Elon Musk affecting young people's popularity, "
+            "Gen Z, Millennials, reports, articles"
+        )
+        analysis = self.analyzer.analyze_query_intent(query)
+
+        assert analysis['intent_type'] == QueryIntentType.DEMOGRAPHIC.value
+        assert analysis['rewrite_applied'] is True
+        assert analysis['enhanced_query'] != query
+        assert 'reports' not in analysis['enhanced_query'].lower()
+        assert 'articles' not in analysis['enhanced_query'].lower()
+
+
+class TestSearchResultPostProcessing:
+    """Test re-rank partition and must_scrape_urls (M-D.1b)."""
+
+    def setup_method(self):
+        self.analyzer = ResultQualityAnalyzer()
+
+    def _build_result(self, domain: str, title: str, query: str, position: int = 1) -> dict:
+        result = {
+            'title': title,
+            'link': f'https://{domain}/page',
+            'snippet': title,
+            'displayLink': domain,
+            'metadata': {},
+        }
+        quality = self.analyzer.analyze_result_quality(result, query, position)
+        result['_quality'] = quality
+        result['_quality_summary'] = {
+            'score': quality['quality_score'],
+            'level': quality['credibility_level'],
+            'is_authoritative': quality['authority_score'] > 0.8,
+            'is_relevant': quality['relevance_score'] > 0.7,
+            'is_fresh': quality['freshness_score'] > 0.7,
+            'warnings_count': len(quality['warnings']),
+        }
+        return result
+
+    def test_partition_demotes_social_noise(self):
+        from aiecs.tools.search_tool.analyzers import partition_search_results
+
+        query = 'Tesla Gen Z Millennials popularity survey'
+        results = [
+            self._build_result('facebook.com', 'Tesla fans', query, 1),
+            self._build_result('reddit.com', 'Tesla thread', query, 2),
+            self._build_result('yougov.com', 'Tesla brand survey Gen Z', query, 3),
+        ]
+
+        primary, low_signal, must_scrape = partition_search_results(
+            self.analyzer,
+            results,
+            num_results=2,
+        )
+
+        assert [item['displayLink'] for item in primary] == ['yougov.com']
+        assert {item['displayLink'] for item in low_signal} == {'facebook.com', 'reddit.com'}
+        assert len(must_scrape) >= 1
+        assert must_scrape[0]['url'].startswith('https://yougov.com')
+
+    def test_build_must_scrape_urls_requires_signal(self):
+        from aiecs.tools.search_tool.analyzers import build_must_scrape_urls
+
+        weak = self._build_result('facebook.com', 'noise', 'unrelated query', 1)
+        strong = self._build_result('yougov.com', 'Tesla survey Gen Z Millennials', 'Tesla Gen Z survey', 1)
+
+        must_scrape = build_must_scrape_urls([weak, strong])
+        assert len(must_scrape) == 1
+        assert 'yougov.com' in must_scrape[0]['url']
+        assert must_scrape[0]['score'] > 0
+
 
 class TestResultDeduplicator:
     """Test result deduplication"""
@@ -534,6 +619,163 @@ class TestSearchToolIntegration:
         assert tool.intent_analyzer is None
         assert tool.deduplicator is None
         assert tool.search_context is None
+
+
+class TestSearchBatch:
+    """Test batch search (M-D.1 Phase 2)."""
+
+    @pytest.fixture
+    def mock_search_tool(self):
+        mock_service = MagicMock()
+        mock_cse = MagicMock()
+        mock_list = MagicMock()
+
+        responses = [
+            {
+                'items': [
+                    {
+                        'title': 'Tesla Gen Z survey',
+                        'link': 'https://yougov.com/tesla-gen-z',
+                        'snippet': 'Tesla popularity among Gen Z survey results',
+                        'displayLink': 'yougov.com',
+                    },
+                    {
+                        'title': 'Tesla Reddit thread',
+                        'link': 'https://reddit.com/r/tesla/popularity',
+                        'snippet': 'Discussion about Tesla popularity',
+                        'displayLink': 'reddit.com',
+                    },
+                ]
+            },
+            {
+                'items': [
+                    {
+                        'title': 'Tesla brand perception Millennials',
+                        'link': 'https://kpmg.com/tesla-millennials',
+                        'snippet': 'Millennials Tesla brand perception report',
+                        'displayLink': 'kpmg.com',
+                    },
+                    {
+                        'title': 'Tesla Facebook group',
+                        'link': 'https://facebook.com/groups/tesla',
+                        'snippet': 'Facebook group for Tesla fans',
+                        'displayLink': 'facebook.com',
+                    },
+                ]
+            },
+        ]
+        mock_list.execute.side_effect = responses
+        mock_cse.list.return_value = mock_list
+        mock_service.cse.return_value = mock_cse
+
+        with patch('aiecs.tools.search_tool.core.build', return_value=mock_service):
+            tool = SearchTool(
+                {
+                    'google_api_key': 'test_key',
+                    'google_cse_id': 'test_cse_id',
+                }
+            )
+            tool._service = mock_service
+            yield tool
+
+    def test_merge_batch_search_results_deduplicates_urls(self):
+        from aiecs.tools.search_tool.analyzers import merge_batch_search_results
+
+        analyzer = ResultQualityAnalyzer()
+        deduplicator = ResultDeduplicator()
+        shared_link = 'https://yougov.com/shared'
+        per_query = [
+            {
+                'query': 'query-a',
+                '_metadata': {'query': 'query-a'},
+                'results': [
+                    {
+                        'title': 'A1',
+                        'link': shared_link,
+                        'snippet': 'A1',
+                        'displayLink': 'yougov.com',
+                        '_quality': {'quality_score': 0.9, 'authority_score': 0.92, 'relevance_score': 0.8},
+                        '_quality_summary': {'is_relevant': True, 'is_authoritative': True, 'is_fresh': False},
+                    }
+                ],
+            },
+            {
+                'query': 'query-b',
+                '_metadata': {'query': 'query-b'},
+                'results': [
+                    {
+                        'title': 'B1 duplicate',
+                        'link': shared_link,
+                        'snippet': 'B1',
+                        'displayLink': 'yougov.com',
+                        '_quality': {'quality_score': 0.85, 'authority_score': 0.92, 'relevance_score': 0.75},
+                        '_quality_summary': {'is_relevant': True, 'is_authoritative': True, 'is_fresh': False},
+                    },
+                    {
+                        'title': 'B2',
+                        'link': 'https://kpmg.com/report',
+                        'snippet': 'B2',
+                        'displayLink': 'kpmg.com',
+                        '_quality': {'quality_score': 0.88, 'authority_score': 0.88, 'relevance_score': 0.78},
+                        '_quality_summary': {'is_relevant': True, 'is_authoritative': True, 'is_fresh': False},
+                    },
+                ],
+            },
+        ]
+
+        merged, low_signal, must_scrape = merge_batch_search_results(
+            analyzer,
+            per_query,
+            merged_num_results=3,
+            deduplicator=deduplicator,
+        )
+
+        links = [item['link'] for item in merged]
+        assert len(links) == len(set(links))
+        assert shared_link in links
+        assert len(must_scrape) >= 1
+
+    def test_search_batch_returns_per_query_and_merged(self, mock_search_tool):
+        result = mock_search_tool.search_batch(
+            queries=[
+                'Why is Tesla popular among young people?',
+                'Tesla Gen Z brand perception survey',
+            ],
+            num_results=2,
+            merged_num_results=2,
+        )
+
+        assert len(result['per_query']) == 2
+        assert result['_metadata']['batch_size'] == 2
+        assert len(result['results']) <= 2
+        assert all('results' in bucket for bucket in result['per_query'])
+        assert result['per_query'][0]['query'] != result['per_query'][1]['query']
+        assert any(
+            item.get('displayLink') in {'yougov.com', 'kpmg.com'}
+            for item in result['results']
+        )
+
+    def test_search_batch_rejects_too_many_queries(self, mock_search_tool):
+        from aiecs.tools.search_tool.constants import ValidationError
+
+        with pytest.raises(ValidationError):
+            mock_search_tool.search_batch(
+                queries=[
+                    'query one',
+                    'query two',
+                    'query three',
+                    'query four',
+                ]
+            )
+
+    def test_search_batch_rejects_non_web_type(self, mock_search_tool):
+        from aiecs.tools.search_tool.constants import ValidationError
+
+        with pytest.raises(ValidationError):
+            mock_search_tool.search_batch(
+                queries=['query one', 'query two'],
+                search_type='news',
+            )
 
 
 if __name__ == '__main__':

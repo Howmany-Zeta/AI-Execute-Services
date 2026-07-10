@@ -41,12 +41,17 @@ from .constants import (
     CircuitBreakerOpenError,
     SearchAPIError,
     ValidationError,
+    QueryIntentType,
 )
 from .rate_limiter import RateLimiter, CircuitBreaker
 from .analyzers import (
     ResultQualityAnalyzer,
     QueryIntentAnalyzer,
     ResultSummarizer,
+    partition_search_results,
+    build_search_next_steps,
+    merge_batch_search_results,
+    build_batch_intent_analysis,
 )
 from .deduplicator import ResultDeduplicator
 from .context import SearchContext
@@ -110,6 +115,7 @@ class SearchTool(BaseTool):
         enable_intelligent_cache: bool = Field(default=True, description="Enable intelligent Redis caching")
         similarity_threshold: float = Field(default=0.85, description="Similarity threshold for deduplication")
         max_search_history: int = Field(default=10, description="Maximum search history to maintain")
+        max_batch_queries: int = Field(default=3, ge=1, le=10, description="Maximum orthogonal queries per search_batch call")
 
     # Schema definitions
     class Search_webSchema(BaseModel):
@@ -216,6 +222,50 @@ class SearchTool(BaseTool):
         """Schema for get_search_context operation (no parameters required)"""
 
         pass
+
+    class Search_batchSchema(BaseModel):
+        """Schema for search_batch operation (2–3 orthogonal queries per call)."""
+
+        queries: List[str] = Field(description="List of orthogonal search queries (1–3 recommended)")
+        search_type: str = Field(default="web", description="Batch search type; currently only 'web' is supported")
+        num_results: int = Field(default=10, ge=1, le=100, description="Number of results to return per query")
+        merged_num_results: Optional[int] = Field(
+            default=None,
+            ge=1,
+            le=100,
+            description="Number of merged ranked results across all queries (defaults to num_results)",
+        )
+        language: str = Field(default="en", description="Language code for results")
+        country: str = Field(default="us", description="Country code for geolocation")
+        safe_search: str = Field(default="medium", description="Safe search level: 'off', 'medium', or 'high'")
+        date_restrict: Optional[str] = Field(default=None, description="Date restriction applied to each query")
+        file_type: Optional[str] = Field(default=None, description="File type filter applied to each query")
+        exclude_terms: Optional[str] = Field(default=None, description="Terms to exclude from each query")
+        auto_enhance: bool = Field(default=True, description="Apply intent rewrite to each query")
+
+        @field_validator("queries")
+        @classmethod
+        def validate_queries(cls, values: List[str]) -> List[str]:
+            cleaned = [query.strip() for query in values if query and query.strip()]
+            if not cleaned:
+                raise ValueError("queries list cannot be empty")
+            return cleaned
+
+        @field_validator("safe_search")
+        @classmethod
+        def validate_safe_search(cls, value: str) -> str:
+            allowed = ["off", "medium", "high"]
+            if value not in allowed:
+                raise ValueError(f"safe_search must be one of {allowed}")
+            return value
+
+        @field_validator("search_type")
+        @classmethod
+        def validate_search_type(cls, value: str) -> str:
+            allowed = ["web"]
+            if value not in allowed:
+                raise ValueError(f"search_type must be one of {allowed}")
+            return value
 
     # Tool metadata
     description = "Comprehensive web search tool using Google Custom Search API."
@@ -515,6 +565,35 @@ class SearchTool(BaseTool):
         auto_enhance: bool = True,
         return_summary: bool = False,
     ) -> Dict[str, Any]:
+        """Search the web with enhanced intelligence (cached)."""
+        return self._search_web_impl(
+            query=query,
+            num_results=num_results,
+            start_index=start_index,
+            language=language,
+            country=country,
+            safe_search=safe_search,
+            date_restrict=date_restrict,
+            file_type=file_type,
+            exclude_terms=exclude_terms,
+            auto_enhance=auto_enhance,
+            return_summary=return_summary,
+        )
+
+    def _search_web_impl(
+        self,
+        query: str,
+        num_results: int = 10,
+        start_index: int = 1,
+        language: str = "en",
+        country: str = "us",
+        safe_search: str = "medium",
+        date_restrict: Optional[str] = None,
+        file_type: Optional[str] = None,
+        exclude_terms: Optional[str] = None,
+        auto_enhance: bool = True,
+        return_summary: bool = False,
+    ) -> Dict[str, Any]:
         """
         Search the web with enhanced intelligence.
 
@@ -532,7 +611,7 @@ class SearchTool(BaseTool):
             return_summary: Return summary metadata
 
         Returns:
-            List of search results (or dict with results and summary)
+            Dict with results, low_signal, must_scrape_urls, and metadata
         """
         start_time = time.time()
         intent_analysis = None
@@ -600,16 +679,29 @@ class SearchTool(BaseTool):
             if self.deduplicator:
                 results = self.deduplicator.deduplicate_results(results, self.config.similarity_threshold)
 
-            # Add search metadata
+            low_signal_results: List[Dict[str, Any]] = []
+            must_scrape_urls: List[Dict[str, Any]] = []
+            next_steps: List[str] = []
+            if self.config.enable_quality_analysis and self.quality_analyzer:
+                results, low_signal_results, must_scrape_urls = partition_search_results(
+                    self.quality_analyzer,
+                    results,
+                    num_results=num_results,
+                )
+                next_steps = build_search_next_steps(must_scrape_urls, intent_analysis)
+
+            search_metadata = None
             if intent_analysis:
-                for result in results:
-                    result["_search_metadata"] = {
-                        "original_query": query,
-                        "enhanced_query": enhanced_query,
-                        "intent_type": intent_analysis["intent_type"],
-                        "intent_confidence": intent_analysis["confidence"],
-                        "suggestions": intent_analysis["suggestions"],
-                    }
+                search_metadata = {
+                    "original_query": query,
+                    "enhanced_query": enhanced_query,
+                    "intent_type": intent_analysis["intent_type"],
+                    "intent_confidence": intent_analysis["confidence"],
+                    "rewrite_applied": intent_analysis.get("rewrite_applied", False),
+                    "suggestions": intent_analysis["suggestions"],
+                }
+                for result in results + low_signal_results:
+                    result["_search_metadata"] = search_metadata.copy()
 
             # Update context
             if self.search_context:
@@ -624,16 +716,22 @@ class SearchTool(BaseTool):
             self.metrics.record_search(query, "web", results, response_time, cached=False)
 
             # Prepare result with metadata for TTL calculation
-            result_data = {
+            result_data: Dict[str, Any] = {
                 "results": results,
+                "low_signal": low_signal_results,
+                "must_scrape_urls": must_scrape_urls,
+                "next_steps": next_steps,
                 "_metadata": {
-                    "intent_type": (intent_analysis["intent_type"] if intent_analysis else "GENERAL"),
+                    "intent_type": (intent_analysis["intent_type"] if intent_analysis else QueryIntentType.GENERAL.value),
                     "query": query,
                     "enhanced_query": enhanced_query,
+                    "rewrite_applied": (intent_analysis.get("rewrite_applied", False) if intent_analysis else False),
                     "timestamp": time.time(),
                     "response_time_ms": response_time,
                 },
             }
+            if search_metadata is not None:
+                result_data["_search_metadata"] = search_metadata
 
             # Generate summary if requested
             if return_summary and self.result_summarizer:
@@ -654,6 +752,114 @@ class SearchTool(BaseTool):
 
             self.logger.error(f"Search failed: {error_info['user_message']}")
             raise
+
+    def search_batch(
+        self,
+        queries: List[str],
+        search_type: str = "web",
+        num_results: int = 10,
+        merged_num_results: Optional[int] = None,
+        language: str = "en",
+        country: str = "us",
+        safe_search: str = "medium",
+        date_restrict: Optional[str] = None,
+        file_type: Optional[str] = None,
+        exclude_terms: Optional[str] = None,
+        auto_enhance: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Execute 1–3 orthogonal web searches in one call and return per-query buckets
+        plus a merged ranked result list (M-D.1 Phase 2).
+        """
+        start_time = time.time()
+
+        cleaned_queries = [query.strip() for query in queries if query and query.strip()]
+        if not cleaned_queries:
+            raise ValidationError("queries list cannot be empty")
+        if len(cleaned_queries) > self.config.max_batch_queries:
+            raise ValidationError(f"Maximum {self.config.max_batch_queries} queries allowed in batch")
+        if search_type != "web":
+            raise ValidationError("search_batch currently supports search_type='web' only")
+        if num_results < 1 or num_results > 100:
+            raise ValidationError("num_results must be between 1 and 100")
+
+        merged_limit = merged_num_results if merged_num_results is not None else num_results
+        if merged_limit < 1 or merged_limit > 100:
+            raise ValidationError("merged_num_results must be between 1 and 100")
+
+        per_query_buckets: List[Dict[str, Any]] = []
+        for query in cleaned_queries:
+            bucket = self._search_web_impl(
+                query=query,
+                num_results=num_results,
+                language=language,
+                country=country,
+                safe_search=safe_search,
+                date_restrict=date_restrict,
+                file_type=file_type,
+                exclude_terms=exclude_terms,
+                auto_enhance=auto_enhance,
+            )
+            per_query_buckets.append(
+                {
+                    "query": query,
+                    "results": bucket.get("results", []),
+                    "low_signal": bucket.get("low_signal", []),
+                    "must_scrape_urls": bucket.get("must_scrape_urls", []),
+                    "next_steps": bucket.get("next_steps", []),
+                    "_search_metadata": bucket.get("_search_metadata"),
+                    "_metadata": bucket.get("_metadata"),
+                }
+            )
+
+        merged_results: List[Dict[str, Any]] = []
+        merged_low_signal: List[Dict[str, Any]] = []
+        merged_must_scrape: List[Dict[str, Any]] = []
+        merged_next_steps: List[str] = []
+
+        if self.config.enable_quality_analysis and self.quality_analyzer:
+            merged_results, merged_low_signal, merged_must_scrape = merge_batch_search_results(
+                self.quality_analyzer,
+                per_query_buckets,
+                merged_num_results=merged_limit,
+                deduplicator=self.deduplicator,
+                similarity_threshold=self.config.similarity_threshold,
+            )
+            merged_next_steps = build_search_next_steps(
+                merged_must_scrape,
+                build_batch_intent_analysis(per_query_buckets),
+            )
+            if len(cleaned_queries) > 1:
+                merged_next_steps.insert(
+                    0,
+                    f"batch search covered {len(cleaned_queries)} orthogonal queries; prefer merged must_scrape_urls before another search_batch",
+                )
+
+        response_time = (time.time() - start_time) * 1000
+        self.metrics.record_search(
+            " | ".join(cleaned_queries),
+            "web_batch",
+            merged_results,
+            response_time,
+            cached=False,
+        )
+
+        return {
+            "per_query": per_query_buckets,
+            "results": merged_results,
+            "low_signal": merged_low_signal,
+            "must_scrape_urls": merged_must_scrape,
+            "next_steps": merged_next_steps,
+            "_metadata": {
+                "batch_size": len(cleaned_queries),
+                "queries": cleaned_queries,
+                "search_type": search_type,
+                "num_results_per_query": num_results,
+                "merged_num_results": merged_limit,
+                "timestamp": time.time(),
+                "response_time_ms": response_time,
+            },
+        }
 
     def search_images(
         self,

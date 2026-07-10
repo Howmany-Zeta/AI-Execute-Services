@@ -35,6 +35,9 @@ class IntelligentCache:
         QueryIntentType.RECENT_NEWS.value: 3600,
         QueryIntentType.PRODUCT.value: 86400,  # 1 day
         QueryIntentType.COMPARISON.value: 86400 * 3,  # 3 days
+        QueryIntentType.CAUSAL.value: 86400,  # 1 day
+        QueryIntentType.DEMOGRAPHIC.value: 86400,  # 1 day
+        QueryIntentType.BRAND.value: 86400,  # 1 day
         QueryIntentType.GENERAL.value: 3600,  # 1 hour default
     }
 

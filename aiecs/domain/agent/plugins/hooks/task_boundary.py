@@ -397,6 +397,22 @@ async def dispatch_loop_detected_hook(
     await dispatch_agent_hook(plugin_ctx, AgentHookEvent.ON_LOOP_DETECTED, payload)
 
 
+async def dispatch_search_burst_detected_hook(
+    plugin_ctx: AgentPluginContext,
+    signal: Any,
+    iteration: int,
+) -> None:
+    """M-D.4 — optional hook when consecutive web_search threshold is met."""
+    payload: dict[str, Any] = {
+        "event": AgentHookEvent.ON_SEARCH_BURST_DETECTED.value,
+        "agent_id": _agent_id(plugin_ctx),
+        "task_id": _task_id(plugin_ctx),
+        "iteration": iteration,
+        "signal": signal.to_dict() if hasattr(signal, "to_dict") else signal,
+    }
+    await dispatch_agent_hook(plugin_ctx, AgentHookEvent.ON_SEARCH_BURST_DETECTED, payload)
+
+
 async def dispatch_max_iterations_hook(
     plugin_ctx: AgentPluginContext,
     state: ToolLoopRunState,

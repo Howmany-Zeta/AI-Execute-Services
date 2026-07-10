@@ -290,6 +290,10 @@ class AgentConfiguration(BaseModel):
         default=None,
         description="GVR tool-loop stall signals (A-7). LoopDetectionConfig dict or model; default None/disabled.",
     )
+    search_burst_guard: Optional[Any] = Field(
+        default=None,
+        description=("Consecutive web_search burst guard (M-D.4). SearchBurstGuardConfig dict or model; " "default None/disabled. Env AIECS_SEARCH_BURST_GUARD=true enables soft guard."),
+    )
     goal_graph: Optional[Any] = Field(
         default=None,
         description="GoalGraph config (A-3). GoalGraphConfig dict or model; default_decomposer=none only.",
@@ -1182,5 +1186,6 @@ from aiecs.domain.agent.plugins.models import PluginConfig  # noqa: E402
 from aiecs.domain.agent.verification.policy_models import VerificationPolicy, WhenToVerify  # noqa: E402,F401
 from aiecs.domain.agent.verification.peer_review_policy_models import PeerReviewPolicy  # noqa: E402,F401
 from aiecs.domain.agent.loop_detection import LoopDetectionConfig  # noqa: E402,F401
+from aiecs.domain.agent.search_burst_guard import SearchBurstGuardConfig  # noqa: E402,F401
 
 AgentConfiguration.model_rebuild()

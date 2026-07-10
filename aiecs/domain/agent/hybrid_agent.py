@@ -61,6 +61,7 @@ from aiecs.domain.agent.plugins.models import PluginPhase
 from aiecs.domain.agent.verification.policy_runner import run_gvr_pre_exit
 from aiecs.domain.agent.exceptions import VerificationExhausted
 from aiecs.domain.agent.loop_detection import LoopSignal, resolve_loop_detection_config
+from aiecs.domain.agent.search_burst_guard import SearchBurstSignal, resolve_search_burst_guard_config
 
 if TYPE_CHECKING:
     from aiecs.llm.protocols import LLMClientProtocol
@@ -343,8 +344,10 @@ class HybridAgent(BaseAIAgent):
 
         self._gate_registry = build_gate_registry_from_config(config.deterministic_gates)
         from aiecs.domain.agent.loop_detection import LoopDetectionService, resolve_loop_detection_config
+        from aiecs.domain.agent.search_burst_guard import SearchBurstGuardService, resolve_search_burst_guard_config
 
         self._loop_detection = LoopDetectionService(resolve_loop_detection_config(config.loop_detection))
+        self._search_burst_guard = SearchBurstGuardService(resolve_search_burst_guard_config(config.search_burst_guard))
 
         logger.info(f"HybridAgent initialized: {agent_id} with LLM ({self.llm_client.provider_name}) " f"and {len(tools) if isinstance(tools, (list, dict)) else 0} tools")
 
@@ -542,6 +545,10 @@ class HybridAgent(BaseAIAgent):
         """Read-only loop stall signals for host DECIDE (A-7)."""
         return self._loop_detection.get_signal()
 
+    def get_search_burst_signals(self) -> SearchBurstSignal:
+        """Read-only search burst signals for host DECIDE (M-D.4)."""
+        return self._search_burst_guard.get_signal()
+
     async def _track_tool_loop_detection(
         self,
         *,
@@ -565,6 +572,29 @@ class HybridAgent(BaseAIAgent):
             from aiecs.domain.agent.plugins.hooks.task_boundary import dispatch_loop_detected_hook
 
             await dispatch_loop_detected_hook(plugin_ctx, signal, iteration)
+
+    async def _track_search_burst_guard(
+        self,
+        *,
+        tool_name: str,
+        operation: str | None,
+        iteration: int,
+        plugin_ctx: Optional[AgentPluginContext],
+    ) -> Optional[str]:
+        signal = self._search_burst_guard.record_tool_call(tool_name=tool_name, operation=operation)
+        if plugin_ctx is not None:
+            plugin_ctx.plugin_state["gvr.search_burst_signal"] = self._search_burst_guard.get_signal().to_dict()
+
+        if signal is None:
+            return None
+
+        cfg = resolve_search_burst_guard_config(self._config.search_burst_guard)
+        if cfg is not None and cfg.hook_on_detect and plugin_ctx is not None:
+            from aiecs.domain.agent.plugins.hooks.task_boundary import dispatch_search_burst_detected_hook
+
+            await dispatch_search_burst_detected_hook(plugin_ctx, signal, iteration)
+
+        return signal.reminder
 
     async def _handle_pre_exit_gvr(
         self,
@@ -645,6 +675,7 @@ class HybridAgent(BaseAIAgent):
 
         state = ToolLoopRunState()
         self._loop_detection.reset()
+        self._search_burst_guard.reset()
         iteration = 0
         while budget.remaining > 0:
             logger.debug(f"HybridAgent {self.agent_id} - tool loop iteration {iteration + 1}")
@@ -958,6 +989,7 @@ class HybridAgent(BaseAIAgent):
         messages = list(initial_messages) if initial_messages is not None else await self._build_initial_messages_async(task_description, context, plugin_ctx)
         state = ToolLoopRunState()
         self._loop_detection.reset()
+        self._search_burst_guard.reset()
         iteration = 0
 
         # Drain pre_main_loop activations enqueued by DAWPPlugin.on_pre_main_loop (§9, D1-09).
@@ -2158,6 +2190,12 @@ class HybridAgent(BaseAIAgent):
                         iteration=iteration,
                         plugin_ctx=plugin_ctx,
                     )
+                    burst_reminder = await self._track_search_burst_guard(
+                        tool_name=tool_name,
+                        operation=operation,
+                        iteration=iteration,
+                        plugin_ctx=plugin_ctx,
+                    )
                     state.steps.append(
                         {
                             "type": "action",
@@ -2210,6 +2248,8 @@ class HybridAgent(BaseAIAgent):
                         media_type = tool_result.get("_image_media_type", "image/png")
                         tool_images = [f"data:{media_type};base64,{tool_result['_image_b64']}"]
                     tool_content = hook_result.tool_content or (json.dumps(tool_result, ensure_ascii=False) if isinstance(tool_result, dict) else str(tool_result))
+                    if burst_reminder:
+                        tool_content = f"{tool_content}\n\n{burst_reminder}"
                     messages.append(
                         LLMMessage(
                             role="tool",

@@ -148,6 +148,7 @@ from .verification import (
     dawp_result_terminal_event,
 )
 from .loop_detection import LoopDetectionService, LoopSignal
+from .search_burst_guard import SearchBurstGuardConfig, SearchBurstGuardService, SearchBurstSignal
 from .goal_graph import GoalGraph, resolve_goal_graph_config
 
 __all__ = [
@@ -184,6 +185,9 @@ __all__ = [
     "LoopDetectionConfig",
     "LoopDetectionService",
     "LoopSignal",
+    "SearchBurstGuardConfig",
+    "SearchBurstGuardService",
+    "SearchBurstSignal",
     "GoalGraph",
     "GoalGraphConfig",
     "GoalOrigin",
@@ -266,6 +270,9 @@ __all__ = [
     "LoopDetectionConfig",
     "LoopDetectionService",
     "LoopSignal",
+    "SearchBurstGuardConfig",
+    "SearchBurstGuardService",
+    "SearchBurstSignal",
     "GoalGraph",
     "GoalGraphConfig",
     "resolve_goal_graph_config",

@@ -84,6 +84,9 @@ class QueryIntentType(str, Enum):
     RECENT_NEWS = "recent_news"
     ACADEMIC = "academic"
     PRODUCT = "product"
+    CAUSAL = "causal"
+    DEMOGRAPHIC = "demographic"
+    BRAND = "brand"
     GENERAL = "general"
 
 
