@@ -10,6 +10,9 @@ See also `docs/changelog.rst` for historical release notes.
 ## [Unreleased]
 
 
+
+## [2.1.0rc6] - 2026-07-10 (Pre-release)
+
 ## [2.1.0rc5] - 2026-07-02 (Pre-release)
 
 ### GVR — Consumer API / Contract (M-8)
