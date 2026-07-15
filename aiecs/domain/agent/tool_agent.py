@@ -1143,7 +1143,13 @@ class ToolAgent(BaseAIAgent):
 
         async for chunk in stream_gen:
             if isinstance(chunk, StreamChunk):
-                if chunk.type == "token" and chunk.content:
+                if chunk.type == "thought" and chunk.content:
+                    yield {
+                        "type": "thinking_token",
+                        "content": chunk.content,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                elif chunk.type == "token" and chunk.content:
                     response_tokens.append(chunk.content)
                     yield {
                         "type": "token",

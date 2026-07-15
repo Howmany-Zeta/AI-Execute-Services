@@ -19,6 +19,44 @@ from aiecs.llm.utils.image_utils import parse_image_source
 
 logger = logging.getLogger(__name__)
 
+_REASONING_DELTA_KEYS = ("reasoning_content", "reasoning")
+
+
+def _extract_reasoning_fields(obj: Any) -> Optional[str]:
+    """Read provider-specific reasoning fields from an OpenAI-compatible delta or message."""
+    for key in _REASONING_DELTA_KEYS:
+        value = getattr(obj, key, None)
+        if value:
+            return str(value)
+
+        extras = getattr(obj, "model_extra", None)
+        if isinstance(extras, dict):
+            extra_value = extras.get(key)
+            if extra_value:
+                return str(extra_value)
+
+    return None
+
+
+def _extract_reasoning_from_delta(delta: Any) -> Optional[str]:
+    """Read provider-specific reasoning fields from an OpenAI-compatible stream delta."""
+    return _extract_reasoning_fields(delta)
+
+
+def _format_reasoning_block(reasoning: str) -> str:
+    """Format provider reasoning text for non-streaming LLMResponse.content."""
+    return f"<thinking>\n{reasoning}\n</thinking>\n"
+
+
+def _build_content_with_reasoning(reasoning: Optional[str], visible: str) -> str:
+    """Combine reasoning and visible answer text for non-streaming responses."""
+    parts: List[str] = []
+    if reasoning:
+        parts.append(_format_reasoning_block(reasoning))
+    if visible:
+        parts.append(visible)
+    return "".join(parts)
+
 
 @dataclass
 class StreamChunk:
@@ -28,7 +66,7 @@ class StreamChunk:
     Can contain either a text token or tool call information.
     """
 
-    type: str  # "token", "tool_call", "tool_calls", or "usage"
+    type: str  # "token", "thought", "tool_call", "tool_calls", or "usage"
     content: Optional[str] = None  # Text token content
     tool_call: Optional[Dict[str, Any]] = None  # Tool call information
     tool_calls: Optional[List[Dict[str, Any]]] = None  # Complete tool calls (when stream ends)
@@ -314,7 +352,8 @@ class OpenAICompatibleFunctionCallingMixin:
 
         # Extract response content
         message = response.choices[0].message
-        content = message.content or ""
+        reasoning = _extract_reasoning_fields(message)
+        content = _build_content_with_reasoning(reasoning, message.content or "")
 
         # Extract function calls
         function_call, tool_calls = self._extract_function_calls_from_response(message)
@@ -386,6 +425,7 @@ class OpenAICompatibleFunctionCallingMixin:
 
         Note:
             When return_chunks=True, yields StreamChunk objects that can contain:
+            - type="thought": Provider reasoning delta (reasoning_content / reasoning)
             - type="token": Text token content
             - type="tool_call": Tool call information (accumulated)
             - type="tool_calls": Complete tool calls list (at end of stream)
@@ -441,6 +481,11 @@ class OpenAICompatibleFunctionCallingMixin:
                     continue
 
                 delta = chunk.choices[0].delta
+
+                reasoning_content = _extract_reasoning_from_delta(delta)
+                if reasoning_content:
+                    if return_chunks:
+                        yield StreamChunk(type="thought", content=reasoning_content)
 
                 # Yield text tokens
                 if delta.content:

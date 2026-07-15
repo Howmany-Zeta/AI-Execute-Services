@@ -102,6 +102,46 @@ def _serialize_function_args(args) -> str:
     return json.dumps(args_dict, ensure_ascii=False)
 
 
+def _format_thought_block(thought: str) -> str:
+    """Format Gemini thought text for non-streaming LLMResponse.content."""
+    return f"<thinking>\n{thought}\n</thinking>\n"
+
+
+def build_content_from_google_parts(parts: Any) -> str:
+    """Build LLMResponse.content from Gemini parts, preserving thought then text order."""
+    if not parts:
+        return ""
+
+    segments: List[str] = []
+    for part in parts:
+        thought_content = getattr(part, "thought", None)
+        if thought_content:
+            segments.append(_format_thought_block(str(thought_content)))
+
+        if hasattr(part, "text") and part.text:
+            segments.append(str(part.text))
+
+    return "".join(segments)
+
+
+def extract_content_from_google_response(response: Any) -> str:
+    """Extract visible and thinking content from a non-streaming Google response."""
+    if hasattr(response, "candidates") and response.candidates:
+        candidate = response.candidates[0]
+        content_obj = getattr(candidate, "content", None)
+        if content_obj is not None:
+            parts = getattr(content_obj, "parts", None)
+            if parts:
+                built = build_content_from_google_parts(parts)
+                if built:
+                    return built
+
+    try:
+        return response.text or ""
+    except (ValueError, AttributeError):
+        return ""
+
+
 class GoogleFunctionCallingMixin:
     """
     Mixin class providing Google Function Calling implementation.
@@ -413,9 +453,13 @@ class GoogleFunctionCallingMixin:
                             block_type="response",
                         )
 
-                # Extract text from chunk parts
+                # Extract thought and text from chunk parts
                 if hasattr(candidate, "content") and candidate.content is not None and candidate.content.parts is not None:
                     for part in candidate.content.parts:
+                        thought_content = getattr(part, "thought", None)
+                        if thought_content:
+                            if return_chunks:
+                                yield StreamChunk(type="thought", content=thought_content)
                         if hasattr(part, "text") and part.text:
                             text_content = part.text
                             if return_chunks:

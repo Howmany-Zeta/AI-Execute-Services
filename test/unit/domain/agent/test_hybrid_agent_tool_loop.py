@@ -271,6 +271,54 @@ async def test_tool_loop_streaming_with_tool_calls(tool_loop_agent):
     assert result_events[0].get("success") is True
 
 
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_tool_loop_streaming_forwards_thinking_tokens_without_polluting_answer(tool_loop_agent):
+    """Gemini thought chunks must stream as thinking_token and stay out of visible tokens."""
+    from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
+
+    agent, _mock_client = tool_loop_agent
+
+    async def mock_stream_first():
+        yield StreamChunk(type="thought", content="internal reasoning")
+        yield StreamChunk(type="token", content="I'll use the tool. ")
+        yield StreamChunk(
+            type="tool_calls",
+            tool_calls=[
+                {
+                    "id": "call_0",
+                    "type": "function",
+                    "function": {"name": "mock_tool", "arguments": '{"q": "test"}'},
+                }
+            ],
+        )
+
+    async def mock_stream_second():
+        yield StreamChunk(type="token", content="Done.")
+
+    call_count = [0]
+
+    def get_stream(**kwargs):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return mock_stream_first()
+        return mock_stream_second()
+
+    with patch.object(agent.llm_client, "stream_text", new=get_stream):
+        events = []
+        async for event in agent._tool_loop_streaming("Do something", {}):
+            events.append(event)
+
+    thinking_events = [e for e in events if e.get("type") == "thinking_token"]
+    token_events = [e for e in events if e.get("type") == "token"]
+
+    assert len(thinking_events) == 1
+    assert thinking_events[0]["content"] == "internal reasoning"
+    token_text = "".join(e["content"] for e in token_events)
+    assert "internal reasoning" not in token_text
+    assert "I'll use the tool." in token_text
+
+
 # =============================================================================
 # Task 5.5: Assistant message includes both content and tool_calls in history
 # =============================================================================

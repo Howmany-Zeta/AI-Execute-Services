@@ -19,6 +19,7 @@ from aiecs.llm.clients.base_client import (
     RateLimitError,
 )
 from aiecs.config.config import get_settings
+from aiecs.llm.clients.google_function_calling_mixin import extract_content_from_google_response
 from aiecs.llm.utils.image_utils import parse_image_source
 
 logger = logging.getLogger(__name__)
@@ -306,7 +307,7 @@ class GoogleAIClient(BaseLLMClient):
                 config=config,
             )
 
-            content = response.text or ""
+            content = extract_content_from_google_response(response)
             usage = response.usage_metadata
             prompt_tokens: int = (usage.prompt_token_count or 0) if usage is not None else 0
             completion_tokens: int = (usage.candidates_token_count or 0) if usage is not None else 0

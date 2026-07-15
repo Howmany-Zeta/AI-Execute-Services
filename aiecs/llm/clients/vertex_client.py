@@ -24,7 +24,10 @@ from aiecs.llm.clients.base_client import (  # noqa: E402
     RateLimitError,
     SafetyBlockError,
 )
-from aiecs.llm.clients.google_function_calling_mixin import GoogleFunctionCallingMixin  # noqa: E402
+from aiecs.llm.clients.google_function_calling_mixin import (  # noqa: E402
+    GoogleFunctionCallingMixin,
+    extract_content_from_google_response,
+)
 from aiecs.config.config import get_settings  # noqa: E402
 
 # Finish-reason values (as returned by str() on FinishReason in Python 3.11+)
@@ -835,158 +838,59 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                             default_message="Prompt blocked by safety filters",
                         )
 
-            # Handle response content safely - improved multi-part response
-            # handling
-            content = None
-            try:
-                # First try to get text directly
-                content = response.text or ""
+            # Handle response content safely - prefer parts so part.thought is included
+            content = extract_content_from_google_response(response)
+            if content:
                 self.logger.debug(f"Vertex AI response received: {content[:100]}...")
-            except (ValueError, AttributeError) as ve:
-                # Handle multi-part responses and other issues
-                self.logger.warning(f"Cannot get response text directly: {str(ve)}")
+            elif hasattr(response, "candidates") and response.candidates:
+                candidate = response.candidates[0]
+                self.logger.debug(f"Candidate finish_reason: {getattr(candidate, 'finish_reason', 'unknown')}")
 
-                # Try to extract content from candidates with multi-part
-                # support
-                if hasattr(response, "candidates") and response.candidates:
-                    candidate = response.candidates[0]
-                    self.logger.debug(f"Candidate finish_reason: {getattr(candidate, 'finish_reason', 'unknown')}")
-
-                    # Handle multi-part content
-                    if hasattr(candidate, "content") and candidate.content is not None and hasattr(candidate.content, "parts"):
-                        try:
-                            # Extract text from all parts
-                            text_parts: List[str] = []
-                            for part in candidate.content.parts or []:
-                                if hasattr(part, "text") and part.text:
-                                    text_parts.append(str(part.text))
-
-                            if text_parts:
-                                # Log part count for monitoring
-                                part_count = len(text_parts)
-                                self.logger.info(f"📊 Vertex AI response: {part_count} parts detected")
-
-                                # Update statistics
-                                self._part_count_stats["total_responses"] += 1
-                                self._part_count_stats["part_counts"][part_count] = self._part_count_stats["part_counts"].get(part_count, 0) + 1
-                                self._part_count_stats["last_part_count"] = part_count
-
-                                # Log statistics if significant variation
-                                # detected
-                                if part_count != self._part_count_stats.get("last_part_count", part_count):
-                                    self.logger.warning(f"⚠️ Part count variation detected: {part_count} parts (previous: {self._part_count_stats.get('last_part_count', 'unknown')})")
-
-                                # Handle multi-part response format
-                                if len(text_parts) > 1:
-                                    # Multi-part response
-                                    # Minimal fix: only fix incomplete <thinking> tags, preserve original order
-                                    # Do NOT reorganize content - let
-                                    # downstream code handle semantics
-
-                                    processed_parts = []
-                                    fixed_count = 0
-
-                                    for i, part_raw in enumerate(text_parts):
-                                        # Check for thinking content that needs
-                                        # formatting
-                                        needs_thinking_format = False
-                                        # Ensure part is a string (use different name to avoid redefinition)
-                                        part_str: str = str(part_raw) if not isinstance(part_raw, str) else part_raw
-
-                                        if "<thinking>" in part_str and "</thinking>" not in part_str:
-                                            # Incomplete <thinking> tag: add
-                                            # closing tag
-                                            part_str = part_str + "\n</thinking>"
-                                            needs_thinking_format = True
-                                            self.logger.debug(f"  Part {i+1}: Incomplete <thinking> tag fixed")
-                                        elif isinstance(part_str, str) and part_str.startswith("thinking") and "</thinking>" not in part_str:
-                                            # thinking\n format: convert to
-                                            # <thinking>...</thinking>
-                                            if part_str.startswith("thinking\n"):
-                                                # thinking\n格式：提取内容并包装
-                                                # 跳过 "thinking\n"
-                                                content = part_str[8:]
-                                            else:
-                                                # thinking开头但无换行：提取内容并包装
-                                                # 跳过 "thinking"
-                                                content = part_str[7:]
-
-                                            part_str = f"<thinking>\n{content}\n</thinking>"
-                                            needs_thinking_format = True
-                                            self.logger.debug(f"  Part {i+1}: thinking\\n format converted to <thinking> tags")
-
-                                        if needs_thinking_format:
-                                            fixed_count += 1
-
-                                        processed_parts.append(part_str)
-
-                                    # Merge in original order
-                                    content = "\n".join(processed_parts)
-
-                                    if fixed_count > 0:
-                                        self.logger.info(f"✅ Multi-part response merged: {len(text_parts)} parts, {fixed_count} incomplete tags fixed, order preserved")
-                                    else:
-                                        self.logger.info(f"✅ Multi-part response merged: {len(text_parts)} parts, order preserved")
-                                else:
-                                    # Single part response - use as is
-                                    content = text_parts[0]
-                                    self.logger.info("Successfully extracted single-part response")
-                            else:
-                                self.logger.warning("No text content found in multi-part response")
-                        except Exception as part_error:
-                            self.logger.error(f"Failed to extract content from multi-part response: {str(part_error)}")
-
-                    # If still no content, check finish reason
-                    if not content:
-                        if hasattr(candidate, "finish_reason"):
-                            if candidate.finish_reason == "MAX_TOKENS":
-                                content = "[Response truncated due to token limit - consider increasing max_tokens for Gemini 2.5 models]"
-                                self.logger.warning("Response truncated due to MAX_TOKENS - Gemini 2.5 uses thinking tokens")
-                            elif candidate.finish_reason in [
-                                "SAFETY",
-                                "RECITATION",
-                            ]:
-                                # Response was blocked by safety filters
-                                raise _build_safety_block_error(
-                                    response,
-                                    block_type="response",
-                                    default_message="Response blocked by safety filters",
-                                )
-                            else:
-                                content = f"[Response error: Cannot get response text - {candidate.finish_reason}]"
-                        else:
-                            content = "[Response error: Cannot get the response text]"
+                if hasattr(candidate, "finish_reason"):
+                    if candidate.finish_reason == "MAX_TOKENS":
+                        content = "[Response truncated due to token limit - consider increasing max_tokens for Gemini 2.5 models]"
+                        self.logger.warning("Response truncated due to MAX_TOKENS - Gemini 2.5 uses thinking tokens")
+                    elif candidate.finish_reason in [
+                        "SAFETY",
+                        "RECITATION",
+                    ]:
+                        raise _build_safety_block_error(
+                            response,
+                            block_type="response",
+                            default_message="Response blocked by safety filters",
+                        )
+                    else:
+                        content = f"[Response error: Cannot get response text - {candidate.finish_reason}]"
                 else:
-                    # No candidates found - check if this is due to safety filters
-                    # Check prompt_feedback for block reason
-                    if hasattr(response, "prompt_feedback"):
-                        pf = response.prompt_feedback
-                        if pf is not None and hasattr(pf, "block_reason") and pf.block_reason:
-                            block_reason = str(pf.block_reason)
-                            if block_reason not in ["BLOCKED_REASON_UNSPECIFIED", "OTHER"]:
-                                raise _build_safety_block_error(
-                                    response,
-                                    block_type="prompt",
-                                    default_message="No candidates found - prompt blocked by safety filters",
-                                )
-                        elif isinstance(pf, dict) and pf.get("block_reason"):
-                            block_reason = str(pf.get("block_reason", ""))
-                            if block_reason not in ["BLOCKED_REASON_UNSPECIFIED", "OTHER", ""]:
-                                raise _build_safety_block_error(
-                                    response,
-                                    block_type="prompt",
-                                    default_message="No candidates found - prompt blocked by safety filters",
-                                )
+                    content = "[Response error: Cannot get the response text]"
+            else:
+                # No candidates found - check if this is due to safety filters
+                if hasattr(response, "prompt_feedback"):
+                    pf = response.prompt_feedback
+                    if pf is not None and hasattr(pf, "block_reason") and pf.block_reason:
+                        block_reason = str(pf.block_reason)
+                        if block_reason not in ["BLOCKED_REASON_UNSPECIFIED", "OTHER"]:
+                            raise _build_safety_block_error(
+                                response,
+                                block_type="prompt",
+                                default_message="No candidates found - prompt blocked by safety filters",
+                            )
+                    elif isinstance(pf, dict) and pf.get("block_reason"):
+                        block_reason = str(pf.get("block_reason", ""))
+                        if block_reason not in ["BLOCKED_REASON_UNSPECIFIED", "OTHER", ""]:
+                            raise _build_safety_block_error(
+                                response,
+                                block_type="prompt",
+                                default_message="No candidates found - prompt blocked by safety filters",
+                            )
 
-                    # If not a safety block, raise generic error with details
-                    error_msg = "Response error: No candidates found - Response has no candidates (and thus no text)."
-                    if hasattr(response, "prompt_feedback"):
-                        error_msg += " Check prompt_feedback for details."
-                    raise ValueError(error_msg)
+                error_msg = "Response error: No candidates found - Response has no candidates (and thus no text)."
+                if hasattr(response, "prompt_feedback"):
+                    error_msg += " Check prompt_feedback for details."
+                raise ValueError(error_msg)
 
-                # Final fallback
-                if not content:
-                    content = "[Response error: Cannot get the response text. Multiple content parts are not supported.]"
+            if not content:
+                content = "[Response error: Cannot get the response text. Multiple content parts are not supported.]"
 
             # Extract actual token usage from response.usage_metadata
             prompt_tokens = 0
