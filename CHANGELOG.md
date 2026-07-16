@@ -9,6 +9,9 @@ See also `docs/changelog.rst` for historical release notes.
 
 ## [Unreleased]
 
+
+## [2.1.0rc8] - 2026-07-16 (Pre-release)
+
 ### Added
 
 - **M-D.5 SearchTool grounding:** fail-open router over Gemini Google Search Grounding, Grok web search, and Google CSE (`grounding_provider` / `grounding_provider_chain`, default `gemini,grok,google_cse`).
