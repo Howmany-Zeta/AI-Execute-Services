@@ -388,8 +388,8 @@ class TestSearchContext:
             'machine learning guide'
         )
         
-        # Should have high similarity (2 out of 3 words match)
-        assert similarity > 0.5
+        # Jaccard: 2 shared / 4 union = 0.5 for tutorial vs guide
+        assert similarity >= 0.5
     
     def test_learn_preferences(self):
         """Test learning user preferences from feedback"""
@@ -413,13 +413,13 @@ class TestSearchContext:
     
     def test_contextual_suggestions(self):
         """Test contextual suggestions generation"""
-        self.context.add_search('python tutorial', [])
-        self.context.add_search('python documentation', [])
+        self.context.add_search('python machine learning tutorial', [])
+        self.context.add_search('python machine learning guide', [])
         
-        suggestions = self.context.get_contextual_suggestions('python guide')
+        suggestions = self.context.get_contextual_suggestions('python machine learning course')
         
         assert 'related_queries' in suggestions
-        # Should find related queries
+        # Jaccard > 0.5 against history entries that share most tokens
         assert len(suggestions['related_queries']) > 0
 
 
@@ -573,12 +573,8 @@ class TestEnhancedMetrics:
 class TestSearchToolIntegration:
     """Integration tests for SearchTool with enhanced features"""
     
-    @patch('aiecs.tools.search_tool.core.build')
-    def test_search_tool_initialization(self, mock_build):
+    def test_search_tool_initialization(self):
         """Test SearchTool initialization with enhanced features"""
-        mock_service = Mock()
-        mock_build.return_value = mock_service
-        
         config = {
             'google_api_key': 'test_key',
             'google_cse_id': 'test_cse_id',
@@ -588,22 +584,18 @@ class TestSearchToolIntegration:
             'enable_context_tracking': True,
             'enable_intelligent_cache': False  # Disable Redis for testing
         }
-        
+
         tool = SearchTool(config)
-        
+
         assert tool.quality_analyzer is not None
         assert tool.intent_analyzer is not None
         assert tool.deduplicator is not None
         assert tool.search_context is not None
         assert tool.metrics is not None
         assert tool.error_handler is not None
-    
-    @patch('aiecs.tools.search_tool.core.build')
-    def test_search_tool_disabled_features(self, mock_build):
+
+    def test_search_tool_disabled_features(self):
         """Test SearchTool with features disabled"""
-        mock_service = Mock()
-        mock_build.return_value = mock_service
-        
         config = {
             'google_api_key': 'test_key',
             'google_cse_id': 'test_cse_id',
@@ -612,7 +604,7 @@ class TestSearchToolIntegration:
             'enable_deduplication': False,
             'enable_context_tracking': False
         }
-        
+
         tool = SearchTool(config)
         
         assert tool.quality_analyzer is None
@@ -668,15 +660,15 @@ class TestSearchBatch:
         mock_cse.list.return_value = mock_list
         mock_service.cse.return_value = mock_cse
 
-        with patch('aiecs.tools.search_tool.core.build', return_value=mock_service):
-            tool = SearchTool(
-                {
-                    'google_api_key': 'test_key',
-                    'google_cse_id': 'test_cse_id',
-                }
-            )
-            tool._service = mock_service
-            yield tool
+        tool = SearchTool(
+            {
+                'google_api_key': 'test_key',
+                'google_cse_id': 'test_cse_id',
+                'enable_intelligent_cache': False,
+            }
+        )
+        tool.service = mock_service
+        yield tool
 
     def test_merge_batch_search_results_deduplicates_urls(self):
         from aiecs.tools.search_tool.analyzers import merge_batch_search_results
@@ -776,6 +768,116 @@ class TestSearchBatch:
                 queries=['query one', 'query two'],
                 search_type='news',
             )
+
+
+class TestGroundingPipelineE2E:
+    """P4-04: Tesla / comma-stack fixtures through full search_web pipeline."""
+
+    @pytest.mark.gate_p4
+    def test_tesla_demographic_search_web_must_scrape_after_partition(self):
+        from aiecs.tools.search_tool.backends.registry import GroundingBackendRegistry
+        from test.unit.tools.search_tool.fakes import FakeGroundingBackend
+
+        gemini = FakeGroundingBackend(
+            'gemini',
+            citations=[
+                {
+                    'url': 'https://www.yougov.com/topics/tesla-gen-z',
+                    'title': 'YouGov Tesla Gen Z brand survey',
+                    'domain': 'www.yougov.com',
+                    'snippet': '',
+                },
+                {
+                    'url': 'https://www.facebook.com/groups/tesla',
+                    'title': 'Tesla fans',
+                    'domain': 'www.facebook.com',
+                    'snippet': '',
+                },
+            ],
+        )
+        original = gemini.search
+
+        def with_answer(params):
+            result = original(params)
+            result.answer = 'Synthesized Tesla Gen Z overview'
+            return result
+
+        gemini.search = with_answer  # type: ignore[method-assign]
+
+        tool = SearchTool(
+            {
+                'grounding_provider': 'auto',
+                'grounding_provider_chain': 'gemini,grok,google_cse',
+                'enable_intent_analysis': True,
+                'enable_quality_analysis': True,
+                'enable_intelligent_cache': False,
+                'enable_deduplication': False,
+                'enable_context_tracking': False,
+            }
+        )
+        registry = GroundingBackendRegistry()
+        registry.register(gemini)
+        registry.register(FakeGroundingBackend('grok', configured=False))
+        registry.register(FakeGroundingBackend('google_cse', configured=False))
+        tool._registry = registry
+
+        out = tool.search_web(
+            'Why is Tesla popular among young people?',
+            num_results=5,
+            auto_enhance=True,
+        )
+
+        assert out['_search_metadata']['partition_profile'] == 'grounding'
+        assert out['_search_metadata']['intent_type'] == QueryIntentType.DEMOGRAPHIC.value
+        assert len(out['must_scrape_urls']) >= 1
+        assert out.get('grounding_answer')
+        joined = ' '.join(
+            [*(r.get('displayLink', '') for r in out['results']), *(u['url'] for u in out['must_scrape_urls'])]
+        )
+        assert 'yougov.com' in joined
+        assert any('facebook.com' in (r.get('displayLink') or '') for r in out['low_signal'])
+
+    @pytest.mark.gate_p4
+    def test_comma_stack_search_web_uses_rewritten_query(self):
+        from aiecs.tools.search_tool.backends.registry import GroundingBackendRegistry
+        from test.unit.tools.search_tool.fakes import FakeGroundingBackend
+
+        query = (
+            "criticisms of Tesla and Elon Musk affecting young people's popularity, "
+            "Gen Z, Millennials, reports, articles"
+        )
+        gemini = FakeGroundingBackend(
+            'gemini',
+            citations=[
+                {
+                    'url': 'https://www.yougov.com/tesla',
+                    'title': 'YouGov',
+                    'domain': 'www.yougov.com',
+                    'snippet': '',
+                }
+            ],
+        )
+        tool = SearchTool(
+            {
+                'grounding_provider': 'auto',
+                'enable_intent_analysis': True,
+                'enable_quality_analysis': True,
+                'enable_intelligent_cache': False,
+                'enable_deduplication': False,
+                'enable_context_tracking': False,
+            }
+        )
+        registry = GroundingBackendRegistry()
+        registry.register(gemini)
+        registry.register(FakeGroundingBackend('grok', configured=False))
+        registry.register(FakeGroundingBackend('google_cse', configured=False))
+        tool._registry = registry
+
+        out = tool.search_web(query, auto_enhance=True)
+        enhanced = out['_search_metadata']['enhanced_query']
+        assert enhanced != query
+        assert 'reports' not in enhanced.lower()
+        assert gemini.search_calls[0].query == enhanced
 
 
 if __name__ == '__main__':

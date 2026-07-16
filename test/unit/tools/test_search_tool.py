@@ -203,8 +203,8 @@ class TestSchemas:
         """Test SearchBatchSchema with too many queries"""
         print_section("Testing SearchBatchSchema - Too Many Queries")
         
-        queries = [f"query{i}" for i in range(51)]
-        with pytest.raises(ValueError, match="Maximum 50 queries allowed"):
+        queries = [f"query{i}" for i in range(4)]
+        with pytest.raises(ValueError, match="Maximum 3 queries allowed"):
             SearchBatchSchema(queries=queries)
         
         print("✓ Too many queries correctly rejected")
@@ -499,10 +499,15 @@ class TestSearchToolMocked:
     @pytest.fixture
     def search_tool(self, mock_google_service):
         """Create SearchTool instance with mocked service"""
-        with patch('aiecs.tools.search_tool.core.build', return_value=mock_google_service):
-            tool = SearchTool()
-            tool.service = mock_google_service
-            return tool
+        tool = SearchTool(
+            config={
+                "google_api_key": "test_key",
+                "google_cse_id": "test_cse_id",
+                "enable_intelligent_cache": False,
+            }
+        )
+        tool.service = mock_google_service
+        return tool
 
     def test_search_tool_initialization(self, search_tool):
         """Test SearchTool initialization"""
@@ -600,6 +605,8 @@ class TestSearchToolMocked:
         assert 'time_window_seconds' in result
         assert 'circuit_breaker_state' in result
         assert 'health_score' in result
+        assert 'resilience' in result
+        assert 'google_cse' in result['resilience']
 
         print_result("Quota status", result)
         print("✓ Quota status retrieval working")

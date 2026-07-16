@@ -108,18 +108,26 @@ def _format_thought_block(thought: str) -> str:
 
 
 def build_content_from_google_parts(parts: Any) -> str:
-    """Build LLMResponse.content from Gemini parts, preserving thought then text order."""
+    """Build LLMResponse.content from Gemini parts.
+
+    Per google-genai ``Part`` schema, ``part.thought`` is a boolean flag
+    (not content). When ``True``, the thought summary lives in ``part.text``
+    and is wrapped in ``<thinking>`` blocks. Non-thought text is appended as-is.
+    Flag-only parts (``thought=True`` with no text) are skipped.
+    """
     if not parts:
         return ""
 
     segments: List[str] = []
     for part in parts:
-        thought_content = getattr(part, "thought", None)
-        if thought_content:
-            segments.append(_format_thought_block(str(thought_content)))
-
-        if hasattr(part, "text") and part.text:
-            segments.append(str(part.text))
+        is_thought = getattr(part, "thought", None) is True
+        text_content = getattr(part, "text", None) or ""
+        if not text_content:
+            continue
+        if is_thought:
+            segments.append(_format_thought_block(str(text_content)))
+        else:
+            segments.append(str(text_content))
 
     return "".join(segments)
 
@@ -453,15 +461,19 @@ class GoogleFunctionCallingMixin:
                             block_type="response",
                         )
 
-                # Extract thought and text from chunk parts
+                # Extract thought and text from chunk parts.
+                # google-genai Part.thought is a bool flag; summary text is in part.text.
                 if hasattr(candidate, "content") and candidate.content is not None and candidate.content.parts is not None:
                     for part in candidate.content.parts:
-                        thought_content = getattr(part, "thought", None)
-                        if thought_content:
+                        is_thought = getattr(part, "thought", None) is True
+                        text_content = getattr(part, "text", None) or ""
+
+                        if is_thought and text_content:
                             if return_chunks:
-                                yield StreamChunk(type="thought", content=thought_content)
-                        if hasattr(part, "text") and part.text:
-                            text_content = part.text
+                                yield StreamChunk(type="thought", content=text_content)
+                            continue
+
+                        if text_content:
                             if return_chunks:
                                 yield StreamChunk(type="token", content=text_content)
                             else:
@@ -541,7 +553,8 @@ class GoogleFunctionCallingMixin:
             if cached_tokens is not None:
                 usage["cache_read_tokens"] = cached_tokens
             # Include thinking-token count for Gemini Thinking models.
-            thinking_tokens = getattr(last_usage_metadata, "thinking_token_count", None)
+            # SDK field is thoughts_token_count (not thinking_token_count).
+            thinking_tokens = getattr(last_usage_metadata, "thoughts_token_count", None)
             if thinking_tokens is not None:
                 usage["thinking_tokens"] = thinking_tokens
             yield StreamChunk(type="usage", usage=usage)

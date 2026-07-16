@@ -70,11 +70,19 @@ def print_result(label: str, value: Any, indent: int = 0):
         print(f"{prefix}{label}: {value}")
 
 
-# Check if API credentials are available
-HAS_CREDENTIALS = (
-    os.getenv('GOOGLE_API_KEY') and 
-    os.getenv('GOOGLE_CSE_ID') and
-    os.getenv('GOOGLE_API_KEY') != 'test_api_key_12345'
+# Check if API credentials are available (SEARCH_TOOL_* preferred; legacy GOOGLE_* accepted)
+def _cse_api_key() -> str | None:
+    return os.getenv('SEARCH_TOOL_GOOGLE_API_KEY') or os.getenv('GOOGLE_API_KEY')
+
+
+def _cse_id() -> str | None:
+    return os.getenv('SEARCH_TOOL_GOOGLE_CSE_ID') or os.getenv('GOOGLE_CSE_ID')
+
+
+HAS_CREDENTIALS = bool(
+    _cse_api_key()
+    and _cse_id()
+    and _cse_api_key() != 'test_api_key_12345'
 )
 
 # Skip marker for tests requiring credentials
@@ -99,7 +107,16 @@ class TestSearchToolIntegration:
             pytest.skip("API credentials not available")
         
         try:
-            tool = SearchTool()
+            # Pass CSE keys explicitly — SearchTool Config uses SEARCH_TOOL_* prefix
+            # and does not silently fall back to bare GOOGLE_* (§3.5 / §7).
+            tool = SearchTool(
+                config={
+                    "google_api_key": _cse_api_key(),
+                    "google_cse_id": _cse_id(),
+                    "grounding_provider": "google_cse",
+                    "enable_intelligent_cache": False,
+                }
+            )
             return tool
         except Exception as e:
             pytest.skip(f"Failed to initialize SearchTool: {e}")
@@ -325,7 +342,14 @@ class TestSearchToolPerformance:
         """Create SearchTool instance"""
         if not HAS_CREDENTIALS:
             pytest.skip("API credentials not available")
-        return SearchTool()
+        return SearchTool(
+            config={
+                "google_api_key": _cse_api_key(),
+                "google_cse_id": _cse_id(),
+                "grounding_provider": "google_cse",
+                "enable_intelligent_cache": False,
+            }
+        )
     
     @requires_credentials
     def test_search_response_time(self, search_tool):

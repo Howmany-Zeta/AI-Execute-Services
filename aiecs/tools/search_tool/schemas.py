@@ -50,6 +50,14 @@ class SearchWebSchema(BaseModel):
         description="File type filter (e.g., 'pdf', 'doc', 'xls')",
     )
     exclude_terms: Optional[List[str]] = Field(default=None, description="Terms to exclude from search results")
+    allowed_domains: Optional[List[str]] = Field(
+        default=None,
+        description="Restrict results to these domains (Grok native ≤5; CSE post-filter)",
+    )
+    blocked_domains: Optional[List[str]] = Field(
+        default=None,
+        description="Exclude these domains (Gemini exclude_domains / Grok excluded_domains ≤5; CSE post-filter)",
+    )
     auto_enhance: bool = Field(
         default=True,
         description="Whether to automatically enhance query based on detected intent",
@@ -229,7 +237,18 @@ class SearchBatchSchema(BaseModel):
     safe_search: str = Field(default="medium", description="Safe search level")
     date_restrict: Optional[str] = Field(default=None, description="Date restriction for each query")
     file_type: Optional[str] = Field(default=None, description="File type filter for each query")
-    exclude_terms: Optional[str] = Field(default=None, description="Terms to exclude from each query")
+    exclude_terms: Optional[List[str]] = Field(
+        default=None,
+        description="Terms to exclude from each query",
+    )
+    allowed_domains: Optional[List[str]] = Field(
+        default=None,
+        description="Restrict results to these domains for each query",
+    )
+    blocked_domains: Optional[List[str]] = Field(
+        default=None,
+        description="Exclude these domains for each query",
+    )
     auto_enhance: bool = Field(default=True, description="Apply intent rewrite to each query")
 
     @field_validator("queries")

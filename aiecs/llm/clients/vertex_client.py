@@ -918,7 +918,8 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                     cache_read_tokens = usage.cached_content_token_count
                     cache_hit = cache_read_tokens is not None and cache_read_tokens > 0
                 # Gemini Thinking models report internal reasoning cost separately.
-                thinking_tokens = getattr(usage, "thinking_token_count", None)
+                # SDK field is thoughts_token_count (not thinking_token_count).
+                thinking_tokens = getattr(usage, "thoughts_token_count", None)
 
             # Compute cost: use caller-supplied prices when provided, else fall back to config.
             cost = self._compute_cost(model_name, prompt_tokens, completion_tokens, input_price, output_price)

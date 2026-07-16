@@ -9,7 +9,22 @@ See also `docs/changelog.rst` for historical release notes.
 
 ## [Unreleased]
 
+### Added
 
+- **M-D.5 SearchTool grounding:** fail-open router over Gemini Google Search Grounding, Grok web search, and Google CSE (`grounding_provider` / `grounding_provider_chain`, default `gemini,grok,google_cse`).
+- **`SEARCH_TOOL_*` credential isolation** for Gemini (googleai / Vertex), Grok (xAI / Vertex MaaS), and CSE; dual auth modes; optional custom backends via `SearchTool(custom_grounding_backends=[...])`.
+- **Routing-aware cache fingerprint** (`cache_schema_version=m-d.5`), backend-aware partition (`cse` vs `grounding`), batch pin (`pin_on_first_success`) with `batch_p95_budget_seconds=15`, and three-tier `search_error_mode`.
+- **Gemini TOS metadata passthrough:** `_search_metadata.gemini_grounding.search_entry_point` / `requires_search_suggestions_ui` for consumer Path A/B compliance.
+- **Docs:** `aiecs/tools/search_tool/README.md` migration guide (env keys, auth, chain aliases, cache purge, MaaS spike gate, consumer `WebSearch.yaml` sketch).
+
+### Changed
+
+- **SearchTool deprecation reversed (M-D.5 §12):** `search_tool` is no longer slated for MCP-only removal; it remains the core web-search layer with grounding. Importing `SearchTool` does not emit a builtin-tool deprecation warning. `task_tools` deprecation is unchanged.
+
+### Notes
+
+- `allow_llm_credential_fallback=true` is **dev-only** — never enable in production.
+- `grok_maas_web_search_enabled` defaults to `false` until the Phase 3 MaaS `web_search` spike on `xai/grok-4.5` is confirmed.
 
 
 ## [2.1.0rc7] - 2026-07-15 (Pre-release)

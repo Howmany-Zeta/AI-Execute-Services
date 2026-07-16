@@ -936,6 +936,36 @@ print(f"Intelligent Cache: {tool.config.enable_intelligent_cache}")
 
 ---
 
+## Appendix — Grok Vertex MaaS grounding (M-D.5 Phase 3)
+
+| Setting | Env | Default | Notes |
+|---------|-----|---------|-------|
+| `grok_maas_web_search_enabled` | `SEARCH_TOOL_GROK_MAAS_WEB_SEARCH_ENABLED` | `false` | Opt-in for MaaS Grok in `auto`. Credentials alone do **not** enable Grok. When true, auto MaaS **always** TTL-probes `web_search`. |
+| `grok_maas_capability_probe` | `SEARCH_TOOL_GROK_MAAS_CAPABILITY_PROBE` | `false` | Also probe when forced `grok_grounding_auth=vertex_maas`. Auto MaaS probes regardless. |
+| `vertex_project_id_maas` | `SEARCH_TOOL_VERTEX_PROJECT_ID_MAAS` | — | Required for MaaS path |
+| `google_application_credentials_vertex_maas` | `SEARCH_TOOL_GOOGLE_APPLICATION_CREDENTIALS_VERTEX_MAAS` | — | SA JSON for sync token refresh |
+
+**Phase 3 spike:** Target model `xai/grok-4.5`. Support for MaaS `web_search` is **unconfirmed** until ops validate the openapi endpoint; leave enable `false` until then. Forced `vertex_maas` still attempts regardless of enable; set the probe flag to fast-fail unsupported models. See `aiecs/tools/search_tool/backends/grok_grounding.py`.
+
+---
+
+## Appendix — M-D.5 routing cache purge (Phase 4)
+
+`search_web` / `search_batch` cache keys include a routing fingerprint (`cache_schema_version=m-d.5`). Changing chain/auth/provider automatically misses legacy CSE-era entries.
+
+**Staged rollout purge (optional but recommended on first grounding enable):**
+
+1. **In-process:** `SearchTool.clear_search_cache()` — clears the tool-executor LRU used by `@cache_result_with_strategy`.
+2. **Redis (if dual-layer / intelligent cache enabled):**
+   ```bash
+   # Example — adjust prefix to your deployment
+   redis-cli --scan --pattern 'tool_executor:*' | xargs -r redis-cli del
+   redis-cli --scan --pattern 'search_tool:*' | xargs -r redis-cli del
+   ```
+3. Confirm `SEARCH_TOOL_CACHE_SCHEMA_VERSION` / config `cache_schema_version` remains `"m-d.5"` (or bump again on breaking envelope changes).
+
+---
+
 **Document Version**: 2.0  
 **Last Updated**: 2025-10-18  
 **Maintainer**: AIECS Tools Team

@@ -233,10 +233,14 @@ def cache_result_with_strategy(
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
-            if not hasattr(self, "_executor") or not self._executor.config.enable_cache:
-                return func(self, *args, **kwargs)
+            # Option A (§3.2): `_cache_*` kwargs participate in the cache key but
+            # are stripped before the underlying provider/tool call.
+            call_kwargs = {k: v for k, v in kwargs.items() if not str(k).startswith("_cache_")}
 
-            # Generate cache key
+            if not hasattr(self, "_executor") or not self._executor.config.enable_cache:
+                return func(self, *args, **call_kwargs)
+
+            # Generate cache key (includes `_cache_*` fingerprint kwargs)
             cache_key = self._executor._get_cache_key(func.__name__, args, kwargs)
 
             # Check cache
@@ -247,7 +251,11 @@ def cache_result_with_strategy(
                 return cached
 
             # Execute function
-            result = func(self, *args, **kwargs)
+            result = func(self, *args, **call_kwargs)
+
+            # Tier C / explicit failure envelopes are not cached (M-D.5 §3.2 / §3.10)
+            if isinstance(result, dict) and result.get("success") is False:
+                return result
 
             # Calculate TTL based on strategy
             # Support both regular callables and lambdas that need self

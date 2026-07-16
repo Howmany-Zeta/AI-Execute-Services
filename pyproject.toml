@@ -315,6 +315,14 @@ markers = [
 
     # Context compression kernel (Phase 0+)
     "compression: Context compression kernel unit tests",
+
+    # M-D.5 grounding search phase gates (§3.9)
+    "gate_p0: M-D.5 Phase 0 prep (deprecation revoke, skeleton imports)",
+    "gate_p1: M-D.5 Phase 1 router foundation (no live Gemini/Grok)",
+    "gate_p2: M-D.5 Phase 2 Gemini grounding",
+    "gate_p3: M-D.5 Phase 3 Grok grounding",
+    "gate_p4: M-D.5 Phase 4 integration (partition + cache)",
+    "gate_p5: M-D.5 Phase 5 custom registry + docs",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
