@@ -11,7 +11,11 @@ See also `docs/changelog.rst` for historical release notes.
 
 
 
+
+## [2.1.0rc10] - 2026-07-17 (Pre-release)
+
 ## [2.1.0rc9] - 2026-07-16 (Pre-release)
+
 
 ## [2.1.0rc8] - 2026-07-16 (Pre-release)
 
