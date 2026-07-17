@@ -20,6 +20,8 @@ class FakeGroundingBackend:
         error: str | None = None,
         error_type: str | None = None,
         citations: list[dict] | None = None,
+        grounding_chunks: list[dict] | None = None,
+        grounding_supports: list[dict] | None = None,
         resilience: BackendResilienceGuard | None = None,
     ) -> None:
         self.name = name
@@ -29,6 +31,8 @@ class FakeGroundingBackend:
         self._error = error or "simulated failure"
         self._error_type = error_type or "simulated_failure"
         self._citations = citations or [{"url": "https://example.com", "title": "Example"}]
+        self._grounding_chunks = list(grounding_chunks or [])
+        self._grounding_supports = list(grounding_supports or [])
         self.resilience = resilience or BackendResilienceGuard(
             name,
             rate_limit_requests=60,
@@ -70,6 +74,8 @@ class FakeGroundingBackend:
                 success=True,
                 answer="fake answer",
                 citations=citations,
+                grounding_chunks=list(self._grounding_chunks),
+                grounding_supports=list(self._grounding_supports),
                 backend=self.name,
                 params_applied=["query"],
                 provider_native=provider_native,

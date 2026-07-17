@@ -221,6 +221,14 @@ class SearchTool(BaseTool):
             default=False,
             description=("When true, attach full serialized grounding_metadata and " "generate_content response dump to provider_native / _search_metadata " "(debug / e2e; can be large)"),
         )
+        gemini_include_grounding_supports: bool = Field(
+            default=True,
+            description=("Attach lightweight grounding_supports/chunks to SearchTool envelope " "(SEARCH_TOOL_GEMINI_INCLUDE_GROUNDING_SUPPORTS; independent of raw dump)"),
+        )
+        gemini_grounding_supports_include_segment_text: bool = Field(
+            default=True,
+            description=("Include segment.text in grounding_supports " "(SEARCH_TOOL_GEMINI_GROUNDING_SUPPORTS_INCLUDE_SEGMENT_TEXT; False → indices only)"),
+        )
         gemini_api_key: Optional[str] = Field(
             default=None,
             description="SEARCH_TOOL_GEMINI_API_KEY — Google GenAI API key path",
@@ -1048,6 +1056,10 @@ class SearchTool(BaseTool):
                     # Synthesized grounding text — not collected evidence (§3.13 / §10)
                     result_data["grounding_answer"] = grounding_partial["grounding_answer"]
                 result_data["grounding_citations"] = list(grounding_partial.get("grounding_citations") or [])
+                if grounding_partial.get("grounding_chunks"):
+                    result_data["grounding_chunks"] = list(grounding_partial["grounding_chunks"])
+                if grounding_partial.get("grounding_supports"):
+                    result_data["grounding_supports"] = list(grounding_partial["grounding_supports"])
             elif raw.answer:
                 result_data["grounding_answer"] = raw.answer
 
@@ -1636,6 +1648,10 @@ class SearchTool(BaseTool):
             if grounding_partial.get("grounding_answer"):
                 bucket["grounding_answer"] = grounding_partial["grounding_answer"]
             bucket["grounding_citations"] = list(grounding_partial.get("grounding_citations") or [])
+            if grounding_partial.get("grounding_chunks"):
+                bucket["grounding_chunks"] = list(grounding_partial["grounding_chunks"])
+            if grounding_partial.get("grounding_supports"):
+                bucket["grounding_supports"] = list(grounding_partial["grounding_supports"])
         elif raw.answer:
             bucket["grounding_answer"] = raw.answer
         return bucket

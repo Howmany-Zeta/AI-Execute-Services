@@ -227,9 +227,28 @@ class GeminiGroundingBackend:
         answer = getattr(response, "text", None)
         grounding_meta = self._extract_grounding_metadata(response)
         citations = self._citations_from_grounding(grounding_meta)
+
+        include_supports = bool(getattr(self._config, "gemini_include_grounding_supports", True))
+        include_segment_text = bool(getattr(self._config, "gemini_grounding_supports_include_segment_text", True))
+        grounding_chunks: list[dict[str, Any]] = []
+        grounding_supports: list[dict[str, Any]] = []
+        if include_supports:
+            grounding_chunks, grounding_supports = self._project_grounding_alignment(
+                grounding_meta,
+                include_segment_text=include_segment_text,
+            )
+
         if blocked_domains:
             blocked = {d.lower().lstrip(".") for d in blocked_domains}
             citations = [c for c in citations if not any((c.get("domain") or urlparse(c.get("url", "")).netloc).lower().endswith(b) for b in blocked)]
+            if grounding_chunks or grounding_supports:
+                from ..normalizer import filter_blocked_domain_grounding_alignment
+
+                grounding_chunks, grounding_supports = filter_blocked_domain_grounding_alignment(
+                    grounding_chunks,
+                    grounding_supports,
+                    blocked_domains,
+                )
 
         gemini_grounding = self.build_gemini_grounding_passthrough(grounding_meta)
         provider_native: dict[str, Any] = {
@@ -251,6 +270,8 @@ class GeminiGroundingBackend:
                 backend=self.name,
                 params_applied=params_applied,
                 params_ignored=params_ignored,
+                grounding_chunks=grounding_chunks,
+                grounding_supports=grounding_supports,
                 provider_native=provider_native,
             )
 
@@ -258,6 +279,8 @@ class GeminiGroundingBackend:
             success=True,
             answer=answer,
             citations=citations,
+            grounding_chunks=grounding_chunks,
+            grounding_supports=grounding_supports,
             backend=self.name,
             params_applied=params_applied,
             params_ignored=params_ignored,
@@ -319,6 +342,68 @@ class GeminiGroundingBackend:
                 }
             )
         return citations
+
+    @staticmethod
+    def _project_grounding_alignment(
+        grounding_meta: Any,
+        *,
+        include_segment_text: bool = True,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Project compact ``grounding_chunks`` + ``grounding_supports`` for Layer A.
+
+        Indices match the provider ``grounding_chunks[]`` order (pre-``results[]``
+        partition / ``num_results`` truncation). Independent of
+        ``gemini_include_raw_grounding``.
+        """
+        if grounding_meta is None:
+            return [], []
+
+        chunks_raw = getattr(grounding_meta, "grounding_chunks", None) or []
+        chunks_light: list[dict[str, Any]] = []
+        for index, chunk in enumerate(chunks_raw):
+            web = getattr(chunk, "web", None)
+            uri = ""
+            title = ""
+            domain = ""
+            if web is not None:
+                uri = getattr(web, "uri", None) or ""
+                title = getattr(web, "title", None) or ""
+                domain = getattr(web, "domain", None) or (urlparse(uri).netloc if uri else "")
+            entry: dict[str, Any] = {
+                "index": index,
+                "domain": domain,
+                "url": uri,
+            }
+            if title:
+                entry["title"] = title
+            chunks_light.append(entry)
+
+        supports_raw = getattr(grounding_meta, "grounding_supports", None) or []
+        supports_light: list[dict[str, Any]] = []
+        for support in supports_raw:
+            indices_raw = getattr(support, "grounding_chunk_indices", None) or []
+            indices = [int(i) for i in indices_raw]
+            segment_obj = getattr(support, "segment", None)
+            segment: dict[str, Any] = {}
+            if segment_obj is not None:
+                start_index = getattr(segment_obj, "start_index", None)
+                end_index = getattr(segment_obj, "end_index", None)
+                if start_index is not None:
+                    segment["start_index"] = int(start_index)
+                if end_index is not None:
+                    segment["end_index"] = int(end_index)
+                if include_segment_text:
+                    text = getattr(segment_obj, "text", None)
+                    if text is not None:
+                        segment["text"] = str(text)
+            supports_light.append(
+                {
+                    "grounding_chunk_indices": indices,
+                    "segment": segment,
+                }
+            )
+
+        return chunks_light, supports_light
 
     @staticmethod
     def build_gemini_grounding_passthrough(grounding_meta: Any) -> dict[str, Any]:

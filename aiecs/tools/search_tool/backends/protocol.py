@@ -41,6 +41,9 @@ class BackendRawResult:
     success: bool
     answer: str | None = None
     citations: list[dict[str, Any]] = field(default_factory=list)
+    # Lightweight Gemini sentence↔chunk alignment (Layer A; independent of raw dump).
+    grounding_chunks: list[dict[str, Any]] = field(default_factory=list)
+    grounding_supports: list[dict[str, Any]] = field(default_factory=list)
     provider_native: dict[str, Any] | None = None
     error: str | None = None
     error_type: str | None = None

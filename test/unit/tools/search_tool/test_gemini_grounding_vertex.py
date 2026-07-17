@@ -168,3 +168,8 @@ def test_include_raw_grounding_serializes_metadata() -> None:
     assert meta["grounding_chunks"][0]["web"]["uri"] == "https://example.com/a"
     assert "grounding_supports" in meta
     assert result.provider_native["generate_content_response"]["text"] == "answer"
+    # Layer A lightweight fields coexist with the raw dump path.
+    assert len(result.grounding_chunks) == 1
+    assert result.grounding_chunks[0]["url"] == "https://example.com/a"
+    assert len(result.grounding_supports) == 1
+    assert result.grounding_supports[0]["grounding_chunk_indices"] == [0]
