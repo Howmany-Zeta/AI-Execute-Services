@@ -434,12 +434,12 @@ if __name__ == "__main__":
     # Discover tools
     discover_tools()
 
-    # Generate Schema for PandasTool
-    print("Generating Schema for PandasTool:")
+    # Generate Schema for ResearchTool (retained task tool)
+    print("Generating Schema for ResearchTool:")
     print("=" * 80)
 
-    pandas_tool = TOOL_CLASSES["pandas"]
-    schemas = generate_schemas_for_tool(pandas_tool)
+    research_tool = TOOL_CLASSES["research"]
+    schemas = generate_schemas_for_tool(research_tool)
 
     print(f"\nGenerated {len(schemas)} Schemas:\n")
 

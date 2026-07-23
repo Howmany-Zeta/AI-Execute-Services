@@ -32,7 +32,7 @@ class TestSecurityAndValidation:
         # Should handle malicious inputs gracefully
         with pytest.raises(Exception):  # Should fail safely
             await operation_executor.execute_operation(
-                "stats.describe", malicious_params
+                "research.mill_agreement", malicious_params
             )
     
     @pytest.mark.asyncio
@@ -40,7 +40,7 @@ class TestSecurityAndValidation:
         """Test protection against resource exhaustion attacks."""
         # Test with extremely large batch
         large_operations = [
-            {"operation": "stats.read_data", "params": {"file_path": "/dev/null"}}
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}}
             for _ in range(1000)  # Very large batch
         ]
         
@@ -66,7 +66,7 @@ class TestSecurityAndValidation:
         # Should handle large inputs gracefully
         try:
             await operation_executor.execute_operation(
-                "stats.describe", {"large_param": huge_param}
+                "research.mill_agreement", {"large_param": huge_param}
             )
         except Exception as e:
             # Should fail gracefully, not crash
@@ -81,7 +81,7 @@ class TestPerformanceAndLoad:
         """Test handling of high concurrency scenarios."""
         # Create 50 concurrent operations
         operations = [
-            {"operation": "stats.read_data", "params": {"file_path": sample_csv_file}}
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}}
             for _ in range(50)
         ]
         
@@ -109,7 +109,7 @@ class TestPerformanceAndLoad:
         # Execute many operations
         for _ in range(10):
             operations = [
-                {"operation": "stats.read_data", "params": {"file_path": sample_csv_file}}
+                {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}}
                 for _ in range(20)
             ]
             await operation_executor.batch_execute_operations(operations)
@@ -124,7 +124,7 @@ class TestPerformanceAndLoad:
         """Test proper tool instance lifecycle management."""
         # Create multiple tool instances
         for i in range(10):
-            tool = operation_executor.get_tool_instance("stats")
+            tool = operation_executor.get_tool_instance("research")
             assert tool is not None
         
         # Should reuse instances (cache)
@@ -142,7 +142,7 @@ class TestPerformanceAndLoad:
         operation_executor.semaphore = asyncio.Semaphore(2)
         
         operations = [
-            {"operation": "stats.read_data", "params": {"file_path": sample_csv_file}}
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}}
             for _ in range(10)
         ]
         
@@ -164,13 +164,13 @@ class TestReliabilityAndResilience:
         # Simulate tool failure
         with patch('aiecs.tools.get_tool') as mock_get_tool:
             mock_tool = MagicMock()
-            mock_tool.describe.side_effect = Exception("Tool crashed")
+            mock_tool.mill_agreement.side_effect = Exception("Tool crashed")
             mock_get_tool.return_value = mock_tool
             
             # Should handle tool failure gracefully
             with pytest.raises(Exception):
                 await operation_executor.execute_operation(
-                    "stats.describe", {"file_path": "test.csv"}
+                    "research.mill_agreement", {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}
                 )
             
             # Executor should still be functional after failure
@@ -181,11 +181,11 @@ class TestReliabilityAndResilience:
     async def test_partial_batch_failure_handling(self, operation_executor, sample_csv_file):
         """Test handling of partial failures in batch operations."""
         operations = [
-            {"operation": "stats.read_data", "params": {"file_path": sample_csv_file}},
-            {"operation": "stats.nonexistent", "params": {"file_path": sample_csv_file}},
-            {"operation": "stats.read_data", "params": {"file_path": sample_csv_file}},
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}},
+            {"operation": "research.nonexistent", "params": {"file_path": sample_csv_file}},
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}},
             {"operation": "invalid.operation", "params": {}},
-            {"operation": "stats.read_data", "params": {"file_path": sample_csv_file}}
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}}
         ]
         
         results = await operation_executor.batch_execute_operations(operations)
@@ -217,8 +217,8 @@ class TestReliabilityAndResilience:
         assert len(operation_executor._tool_instances) >= initial_tool_count
         
         # Should still be able to execute valid operations
-        operation_executor.get_tool_instance("stats")
-        assert "stats" in operation_executor._tool_instances
+        operation_executor.get_tool_instance("research")
+        assert "research" in operation_executor._tool_instances
     
     @pytest.mark.asyncio
     async def test_timeout_handling(self, operation_executor):
@@ -230,7 +230,7 @@ class TestReliabilityAndResilience:
         try:
             # Simulate a potentially long-running operation
             await operation_executor.execute_operation(
-                "stats.describe", {"file_path": "/dev/zero"}  # This might hang
+                "research.mill_agreement", {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}  # This might hang
             )
         except Exception:
             pass  # Expected to fail
@@ -246,7 +246,7 @@ class TestMonitoringAndObservability:
     def test_statistics_collection(self, operation_executor):
         """Test that statistics are properly collected."""
         # Execute some operations to generate stats
-        operation_executor.get_tool_instance("stats")
+        operation_executor.get_tool_instance("research")
         
         stats = operation_executor.get_stats()
         
@@ -258,7 +258,7 @@ class TestMonitoringAndObservability:
         
         # Verify statistics accuracy
         assert stats["cached_tools"] == 1
-        assert "stats" in stats["tool_names"]
+        assert "research" in stats["tool_names"]
         assert isinstance(stats["semaphore_value"], int)
         
         # Verify config statistics
@@ -279,7 +279,7 @@ class TestMonitoringAndObservability:
             error_count += 1
         
         try:
-            await operation_executor.execute_operation("stats.nonexistent", {})
+            await operation_executor.execute_operation("research.nonexistent", {})
         except Exception:
             error_count += 1
         
@@ -293,7 +293,7 @@ class TestMonitoringAndObservability:
         assert stats is not None
         
         # Should be able to get tool instances
-        tool = operation_executor.get_tool_instance("stats")
+        tool = operation_executor.get_tool_instance("research")
         assert tool is not None
         
         # Cache operations should work

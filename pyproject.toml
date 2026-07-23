@@ -20,7 +20,7 @@ exclude = '''
 # Poetry 2.x 配置 - 需要基本的 metadata (使用 PEP 621 格式时保持最小配置)
 [tool.poetry]
 name = "aiecs"
-version = "2.1.0rc10"
+version = "2.1.0"
 description = "AI Execute Services - A middleware framework for AI-powered task execution and tool orchestration"
 authors = ["AIECS Team <iretbl@gmail.com>"]
 readme = "README.md"
@@ -28,7 +28,7 @@ packages = [{include = "aiecs"}]
 
 [project]
 name = "aiecs"
-version = "2.1.0rc10"
+version = "2.1.0"
 description = "AI Execute Services - A middleware framework for AI-powered task execution and tool orchestration"
 authors = [
     {name = "AIECS Team", email = "iretbl@gmail.com"}
@@ -93,7 +93,6 @@ dependencies = [
     # Natural Language Processing
     # =============================================================================
     "spacy (>=3.8.7,<4.0.0)",                       # Industrial-strength NLP library
-    "rake-nltk (>=1.0.6,<2.0.0)",                   # Rapid Automatic Keyword Extraction
     # "transformers (>=4.56.1,<5.0.0)",             # Installation requirements are costly and temporarily disabled
     # "torch (>=2.8.0,<3.0.0)",                     # Installation requirements are costly and temporarily disabled
 
@@ -103,41 +102,30 @@ dependencies = [
     "numpy (>=2.4.1,<3.0.0)",                       # Fundamental package for numerical computing
     "pandas (>=2.2.3,<3.0.0)",                      # Data analysis and manipulation library
     "scipy (>=1.15.3,<2.0.0)",                      # Scientific computing library
-    "scikit-learn (>=1.5.0,<2.0.0)",                # Machine learning library
-    "statsmodels (>=0.14.4,<0.15.0)",               # Statistical models and tests
-    "pyreadstat (>=1.2.9,<2.0.0)",                  # Read/write SAS, SPSS, and Stata files
     "pyarrow (>=21.0.0,<22.0.0)",                    # Apache Arrow for Parquet file support
     "tabulate (>=0.9.0,<0.10.0)",                   # Pretty-print tabular data
 
     # =============================================================================
-    # Document Processing and Office Files
+    # Document / spreadsheet helpers (core document tools removed in 2.1.0 slim)
     # =============================================================================
-    "python-docx (>=1.1.2,<2.0.0)",                 # Microsoft Word document processing
-    "python-pptx (>=1.0.2,<2.0.0)",                 # Microsoft PowerPoint document processing
     "openpyxl (>=3.1.5,<4.0.0)",                    # Excel file reading and writing
-    "pdfplumber (>=0.11.7,<0.12.0)",                # PDF text extraction and analysis
     "pdfminer-six (==20250506)",                    # PDF parsing and text extraction
-    "tika (>=3.1.0,<4.0.0)",                        # Content analysis toolkit for document parsing (upgraded from 2.x for security fixes)
 
     # =============================================================================
-    # Data Visualization and Reporting
+    # Data Visualization
     # =============================================================================
     "matplotlib (>=3.10.3,<4.0.0)",                 # Comprehensive plotting library
-    "seaborn (>=0.13.2,<0.14.0)",                   # Statistical data visualization
-    "jinja2 (>=3.1.6,<4.0.0)",                      # Template engine for report generation
 
     # =============================================================================
-    # Web Scraping and Content Extraction
+    # Content Extraction / Images
     # =============================================================================
     "lxml (>=5.4.0,<6.0.0)",                        # Fast XML and HTML processing
-    "pytesseract (>=0.3.13,<0.4.0)",                # OCR (Optical Character Recognition) wrapper
-    "pillow (>=11.2.1,<12.0.0)",                    # Image processing library (PIL fork)
+    "pillow (>=11.2.1,<12.0.0)",                    # Image processing library (PIL fork); OCR uses system tesseract
     # =============================================================================
     # Configuration and Data Formats
     # =============================================================================
     "pyyaml (>=6.0.2,<7.0.0)",                      # YAML parser and emitter
     "markdown (>=3.8,<4.0)",                        # Markdown parser and converter
-    "bleach (>=6.2.0,<7.0.0)",                      # HTML sanitizing library
     "python-frontmatter (>=1.1.0,<2.0.0)",          # Frontmatter parser for Markdown files
 
     # =============================================================================
@@ -177,7 +165,6 @@ dev = [
     "types-pyyaml>=6.0.12.20250915",
     "types-opentracing>=2.4.10.20250622",
     "types-lxml>=2025.8.25",
-    "types-bleach>=6.3.0.20251115",
     "deptry>=0.23.0,<1.0.0",
 ]
 docs = [

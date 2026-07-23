@@ -34,7 +34,6 @@ class TestAIECSStartup:
         test_env = {
             'AIECS_ENV': 'test',
             'LOG_LEVEL': 'WARNING',
-            'SKIP_OFFICE_TOOL': 'true',
             'SKIP_IMAGE_TOOL': 'true', 
             'SKIP_CHART_TOOL': 'true',
             'STATS_TOOL_MAX_FILE_SIZE_MB': '50',

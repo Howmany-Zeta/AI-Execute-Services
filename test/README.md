@@ -157,7 +157,7 @@ poetry run pytest test/unit/tools/
 
 **Run specific test file:**
 ```bash
-poetry run pytest test/unit/tools/test_pandas_tool.py -v
+poetry run pytest test/unit/tools/test_research_tool.py -v
 ```
 
 **With coverage:**

@@ -208,7 +208,8 @@ class VersionManager:
             raise FileNotFoundError(f"Could not find {changelog_file}")
 
         content = changelog_file.read_text(encoding="utf-8")
-        if f"## [{new_version}]" in content:
+        # Exact section title only (avoid matching 2.1.0 inside 2.1.0rc10)
+        if re.search(rf"^## \[{re.escape(new_version)}\](?:\s|$)", content, re.MULTILINE):
             raise ValueError(f"CHANGELOG.md already contains section for [{new_version}]")
 
         release_date = release_date or date.today()

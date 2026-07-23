@@ -1444,14 +1444,8 @@ class DependencyChecker:
         self.logger.info("Starting comprehensive dependency check...")
 
         tools = {
-            # Task tools (11 total)
+            # Task tools retained in 2.1.0 slim (+ standalone search_tool)
             "image": self.check_image_tool_dependencies(),
-            "classifier": self.check_classfire_tool_dependencies(),  # Note: registered as "classifier"
-            "office": self.check_office_tool_dependencies(),
-            "stats": self.check_stats_tool_dependencies(),
-            "report": self.check_report_tool_dependencies(),
-            "chart": self.check_chart_tool_dependencies(),
-            "pandas": self.check_pandas_tool_dependencies(),
             "search": self.check_search_tool_dependencies(),
             "research": self.check_research_tool_dependencies(),
             # Document tools (7 total)
@@ -1463,6 +1457,7 @@ class DependencyChecker:
             "ai_document_writer_orchestrator": self.check_ai_document_writer_orchestrator_dependencies(),
             "ai_document_orchestrator": self.check_ai_document_orchestrator_dependencies(),
             # KG tools removed in AIECS 2.0 (use private aiecs-kg + custom BaseTool)
+            # chart/classifier/office/pandas/report/stats removed in AIECS 2.1.0
         }
 
         return tools

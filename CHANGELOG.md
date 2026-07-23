@@ -9,8 +9,16 @@ See also `docs/changelog.rst` for historical release notes.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-07-23
 
+### Removed
 
+- **task_tools slim:** Removed built-in `chart`, `classifier` (`classfire_tool`), `office`, `pandas`, `report`, and `stats` tools from `aiecs.tools.task_tools`.
+- Temporarily retained: `image_tool`, `research_tool`. Core web search remains at `aiecs.tools.search_tool`.
+
+### Notes
+
+- Promotes the 2.1.0rc* line (GVR, SearchTool grounding / M-D.5, and related fixes) to a stable release.
 
 ## [2.1.0rc10] - 2026-07-17 (Pre-release)
 

@@ -23,7 +23,6 @@ class TestFastAPIAppStartup:
         test_env = {
             'AIECS_ENV': 'test',
             'LOG_LEVEL': 'WARNING',
-            'SKIP_OFFICE_TOOL': 'true',
             'SKIP_IMAGE_TOOL': 'true',
             'SKIP_CHART_TOOL': 'true',
             'DISABLE_DATABASE': 'true',  # Disable database for testing

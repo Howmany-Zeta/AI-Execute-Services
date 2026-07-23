@@ -89,13 +89,7 @@ def setup_test_environment():
     - Set test-specific configurations
     """
     # Skip heavy tool dependencies in tests
-    os.environ['SKIP_OFFICE_TOOL'] = 'true'
     os.environ['SKIP_IMAGE_TOOL'] = 'true'
-    os.environ['SKIP_CHART_TOOL'] = 'true'
-    
-    # Configure tool settings for tests
-    os.environ['STATS_TOOL_MAX_FILE_SIZE_MB'] = '200'
-    os.environ['STATS_TOOL_ALLOWED_EXTENSIONS'] = '[".csv", ".xlsx", ".json"]'
     
     # Reduce logging noise during tests
     logging.getLogger('aiecs').setLevel(logging.WARNING)
@@ -113,11 +107,7 @@ def setup_test_environment():
     
     # Cleanup environment variables
     cleanup_vars = [
-        'SKIP_OFFICE_TOOL', 
-        'SKIP_IMAGE_TOOL', 
-        'SKIP_CHART_TOOL',
-        'STATS_TOOL_MAX_FILE_SIZE_MB', 
-        'STATS_TOOL_ALLOWED_EXTENSIONS'
+        'SKIP_IMAGE_TOOL',
     ]
     for var in cleanup_vars:
         os.environ.pop(var, None)

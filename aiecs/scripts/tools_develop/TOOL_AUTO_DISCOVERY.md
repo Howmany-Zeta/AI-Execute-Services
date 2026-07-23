@@ -87,18 +87,11 @@ poetry run python -m aiecs.scripts.tools_develop.verify_tools
 
 ```
 aiecs/tools/
-├── task_tools/          # 任务工具 (category: task)
-│   ├── chart_tool.py    # @register_tool("chart")
-│   ├── pandas_tool.py   # @register_tool("pandas")
-│   └── ...
-├── docs/                # 文档工具 (category: docs)
-│   ├── document_parser_tool.py    # @register_tool("document_parser")
-│   ├── document_writer_tool.py    # @register_tool("document_writer")
-│   └── ...
-└── statistics/          # 统计工具 (category: statistics)
-    ├── data_loader_tool.py        # @register_tool("data_loader")
-    ├── data_profiler_tool.py      # @register_tool("data_profiler")
-    └── ...
+├── task_tools/          # 任务工具 (category: task; slimmed in 2.1.0)
+│   ├── image_tool.py    # @register_tool("image")
+│   └── research_tool.py # @register_tool("research")
+└── search_tool/         # 搜索工具 (category: task; standalone package)
+    └── ...              # @register_tool("search")
 ```
 
 ## 🔍 描述提取规则

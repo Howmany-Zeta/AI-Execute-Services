@@ -48,15 +48,14 @@ class TestSingleOperationExecution:
     @pytest.mark.asyncio
     async def test_execute_operation_sync_success(self, operation_executor, sample_csv_file):
         """Test successful execution of synchronous operation."""
-        # Test stats tool describe operation
+        # Test research tool mill_agreement operation
         result = await operation_executor.execute_operation(
-            "stats.describe", 
-            {"file_path": sample_csv_file}
+            "research.mill_agreement",
+            {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}
         )
         
         assert result is not None
-        assert "statistics" in result
-        assert "summary" in result
+        assert isinstance(result, dict)
     
     @pytest.mark.asyncio
     async def test_execute_operation_invalid_spec(self, operation_executor):
@@ -74,29 +73,29 @@ class TestSingleOperationExecution:
     async def test_execute_operation_nonexistent_operation(self, operation_executor):
         """Test error handling for non-existent operation."""
         with pytest.raises(ValueError, match="Operation .* not found in tool"):
-            await operation_executor.execute_operation("stats.nonexistent", {})
+            await operation_executor.execute_operation("research.nonexistent", {})
     
     @pytest.mark.asyncio
     async def test_execute_operation_tool_caching(self, operation_executor, sample_csv_file):
         """Test that tool instances are cached properly."""
         # First call - tool should be created and cached
         await operation_executor.execute_operation(
-            "stats.describe", 
-            {"file_path": sample_csv_file}
+            "research.mill_agreement", 
+            {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}
         )
         
         # Verify tool is cached
-        assert "stats" in operation_executor._tool_instances
+        assert "research" in operation_executor._tool_instances
         
         # Second call - should use cached tool
-        tool_instance = operation_executor._tool_instances["stats"]
+        tool_instance = operation_executor._tool_instances["research"]
         await operation_executor.execute_operation(
-            "stats.describe", 
-            {"file_path": sample_csv_file}
+            "research.mill_agreement", 
+            {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}
         )
         
         # Should be same instance
-        assert operation_executor._tool_instances["stats"] is tool_instance
+        assert operation_executor._tool_instances["research"] is tool_instance
 
 
 class TestBatchOperations:
@@ -106,8 +105,8 @@ class TestBatchOperations:
     async def test_batch_execute_operations_success(self, operation_executor, sample_csv_file):
         """Test successful batch execution of operations."""
         operations = [
-            {"operation": "stats.describe", "params": {"file_path": sample_csv_file}},
-            {"operation": "stats.read_data", "params": {"file_path": sample_csv_file}}
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}},
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}}
         ]
         
         results = await operation_executor.batch_execute_operations(operations)
@@ -121,9 +120,9 @@ class TestBatchOperations:
     async def test_batch_execute_operations_with_errors(self, operation_executor, sample_csv_file):
         """Test batch execution with some operations failing."""
         operations = [
-            {"operation": "stats.describe", "params": {"file_path": sample_csv_file}},
-            {"operation": "stats.nonexistent", "params": {"file_path": sample_csv_file}},
-            {"operation": "stats.read_data", "params": {"file_path": sample_csv_file}}
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}},
+            {"operation": "research.nonexistent", "params": {"file_path": sample_csv_file}},
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}}
         ]
         
         results = await operation_executor.batch_execute_operations(operations)
@@ -139,7 +138,7 @@ class TestBatchOperations:
         """Test batch execution with large number of operations."""
         # Create 12 operations to test batching (batch_size=5 in config)
         operations = [
-            {"operation": "stats.read_data", "params": {"file_path": sample_csv_file}}
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}}
             for _ in range(12)
         ]
         
@@ -158,8 +157,8 @@ class TestSequenceOperations:
     async def test_execute_operations_sequence_success(self, operation_executor, sample_csv_file, mock_save_callback):
         """Test successful sequence execution."""
         operations = [
-            {"operation": "stats.read_data", "params": {"file_path": sample_csv_file}},
-            {"operation": "stats.describe", "params": {"file_path": sample_csv_file}}
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}},
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}}
         ]
         
         results = await operation_executor.execute_operations_sequence(
@@ -179,9 +178,9 @@ class TestSequenceOperations:
     async def test_execute_operations_sequence_with_failure_continue(self, operation_executor, sample_csv_file, mock_save_callback):
         """Test sequence execution with failure but continue on failure."""
         operations = [
-            {"operation": "stats.read_data", "params": {"file_path": sample_csv_file}},
-            {"operation": "stats.nonexistent", "params": {"file_path": sample_csv_file}},
-            {"operation": "stats.describe", "params": {"file_path": sample_csv_file}}
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}},
+            {"operation": "research.nonexistent", "params": {"file_path": sample_csv_file}},
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}}
         ]
         
         results = await operation_executor.execute_operations_sequence(
@@ -199,9 +198,9 @@ class TestSequenceOperations:
     async def test_execute_operations_sequence_with_failure_stop(self, operation_executor, sample_csv_file, mock_save_callback):
         """Test sequence execution with failure and stop on failure."""
         operations = [
-            {"operation": "stats.read_data", "params": {"file_path": sample_csv_file}},
-            {"operation": "stats.nonexistent", "params": {"file_path": sample_csv_file}},
-            {"operation": "stats.describe", "params": {"file_path": sample_csv_file}}
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}},
+            {"operation": "research.nonexistent", "params": {"file_path": sample_csv_file}},
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}}
         ]
         
         results = await operation_executor.execute_operations_sequence(
@@ -284,10 +283,10 @@ class TestToolCalls:
     async def test_execute_tool_call_success(self, operation_executor, sample_csv_file):
         """Test successful tool call execution."""
         call = {
-            "tool": "stats",
+            "tool": "research",
             "params": {
-                "op": "read_data",
-                "file_path": sample_csv_file
+                "op": "mill_agreement",
+                "cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]
             }
         }
         
@@ -299,10 +298,10 @@ class TestToolCalls:
     async def test_execute_tool_call_with_cache(self, operation_executor, sample_csv_file):
         """Test tool call with caching enabled."""
         call = {
-            "tool": "stats",
+            "tool": "research",
             "params": {
-                "op": "read_data",
-                "file_path": sample_csv_file,
+                "op": "mill_agreement",
+                "cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}],
                 "user_id": "user123",
                 "task_id": "task456"
             }
@@ -325,23 +324,23 @@ class TestToolCalls:
             return f"Custom result for {tool_name}"
         
         call = {
-            "tool": "stats",
+            "tool": "research",
             "params": {
-                "op": "read_data",
-                "file_path": sample_csv_file
+                "op": "mill_agreement",
+                "cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]
             }
         }
         
         result = await operation_executor._execute_tool_call(call, custom_executor)
         
-        assert result == "Custom result for stats"
+        assert result == "Custom result for research"
     
     @pytest.mark.asyncio
     async def test_batch_tool_calls_success(self, operation_executor, sample_csv_file):
         """Test successful batch tool calls."""
         tool_calls = [
-            {"tool": "stats", "params": {"op": "read_data", "file_path": sample_csv_file}},
-            {"tool": "stats", "params": {"op": "describe", "file_path": sample_csv_file}}
+            {"tool": "research", "params": {"op": "mill_agreement", "cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}},
+            {"tool": "research", "params": {"op": "mill_agreement", "cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}}
         ]
         
         results = await operation_executor.batch_tool_calls(tool_calls)
@@ -418,8 +417,8 @@ class TestParallelOperations:
     async def test_execute_parallel_operations_success(self, operation_executor, sample_csv_file):
         """Test successful parallel operation execution."""
         operations = [
-            {"operation": "stats.read_data", "params": {"file_path": sample_csv_file}},
-            {"operation": "stats.describe", "params": {"file_path": sample_csv_file}}
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}},
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}}
         ]
         
         results = await operation_executor.execute_parallel_operations(operations)
@@ -434,9 +433,9 @@ class TestParallelOperations:
     async def test_execute_parallel_operations_with_failures(self, operation_executor, sample_csv_file):
         """Test parallel operation execution with some failures."""
         operations = [
-            {"operation": "stats.read_data", "params": {"file_path": sample_csv_file}},
-            {"operation": "stats.nonexistent", "params": {"file_path": sample_csv_file}},
-            {"operation": "stats.describe", "params": {"file_path": sample_csv_file}}
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}},
+            {"operation": "research.nonexistent", "params": {"file_path": sample_csv_file}},
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}}
         ]
         
         results = await operation_executor.execute_parallel_operations(operations)
@@ -469,18 +468,18 @@ class TestUtilityMethods:
     def test_get_tool_instance(self, operation_executor):
         """Test tool instance retrieval and caching."""
         # First call should create instance
-        tool1 = operation_executor.get_tool_instance("stats")
+        tool1 = operation_executor.get_tool_instance("research")
         assert tool1 is not None
-        assert "stats" in operation_executor._tool_instances
+        assert "research" in operation_executor._tool_instances
         
         # Second call should return cached instance
-        tool2 = operation_executor.get_tool_instance("stats")
+        tool2 = operation_executor.get_tool_instance("research")
         assert tool2 is tool1
     
     def test_clear_tool_cache(self, operation_executor):
         """Test tool cache clearing."""
         # Create some tool instances
-        operation_executor.get_tool_instance("stats")
+        operation_executor.get_tool_instance("research")
         assert len(operation_executor._tool_instances) > 0
         
         # Clear cache
@@ -490,7 +489,7 @@ class TestUtilityMethods:
     def test_get_stats(self, operation_executor):
         """Test statistics retrieval."""
         # Add some tools to cache
-        operation_executor.get_tool_instance("stats")
+        operation_executor.get_tool_instance("research")
         
         stats = operation_executor.get_stats()
         
@@ -500,7 +499,7 @@ class TestUtilityMethods:
         assert "config" in stats
         
         assert stats["cached_tools"] == 1
-        assert "stats" in stats["tool_names"]
+        assert "research" in stats["tool_names"]
         assert stats["semaphore_value"] == operation_executor.semaphore._value
         
         # Check config values
@@ -519,15 +518,14 @@ class TestErrorScenarios:
         # Try to use stats tool with invalid file
         with pytest.raises(Exception):  # Should propagate the underlying error
             await operation_executor.execute_operation(
-                "stats.describe", 
-                {"file_path": "/nonexistent/file.csv"}
+                "research.mill_agreement", {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}
             )
     
     @pytest.mark.asyncio
     async def test_sequence_operations_with_invalid_params(self, operation_executor):
         """Test sequence execution with invalid parameters."""
         operations = [
-            {"operation": "stats.describe"},  # Missing required params
+            {"operation": "research.mill_agreement"},  # Missing required params
         ]
         
         results = await operation_executor.execute_operations_sequence(
@@ -582,15 +580,12 @@ class TestSequenceOperationsWithParameterReferences:
         """Test sequence execution where later operations use results from earlier ones."""
         operations = [
             {
-                "operation": "stats.read_data", 
-                "params": {"file_path": sample_csv_file}
+                "operation": "research.mill_agreement",
+                "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}
             },
             {
-                "operation": "stats.describe",
-                "params": {
-                    "file_path": sample_csv_file,
-                    "variables": ["name", "age"]  # Using specific variables
-                }
+                "operation": "research.mill_agreement",
+                "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}
             }
         ]
         
@@ -614,23 +609,23 @@ class TestIntegrationScenarios:
         """Test a comprehensive workflow using multiple features."""
         # 1. Execute single operation
         single_result = await operation_executor.execute_operation(
-            "stats.read_data", 
-            {"file_path": sample_csv_file}
+            "research.mill_agreement", 
+            {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}
         )
         assert single_result is not None
         
         # 2. Execute batch operations
         batch_operations = [
-            {"operation": "stats.describe", "params": {"file_path": sample_csv_file}},
-            {"operation": "stats.read_data", "params": {"file_path": sample_csv_file}}
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}},
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}}
         ]
         batch_results = await operation_executor.batch_execute_operations(batch_operations)
         assert len(batch_results) == 2
         
         # 3. Execute sequence operations
         sequence_operations = [
-            {"operation": "stats.read_data", "params": {"file_path": sample_csv_file}},
-            {"operation": "stats.describe", "params": {"file_path": sample_csv_file}}
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}},
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}}
         ]
         sequence_results = await operation_executor.execute_operations_sequence(
             sequence_operations, "user123", "task456", save_callback=mock_save_callback
@@ -639,8 +634,8 @@ class TestIntegrationScenarios:
         
         # 4. Execute parallel operations
         parallel_operations = [
-            {"operation": "stats.read_data", "params": {"file_path": sample_csv_file}},
-            {"operation": "stats.describe", "params": {"file_path": sample_csv_file}}
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}},
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}}
         ]
         parallel_results = await operation_executor.execute_parallel_operations(parallel_operations)
         assert len(parallel_results) == 2
@@ -661,7 +656,7 @@ class TestIntegrationScenarios:
         
         # Create many operations to test rate limiting
         operations = [
-            {"operation": "stats.read_data", "params": {"file_path": sample_csv_file}}
+            {"operation": "research.mill_agreement", "params": {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}}
             for _ in range(6)  # More than batch size
         ]
         
@@ -678,13 +673,13 @@ class TestIntegrationScenarios:
     async def test_cache_behavior_across_operations(self, operation_executor, sample_csv_file):
         """Test caching behavior across different operation types."""
         # Execute the same operation multiple times
-        params = {"file_path": sample_csv_file, "user_id": "user123", "task_id": "task456"}
+        params = {**{"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}, "user_id": "user123", "task_id": "task456"}
         
         # First through single operation
-        result1 = await operation_executor.execute_operation("stats.read_data", params)
+        result1 = await operation_executor.execute_operation("research.mill_agreement", params)
         
         # Then through tool call
-        call = {"tool": "stats", "params": {"op": "read_data", **params}}
+        call = {"tool": "research", "params": {"op": "mill_agreement", **params}}
         result2 = await operation_executor._execute_tool_call(call)
         
         # Both should work

@@ -29,7 +29,6 @@ class TestIntegrationStartup:
             'AIECS_ENV': 'test',
             'LOG_LEVEL': 'INFO',  # Use INFO for integration tests
             'TEMP_DIR': self.temp_dir,
-            'SKIP_OFFICE_TOOL': 'true',
             'SKIP_IMAGE_TOOL': 'true',
             'SKIP_CHART_TOOL': 'true',
             'STATS_TOOL_MAX_FILE_SIZE_MB': '100',

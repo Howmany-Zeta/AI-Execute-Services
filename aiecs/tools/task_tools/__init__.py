@@ -7,15 +7,11 @@
 """
 Task Tools Module
 
-This module contains specialized tools for various task-oriented operations:
-- chart_tool: Chart and visualization operations
-- classfire_tool: Classification and categorization operations
+Retained built-in task tools (temporary; pending MCP migration):
 - image_tool: Image processing and manipulation operations
-- office_tool: Office document processing operations
-- pandas_tool: Data analysis and manipulation operations
-- report_tool: Report generation and formatting operations
 - research_tool: Research and information gathering operations
-- stats_tool: Statistical analysis and computation operations
+
+Core web search lives in the standalone package ``aiecs.tools.search_tool``.
 
 .. deprecated:: 2026-07-01
     Built-in task tools in ``aiecs.tools.task_tools`` are being migrated to MCP server
@@ -24,11 +20,10 @@ This module contains specialized tools for various task-oriented operations:
 
 Note:
 - Legacy API source tools removed in AIECS 2.0.0 (fork or custom BaseTool)
-- search_tool is now a standalone package at aiecs.tools.search_tool
+- search_tool is a standalone package at aiecs.tools.search_tool
+- chart/classfire/office/pandas/report/stats tools removed in AIECS 2.1.0 (slim)
 - Legacy scraper tools removed in AIECS 2.0.0 (fork or custom BaseTool)
 """
-
-import os
 
 from aiecs.tools._builtin_tool_deprecation import warn_builtin_tool_deprecated
 
@@ -36,28 +31,9 @@ warn_builtin_tool_deprecated("task_tools")
 
 # Define available tools for lazy loading
 _AVAILABLE_TOOLS = [
-    "chart_tool",
-    "classfire_tool",
     "image_tool",
-    "pandas_tool",
-    "report_tool",
     "research_tool",
-    "stats_tool",
 ]
-
-# Add office_tool conditionally
-# Check environment variable via settings (preferred) or direct check
-try:
-    from aiecs.config.config import get_settings
-
-    settings = get_settings()
-    skip_office_tool = getattr(settings, "skip_office_tool", False)
-except Exception:
-    # Fallback to direct env check if settings not available
-    skip_office_tool = os.getenv("SKIP_OFFICE_TOOL", "").lower() in ("true", "1", "yes")
-
-if not skip_office_tool:
-    _AVAILABLE_TOOLS.append("office_tool")
 
 # Track which tools have been loaded
 _LOADED_TOOLS = set()
@@ -69,21 +45,9 @@ def _lazy_load_tool(tool_name: str):
         return
 
     try:
-        if tool_name == "chart_tool":
-            pass
-        elif tool_name == "classfire_tool":
-            pass
-        elif tool_name == "image_tool":
-            pass
-        elif tool_name == "office_tool":
-            pass
-        elif tool_name == "pandas_tool":
-            pass
-        elif tool_name == "report_tool":
+        if tool_name == "image_tool":
             pass
         elif tool_name == "research_tool":
-            pass
-        elif tool_name == "stats_tool":
             pass
 
         _LOADED_TOOLS.add(tool_name)

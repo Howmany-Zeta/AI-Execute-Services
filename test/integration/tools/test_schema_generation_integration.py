@@ -35,13 +35,13 @@ def discovered_tools():
 class TestSchemaGenerationIntegration:
     """Integration tests for schema generation functionality."""
 
-    def test_schema_generation_for_pandas_tool(self, discovered_tools):
-        """Test schema generation for pandas tool methods."""
-        if "pandas" not in discovered_tools:
-            pytest.skip("pandas tool not available")
+    def test_schema_generation_for_research_tool(self, discovered_tools):
+        """Test schema generation for research tool methods."""
+        if "research" not in discovered_tools:
+            pytest.skip("research tool not available")
 
-        pandas_tool = discovered_tools["pandas"]
-        schemas = generate_schemas_for_tool(pandas_tool)
+        research_tool = discovered_tools["research"]
+        schemas = generate_schemas_for_tool(research_tool)
 
         # Should generate schemas for multiple methods
         assert len(schemas) > 0, "Should generate at least one schema"
@@ -51,13 +51,13 @@ class TestSchemaGenerationIntegration:
             assert issubclass(schema, BaseModel), f"Schema for {method_name} should be a BaseModel"
             assert schema.__name__.endswith("Schema"), f"Schema name should end with 'Schema'"
 
-    def test_schema_generation_for_stats_tool(self, discovered_tools):
-        """Test schema generation for stats tool methods."""
-        if "stats" not in discovered_tools:
-            pytest.skip("stats tool not available")
+    def test_schema_generation_for_image_tool(self, discovered_tools):
+        """Test schema generation for image tool methods."""
+        if "image" not in discovered_tools:
+            pytest.skip("image tool not available")
 
-        stats_tool = discovered_tools["stats"]
-        schemas = generate_schemas_for_tool(stats_tool)
+        image_tool = discovered_tools["image"]
+        schemas = generate_schemas_for_tool(image_tool)
 
         assert len(schemas) > 0, "Should generate at least one schema"
 
@@ -68,17 +68,17 @@ class TestSchemaGenerationIntegration:
 
     def test_schema_generation_handles_complex_types(self, discovered_tools):
         """Test that schema generation handles complex types gracefully."""
-        if "pandas" not in discovered_tools:
-            pytest.skip("pandas tool not available")
+        if "research" not in discovered_tools:
+            pytest.skip("research tool not available")
 
-        pandas_tool = discovered_tools["pandas"]
+        research_tool = discovered_tools["research"]
         
         # Find a method that might have complex types
-        for method_name in dir(pandas_tool):
-            if method_name.startswith("_") or not callable(getattr(pandas_tool, method_name)):
+        for method_name in dir(research_tool):
+            if method_name.startswith("_") or not callable(getattr(research_tool, method_name)):
                 continue
             
-            method = getattr(pandas_tool, method_name)
+            method = getattr(research_tool, method_name)
             if isinstance(method, type):
                 continue
             
@@ -141,7 +141,7 @@ class TestSchemaCoverageTracking:
     def test_schema_coverage_analysis(self, discovered_tools):
         """Test schema coverage analysis for all tools."""
         # Analyze a few tools
-        test_tools = ["pandas", "stats", "research"]
+        test_tools = ["research", "image", "search"]
         available_tools = [t for t in test_tools if t in discovered_tools]
         
         if not available_tools:
@@ -166,11 +166,11 @@ class TestSchemaCoverageTracking:
 
     def test_schema_coverage_metrics_calculation(self, discovered_tools):
         """Test that schema coverage metrics are calculated correctly."""
-        if "pandas" not in discovered_tools:
-            pytest.skip("pandas tool not available")
+        if "research" not in discovered_tools:
+            pytest.skip("research tool not available")
 
-        tool_class = discovered_tools["pandas"]
-        result = analyze_tool_schemas("pandas", tool_class)
+        tool_class = discovered_tools["research"]
+        result = analyze_tool_schemas("research", tool_class)
         
         metrics = result["metrics"]
         scores = metrics.get_scores()
@@ -183,10 +183,10 @@ class TestSchemaCoverageTracking:
 
     def test_schema_quality_validation(self, discovered_tools):
         """Test schema quality validation."""
-        if "pandas" not in discovered_tools:
-            pytest.skip("pandas tool not available")
+        if "research" not in discovered_tools:
+            pytest.skip("research tool not available")
 
-        tool_class = discovered_tools["pandas"]
+        tool_class = discovered_tools["research"]
         
         # Find a method with a schema
         for method_name in dir(tool_class):
@@ -227,11 +227,11 @@ class TestSchemaBackwardCompatibility:
 
     def test_auto_generation_fallback_works(self, discovered_tools):
         """Test that auto-generation works as fallback when manual schemas are missing."""
-        if "pandas" not in discovered_tools:
-            pytest.skip("pandas tool not available")
+        if "research" not in discovered_tools:
+            pytest.skip("research tool not available")
 
-        tool_class = discovered_tools["pandas"]
-        result = analyze_tool_schemas("pandas", tool_class)
+        tool_class = discovered_tools["research"]
+        result = analyze_tool_schemas("research", tool_class)
         
         # Should have both manual and auto schemas, or at least auto schemas
         auto_schemas = [m for m in result["methods"] if m.get("schema_type") == "auto"]
@@ -240,7 +240,7 @@ class TestSchemaBackwardCompatibility:
     def test_schema_generation_does_not_break_existing_tools(self, discovered_tools):
         """Test that schema generation doesn't break existing tool functionality."""
         # Test with a few tools
-        test_tools = ["pandas", "stats", "research"]
+        test_tools = ["research", "image", "search"]
         available_tools = [t for t in test_tools if t in discovered_tools]
         
         if not available_tools:
@@ -265,10 +265,10 @@ class TestSchemaValidationIntegration:
 
     def test_generated_schemas_are_valid_pydantic_models(self, discovered_tools):
         """Test that generated schemas are valid Pydantic models."""
-        if "pandas" not in discovered_tools:
-            pytest.skip("pandas tool not available")
+        if "research" not in discovered_tools:
+            pytest.skip("research tool not available")
 
-        tool_class = discovered_tools["pandas"]
+        tool_class = discovered_tools["research"]
         schemas = generate_schemas_for_tool(tool_class)
         
         for method_name, schema in list(schemas.items())[:3]:  # Test first 3
@@ -324,10 +324,10 @@ class TestSchemaPerformance:
         """Test that schema generation completes within reasonable time."""
         import time
         
-        if "pandas" not in discovered_tools:
-            pytest.skip("pandas tool not available")
+        if "research" not in discovered_tools:
+            pytest.skip("research tool not available")
 
-        tool_class = discovered_tools["pandas"]
+        tool_class = discovered_tools["research"]
         
         start_time = time.time()
         schemas = generate_schemas_for_tool(tool_class)
@@ -341,13 +341,13 @@ class TestSchemaPerformance:
         """Test that schema coverage analysis completes within reasonable time."""
         import time
         
-        if "pandas" not in discovered_tools:
-            pytest.skip("pandas tool not available")
+        if "research" not in discovered_tools:
+            pytest.skip("research tool not available")
 
-        tool_class = discovered_tools["pandas"]
+        tool_class = discovered_tools["research"]
         
         start_time = time.time()
-        result = analyze_tool_schemas("pandas", tool_class)
+        result = analyze_tool_schemas("research", tool_class)
         elapsed_time = time.time() - start_time
         
         # Should complete in less than 2 seconds
