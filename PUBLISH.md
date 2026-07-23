@@ -16,6 +16,7 @@ poetry run pip install build twine
 ```
 
 4. Clean working tree for the release commit (recommended)
+5. Pre-commit hooks enabled (release commits run license/black/flake8/mypy/deptry)
 
 ## 1. Set the release version
 
@@ -47,27 +48,67 @@ poetry run aiecs-version --version 2.2.0rc1
 
 Put release notes under `## [Unreleased]` **before** running `aiecs-version`, so they land in the new section. Use `--no-changelog` only when intentionally skipping CHANGELOG.
 
+If you also changed dependencies, refresh the lockfile:
+
+```bash
+poetry lock --no-interaction
+```
+
 Confirm:
 
 ```bash
 poetry run aiecs-version --show
 ```
 
-## 2. Commit and tag
+## 2. Commit
 
 ```bash
 VERSION=$(poetry run aiecs-version --show)
 
 git add aiecs/__init__.py aiecs/main.py pyproject.toml CHANGELOG.md
-# plus any other release-related files
-git commit -m "Release v${VERSION}"
+# plus any other release-related files (e.g. poetry.lock, PUBLISH.md, code/tests)
+git status   # review staged set
 
+git commit -m "Release v${VERSION}"
+```
+
+Pre-commit may take a minute; fix any hook failures and create a **new** commit (do not `--amend` unless you intentionally follow the project amend rules).
+
+## 3. Tag and push
+
+Use the `tag` subcommand (not `add` / typos like `agg`):
+
+```bash
+VERSION=$(poetry run aiecs-version --show)
+
+# Create lightweight tag on current HEAD
 git tag "v${VERSION}"
+
+# Verify tag points at the release commit
+git show -s --format='%h %s%n%d' "v${VERSION}"
+
+# Push branch, then tag
 git push origin HEAD
 git push origin "v${VERSION}"
 ```
 
-## 3. Build the package
+Useful checks:
+
+```bash
+git tag -l "v${VERSION}"
+git ls-remote --tags origin "v${VERSION}"
+```
+
+If the tag already exists locally and you need to move it (only when you created it and it was never pushed):
+
+```bash
+git tag -d "v${VERSION}"
+git tag "v${VERSION}"
+```
+
+Do **not** force-push tags to a shared remote unless the team explicitly agrees.
+
+## 4. Build the package
 
 ```bash
 # Clean previous builds
@@ -80,7 +121,7 @@ poetry run python -m build
 
 Artifacts appear under `dist/` as `aiecs-<version>.tar.gz` and `aiecs-<version>-py3-none-any.whl`.
 
-## 4. Smoke-test the wheel locally
+## 5. Smoke-test the wheel locally
 
 ```bash
 VERSION=$(poetry run aiecs-version --show)
@@ -99,7 +140,7 @@ deactivate
 rm -rf test_env
 ```
 
-## 5. Upload to TestPyPI (recommended first)
+## 6. Upload to TestPyPI (recommended first)
 
 ```bash
 poetry run twine upload --repository testpypi dist/*
@@ -112,14 +153,14 @@ pip install \
   "aiecs==${VERSION}"
 ```
 
-## 6. Upload to PyPI
+## 7. Upload to PyPI
 
 ```bash
 poetry run twine upload dist/*
 # or: python -m twine upload dist/*
 ```
 
-## 7. Post-upload verification
+## 8. Post-upload verification
 
 ```bash
 VERSION=$(poetry run aiecs-version --show)
@@ -128,7 +169,7 @@ pip install --upgrade "aiecs==${VERSION}"
 python -c "import aiecs; print(aiecs.__version__)"
 ```
 
-## Quick reference — stable vs RC
+## Quick reference
 
 | Goal | Command |
 |------|---------|
@@ -137,11 +178,15 @@ python -c "import aiecs; print(aiecs.__version__)"
 | Next patch/minor/major | `poetry run aiecs-version --bump patch\|minor\|major` |
 | Next RC | `poetry run aiecs-version --bump rc` |
 | Skip CHANGELOG rewrite | add `--no-changelog` |
-| Tag | `git tag v$(poetry run aiecs-version --show)` |
+| Refresh lock after dep edits | `poetry lock --no-interaction` |
+| Create tag | `git tag "v${VERSION}"` |
+| Push tag | `git push origin "v${VERSION}"` |
+| Verify remote tag | `git ls-remote --tags origin "v${VERSION}"` |
 
 ## Notes
 
 - Prefer Poetry-invoked tools (`poetry run …`) so the active project environment is used.
 - Do not edit version strings by hand across files; always use `aiecs-version`.
+- Tag names use a `v` prefix (`v2.1.0`); PyPI / `aiecs-version` use the bare PEP 440 version (`2.1.0`).
 - PyPI versions are immutable: fix mistakes with a new patch (or a new RC), not a re-upload of the same version.
 - For version-manager behavior and PEP 440 pre-release suffixes (`rcN`, `aN`, `bN`, `.devN`), see [`VERSION_MANAGEMENT.md`](aiecs/scripts/aid/VERSION_MANAGEMENT.md).
