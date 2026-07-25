@@ -44,6 +44,8 @@ class LLMMessage:
         tool_calls: Tool call information for assistant messages
         tool_call_id: Tool call ID for tool response messages
         cache_control: Cache control marker for prompt caching support
+        thought_signature: Gemini content-part thought signature (base64 or skip sentinel)
+            preserved when thinking text is split out of raw Parts.
     """
 
     role: str  # "system", "user", "assistant", "tool"
@@ -52,6 +54,7 @@ class LLMMessage:
     tool_calls: Optional[List[Dict[str, Any]]] = None  # For assistant messages with tool calls
     tool_call_id: Optional[str] = None  # For tool messages
     cache_control: Optional[CacheControl] = None  # Cache control for prompt caching
+    thought_signature: Optional[str] = None  # Gemini content-part thought signature
 
 
 @dataclass
@@ -298,6 +301,7 @@ class BaseLLMClient(ABC):
                         tool_calls=msg.tool_calls,
                         tool_call_id=msg.tool_call_id,
                         cache_control=CacheControl(type="ephemeral"),
+                        thought_signature=msg.thought_signature,
                     )
                 )
             else:

@@ -71,6 +71,8 @@ class StreamChunk:
     tool_call: Optional[Dict[str, Any]] = None  # Tool call information
     tool_calls: Optional[List[Dict[str, Any]]] = None  # Complete tool calls (when stream ends)
     usage: Optional[Dict[str, Any]] = None  # Token usage metadata (when type="usage")
+    # Gemini thought_signature for thought/text parts (base64 or skip sentinel).
+    thought_signature: Optional[str] = None
 
 
 class OpenAICompatibleFunctionCallingMixin:

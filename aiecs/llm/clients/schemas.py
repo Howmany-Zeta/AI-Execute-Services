@@ -29,6 +29,9 @@ class ToolCallItem(BaseModel):
     id: Optional[str] = None
     type: str = "function"
     function: Union[ToolCallFunction, dict] = Field(default_factory=lambda: ToolCallFunction())
+    # Gemini thinking models attach thought_signature on functionCall Parts.
+    # Stored as base64 (or the skip sentinel) for JSON-safe history round-trip.
+    thought_signature: Optional[str] = None
 
     model_config = {"extra": "ignore"}
 
@@ -48,6 +51,9 @@ class ToolCallItem(BaseModel):
                     func = {}
                 if not isinstance(func, dict):
                     return None
+                thought_signature = obj.get("thought_signature")
+                if thought_signature is not None and not isinstance(thought_signature, str):
+                    thought_signature = None
                 return cls(
                     id=obj.get("id"),
                     type=obj.get("type", "function"),
@@ -55,6 +61,7 @@ class ToolCallItem(BaseModel):
                         name=func.get("name", ""),
                         arguments=func.get("arguments", "{}"),
                     ),
+                    thought_signature=thought_signature,
                 )
             except Exception:
                 return None
@@ -97,21 +104,20 @@ def sanitize_tool_calls(raw: Optional[List[Any]]) -> Optional[List[Dict[str, Any
             call_id = validated.id or f"call_{i}"
             func = validated.function
             if isinstance(func, ToolCallFunction):
-                result.append(
-                    {
-                        "id": call_id,
-                        "type": validated.type,
-                        "function": {"name": func.name, "arguments": func.arguments},
-                    }
-                )
+                entry: Dict[str, Any] = {
+                    "id": call_id,
+                    "type": validated.type,
+                    "function": {"name": func.name, "arguments": func.arguments},
+                }
             else:
-                result.append(
-                    {
-                        "id": call_id,
-                        "type": validated.type,
-                        "function": func if isinstance(func, dict) else {},
-                    }
-                )
+                entry = {
+                    "id": call_id,
+                    "type": validated.type,
+                    "function": func if isinstance(func, dict) else {},
+                }
+            if validated.thought_signature:
+                entry["thought_signature"] = validated.thought_signature
+            result.append(entry)
     return result if result else None
 
 

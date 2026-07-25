@@ -9,15 +9,20 @@ Provides shared implementation for Google providers (Vertex AI, Google AI)
 that use FunctionDeclaration format for Function Calling.
 """
 
+import base64
 import json
 import logging
-from typing import Dict, Any, Optional, List, Union, AsyncGenerator
+from typing import Dict, Any, Optional, List, Union, AsyncGenerator, Tuple
 from dataclasses import dataclass
 from google import genai
 from google.genai import types
 from .base_client import LLMMessage, LLMResponse
 
 logger = logging.getLogger(__name__)
+
+# Gemini 3 requires thought_signature on functionCall parts when replaying history.
+# Use this sentinel only when a signature was never available (imported / synthetic history).
+SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
 
 # JSON Schema keywords that the Google genai SDK's Schema type does not support.
 # The SDK coerces raw parameter dicts to Schema objects via pydantic; unknown
@@ -67,6 +72,85 @@ except ImportError:
         tool_call: Optional[Dict[str, Any]] = None
         tool_calls: Optional[List[Dict[str, Any]]] = None
         usage: Optional[Dict[str, Any]] = None
+        thought_signature: Optional[str] = None
+
+
+def serialize_thought_signature(sig: Any) -> Optional[str]:
+    """Convert Part.thought_signature to a JSON-safe string for history storage."""
+    if sig is None:
+        return None
+    if isinstance(sig, bytes):
+        if sig == SKIP_THOUGHT_SIGNATURE_VALIDATOR.encode("utf-8"):
+            return SKIP_THOUGHT_SIGNATURE_VALIDATOR
+        if not sig:
+            return None
+        return base64.b64encode(sig).decode("ascii")
+    if isinstance(sig, str):
+        return sig or None
+    return None
+
+
+def deserialize_thought_signature(sig: Optional[str]) -> Optional[bytes]:
+    """Convert a stored thought_signature string back to bytes for types.Part."""
+    if not sig:
+        return None
+    if sig == SKIP_THOUGHT_SIGNATURE_VALIDATOR:
+        return SKIP_THOUGHT_SIGNATURE_VALIDATOR.encode("utf-8")
+    try:
+        return base64.b64decode(sig, validate=False)
+    except (ValueError, TypeError):
+        # Non-base64 strings (including the skip sentinel from older storage) as utf-8.
+        return sig.encode("utf-8")
+
+
+def resolve_function_call_thought_signature(
+    stored: Optional[str],
+    *,
+    require_signature: bool,
+) -> Optional[bytes]:
+    """Resolve bytes for a functionCall Part; fall back to skip when required but missing."""
+    decoded = deserialize_thought_signature(stored)
+    if decoded is not None:
+        return decoded
+    if require_signature:
+        return SKIP_THOUGHT_SIGNATURE_VALIDATOR.encode("utf-8")
+    return None
+
+
+def build_google_function_call_part(
+    name: str,
+    args_dict: Dict[str, Any],
+    thought_signature: Optional[str] = None,
+    *,
+    require_signature: bool = True,
+) -> types.Part:
+    """Build a functionCall Part, attaching thought_signature when required/available."""
+    sig_bytes = resolve_function_call_thought_signature(
+        thought_signature,
+        require_signature=require_signature,
+    )
+    if sig_bytes is not None:
+        return types.Part(
+            function_call=types.FunctionCall(name=name, args=args_dict),
+            thought_signature=sig_bytes,
+        )
+    return types.Part(function_call=types.FunctionCall(name=name, args=args_dict))
+
+
+def build_google_text_part(
+    text: str,
+    thought_signature: Optional[str] = None,
+    *,
+    thought: Optional[bool] = None,
+) -> types.Part:
+    """Build a text Part, optionally restoring thought flag and thought_signature."""
+    sig_bytes = deserialize_thought_signature(thought_signature)
+    kwargs: Dict[str, Any] = {"text": text}
+    if thought is not None:
+        kwargs["thought"] = thought
+    if sig_bytes is not None:
+        kwargs["thought_signature"] = sig_bytes
+    return types.Part(**kwargs)
 
 
 def _serialize_function_args(args) -> str:
@@ -115,13 +199,30 @@ def build_content_from_google_parts(parts: Any) -> str:
     and is wrapped in ``<thinking>`` blocks. Non-thought text is appended as-is.
     Flag-only parts (``thought=True`` with no text) are skipped.
     """
+    content, _ = build_content_and_signature_from_google_parts(parts)
+    return content
+
+
+def build_content_and_signature_from_google_parts(parts: Any) -> Tuple[str, Optional[str]]:
+    """Build content and capture the last non-functionCall part thought_signature.
+
+    When thinking text is split into ``<thinking>`` blocks, the associated
+    ``thought_signature`` (if any) is returned so callers can restore it on
+    the content Part when replaying history.
+    """
     if not parts:
-        return ""
+        return "", None
 
     segments: List[str] = []
+    content_thought_signature: Optional[str] = None
     for part in parts:
+        if getattr(part, "function_call", None):
+            continue
         is_thought = getattr(part, "thought", None) is True
         text_content = getattr(part, "text", None) or ""
+        part_sig = serialize_thought_signature(getattr(part, "thought_signature", None))
+        if part_sig:
+            content_thought_signature = part_sig
         if not text_content:
             continue
         if is_thought:
@@ -129,25 +230,31 @@ def build_content_from_google_parts(parts: Any) -> str:
         else:
             segments.append(str(text_content))
 
-    return "".join(segments)
+    return "".join(segments), content_thought_signature
 
 
 def extract_content_from_google_response(response: Any) -> str:
     """Extract visible and thinking content from a non-streaming Google response."""
+    content, _ = extract_content_and_signature_from_google_response(response)
+    return content
+
+
+def extract_content_and_signature_from_google_response(response: Any) -> Tuple[str, Optional[str]]:
+    """Extract content and content-part thought_signature from a Google response."""
     if hasattr(response, "candidates") and response.candidates:
         candidate = response.candidates[0]
         content_obj = getattr(candidate, "content", None)
         if content_obj is not None:
             parts = getattr(content_obj, "parts", None)
             if parts:
-                built = build_content_from_google_parts(parts)
-                if built:
-                    return built
+                built, content_sig = build_content_and_signature_from_google_parts(parts)
+                if built or content_sig:
+                    return built, content_sig
 
     try:
-        return response.text or ""
+        return response.text or "", None
     except (ValueError, AttributeError):
-        return ""
+        return "", None
 
 
 class GoogleFunctionCallingMixin:
@@ -273,16 +380,18 @@ class GoogleFunctionCallingMixin:
                         func_call = part.function_call
                         # Prefer the SDK-assigned id; fall back to a synthetic one.
                         call_id = func_call.id if hasattr(func_call, "id") and func_call.id else f"call_{len(function_calls)}"
-                        function_calls.append(
-                            {
-                                "id": call_id,
-                                "type": "function",
-                                "function": {
-                                    "name": func_call.name,
-                                    "arguments": _serialize_function_args(func_call.args) if hasattr(func_call, "args") else "{}",
-                                },
-                            }
-                        )
+                        entry: Dict[str, Any] = {
+                            "id": call_id,
+                            "type": "function",
+                            "function": {
+                                "name": func_call.name,
+                                "arguments": _serialize_function_args(func_call.args) if hasattr(func_call, "args") else "{}",
+                            },
+                        }
+                        thought_sig = serialize_thought_signature(getattr(part, "thought_signature", None))
+                        if thought_sig:
+                            entry["thought_signature"] = thought_sig
+                        function_calls.append(entry)
 
         return function_calls if function_calls else None
 
@@ -373,16 +482,18 @@ class GoogleFunctionCallingMixin:
                         func_call = part.function_call
                         # Prefer the SDK-assigned id; fall back to a synthetic one.
                         call_id = func_call.id if hasattr(func_call, "id") and func_call.id else f"call_{len(function_calls)}"
-                        function_calls.append(
-                            {
-                                "id": call_id,
-                                "type": "function",
-                                "function": {
-                                    "name": func_call.name,
-                                    "arguments": _serialize_function_args(func_call.args) if hasattr(func_call, "args") else "{}",
-                                },
-                            }
-                        )
+                        entry: Dict[str, Any] = {
+                            "id": call_id,
+                            "type": "function",
+                            "function": {
+                                "name": func_call.name,
+                                "arguments": _serialize_function_args(func_call.args) if hasattr(func_call, "args") else "{}",
+                            },
+                        }
+                        thought_sig = serialize_thought_signature(getattr(part, "thought_signature", None))
+                        if thought_sig:
+                            entry["thought_signature"] = thought_sig
+                        function_calls.append(entry)
 
         return function_calls if function_calls else None
 
@@ -467,15 +578,24 @@ class GoogleFunctionCallingMixin:
                     for part in candidate.content.parts:
                         is_thought = getattr(part, "thought", None) is True
                         text_content = getattr(part, "text", None) or ""
+                        part_sig = serialize_thought_signature(getattr(part, "thought_signature", None))
 
                         if is_thought and text_content:
                             if return_chunks:
-                                yield StreamChunk(type="thought", content=text_content)
+                                yield StreamChunk(
+                                    type="thought",
+                                    content=text_content,
+                                    thought_signature=part_sig,
+                                )
                             continue
 
                         if text_content:
                             if return_chunks:
-                                yield StreamChunk(type="token", content=text_content)
+                                yield StreamChunk(
+                                    type="token",
+                                    content=text_content,
+                                    thought_signature=part_sig,
+                                )
                             else:
                                 yield text_content
 
@@ -499,13 +619,17 @@ class GoogleFunctionCallingMixin:
                             continue
                         _raw_func_data = func_call.get("function")
                         func_data: Dict[str, Any] = _raw_func_data if isinstance(_raw_func_data, dict) else {}
+                        thought_sig = func_call.get("thought_signature")
                         # Initialize accumulator if needed
                         if call_id not in tool_calls_accumulator:
-                            tool_calls_accumulator[call_id] = {
+                            entry = {
                                 "id": call_id,
                                 "type": func_call.get("type", "function"),
                                 "function": func_data or {"name": "", "arguments": "{}"},
                             }
+                            if thought_sig:
+                                entry["thought_signature"] = thought_sig
+                            tool_calls_accumulator[call_id] = entry
                         else:
                             # Update accumulator (merge arguments if needed)
                             existing_call = tool_calls_accumulator[call_id]
@@ -522,6 +646,8 @@ class GoogleFunctionCallingMixin:
                                     new_args = func_data["arguments"]
                                     if new_args and new_args != "{}":
                                         existing_call["function"]["arguments"] = new_args
+                            if thought_sig and not existing_call.get("thought_signature"):
+                                existing_call["thought_signature"] = thought_sig
 
                         # Yield tool call update if return_chunks=True
                         if return_chunks:

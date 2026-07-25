@@ -1999,6 +1999,7 @@ class HybridAgent(BaseAIAgent):
         *,
         thought_raw: str,
         tool_calls_to_process: List[Dict[str, Any]],
+        content_thought_signature: Optional[str] = None,
         messages: List[LLMMessage],
         iteration: int,
         state: ToolLoopRunState,
@@ -2031,6 +2032,7 @@ class HybridAgent(BaseAIAgent):
                 role="assistant",
                 content=(thought_raw or "").strip() or None,
                 tool_calls=tool_calls_to_process or None,
+                thought_signature=content_thought_signature,
             )
         )
 
@@ -2377,6 +2379,10 @@ class HybridAgent(BaseAIAgent):
 
         thought_raw = response.content or ""
         state.total_tokens += getattr(response, "total_tokens", 0)
+        response_metadata = getattr(response, "metadata", None) or {}
+        content_thought_signature = response_metadata.get("content_thought_signature")
+        if not isinstance(content_thought_signature, str):
+            content_thought_signature = None
 
         cache_read_tokens = getattr(response, "cache_read_tokens", None)
         cache_creation_tokens = getattr(response, "cache_creation_tokens", None)
@@ -2404,6 +2410,7 @@ class HybridAgent(BaseAIAgent):
             return await self._process_tool_calls_batch(
                 thought_raw=thought_raw,
                 tool_calls_to_process=tool_calls_to_process,
+                content_thought_signature=content_thought_signature,
                 messages=messages,
                 iteration=iteration,
                 state=state,
@@ -2482,16 +2489,21 @@ class HybridAgent(BaseAIAgent):
 
         thought_tokens: List[str] = []
         tool_calls_from_stream = None
+        content_thought_signature: Optional[str] = None
 
         async for chunk in stream_gen:
             if isinstance(chunk, StreamChunk):
                 if chunk.type == "thought" and chunk.content:
+                    if getattr(chunk, "thought_signature", None):
+                        content_thought_signature = chunk.thought_signature
                     yield {
                         "type": "thinking_token",
                         "content": chunk.content,
                         "timestamp": datetime.utcnow().isoformat(),
                     }
                 elif chunk.type == "token" and chunk.content:
+                    if getattr(chunk, "thought_signature", None):
+                        content_thought_signature = chunk.thought_signature
                     thought_tokens.append(chunk.content)
                     yield {
                         "type": "token",
@@ -2537,6 +2549,7 @@ class HybridAgent(BaseAIAgent):
             outcome = await self._process_tool_calls_batch(
                 thought_raw=thought_raw,
                 tool_calls_to_process=tool_calls_from_stream,
+                content_thought_signature=content_thought_signature,
                 messages=messages,
                 iteration=iteration,
                 state=state,

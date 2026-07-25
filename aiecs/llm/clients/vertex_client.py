@@ -26,7 +26,9 @@ from aiecs.llm.clients.base_client import (  # noqa: E402
 )
 from aiecs.llm.clients.google_function_calling_mixin import (  # noqa: E402
     GoogleFunctionCallingMixin,
-    extract_content_from_google_response,
+    build_google_function_call_part,
+    build_google_text_part,
+    extract_content_and_signature_from_google_response,
 )
 from aiecs.config.config import get_settings  # noqa: E402
 
@@ -523,7 +525,13 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
 
                 parts = []
                 if msg.content:
-                    parts.append(types.Part.from_text(text=msg.content))
+                    # Restore content-part thought_signature when thinking text was split out.
+                    parts.append(
+                        build_google_text_part(
+                            msg.content,
+                            thought_signature=msg.thought_signature,
+                        )
+                    )
 
                 # Add images if present
                 if msg.images:
@@ -547,7 +555,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                             )
 
                 if sanitized_tool_calls:
-                    for tool_call in sanitized_tool_calls:
+                    for index, tool_call in enumerate(sanitized_tool_calls):
                         func = tool_call.get("function") or {}
                         func_name = func.get("name", "")
                         func_args = func.get("arguments", "{}")
@@ -555,10 +563,16 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                             args_dict = json.loads(func_args) if isinstance(func_args, str) else func_args
                         except json.JSONDecodeError:
                             args_dict = {}
-                        # Create FunctionCall part using types.Part + types.FunctionCall
-                        # (Part.from_dict is deprecated in the new SDK)
-                        function_call_part = types.Part(function_call=types.FunctionCall(name=func_name, args=args_dict))
-                        parts.append(function_call_part)
+                        # Gemini 3 requires thought_signature on the first functionCall
+                        # part of each step; parallel subsequent calls usually omit it.
+                        parts.append(
+                            build_google_function_call_part(
+                                func_name,
+                                args_dict if isinstance(args_dict, dict) else {},
+                                thought_signature=tool_call.get("thought_signature"),
+                                require_signature=(index == 0),
+                            )
+                        )
 
                 contents.append(types.Content(role="model", parts=parts))
 
@@ -574,7 +588,12 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 parts = []
 
                 if msg.content:
-                    parts.append(types.Part.from_text(text=msg.content))
+                    parts.append(
+                        build_google_text_part(
+                            msg.content,
+                            thought_signature=msg.thought_signature if msg.role == "assistant" else None,
+                        )
+                    )
 
                 if msg.images:
                     for image_source in msg.images:
@@ -839,7 +858,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                         )
 
             # Handle response content safely - prefer parts so part.thought is included
-            content = extract_content_from_google_response(response)
+            content, content_thought_signature = extract_content_and_signature_from_google_response(response)
             if content:
                 self.logger.debug(f"Vertex AI response received: {content[:100]}...")
             elif hasattr(response, "candidates") and response.candidates:
@@ -927,6 +946,10 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             # Extract function calls from response if present
             function_calls = self._extract_function_calls_from_google_response(response)
 
+            response_metadata: Optional[Dict[str, Any]] = None
+            if content_thought_signature:
+                response_metadata = {"content_thought_signature": content_thought_signature}
+
             llm_response = LLMResponse(
                 content=content or "",
                 provider=self.provider_name,
@@ -938,6 +961,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 cache_read_tokens=cache_read_tokens,
                 cache_hit=cache_hit,
                 thinking_tokens=thinking_tokens,
+                metadata=response_metadata,
             )
 
             # Attach function call info if present

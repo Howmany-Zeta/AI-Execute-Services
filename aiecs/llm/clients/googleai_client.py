@@ -19,7 +19,11 @@ from aiecs.llm.clients.base_client import (
     RateLimitError,
 )
 from aiecs.config.config import get_settings
-from aiecs.llm.clients.google_function_calling_mixin import extract_content_from_google_response
+from aiecs.llm.clients.google_function_calling_mixin import (
+    build_google_function_call_part,
+    build_google_text_part,
+    extract_content_from_google_response,
+)
 from aiecs.llm.utils.image_utils import parse_image_source
 
 logger = logging.getLogger(__name__)
@@ -107,7 +111,12 @@ class GoogleAIClient(BaseLLMClient):
             elif msg.role == "assistant" and msg.tool_calls:
                 parts = []
                 if msg.content:
-                    parts.append(types.Part(text=msg.content))
+                    parts.append(
+                        build_google_text_part(
+                            msg.content,
+                            thought_signature=msg.thought_signature,
+                        )
+                    )
 
                 # Add images if present
                 if msg.images:
@@ -133,7 +142,7 @@ class GoogleAIClient(BaseLLMClient):
 
                 sanitized_tool_calls = self._sanitize_tool_calls(msg.tool_calls)
                 if sanitized_tool_calls:
-                    for tool_call in sanitized_tool_calls:
+                    for index, tool_call in enumerate(sanitized_tool_calls):
                         func = tool_call.get("function") or {}
                         func_name = func.get("name", "")
                         func_args = func.get("arguments", "{}")
@@ -144,9 +153,14 @@ class GoogleAIClient(BaseLLMClient):
                         except json.JSONDecodeError:
                             args_dict = {}
 
-                        # Create FunctionCall part using types.FunctionCall
-                        function_call = types.FunctionCall(name=func_name, args=args_dict)
-                        parts.append(types.Part(function_call=function_call))
+                        parts.append(
+                            build_google_function_call_part(
+                                func_name,
+                                args_dict if isinstance(args_dict, dict) else {},
+                                thought_signature=tool_call.get("thought_signature"),
+                                require_signature=(index == 0),
+                            )
+                        )
 
                 contents.append(types.Content(role="model", parts=parts))
 
@@ -157,7 +171,12 @@ class GoogleAIClient(BaseLLMClient):
 
                 # Add text content if present
                 if msg.content:
-                    parts.append(types.Part(text=msg.content))
+                    parts.append(
+                        build_google_text_part(
+                            msg.content,
+                            thought_signature=msg.thought_signature if msg.role == "assistant" else None,
+                        )
+                    )
 
                 # Add images if present
                 if msg.images:
