@@ -9,6 +9,25 @@ See also `docs/changelog.rst` for historical release notes.
 
 ## [Unreleased]
 
+
+## [2.1.1] - 2026-07-26
+
+### Fixed
+
+- **Gemini / Vertex tool calling:** round-trip `thought_signature` on function-call parts (stream and non-stream) so Vertex no longer rejects follow-up turns with `Function call is missing a thought_signature`.
+
+### Changed
+
+- **Dependencies:** drop unused tool stacks (langchain/langgraph, spacy, pandas/scipy/matplotlib, and related); keep `numpy` for context diversity. Make `clickhouse-connect` an optional extra (`aiecs[clickhouse]`).
+- **Docs layout:** move GVR / host integration guides from `aiecs/docs` to root `docs/` (no longer packaged inside the wheel).
+
+### Removed
+
+- **`research_tool` and `langchain_adapter`** from core tool surface.
+- **`aiecs/scripts/dependance_check`** and related console scripts / docker healthcheck usage.
+- **`aiecs/scripts/tools_develop`** and related console scripts / pre-commit schema-coverage hooks.
+
+
 ## [2.1.0] - 2026-07-23
 
 ### Removed
