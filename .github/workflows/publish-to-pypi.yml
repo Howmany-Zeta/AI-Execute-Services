@@ -135,4 +135,4 @@ jobs:
         
         # Test command line tools
         aiecs --help
-        aiecs-check-deps --help
+        aiecs-version --show

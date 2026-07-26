@@ -85,4 +85,4 @@ jobs:
 
         # Test command line tools
         aiecs --help || echo "⚠️ aiecs command not available"
-        aiecs-check-deps --help || echo "⚠️ aiecs-check-deps command not available"
+        aiecs-version --show || echo "⚠️ aiecs-version command not available"

@@ -184,10 +184,7 @@ EXPOSE 8000
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "from aiecs.scripts.dependance_check.dependency_checker import DependencyChecker; \
-    checker = DependencyChecker(); \
-    tools = checker.check_all_dependencies(); \
-    exit(0 if len(tools) == 30 else 1)"
+    CMD python -c "import aiecs; assert aiecs.__version__"
 
 # 默认命令 (可以被 docker run 覆盖)
 CMD ["python", "-m", "aiecs"]

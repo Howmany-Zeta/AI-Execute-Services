@@ -140,26 +140,6 @@ services:
       jupyter lab --ip=0.0.0.0 --port=8888 --no-browser
       --allow-root --NotebookApp.token='' --NotebookApp.password=''"
 
-  # ============================================================================
-  # 依赖检查服务 (一次性运行)
-  # ============================================================================
-  dependency-check:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: production
-    container_name: aiecs-dep-check
-    volumes:
-      - ./dependency_report.txt:/app/dependency_report.txt
-    networks:
-      - aiecs-network
-    command: >
-      bash -c "python aiecs/scripts/dependance_check/dependency_checker.py > /app/dependency_report.txt 2>&1 &&
-      echo 'Dependency check completed. See dependency_report.txt' &&
-      exit 0"
-    profiles:
-      - tools
-
 # ============================================================================
 # 网络配置
 # ============================================================================
