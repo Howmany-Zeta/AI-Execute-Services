@@ -119,7 +119,6 @@ jobs:
           poetry run pytest test/integration/tools/test_schema_generation_integration.py \
             -m integration \
             --cov=aiecs.tools.schema_generator \
-            --cov=aiecs.scripts.tools_develop.validate_tool_schemas \
             --cov-report=term-missing \
             --tb=short \
             -v

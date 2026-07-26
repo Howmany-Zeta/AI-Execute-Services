@@ -6,9 +6,8 @@
 
 Copy or import from ``app/services/multi_task/`` — L1/L2 policy stays in the host.
 
-Packaged host integration guide (F6):
-``aiecs/docs/host/context_compression_integration.md`` (also under site-packages
-after ``pip install aiecs``).
+Host integration guide (F6):
+``docs/host/context_compression_integration.md``.
 """
 
 from aiecs.domain.context.compression.tokens import estimate_transcript_tokens

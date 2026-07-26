@@ -1,9 +1,8 @@
 # Context compression — host integration guide (O10)
 
-> **Canonical source (wheel):** [`aiecs/docs/host/context_compression_integration.md`](../../aiecs/docs/host/context_compression_integration.md)
+> **Canonical source:** [`docs/host/context_compression_integration.md`](../host/context_compression_integration.md)
 >
-> This repo-local copy is kept for developer browsing. PyPI installs expose the packaged
-> path under `site-packages/aiecs/docs/host/context_compression_integration.md`.
+> This file is a shorter developer-facing summary; prefer the canonical guide above.
 
 This document explains how **python-middleware** (and other hosts) integrate with
 `aiecs.domain.context.compression` without duplicating OpenHarness `run_query` or

@@ -26,7 +26,7 @@ This document lists the **stable GVR-facing API surface** for python-middleware 
 1. Open PR with `CHANGELOG.md` entry under **Breaking** describing each GVR-facing change.
 2. Update `tests/contract/test_aiecs_gvr_surface.py` snapshots intentionally (not silently).
 3. Bump **major** version when removing or renaming contract-covered symbols or changing required method signatures.
-4. Publish migration notes in `aiecs/docs/migration_2.1.0rc4_to_ga.md` (or successor) before GA/rc promotion.
+4. Publish migration notes in `docs/migration_2.1.0rc4_to_ga.md` (or successor) before GA/rc promotion.
 5. Notify python-middleware MC GVR team; allow ≥1 release cycle before removing deprecated aliases.
 
 ### Known opt-in breaking changes (GA GVR train)

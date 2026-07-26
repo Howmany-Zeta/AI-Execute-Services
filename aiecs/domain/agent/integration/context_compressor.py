@@ -12,7 +12,7 @@ Smart context compression for token limits.
     **Deprecated:** ``ContextCompressor`` emits :class:`DeprecationWarning` on
     construction; scheduled removal in **aiecs 2.2.0**. New code should use
     ``auto_compact_if_needed``, ``compact_formatted_transcript``, or
-    ``maybe_compact_before_llm`` (see ``aiecs/docs/host/context_compression_integration.md``).
+    ``maybe_compact_before_llm`` (see ``docs/host/context_compression_integration.md``).
 """
 
 import asyncio

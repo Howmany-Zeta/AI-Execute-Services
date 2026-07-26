@@ -1,7 +1,7 @@
 # Context compression — host integration guide
 
-This document is the **canonical host integration guide** shipped inside the `aiecs`
-PyPI wheel (`aiecs/docs/host/context_compression_integration.md`). It explains how
+This document is the **canonical host integration guide**
+(`docs/host/context_compression_integration.md`). It explains how
 **python-middleware** (and other hosts) integrate with the aiecs context compression
 kernel without duplicating OpenHarness `run_query` or Claude Code UI/SSE layers.
 
@@ -28,7 +28,7 @@ For the full host orchestration plan, see the python-middleware repo:
 | **F3** | `CompressionPolicyResolver`, `resolve_layer_compression_policy` | `aiecs.domain.context.compression.policy_resolver` | L2 / L3 |
 | **F4** | `PluginPhase.ON_TOOL_BATCH_END` | `aiecs.domain.agent.plugins.models` | L3 (plugin phase; G1 batch-end compaction) |
 | **F5** | `RETRY_COMPACT_PROGRESS_PHASES`, `compact_progress_event_to_sse_payload` | `aiecs.host.compression.progress_bridge` | L2 / L3 |
-| **F6** | This document | `aiecs/docs/host/context_compression_integration.md` (wheel) | Host |
+| **F6** | This document | `docs/host/context_compression_integration.md` | Host |
 | **F7** | `estimate_transcript_tokens` | `aiecs.host.compression` | L1 / L2 |
 
 > **G5 (Epic 4):** `estimate_transcript_tokens` is re-exported from
