@@ -80,9 +80,8 @@ jobs:
           fi
         done
 
-        # Test basic import
+        # Test basic import + CLI that does not start the server
+        # (aiecs entrypoint boots uvicorn and needs Postgres; do not use aiecs --help here)
         python -c "import aiecs; print(f'AIECS version: {aiecs.__version__}')" || echo "⚠️ Import test failed"
-
-        # Test command line tools
-        aiecs --help || echo "⚠️ aiecs command not available"
         aiecs-version --show || echo "⚠️ aiecs-version command not available"
+        command -v aiecs || echo "⚠️ aiecs command not available"

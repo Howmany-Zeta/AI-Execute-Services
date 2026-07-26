@@ -1,22 +1,26 @@
 # Publishing AIECS to PyPI
 
-Release checklist for building and uploading `aiecs` to TestPyPI / PyPI.
+Release checklist for cutting a version and letting **GitHub Actions** build and upload `aiecs` to TestPyPI / PyPI.
+
+Do **not** run local `twine upload`. Push the tag (and publish a GitHub Release for PyPI); CI handles build and publish via trusted publishing.
 
 Version bumps are managed by `aiecs-version`. See [`aiecs/scripts/aid/VERSION_MANAGEMENT.md`](aiecs/scripts/aid/VERSION_MANAGEMENT.md) for full options (`--show`, `--version`, `--bump`, `--no-changelog`).
 
+## How publish is triggered
+
+| Target | Workflow | Trigger |
+|--------|----------|---------|
+| [TestPyPI](https://test.pypi.org/p/aiecs) | [`.github/workflows/publish-to-testpypi.yml`](.github/workflows/publish-to-testpypi.yml) | Push a tag matching `v*` |
+| [PyPI](https://pypi.org/p/aiecs) | [`.github/workflows/publish-to-pypi.yml`](.github/workflows/publish-to-pypi.yml) | Publish a GitHub **Release** for that tag (or `workflow_dispatch`) |
+
+Both workflows use OIDC trusted publishing (`id-token: write`). No PyPI API tokens are needed on the developer machine.
+
 ## Prerequisites
 
-1. Accounts on [PyPI](https://pypi.org/) and [TestPyPI](https://test.pypi.org/)
-2. Project dependencies installed (`poetry install`)
-3. Build / upload tools available:
-
-```bash
-poetry run pip install build twine
-# or: pip install build twine
-```
-
-4. Clean working tree for the release commit (recommended)
-5. Pre-commit hooks enabled (release commits run license/black/flake8/mypy/deptry)
+1. Project dependencies installed (`poetry install`)
+2. Clean working tree for the release commit (recommended)
+3. Pre-commit hooks enabled (release commits run license/black/flake8/mypy/deptry)
+4. Permission to push tags / create releases on `origin`
 
 ## 1. Set the release version
 
@@ -54,16 +58,17 @@ If you also changed dependencies, refresh the lockfile:
 poetry lock --no-interaction
 ```
 
-Confirm:
+Confirm the bare PEP 440 version (use this for tags; `aiecs-version --show` prints a label prefix):
 
 ```bash
-poetry run aiecs-version --show
+VERSION=$(poetry run python -c "import aiecs; print(aiecs.__version__)")
+echo "${VERSION}"
 ```
 
 ## 2. Commit
 
 ```bash
-VERSION=$(poetry run aiecs-version --show)
+VERSION=$(poetry run python -c "import aiecs; print(aiecs.__version__)")
 
 git add aiecs/__init__.py aiecs/main.py pyproject.toml CHANGELOG.md
 # plus any other release-related files (e.g. poetry.lock, PUBLISH.md, code/tests)
@@ -74,12 +79,10 @@ git commit -m "Release v${VERSION}"
 
 Pre-commit may take a minute; fix any hook failures and create a **new** commit (do not `--amend` unless you intentionally follow the project amend rules).
 
-## 3. Tag and push
-
-Use the `tag` subcommand (not `add` / typos like `agg`):
+## 3. Tag and push (triggers TestPyPI)
 
 ```bash
-VERSION=$(poetry run aiecs-version --show)
+VERSION=$(poetry run python -c "import aiecs; print(aiecs.__version__)")
 
 # Create lightweight tag on current HEAD
 git tag "v${VERSION}"
@@ -87,7 +90,7 @@ git tag "v${VERSION}"
 # Verify tag points at the release commit
 git show -s --format='%h %s%n%d' "v${VERSION}"
 
-# Push branch, then tag
+# Push branch, then tag — tag push starts publish-to-testpypi.yml
 git push origin HEAD
 git push origin "v${VERSION}"
 ```
@@ -99,6 +102,16 @@ git tag -l "v${VERSION}"
 git ls-remote --tags origin "v${VERSION}"
 ```
 
+Watch the workflow on GitHub Actions (`Publish to TestPyPI`). When it finishes:
+
+```bash
+pip install \
+  --index-url https://test.pypi.org/simple/ \
+  --extra-index-url https://pypi.org/simple/ \
+  "aiecs==${VERSION}"
+python -c "import aiecs; print(aiecs.__version__)"
+```
+
 If the tag already exists locally and you need to move it (only when you created it and it was never pushed):
 
 ```bash
@@ -108,85 +121,68 @@ git tag "v${VERSION}"
 
 Do **not** force-push tags to a shared remote unless the team explicitly agrees.
 
-## 4. Build the package
+## 4. Publish a GitHub Release (triggers PyPI)
+
+Creating and **publishing** a GitHub Release for `v${VERSION}` starts `publish-to-pypi.yml`.
 
 ```bash
-# Clean previous builds
-rm -rf dist/ build/ *.egg-info
+VERSION=$(poetry run python -c "import aiecs; print(aiecs.__version__)")
 
-# Build sdist + wheel
-poetry run python -m build
-# or: python -m build
+# Example with GitHub CLI (release notes can be empty or taken from CHANGELOG)
+gh release create "v${VERSION}" \
+  --title "v${VERSION}" \
+  --notes-file <(awk "/^## \\[${VERSION}\\]/{flag=1; next} /^## \\[/{flag=0} flag" CHANGELOG.md)
 ```
 
-Artifacts appear under `dist/` as `aiecs-<version>.tar.gz` and `aiecs-<version>-py3-none-any.whl`.
+Or create the release in the GitHub UI from the existing tag.
 
-## 5. Smoke-test the wheel locally
-
-```bash
-VERSION=$(poetry run aiecs-version --show)
-
-python -m venv test_env
-source test_env/bin/activate  # Windows: test_env\Scripts\activate
-
-pip install "dist/aiecs-${VERSION}-py3-none-any.whl"
-
-python -c "import aiecs; print(aiecs.__version__)"
-aiecs --help
-aiecs-version --show
-aiecs-patch-weasel --help
-
-deactivate
-rm -rf test_env
-```
-
-## 6. Upload to TestPyPI (recommended first)
+Watch `Publish to PyPI` on GitHub Actions. When it finishes:
 
 ```bash
-poetry run twine upload --repository testpypi dist/*
-# or: python -m twine upload --repository testpypi dist/*
-
-VERSION=$(poetry run aiecs-version --show)
-pip install \
-  --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ \
-  "aiecs==${VERSION}"
-```
-
-## 7. Upload to PyPI
-
-```bash
-poetry run twine upload dist/*
-# or: python -m twine upload dist/*
-```
-
-## 8. Post-upload verification
-
-```bash
-VERSION=$(poetry run aiecs-version --show)
-
 pip install --upgrade "aiecs==${VERSION}"
 python -c "import aiecs; print(aiecs.__version__)"
 ```
 
+## Optional: local build smoke test
+
+CI builds the package; local build is optional before tagging.
+
+```bash
+VERSION=$(poetry run python -c "import aiecs; print(aiecs.__version__)")
+
+rm -rf dist/ build/ *.egg-info
+poetry run pip install build
+poetry run python -m build
+
+python -m venv test_env
+source test_env/bin/activate  # Windows: test_env\Scripts\activate
+pip install "dist/aiecs-${VERSION}-py3-none-any.whl"
+python -c "import aiecs; print(aiecs.__version__)"
+aiecs-version --show
+deactivate
+rm -rf test_env
+```
+
 ## Quick reference
 
-| Goal | Command |
-|------|---------|
+| Goal | Command / action |
+|------|------------------|
 | Show version | `poetry run aiecs-version --show` |
+| Bare version for tags | `poetry run python -c "import aiecs; print(aiecs.__version__)"` |
 | Cut stable `X.Y.Z` | `poetry run aiecs-version --version X.Y.Z` |
 | Next patch/minor/major | `poetry run aiecs-version --bump patch\|minor\|major` |
 | Next RC | `poetry run aiecs-version --bump rc` |
 | Skip CHANGELOG rewrite | add `--no-changelog` |
 | Refresh lock after dep edits | `poetry lock --no-interaction` |
-| Create tag | `git tag "v${VERSION}"` |
-| Push tag | `git push origin "v${VERSION}"` |
+| Trigger TestPyPI | `git push origin "v${VERSION}"` |
+| Trigger PyPI | Publish a GitHub Release for `v${VERSION}` |
 | Verify remote tag | `git ls-remote --tags origin "v${VERSION}"` |
 
 ## Notes
 
 - Prefer Poetry-invoked tools (`poetry run …`) so the active project environment is used.
 - Do not edit version strings by hand across files; always use `aiecs-version`.
-- Tag names use a `v` prefix (`v2.1.0`); PyPI / `aiecs-version` use the bare PEP 440 version (`2.1.0`).
+- Tag names use a `v` prefix (`v2.1.1`); PyPI / `aiecs-version` use the bare PEP 440 version (`2.1.1`).
 - PyPI versions are immutable: fix mistakes with a new patch (or a new RC), not a re-upload of the same version.
+- Do not upload with local `twine`; the GitHub workflows are the supported publish path.
 - For version-manager behavior and PEP 440 pre-release suffixes (`rcN`, `aN`, `bN`, `.devN`), see [`VERSION_MANAGEMENT.md`](aiecs/scripts/aid/VERSION_MANAGEMENT.md).

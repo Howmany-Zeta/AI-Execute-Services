@@ -130,9 +130,8 @@ jobs:
         pip install --pre "aiecs==${PKG_VERSION}"
         echo "✅ Package installed successfully!"
         
-        # Test basic import (requires Python >=3.11 per pyproject.toml)
+        # Test basic import + CLI that does not start the server
+        # (aiecs entrypoint boots uvicorn and needs Postgres; do not use aiecs --help here)
         python -c "import aiecs; print(f'AIECS version: {aiecs.__version__}')"
-        
-        # Test command line tools
-        aiecs --help
         aiecs-version --show
+        command -v aiecs
