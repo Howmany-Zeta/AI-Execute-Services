@@ -65,9 +65,8 @@ def main():
     # Deprecated tool packages removed in 2.0.0 (knowledge_graph, etc.)
     # excluded per ADR-002 Phase 1 allowlist.
     tools_to_test = [
-        # Task Tools (slimmed in 2.1.0; search_tool is standalone)
+        # Task Tools (slimmed in 2.1.0; search_tool is standalone; research removed)
         ("ImageTool", "aiecs.tools.task_tools.image_tool", "ImageTool"),
-        ("ResearchTool", "aiecs.tools.task_tools.research_tool", "ResearchTool"),
     ]
 
     results = []

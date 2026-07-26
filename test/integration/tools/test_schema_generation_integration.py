@@ -35,22 +35,6 @@ def discovered_tools():
 class TestSchemaGenerationIntegration:
     """Integration tests for schema generation functionality."""
 
-    def test_schema_generation_for_research_tool(self, discovered_tools):
-        """Test schema generation for research tool methods."""
-        if "research" not in discovered_tools:
-            pytest.skip("research tool not available")
-
-        research_tool = discovered_tools["research"]
-        schemas = generate_schemas_for_tool(research_tool)
-
-        # Should generate schemas for multiple methods
-        assert len(schemas) > 0, "Should generate at least one schema"
-
-        # Verify schemas are valid Pydantic models
-        for method_name, schema in schemas.items():
-            assert issubclass(schema, BaseModel), f"Schema for {method_name} should be a BaseModel"
-            assert schema.__name__.endswith("Schema"), f"Schema name should end with 'Schema'"
-
     def test_schema_generation_for_image_tool(self, discovered_tools):
         """Test schema generation for image tool methods."""
         if "image" not in discovered_tools:
@@ -65,23 +49,25 @@ class TestSchemaGenerationIntegration:
         for method_name, schema in schemas.items():
             assert hasattr(schema, "model_fields"), f"Schema should have model_fields"
             assert schema.__doc__, f"Schema should have a docstring"
+            assert issubclass(schema, BaseModel), f"Schema for {method_name} should be a BaseModel"
+            assert schema.__name__.endswith("Schema"), f"Schema name should end with 'Schema'"
 
     def test_schema_generation_handles_complex_types(self, discovered_tools):
         """Test that schema generation handles complex types gracefully."""
-        if "research" not in discovered_tools:
-            pytest.skip("research tool not available")
+        if "image" not in discovered_tools:
+            pytest.skip("image tool not available")
 
-        research_tool = discovered_tools["research"]
-        
+        image_tool = discovered_tools["image"]
+
         # Find a method that might have complex types
-        for method_name in dir(research_tool):
-            if method_name.startswith("_") or not callable(getattr(research_tool, method_name)):
+        for method_name in dir(image_tool):
+            if method_name.startswith("_") or not callable(getattr(image_tool, method_name)):
                 continue
-            
-            method = getattr(research_tool, method_name)
+
+            method = getattr(image_tool, method_name)
             if isinstance(method, type):
                 continue
-            
+
             try:
                 schema = generate_schema_from_method(method, method_name)
                 if schema:

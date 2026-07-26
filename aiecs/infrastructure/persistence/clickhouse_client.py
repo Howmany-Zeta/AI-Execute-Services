@@ -54,7 +54,7 @@ class ClickHouseClient:
     async def initialize(self) -> bool:
         """Initialize ClickHouse connection."""
         if not CLICKHOUSE_AVAILABLE:
-            logger.warning("clickhouse-connect not installed, permanent storage disabled")
+            logger.warning("clickhouse-connect not installed; permanent storage disabled. " "Install with: pip install 'aiecs[clickhouse]'")
             return False
 
         try:

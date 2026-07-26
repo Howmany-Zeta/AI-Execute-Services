@@ -434,22 +434,24 @@ if __name__ == "__main__":
     # Discover tools
     discover_tools()
 
-    # Generate Schema for ResearchTool (retained task tool)
-    print("Generating Schema for ResearchTool:")
+    # Generate Schema for a retained task tool (image) when present
+    print("Generating Schema for registered tools:")
     print("=" * 80)
 
-    research_tool = TOOL_CLASSES["research"]
-    schemas = generate_schemas_for_tool(research_tool)
+    sample_name = "image" if "image" in TOOL_CLASSES else next(iter(TOOL_CLASSES), None)
+    if sample_name is None:
+        print("No tools registered.")
+    else:
+        schemas = generate_schemas_for_tool(TOOL_CLASSES[sample_name])
+        print(f"\nGenerated {len(schemas)} Schemas for '{sample_name}':\n")
 
-    print(f"\nGenerated {len(schemas)} Schemas:\n")
-
-    # Show first 3 examples
-    for method_name, schema in list(schemas.items())[:3]:
-        print(f"{schema.__name__}:")
-        print(f"  Description: {schema.__doc__}")
-        print("  Fields:")
-        for field_name, field_info in schema.model_fields.items():
-            required = "Required" if field_info.is_required() else "Optional"
-            default = f" (default: {field_info.default})" if not field_info.is_required() and field_info.default is not None else ""
-            print(f"    - {field_name}: {field_info.description} [{required}]{default}")
-        print()
+        # Show first 3 examples
+        for method_name, schema in list(schemas.items())[:3]:
+            print(f"{schema.__name__}:")
+            print(f"  Description: {schema.__doc__}")
+            print("  Fields:")
+            for field_name, field_info in schema.model_fields.items():
+                required = "Required" if field_info.is_required() else "Optional"
+                default = f" (default: {field_info.default})" if not field_info.is_required() and field_info.default is not None else ""
+                print(f"    - {field_name}: {field_info.description} [{required}]{default}")
+            print()

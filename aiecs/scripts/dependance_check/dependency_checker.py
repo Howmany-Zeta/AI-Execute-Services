@@ -1447,7 +1447,7 @@ class DependencyChecker:
             # Task tools retained in 2.1.0 slim (+ standalone search_tool)
             "image": self.check_image_tool_dependencies(),
             "search": self.check_search_tool_dependencies(),
-            "research": self.check_research_tool_dependencies(),
+            # research_tool removed (spaCy/scipy stack)
             # Document tools (7 total)
             "document_parser": self.check_document_parser_tool_dependencies(),
             "document_writer": self.check_document_writer_tool_dependencies(),

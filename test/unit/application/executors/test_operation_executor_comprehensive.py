@@ -29,36 +29,28 @@ def sample_csv_file(test_data_dir):
     """Create a sample CSV file for testing."""
     # Create test data directory if it doesn't exist
     test_data_dir.mkdir(exist_ok=True)
-    
+
     csv_file = test_data_dir / "sample_data.csv"
     if not csv_file.exists():
-        import pandas as pd
-        data = {
-            'name': ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve'],
-            'age': [25, 30, 35, 28, 32],
-            'salary': [50000, 60000, 70000, 55000, 65000],
-            'department': ['IT', 'HR', 'IT', 'Finance', 'IT']
-        }
-        df = pd.DataFrame(data)
-        df.to_csv(csv_file, index=False)
-    
+        csv_file.write_text(
+            "name,age,salary,department\n"
+            "Alice,25,50000,IT\n"
+            "Bob,30,60000,HR\n"
+            "Charlie,35,70000,IT\n"
+            "Diana,28,55000,Finance\n"
+            "Eve,32,65000,IT\n"
+        )
+
     return str(csv_file)
 
 
 @pytest.fixture
 def temp_csv_file():
     """Create a temporary CSV file for testing."""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
-        import pandas as pd
-        data = {
-            'x': [1, 2, 3, 4, 5],
-            'y': [2, 4, 6, 8, 10],
-            'group': ['A', 'A', 'B', 'B', 'C']
-        }
-        df = pd.DataFrame(data)
-        df.to_csv(f.name, index=False)
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+        f.write("x,y,group\n1,2,A\n2,4,A\n3,6,B\n4,8,B\n5,10,C\n")
         yield f.name
-    
+
     # Cleanup
     if os.path.exists(f.name):
         os.unlink(f.name)
@@ -777,10 +769,10 @@ class TestErrorScenarios:
     @pytest.mark.asyncio
     async def test_execute_operation_with_tool_error(self, operation_executor):
         """Test operation execution when tool raises an error."""
-        # Try to use stats tool with invalid file
         with pytest.raises(Exception):  # Should propagate the underlying error
             await operation_executor.execute_operation(
-                "research.mill_agreement", {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}
+                "research.mill_agreement",
+                {"cases": "FORCE_ERROR"},
             )
     
     @pytest.mark.asyncio

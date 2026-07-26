@@ -515,10 +515,10 @@ class TestErrorScenarios:
     @pytest.mark.asyncio
     async def test_execute_operation_with_tool_error(self, operation_executor):
         """Test operation execution when tool raises an error."""
-        # Try to use stats tool with invalid file
         with pytest.raises(Exception):  # Should propagate the underlying error
             await operation_executor.execute_operation(
-                "research.mill_agreement", {"cases": [{"attrs": {"a": True}, "outcome": True}, {"attrs": {"a": True, "b": True}, "outcome": True}]}
+                "research.mill_agreement",
+                {"cases": "FORCE_ERROR"},
             )
     
     @pytest.mark.asyncio

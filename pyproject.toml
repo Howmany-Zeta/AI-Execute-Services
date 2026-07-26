@@ -85,54 +85,25 @@ dependencies = [
     "google-auth (>=2.25.0,<3.0.0)",                # Google authentication library
     "google-auth-httplib2 (>=0.2.0,<1.0.0)",        # HTTP transport for Google Auth
     "google-auth-oauthlib (>=1.2.0,<2.0.0)",        # OAuth 2.0 support for Google Auth
-    "langchain (>=0.3.26,<0.4.0)",                  # Framework for developing LLM applications
-    "langgraph (>=0.5.3,<0.6.0)",                   # Graph-based state machine for LangChain
-    "weasel (==0.4.1)",                              # SpaCy's configuration system
 
     # =============================================================================
-    # Natural Language Processing
+    # Numerical / embeddings helpers
     # =============================================================================
-    "spacy (>=3.8.7,<4.0.0)",                       # Industrial-strength NLP library
-    # "transformers (>=4.56.1,<5.0.0)",             # Installation requirements are costly and temporarily disabled
-    # "torch (>=2.8.0,<3.0.0)",                     # Installation requirements are costly and temporarily disabled
-
-    # =============================================================================
-    # Data Processing and Analysis
-    # =============================================================================
-    "numpy (>=2.4.1,<3.0.0)",                       # Fundamental package for numerical computing
-    "pandas (>=2.2.3,<3.0.0)",                      # Data analysis and manipulation library
-    "scipy (>=1.15.3,<2.0.0)",                      # Scientific computing library
-    "pyarrow (>=21.0.0,<22.0.0)",                    # Apache Arrow for Parquet file support
-    "tabulate (>=0.9.0,<0.10.0)",                   # Pretty-print tabular data
-
-    # =============================================================================
-    # Document / spreadsheet helpers (core document tools removed in 2.1.0 slim)
-    # =============================================================================
-    "openpyxl (>=3.1.5,<4.0.0)",                    # Excel file reading and writing
-    "pdfminer-six (==20250506)",                    # PDF parsing and text extraction
-
-    # =============================================================================
-    # Data Visualization
-    # =============================================================================
-    "matplotlib (>=3.10.3,<4.0.0)",                 # Comprehensive plotting library
+    "numpy (>=2.4.1,<3.0.0)",                       # Embedding diversity / cosine ops in ContextEngine
 
     # =============================================================================
     # Content Extraction / Images
     # =============================================================================
-    "lxml (>=5.4.0,<6.0.0)",                        # Fast XML and HTML processing
     "pillow (>=11.2.1,<12.0.0)",                    # Image processing library (PIL fork); OCR uses system tesseract
+
     # =============================================================================
     # Configuration and Data Formats
     # =============================================================================
     "pyyaml (>=6.0.2,<7.0.0)",                      # YAML parser and emitter
-    "markdown (>=3.8,<4.0)",                        # Markdown parser and converter
-    "python-frontmatter (>=1.1.0,<2.0.0)",          # Frontmatter parser for Markdown files
 
     # =============================================================================
     # Database and Storage
     # =============================================================================
-    "sqlalchemy (>=2.0.41,<3.0.0)",                 # SQL toolkit and ORM
-    "clickhouse-connect (>=0.8.0,<1.0.0)",         # ClickHouse client for permanent context storage (dual-write)
     "asyncpg (>=0.30.0,<1.0.0)",                    # PostgreSQL async driver
 
     # =============================================================================
@@ -164,7 +135,6 @@ dev = [
     "types-tqdm>=4.67.0.20250809",
     "types-pyyaml>=6.0.12.20250915",
     "types-opentracing>=2.4.10.20250622",
-    "types-lxml>=2025.8.25",
     "deptry>=0.23.0,<1.0.0",
 ]
 docs = [
@@ -174,6 +144,9 @@ docs = [
     "myst-parser>=2.0.0,<3.0.0",
     "sphinx-copybutton>=0.5.0,<1.0.0",
 ]
+clickhouse = [
+    "clickhouse-connect>=0.8.0,<1.0.0",             # Optional permanent context dual-write backend
+]
 temporal-graphiti = ["graphiti-core[falkordb]>=0.29.1"]
 temporal-graphiti-neo4j = ["graphiti-core>=0.29.1,<0.30.0"]
 host-compression = ["boto3>=1.34.0,<2.0.0"]
@@ -181,7 +154,6 @@ host-compression = ["boto3>=1.34.0,<2.0.0"]
 [project.scripts]
 aiecs = "aiecs.__main__:main"
 aiecs-version = "aiecs.scripts.aid.version_manager:main"
-aiecs-patch-weasel = "aiecs.scripts.dependance_patch.fix_weasel.fix_weasel_validator:main"
 aiecs-download-nlp-data = "aiecs.scripts.dependance_check.download_nlp_data:main"
 aiecs-check-deps = "aiecs.scripts.dependance_check.dependency_checker:main"
 aiecs-fix-deps = "aiecs.scripts.dependance_check.dependency_fixer:main"
@@ -215,26 +187,27 @@ extend_exclude = [
     "examples",
     "test",
     "aiecs/scripts",
+    # Skill demos / helpers may use optional analysis stacks (pandas, etc.)
+    "aiecs/domain/agent/skills/builtin",
 ]
 ignore = ["DEP003", "DEP004"]
 
 [tool.deptry.per_rule_ignores]
-# DEP002: runtime/optional packages not visible to static import scan in aiecs/
+# DEP002: packages declared for runtime/optional side-effects not visible to static import scan.
+# google-auth-httplib2 / google-auth-oauthlib: Google auth transport extras.
+# python-engineio: required by python-socketio.
+# flower: Celery monitoring CLI (not imported by library code).
+# typing-extensions: typing backport used via typing / annotations.
 DEP002 = [
     "typing-extensions",
     "python-engineio",
     "flower",
     "google-auth-httplib2",
     "google-auth-oauthlib",
-    "langgraph",
-    "weasel",
-    "tabulate",
-    "openpyxl",
-    "pdfminer-six",
-    "lxml",
-    "markdown",
-    "python-frontmatter",
-    "sqlalchemy",
+    # Sync HTTP client retained for optional MCP/skill integrations (not scanned under builtin skills).
+    "requests",
+    # Transitive Vertex transport pin; google-genai uses it without a direct aiecs import.
+    "google-cloud-aiplatform",
 ]
 
 [tool.pytest.ini_options]
