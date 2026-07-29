@@ -10,6 +10,19 @@ See also `docs/changelog.rst` for historical release notes.
 ## [Unreleased]
 
 
+## [2.1.2] - 2026-07-30
+
+### Changed
+
+- **Dependencies:** bump all runtime pins to latest PyPI versions, including major upgrades to `openai` 2.x, `google-genai` 2.x, `redis` 8.x, `cachetools` 7.x, and `aiofiles` 25.x; refresh `poetry.lock`.
+
+### Fixed
+
+- **Redis 8:** pin RESP2 wire protocol and replace deprecated `retry_on_timeout` with explicit retry config in `RedisClient`.
+- **Typing:** remove obsolete redis-py `# type: ignore` comments; normalize `bytes | str` hash keys in `ContextEngine`.
+- **Pillow 12:** migrate `image_tool` from `_getexif()` to `getexif()` and fix `Image.Image` typing for resize/filter paths.
+
+
 ## [2.1.1] - 2026-07-26
 
 ### Fixed
