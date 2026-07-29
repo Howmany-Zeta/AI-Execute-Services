@@ -3,11 +3,19 @@
 #  *  Licensed under the Apache-2.0. See License.txt in the project root for license information.
 #  *--------------------------------------------------------------------------------------------*/
 import redis.asyncio as redis
+from redis.backoff import ExponentialBackoff
+from redis.retry import Retry
 import logging
-from typing import Any, Dict, Optional, cast
+from typing import Any, Dict, Optional
 import os
 
 logger = logging.getLogger(__name__)
+
+
+def _decode_response(value: bytes | str | None) -> Optional[str]:
+    if value is None:
+        return None
+    return value if isinstance(value, str) else value.decode()
 
 
 class RedisClient:
@@ -34,7 +42,8 @@ class RedisClient:
                 password=redis_password,
                 decode_responses=True,
                 max_connections=20,
-                retry_on_timeout=True,
+                protocol=2,
+                retry=Retry(ExponentialBackoff(), 3),
             )
 
             # Create Redis client
@@ -67,17 +76,17 @@ class RedisClient:
     async def hincrby(self, name: str, key: str, amount: int = 1) -> int:
         """Atomically increment hash field"""
         client = await self.get_client()
-        return cast(int, await client.hincrby(name, key, amount))  # type: ignore[misc]
+        return await client.hincrby(name, key, amount)
 
     async def hget(self, name: str, key: str) -> Optional[str]:
         """Get hash field value"""
         client = await self.get_client()
-        return cast(Optional[str], await client.hget(name, key))  # type: ignore[misc]
+        return _decode_response(await client.hget(name, key))
 
     async def hgetall(self, name: str) -> Dict[Any, Any]:
         """Get all hash fields"""
         client = await self.get_client()
-        return cast(Dict[Any, Any], await client.hgetall(name))  # type: ignore[misc]
+        return await client.hgetall(name)
 
     async def hset(
         self,
@@ -119,17 +128,17 @@ class RedisClient:
 
         if mapping is not None:
             # Multiple fields mode
-            return cast(int, await client.hset(name, mapping=mapping))  # type: ignore[misc]
+            return await client.hset(name, mapping=mapping)
         elif key is not None and value is not None:
             # Single field mode
-            return cast(int, await client.hset(name, key=key, value=value))  # type: ignore[misc]
+            return await client.hset(name, key=key, value=value)
         else:
             raise ValueError("Either provide (key, value) or mapping parameter. " f"Got: key={key}, value={value}, mapping={mapping}")
 
     async def expire(self, name: str, time: int) -> bool:
         """Set expiration time"""
         client = await self.get_client()
-        return cast(bool, await client.expire(name, time))
+        return await client.expire(name, time)
 
     async def exists(self, name: str) -> bool:
         """Check if key exists"""
@@ -150,7 +159,7 @@ class RedisClient:
         """Get Redis server information"""
         try:
             client = await self.get_client()
-            return cast(Dict[Any, Any], await client.info(section))
+            return await client.info(section)
         except Exception as e:
             logger.error(f"Redis info failed: {e}")
             return {}
@@ -159,7 +168,7 @@ class RedisClient:
         """Delete one or more keys"""
         try:
             client = await self.get_client()
-            return cast(int, await client.delete(*keys))
+            return await client.delete(*keys)
         except Exception as e:
             logger.error(f"Redis delete failed: {e}")
             return 0
@@ -177,7 +186,7 @@ class RedisClient:
         """Get value by key"""
         try:
             client = await self.get_client()
-            return cast(Optional[str], await client.get(key))
+            return _decode_response(await client.get(key))
         except Exception as e:
             logger.error(f"Redis get failed for key {key}: {e}")
             return None

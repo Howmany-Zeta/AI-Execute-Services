@@ -386,13 +386,14 @@ class ImageTool(BaseTool):
         try:
             with Image.open(validated_input.file_path) as img:
                 img.load()
-                info = {"size": img.size, "mode": img.mode}
+                info: Dict[str, Any] = {"size": img.size, "mode": img.mode}
                 if include_exif:
-                    exif = {}
-                    raw = img._getexif() or {}
-                    for tag, val in raw.items():
-                        decoded = ExifTags.TAGS.get(tag, tag)
-                        exif[decoded] = val
+                    exif: Dict[Any, Any] = {}
+                    exif_data = img.getexif()
+                    if exif_data:
+                        for tag, val in exif_data.items():
+                            decoded = ExifTags.TAGS.get(tag, tag)
+                            exif[decoded] = val
                     info["exif"] = exif
                 return info
         except Exception as e:
@@ -424,8 +425,8 @@ class ImageTool(BaseTool):
 
         try:
             with Image.open(validated_input.file_path) as img:
-                img = img.resize((width, height), Image.Resampling.LANCZOS)
-                img.save(validated_input.output_path)
+                resized: Image.Image = img.resize((width, height), Image.Resampling.LANCZOS)
+                resized.save(validated_input.output_path)
             return {
                 "success": True,
                 "output_path": validated_input.output_path,
@@ -462,8 +463,8 @@ class ImageTool(BaseTool):
                 "edge_enhance": ImageFilter.EDGE_ENHANCE,
             }
             with Image.open(validated_input.file_path) as img:
-                img = img.filter(filter_map[filter_type])
-                img.save(validated_input.output_path)
+                filtered: Image.Image = img.filter(filter_map[filter_type])
+                filtered.save(validated_input.output_path)
             return {
                 "success": True,
                 "output_path": validated_input.output_path,

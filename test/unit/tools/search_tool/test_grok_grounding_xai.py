@@ -76,6 +76,7 @@ def test_xai_citations_success() -> None:
         "grok_auth_mode": "xai",
         "grok_client_mode": "sync_openai",
         "grok_maas_web_search_capable": None,
+        "web_search_tool": {"type": "web_search"},
     }
     assert "date_restrict" in result.params_ignored
     factory.assert_called_once_with(

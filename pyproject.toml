@@ -53,63 +53,64 @@ dependencies = [
     # =============================================================================
     # Core Web Framework and API Dependencies
     # =============================================================================
-    "fastapi (>=0.115.12,<0.116.0)",                # Modern, fast web framework for building APIs
+    "fastapi (>=0.141.0,<0.150.0)",                 # Modern, fast web framework for building APIs
     "httpx (>=0.28.1,<0.29.0)",                     # Async HTTP client for Python
-    "requests (>=2.32.3,<3.0.0)",                   # Synchronous HTTP client for Python (used by ppt_tool for MCP server calls)
-    "uvicorn[standard] (>=0.34.2,<0.35.0)",         # ASGI server for FastAPI and WebSocket support
-    "python-dotenv (>=1.1.0,<2.0.0)",               # Environment variable management from .env files
-    "pydantic (>=2.11.5,<3.0.0)",                   # Data validation and settings management
-    "pydantic-settings (>=2.9.1,<3.0.0)",           # Settings management for Pydantic v2
-    "cachetools (>=5.0.0,<6.0.0)",                  # Caching utilities and decorators
-    "typing-extensions (>=4.13.2,<5.0.0)",          # Extended typing capabilities for older Python versions
-    "aiofiles (>=24.1.0,<25.0.0)",                  # Async file operations support
+    "requests (>=2.34.2,<3.0.0)",                   # Synchronous HTTP client for Python (used by ppt_tool for MCP server calls)
+    "uvicorn[standard] (>=0.52.0,<0.53.0)",         # ASGI server for FastAPI and WebSocket support
+    "python-dotenv (>=1.2.2,<2.0.0)",               # Environment variable management from .env files
+    "pydantic (>=2.13.4,<3.0.0)",                   # Data validation and settings management
+    "pydantic-settings (>=2.14.2,<3.0.0)",           # Settings management for Pydantic v2
+    "cachetools (>=7.1.6,<8.0.0)",                  # Caching utilities and decorators
+    "typing-extensions (>=4.16.0,<5.0.0)",          # Extended typing capabilities for older Python versions
+    "aiofiles (>=25.1.0,<26.0.0)",                  # Async file operations support
 
     # =============================================================================
     # Task Queue and Messaging
     # =============================================================================
-    "celery (>=5.5.2,<6.0.0)",                      # Distributed task queue for background processing
-    "redis (>=6.2.0,<7.0.0)",                       # In-memory data store used as Celery broker/backend
-    "python-socketio (>=5.13.0,<6.0.0)",            # WebSocket implementation for real-time communication
-    "python-engineio (>=4.12.1,<5.0.0)",            # Engine.IO implementation for Socket.IO
-    "tenacity (>=9.1.2,<10.0.0)",                   # Retry library with exponential backoff strategies
+    "celery (>=5.6.3,<6.0.0)",                      # Distributed task queue for background processing
+    "redis (>=8.0.1,<9.0.0)",                       # In-memory data store used as Celery broker/backend
+    "python-socketio (>=5.16.3,<6.0.0)",            # WebSocket implementation for real-time communication
+    "python-engineio (>=4.13.3,<5.0.0)",            # Engine.IO implementation for Socket.IO
+    "tenacity (>=9.1.4,<10.0.0)",                   # Retry library with exponential backoff strategies
     "flower (>=2.0.1,<3.0.0)",                      # Web-based monitoring tool for Celery
 
     # =============================================================================
     # AI and LLM Services
     # =============================================================================
-    "openai (>=1.91.0,<2.0.0)",                     # OpenAI API client for GPT models (>=1.91 for graphiti-core)
-    "anthropic[vertex] (>=0.40.0,<1.0.0)",          # Anthropic API client (with Vertex AI transport) for Claude models
-    "google-cloud-aiplatform (>=1.80.0,<2.0.0)",    # Transitive dependency — no longer directly imported after SDK migration to google-genai. Kept pinned because google-genai pulls it in transitively and >=1.80.0 ensures stable gRPC transport for Vertex AI.
-    "google-genai (>=1.0.0,<2.0.0)",                # Google Gen AI SDK for Gemini models (replaces deprecated google-generativeai)
-    "google-api-python-client (>=2.108.0,<3.0.0)",  # Google API Python Client for Custom Search
-    "google-auth (>=2.25.0,<3.0.0)",                # Google authentication library
-    "google-auth-httplib2 (>=0.2.0,<1.0.0)",        # HTTP transport for Google Auth
-    "google-auth-oauthlib (>=1.2.0,<2.0.0)",        # OAuth 2.0 support for Google Auth
+    "openai (>=2.50.0,<3.0.0)",                     # OpenAI API client for GPT models
+    "anthropic[vertex] (>=0.120.2,<1.0.0)",          # Anthropic API client (with Vertex AI transport) for Claude models
+    "google-cloud-aiplatform (>=1.163.0,<2.0.0)",    # Transitive dependency — no longer directly imported after SDK migration to google-genai. Kept pinned because google-genai pulls it in transitively and >=1.80.0 ensures stable gRPC transport for Vertex AI.
+    "google-genai (>=2.14.0,<3.0.0)",                # Google Gen AI SDK for Gemini models (replaces deprecated google-generativeai)
+    "google-api-python-client (>=2.198.0,<3.0.0)",  # Google API Python Client for Custom Search
+    "google-auth (>=2.56.2,<3.0.0)",                # Google authentication library
+    "google-auth-httplib2 (>=0.4.0,<1.0.0)",        # HTTP transport for Google Auth
+    "google-auth-oauthlib (>=1.4.0,<2.0.0)",        # OAuth 2.0 support for Google Auth
 
     # =============================================================================
     # Numerical / embeddings helpers
     # =============================================================================
-    "numpy (>=2.4.1,<3.0.0)",                       # Embedding diversity / cosine ops in ContextEngine
+    "numpy (>=2.5.1,<3.0.0); python_version >= '3.12'",  # 2.5.x requires Python 3.12+
+    "numpy (>=2.4.6,<3.0.0); python_version < '3.12'",   # Latest numpy for Python 3.11
 
     # =============================================================================
     # Content Extraction / Images
     # =============================================================================
-    "pillow (>=11.2.1,<12.0.0)",                    # Image processing library (PIL fork); OCR uses system tesseract
+    "pillow (>=12.3.0,<13.0.0)",                    # Image processing library (PIL fork); OCR uses system tesseract
 
     # =============================================================================
     # Configuration and Data Formats
     # =============================================================================
-    "pyyaml (>=6.0.2,<7.0.0)",                      # YAML parser and emitter
+    "pyyaml (>=6.0.3,<7.0.0)",                      # YAML parser and emitter
 
     # =============================================================================
     # Database and Storage
     # =============================================================================
-    "asyncpg (>=0.30.0,<1.0.0)",                    # PostgreSQL async driver
+    "asyncpg (>=0.31.0,<1.0.0)",                    # PostgreSQL async driver
 
     # =============================================================================
     # Monitoring, Metrics, and Observability
     # =============================================================================
-    "prometheus-client (>=0.21.1,<1.0.0)",          # Prometheus metrics client
+    "prometheus-client (>=0.26.0,<1.0.0)",          # Prometheus metrics client
     "jaeger-client (>=4.8.0,<5.0.0)",               # Jaeger distributed tracing client
     "opentracing (>=2.4.0,<3.0.0)",                 # OpenTracing API for distributed tracing
 ]
@@ -130,7 +131,7 @@ dev = [
     "flake8>=7.3.0,<8.0.0",
     "black>=25.1.0,<26.0.0",
     "types-aiofiles>=25.1.0.20251011",
-    "types-cachetools>=6.2.0.20251022",
+    "types-cachetools>=7.0.0.20260201",
     "types-colorama>=0.4.15.20250801",
     "types-tqdm>=4.67.0.20250809",
     "types-pyyaml>=6.0.12.20250915",

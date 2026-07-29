@@ -58,6 +58,11 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+def _redis_str(value: bytes | str) -> str:
+    """Normalize Redis hash keys/values when decode_responses typing is bytes | str."""
+    return value.decode() if isinstance(value, bytes) else value
+
+
 @dataclass
 class SessionMetrics:
     """Session-level performance metrics."""
@@ -693,7 +698,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         """Get session by ID."""
         if self.redis_client:
             try:
-                data = await self.redis_client.hget("sessions", session_id)  # type: ignore[misc]
+                data = await self.redis_client.hget("sessions", session_id)
                 if data:
                     session = SessionMetrics.from_dict(json.loads(data))
                     return session.to_dict()
@@ -793,7 +798,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         """Store session to Redis or memory."""
         if self.redis_client:
             try:
-                await self.redis_client.hset(  # type: ignore[misc]
+                await self.redis_client.hset(
                     "sessions",
                     session.session_id,
                     json.dumps(session.to_dict(), cls=DateTimeEncoder),
@@ -848,7 +853,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         """Get conversation history for a session."""
         if self.redis_client:
             try:
-                messages_data = await self.redis_client.lrange(f"conversation:{session_id}", -limit, -1)  # type: ignore[misc]
+                messages_data = await self.redis_client.lrange(f"conversation:{session_id}", -limit, -1)
                 # Since lpush adds to the beginning, we need to reverse to get
                 # chronological order
                 return [ConversationMessage.from_dict(json.loads(msg)) for msg in reversed(messages_data)]
@@ -865,12 +870,12 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         if self.redis_client:
             try:
                 # Add to list
-                await self.redis_client.lpush(  # type: ignore[misc]
+                await self.redis_client.lpush(
                     f"conversation:{session_id}",
                     json.dumps(message.to_dict(), cls=DateTimeEncoder),
                 )
                 # Trim to limit
-                await self.redis_client.ltrim(f"conversation:{session_id}", -self.conversation_limit, -1)  # type: ignore[misc]
+                await self.redis_client.ltrim(f"conversation:{session_id}", -self.conversation_limit, -1)
                 # Set TTL
                 await self.redis_client.expire(f"conversation:{session_id}", self.session_ttl)
                 # Dual-write: append to permanent backend
@@ -916,7 +921,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         """Get TaskContext for a session."""
         if self.redis_client:
             try:
-                data = await self.redis_client.hget("task_contexts", session_id)  # type: ignore[misc]
+                data = await self.redis_client.hget("task_contexts", session_id)
                 if data:
                     context_data = json.loads(data)
                     # Reconstruct TaskContext from stored data
@@ -978,7 +983,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
                 context_dict = context.to_dict()
                 sanitized_dict = self._sanitize_dataclasses(context_dict)
 
-                await self.redis_client.hset(  # type: ignore[misc]
+                await self.redis_client.hset(
                     "task_contexts",
                     session_id,
                     json.dumps(sanitized_dict, cls=DateTimeEncoder),
@@ -1060,7 +1065,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         if self.redis_client:
             try:
                 # Store checkpoint
-                await self.redis_client.hset(  # type: ignore[misc]
+                await self.redis_client.hset(
                     f"checkpoints:{thread_id}",
                     checkpoint_id,
                     json.dumps(checkpoint, cls=DateTimeEncoder),
@@ -1109,12 +1114,12 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
             try:
                 if checkpoint_id:
                     # Get specific checkpoint
-                    data = await self.redis_client.hget(f"checkpoints:{thread_id}", checkpoint_id)  # type: ignore[misc]
+                    data = await self.redis_client.hget(f"checkpoints:{thread_id}", checkpoint_id)
                     if data:
                         return cast(Dict[str, Any], json.loads(data))
                 else:
                     # Get latest checkpoint
-                    checkpoints = await self.redis_client.hgetall(f"checkpoints:{thread_id}")  # type: ignore[misc]
+                    checkpoints = await self.redis_client.hgetall(f"checkpoints:{thread_id}")
                     if checkpoints:
                         # Sort by creation time and get latest
                         latest = max(
@@ -1145,7 +1150,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         """List checkpoints for a thread, ordered by creation time (newest first)."""
         if self.redis_client:
             try:
-                checkpoints_data = await self.redis_client.hgetall(f"checkpoints:{thread_id}")  # type: ignore[misc]
+                checkpoints_data = await self.redis_client.hgetall(f"checkpoints:{thread_id}")
                 checkpoints = [json.loads(data) for data in checkpoints_data.values()]
                 # Sort by creation time (newest first)
                 checkpoints.sort(key=lambda x: x["created_at"], reverse=True)
@@ -1168,10 +1173,11 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         if self.redis_client:
             try:
                 # Get all sessions
-                sessions_data = await self.redis_client.hgetall("sessions")  # type: ignore[misc]
+                sessions_data = await self.redis_client.hgetall("sessions")
                 expired_sessions = []
 
-                for session_id, data in sessions_data.items():
+                for session_id_raw, data in sessions_data.items():
+                    session_id = _redis_str(session_id_raw)
                     session = SessionMetrics.from_dict(json.loads(data))
                     if session.last_activity < cutoff_time:
                         expired_sessions.append(session_id)
@@ -1201,11 +1207,11 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         if self.redis_client:
             try:
                 # Remove session
-                await self.redis_client.hdel("sessions", session_id)  # type: ignore[misc]
+                await self.redis_client.hdel("sessions", session_id)
                 # Remove conversation
                 await self.redis_client.delete(f"conversation:{session_id}")
                 # Remove task context
-                await self.redis_client.hdel("task_contexts", session_id)  # type: ignore[misc]
+                await self.redis_client.hdel("task_contexts", session_id)
                 # Remove checkpoints
                 await self.redis_client.delete(f"checkpoints:{session_id}")
             except Exception as e:
@@ -1229,7 +1235,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         if self.redis_client:
             try:
-                sessions_data = await self.redis_client.hgetall("sessions")  # type: ignore[misc]
+                sessions_data = await self.redis_client.hgetall("sessions")
                 active_sessions_count = len([s for s in sessions_data.values() if json.loads(s)["status"] == "active"])
             except Exception as e:
                 logger.error(f"Failed to get metrics from Redis: {e}")
@@ -1305,7 +1311,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         if self.redis_client:
             try:
-                await self.redis_client.hset(  # type: ignore[misc]
+                await self.redis_client.hset(
                     f"checkpoint_writes:{thread_id}",
                     f"{checkpoint_id}:{task_id}",
                     json.dumps(writes_payload, cls=DateTimeEncoder),
@@ -1345,9 +1351,10 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         """Get intermediate writes for a checkpoint (ICheckpointerBackend interface)."""
         if self.redis_client:
             try:
-                writes_data = await self.redis_client.hgetall(f"checkpoint_writes:{thread_id}")  # type: ignore[misc]
+                writes_data = await self.redis_client.hgetall(f"checkpoint_writes:{thread_id}")
                 writes = []
-                for key, data in writes_data.items():
+                for key_raw, data in writes_data.items():
+                    key = _redis_str(key_raw)
                     if key.startswith(f"{checkpoint_id}:"):
                         payload = json.loads(data)
                         writes.extend(payload.get("writes", []))
@@ -1548,7 +1555,7 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
 
         if self.redis_client:
             try:
-                await self.redis_client.hset(  # type: ignore[misc]
+                await self.redis_client.hset(
                     "conversation_sessions",
                     session_key,
                     json.dumps(session_data, cls=DateTimeEncoder),
@@ -1585,11 +1592,11 @@ class ContextEngine(IStorageBackend, ICheckpointerBackend):
         """Update last activity timestamp for a conversation session."""
         if self.redis_client:
             try:
-                session_data = await self.redis_client.hget("conversation_sessions", session_key)  # type: ignore[misc]
+                session_data = await self.redis_client.hget("conversation_sessions", session_key)
                 if session_data:
                     session_dict = json.loads(session_data)
                     session_dict["last_activity"] = datetime.utcnow().isoformat()
-                    await self.redis_client.hset(  # type: ignore[misc]
+                    await self.redis_client.hset(
                         "conversation_sessions",
                         session_key,
                         json.dumps(session_dict, cls=DateTimeEncoder),
@@ -1950,7 +1957,7 @@ Summary:"""
 
                 # Store new messages
                 for msg in messages:
-                    await self.redis_client.rpush(  # type: ignore[misc]
+                    await self.redis_client.rpush(
                         f"conversation:{session_id}",
                         json.dumps(msg.to_dict(), cls=DateTimeEncoder),
                     )
