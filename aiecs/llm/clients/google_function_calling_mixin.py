@@ -239,17 +239,27 @@ def extract_content_from_google_response(response: Any) -> str:
     return content
 
 
+def _google_candidate_parts(candidate: Any) -> Any:
+    """Return Content.parts only when it is a real iterable.
+
+    google-genai often sets Content.parts to None (thought → function_call
+    boundary, thought-signature-only, AFC intermediate, finish-reason-only).
+    hasattr(content, "parts") is True in those cases and is not an iterability check.
+    """
+    content = getattr(candidate, "content", None)
+    parts = getattr(content, "parts", None) if content is not None else None
+    return parts if parts else None
+
+
 def extract_content_and_signature_from_google_response(response: Any) -> Tuple[str, Optional[str]]:
     """Extract content and content-part thought_signature from a Google response."""
     if hasattr(response, "candidates") and response.candidates:
         candidate = response.candidates[0]
-        content_obj = getattr(candidate, "content", None)
-        if content_obj is not None:
-            parts = getattr(content_obj, "parts", None)
-            if parts:
-                built, content_sig = build_content_and_signature_from_google_parts(parts)
-                if built or content_sig:
-                    return built, content_sig
+        parts = _google_candidate_parts(candidate)
+        if parts:
+            built, content_sig = build_content_and_signature_from_google_parts(parts)
+            if built or content_sig:
+                return built, content_sig
 
     try:
         return response.text or "", None
@@ -373,9 +383,9 @@ class GoogleFunctionCallingMixin:
         # candidate.content.parts as Part.function_call objects.
         if hasattr(response, "candidates") and response.candidates:
             candidate = response.candidates[0]
-
-            if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
-                for part in candidate.content.parts:
+            parts = _google_candidate_parts(candidate)
+            if parts:
+                for part in parts:
                     if hasattr(part, "function_call") and part.function_call:
                         func_call = part.function_call
                         # Prefer the SDK-assigned id; fall back to a synthetic one.
@@ -475,9 +485,9 @@ class GoogleFunctionCallingMixin:
         # candidate.content.parts as Part.function_call objects.
         if hasattr(chunk, "candidates") and chunk.candidates:
             candidate = chunk.candidates[0]
-
-            if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
-                for part in candidate.content.parts:
+            parts = _google_candidate_parts(candidate)
+            if parts:
+                for part in parts:
                     if hasattr(part, "function_call") and part.function_call:
                         func_call = part.function_call
                         # Prefer the SDK-assigned id; fall back to a synthetic one.
@@ -574,8 +584,9 @@ class GoogleFunctionCallingMixin:
 
                 # Extract thought and text from chunk parts.
                 # google-genai Part.thought is a bool flag; summary text is in part.text.
-                if hasattr(candidate, "content") and candidate.content is not None and candidate.content.parts is not None:
-                    for part in candidate.content.parts:
+                parts = _google_candidate_parts(candidate)
+                if parts:
+                    for part in parts:
                         is_thought = getattr(part, "thought", None) is True
                         text_content = getattr(part, "text", None) or ""
                         part_sig = serialize_thought_signature(getattr(part, "thought_signature", None))

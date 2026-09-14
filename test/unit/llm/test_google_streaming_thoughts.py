@@ -30,7 +30,11 @@ def _google_chunk(
     text: Optional[str] = None,
 ) -> SimpleNamespace:
     part = SimpleNamespace(thought=thought, text=text)
-    content = SimpleNamespace(parts=[part])
+    return _google_chunk_with_parts([part])
+
+
+def _google_chunk_with_parts(parts: Any) -> SimpleNamespace:
+    content = SimpleNamespace(parts=parts)
     candidate = SimpleNamespace(content=content, finish_reason=None)
     return SimpleNamespace(candidates=[candidate], usage_metadata=None, prompt_feedback=None)
 
@@ -218,3 +222,68 @@ async def test_streaming_usage_forwards_thoughts_token_count():
     usage_chunks = [c for c in chunks if c.type == "usage"]
     assert len(usage_chunks) == 1
     assert usage_chunks[0].usage["thinking_tokens"] == 42
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_streaming_skips_none_parts_without_error():
+    """google-genai Content.parts is often None; that frame must not abort the stream."""
+    client = _GoogleStreamingTestClient()
+    stream = _make_stream([_google_chunk_with_parts(None)])
+    mock_client = _mock_google_client(stream)
+
+    chunks = [
+        chunk
+        async for chunk in client._stream_text_with_function_calling(
+            client=mock_client,
+            model_name="gemini-2.5-flash",
+            contents="prompt",
+            config=SimpleNamespace(),
+            return_chunks=True,
+        )
+    ]
+
+    assert chunks == []
+    assert not any(c.type in {"tool_call", "tool_calls"} for c in chunks)
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_streaming_survives_none_parts_between_thought_and_function_call():
+    """Thought → empty-parts frame → function_call must still emit thought then tool_call."""
+    client = _GoogleStreamingTestClient()
+    stream = _make_stream(
+        [
+            _google_chunk(thought=True, text="about to call manage_tasks"),
+            _google_chunk_with_parts(None),
+            _google_chunk_with_parts(
+                [
+                    SimpleNamespace(
+                        thought=None,
+                        text=None,
+                        function_call=SimpleNamespace(id="call_0", name="manage_tasks", args={"action": "update"}),
+                        thought_signature=None,
+                    )
+                ]
+            ),
+        ]
+    )
+    mock_client = _mock_google_client(stream)
+
+    chunks = [
+        chunk
+        async for chunk in client._stream_text_with_function_calling(
+            client=mock_client,
+            model_name="gemini-2.5-flash",
+            contents="prompt",
+            config=SimpleNamespace(),
+            return_chunks=True,
+        )
+    ]
+
+    assert [c.type for c in chunks] == ["thought", "tool_call", "tool_calls"]
+    assert chunks[0].content == "about to call manage_tasks"
+    assert chunks[1].tool_call is not None
+    assert chunks[1].tool_call["function"]["name"] == "manage_tasks"
+    assert chunks[2].tool_calls is not None
+    assert chunks[2].tool_calls[0]["function"]["name"] == "manage_tasks"

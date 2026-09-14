@@ -137,7 +137,26 @@ def test_extract_function_calls_captures_part_thought_signature():
     calls = client._extract_function_calls_from_google_response(response)
     assert calls is not None
     assert calls[0]["function"]["name"] == "web_search"
+    assert calls[0]["function"]["arguments"] == '{"q": "gemini"}'
     assert calls[0]["thought_signature"] == base64.b64encode(sig).decode("ascii")
+
+
+@pytest.mark.unit
+def test_extract_function_calls_from_response_when_parts_is_none():
+    client = _GoogleSignatureTestClient()
+    response = SimpleNamespace(
+        candidates=[SimpleNamespace(content=SimpleNamespace(parts=None))]
+    )
+    assert client._extract_function_calls_from_google_response(response) is None
+
+
+@pytest.mark.unit
+def test_extract_function_calls_from_chunk_when_parts_is_none():
+    client = _GoogleSignatureTestClient()
+    chunk = SimpleNamespace(
+        candidates=[SimpleNamespace(content=SimpleNamespace(parts=None))]
+    )
+    assert client._extract_function_calls_from_google_chunk(chunk) is None
 
 
 @pytest.mark.unit
