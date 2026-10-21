@@ -54,6 +54,8 @@ class ToolLoopRunState:
     steps: List[Dict[str, Any]] = field(default_factory=list)
     tool_calls_count: int = 0
     total_tokens: int = 0
+    last_cache_hit: bool = False
+    last_cache_read_tokens: int = 0
     last_outcome: Optional["ToolLoopIterationOutcome"] = None
 
 

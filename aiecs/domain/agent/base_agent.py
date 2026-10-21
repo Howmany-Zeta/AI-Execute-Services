@@ -910,6 +910,23 @@ class BaseAIAgent(SkillCapableMixin, ABC):
 
         logger.info(f"Agent {self.agent_id} state: {self._previous_state.value} → {new_state.value}")
 
+    def _require_ready_for_task(self) -> None:
+        """Refuse work when initialize() failed and the agent is still ERROR."""
+        if self._state == AgentState.ERROR:
+            raise TaskExecutionError(
+                "Agent is not ready: initialization failed or agent is in ERROR state",
+                agent_id=self.agent_id,
+            )
+
+    def _release_task(self, entered_busy: bool) -> None:
+        """Return BUSY (or this task's ERROR) to ACTIVE and clear the current task id."""
+        if not entered_busy or self._state == AgentState.STOPPED:
+            return
+        self._current_task_id = None
+        if self._state in (AgentState.BUSY, AgentState.ERROR):
+            self._transition_state(AgentState.ACTIVE)
+            self.last_active_at = datetime.utcnow()
+
     # ==================== Lifecycle Methods ====================
 
     async def initialize(self) -> None:
@@ -1538,6 +1555,133 @@ class BaseAIAgent(SkillCapableMixin, ABC):
         # Execute with retry
         return await retry_policy.execute_with_retry(func, *args, **kwargs)
 
+    def _resolved_llm_client(self) -> Optional["LLMClientProtocol"]:
+        return getattr(self, "llm_client", None) or self._llm_client
+
+    def _agent_retry_policy(self):
+        from .integration.retry_policy import EnhancedRetryPolicy
+
+        retry_config = self._config.retry_policy
+        return EnhancedRetryPolicy(
+            max_retries=retry_config.max_retries,
+            base_delay=retry_config.base_delay,
+            max_delay=retry_config.max_delay,
+            exponential_base=retry_config.exponential_factor,
+            jitter_factor=retry_config.jitter_factor,
+        )
+
+    def _build_llm_call_kwargs(
+        self,
+        messages: List[Any],
+        context: Dict[str, Any],
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        kwargs: Dict[str, Any] = dict(
+            messages=messages,
+            model=self._config.llm_model,
+            temperature=self._config.temperature,
+            max_tokens=self._config.max_tokens,
+            context=context,
+        )
+        kwargs.update(self._config.get_llm_call_kwargs())
+        if extra:
+            kwargs.update(extra)
+        return kwargs
+
+    async def _call_llm(
+        self,
+        messages: List[Any],
+        context: Dict[str, Any],
+        **extra: Any,
+    ) -> Any:
+        """One generate_text call. Agent retries only when the client does not."""
+        client = self._resolved_llm_client()
+        if client is None:
+            raise TaskExecutionError("LLM client is not configured", agent_id=self.agent_id)
+
+        kwargs = self._build_llm_call_kwargs(messages, context, extra)
+
+        async def _once() -> Any:
+            return await client.generate_text(**kwargs)
+
+        if getattr(client, "retries_generate_text", False):
+            return await _once()
+        return await self._agent_retry_policy().execute_with_retry(_once)
+
+    async def _stream_llm(
+        self,
+        messages: List[Any],
+        context: Dict[str, Any],
+        **extra: Any,
+    ) -> AsyncGenerator[Any, None]:
+        """Read stream_text. Retry only before any chunk is handed to the caller."""
+        from .integration.retry_policy import ErrorClassifier
+
+        client = self._resolved_llm_client()
+        if client is None:
+            raise TaskExecutionError("LLM client is not configured", agent_id=self.agent_id)
+
+        kwargs = self._build_llm_call_kwargs(messages, context, extra)
+        kwargs["return_chunks"] = True
+        policy = self._agent_retry_policy()
+        last_error: Optional[Exception] = None
+
+        for attempt in range(policy.max_retries + 1):
+            handed_off = False
+            stream_gen = client.stream_text(**kwargs)
+            try:
+                async for chunk in stream_gen:
+                    handed_off = True
+                    yield chunk
+                return
+            except Exception as exc:
+                last_error = exc
+                if handed_off:
+                    raise
+                error_type = ErrorClassifier.classify(exc)
+                if attempt >= policy.max_retries or not ErrorClassifier.is_retryable(error_type):
+                    raise
+                delay = policy.calculate_delay(attempt, error_type)
+                logger.warning(f"Agent {self.agent_id} stream attempt {attempt + 1} failed " f"({error_type.value}). Retrying in {delay:.2f}s...")
+                aclose = getattr(stream_gen, "aclose", None)
+                if callable(aclose):
+                    await aclose()
+                await asyncio.sleep(delay)
+
+        if last_error is None:
+            raise RuntimeError("Stream retry failed but no error was captured")
+        raise last_error
+
+    async def _iter_user_stream_tokens(
+        self,
+        task: Dict[str, Any],
+        context: Dict[str, Any],
+    ) -> AsyncGenerator[str, None]:
+        """Forward tokens from execute_task_streaming; raise on error; yield result body once if no tokens."""
+        yielded_token = False
+        result_output: Optional[Any] = None
+        error_message: Optional[str] = None
+        async for event in self.execute_task_streaming(task, context):
+            event_type = event.get("type")
+            if event_type == "error":
+                error_message = str(event.get("error") or "Streaming failed")
+                continue
+            if event_type == "token":
+                content = event.get("content")
+                if content:
+                    yielded_token = True
+                    yield str(content)
+            elif event_type == "result":
+                result_output = event.get("output")
+        if error_message:
+            raise TaskExecutionError(
+                error_message,
+                agent_id=self.agent_id,
+                task_id=task.get("task_id"),
+            )
+        if not yielded_token and result_output:
+            yield str(result_output)
+
     # ==================== Memory Management ====================
 
     async def add_to_memory(
@@ -1904,6 +2048,28 @@ class BaseAIAgent(SkillCapableMixin, ABC):
 
         self._metrics.updated_at = datetime.utcnow()
         logger.debug(f"Agent {self.agent_id} cache metrics updated: " f"hit_rate={self._metrics.cache_hit_rate:.2%}, " f"read_tokens={cache_read_tokens}, creation_tokens={cache_creation_tokens}")
+
+    def record_prompt_cache(
+        self,
+        cache_read_tokens: Optional[int] = None,
+        cache_creation_tokens: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Record one LLM response's implicit-cache usage and return a caller event.
+
+        A hit is ``cache_read_tokens > 0``. Zero or a missing count is a miss.
+        """
+        tokens = cache_read_tokens if isinstance(cache_read_tokens, int) and cache_read_tokens > 0 else 0
+        hit = tokens > 0
+        self.update_cache_metrics(
+            cache_read_tokens=cache_read_tokens if isinstance(cache_read_tokens, int) else None,
+            cache_creation_tokens=cache_creation_tokens,
+            cache_hit=hit,
+        )
+        return {
+            "type": "cache_status",
+            "cache_hit": hit,
+            "cache_read_tokens": tokens,
+        }
 
     def update_session_metrics(
         self,
@@ -4383,7 +4549,7 @@ class BaseAIAgent(SkillCapableMixin, ABC):
                     break
 
                 if strategy == RecoveryStrategy.RETRY:
-                    result = await self._execute_with_retry(self.execute_task, task, context)
+                    result = await self.execute_task(task, context)
                 elif strategy == RecoveryStrategy.SIMPLIFY:
                     simplified_task = await self._simplify_task(task)
                     result = await self.execute_task(simplified_task, context)
@@ -4401,11 +4567,11 @@ class BaseAIAgent(SkillCapableMixin, ABC):
                 if structured:
                     return RecoveryResult(
                         success=True,
-                        result=cast(Dict[str, Any], result),
+                        result=result,
                         strategies_attempted=attempted,
                         errors=errors,
                     )
-                return cast(Dict[str, Any], result)
+                return result
 
             except VerificationExhausted as exc:
                 verification_exhausted = exc

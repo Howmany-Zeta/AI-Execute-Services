@@ -14,7 +14,6 @@ Uses OpenAI Function Calling for tool use (BetaToolRunner-style loop).
     tools (OpenAI, xAI, Anthropic, Vertex).
 """
 
-import asyncio
 import json
 import logging
 import uuid
@@ -26,7 +25,7 @@ from aiecs.tools import BaseTool
 from aiecs.domain.agent.tools.schema_generator import ToolSchemaGenerator
 
 from .base_agent import BaseAIAgent
-from .models import AgentType, AgentConfiguration, AgentGoal, ToolObservation, resolve_compression_policy
+from .models import AgentType, AgentConfiguration, AgentGoal, AgentState, ToolObservation, resolve_compression_policy
 from .exceptions import TaskExecutionError, ToolAccessDeniedError
 from .tool_loop_core import (
     ToolLoopCompressionContext,
@@ -463,6 +462,8 @@ class HybridAgent(BaseAIAgent):
             "iterations": inner.get("iterations"),
             "execution_time": execution_time,
             "timestamp": datetime.utcnow().isoformat(),
+            "cache_hit": inner.get("cache_hit", False),
+            "cache_read_tokens": inner.get("cache_read_tokens", 0),
         }
 
     async def _execute_task_with_plugins(
@@ -509,12 +510,12 @@ class HybridAgent(BaseAIAgent):
             initial_messages = await self._build_initial_messages_async(task_description, context, plugin_ctx)
 
         task_for_loop = effective_task_description(plugin_ctx, task_description)
+        plugin_ctx.plugin_state["task.compression_ctx"] = await self._build_tool_loop_compression_context_async(context)
 
         if isinstance(short, PluginShortCircuitResult):
             loop_result = dict(short.result)
         else:
-            loop_result = await self._execute_with_retry(
-                self._tool_loop_with_plugins,
+            loop_result = await self._tool_loop_with_plugins(
                 task_for_loop,
                 context,
                 plugin_ctx,
@@ -721,6 +722,8 @@ class HybridAgent(BaseAIAgent):
                             "iterations": iteration + 1,
                             "tool_calls_count": state.tool_calls_count,
                             "total_tokens": state.total_tokens,
+                            "cache_hit": state.last_cache_hit,
+                            "cache_read_tokens": state.last_cache_read_tokens,
                         }
                     )
 
@@ -753,6 +756,8 @@ class HybridAgent(BaseAIAgent):
                             "iterations": iteration + 1,
                             "tool_calls_count": state.tool_calls_count,
                             "total_tokens": state.total_tokens,
+                            "cache_hit": state.last_cache_hit,
+                            "cache_read_tokens": state.last_cache_read_tokens,
                         }
                     )
 
@@ -829,7 +834,18 @@ class HybridAgent(BaseAIAgent):
         except DawpAbortMainError as _exc:
             logger.warning("HybridAgent (non-streaming): abort_main (pre_main_loop): %s", _exc)
             return self._assemble_loop_result(
-                {"success": False, "output": str(_exc), "reason": "dawp_abort_main", "final_response": str(_exc), "steps": [], "iterations": 0, "tool_calls_count": 0, "total_tokens": 0}
+                {
+                    "success": False,
+                    "output": str(_exc),
+                    "reason": "dawp_abort_main",
+                    "final_response": str(_exc),
+                    "steps": [],
+                    "iterations": 0,
+                    "tool_calls_count": 0,
+                    "total_tokens": 0,
+                    "cache_hit": False,
+                    "cache_read_tokens": 0,
+                }
             )
 
         return await self._run_tool_loop_with_iteration_hooks(messages, context, plugin_ctx=plugin_ctx)
@@ -849,9 +865,12 @@ class HybridAgent(BaseAIAgent):
             TaskExecutionError: If task execution fails
         """
         start_time = datetime.utcnow()
+        entered_busy = False
 
         try:
+            self._require_ready_for_task()
             self._transition_state(self.state.__class__.BUSY)
+            entered_busy = True
             self._current_task_id = task.get("task_id")
 
             inner = await self._execute_task_with_plugins(task, context)
@@ -865,26 +884,25 @@ class HybridAgent(BaseAIAgent):
                 tool_calls=inner.get("tool_calls_count", 0),
             )
 
-            self._transition_state(self.state.__class__.ACTIVE)
-            self._current_task_id = None
-            self.last_active_at = datetime.utcnow()
-
             return self._format_execute_task_response(inner, execution_time)
 
+        except TaskExecutionError:
+            execution_time = (datetime.utcnow() - start_time).total_seconds()
+            self.update_metrics(execution_time=execution_time, success=False)
+            raise
         except Exception as e:
             logger.error(f"Task execution failed for {self.agent_id}: {e}")
 
             execution_time = (datetime.utcnow() - start_time).total_seconds()
             self.update_metrics(execution_time=execution_time, success=False)
 
-            self._transition_state(self.state.__class__.ERROR)
-            self._current_task_id = None
-
             raise TaskExecutionError(
                 f"Task execution failed: {str(e)}",
                 agent_id=self.agent_id,
                 task_id=task.get("task_id"),
             )
+        finally:
+            self._release_task(entered_busy)
 
     async def process_message(self, message: str, sender_id: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -945,6 +963,8 @@ class HybridAgent(BaseAIAgent):
             "tool_calls_count": event.get("tool_calls_count", 0),
             "iterations": event.get("iterations", 0),
             "total_tokens": event.get("total_tokens", 0),
+            "cache_hit": event.get("cache_hit", False),
+            "cache_read_tokens": event.get("cache_read_tokens", 0),
             **({"stop_reason": event["stop_reason"]} if event.get("stop_reason") else {}),
         }
 
@@ -1002,7 +1022,15 @@ class HybridAgent(BaseAIAgent):
                 yield dawp_event
         except DawpAbortMainError as _exc:
             logger.warning("HybridAgent: abort_main triggered (pre_main_loop drain): %s", _exc)
-            yield self._streaming_result_event_from_inner({"success": False, "output": str(_exc), "reason": "dawp_abort_main"})
+            yield self._streaming_result_event_from_inner(
+                {
+                    "success": False,
+                    "output": str(_exc),
+                    "reason": "dawp_abort_main",
+                    "cache_hit": False,
+                    "cache_read_tokens": 0,
+                }
+            )
             return
 
         while budget.remaining > 0:
@@ -1050,7 +1078,15 @@ class HybridAgent(BaseAIAgent):
                     yield dawp_event
             except DawpAbortMainError as _exc:
                 logger.warning("HybridAgent: abort_main triggered (inline drain): %s", _exc)
-                yield self._streaming_result_event_from_inner({"success": False, "output": str(_exc), "reason": "dawp_abort_main"})
+                yield self._streaming_result_event_from_inner(
+                    {
+                        "success": False,
+                        "output": str(_exc),
+                        "reason": "dawp_abort_main",
+                        "cache_hit": state.last_cache_hit,
+                        "cache_read_tokens": state.last_cache_read_tokens,
+                    }
+                )
                 return
 
             if self._plugin_manager is not None:
@@ -1078,7 +1114,15 @@ class HybridAgent(BaseAIAgent):
                     yield dawp_event
             except DawpAbortMainError as _exc:
                 logger.warning("HybridAgent: abort_main triggered (on_iteration_end drain): %s", _exc)
-                yield self._streaming_result_event_from_inner({"success": False, "output": str(_exc), "reason": "dawp_abort_main"})
+                yield self._streaming_result_event_from_inner(
+                    {
+                        "success": False,
+                        "output": str(_exc),
+                        "reason": "dawp_abort_main",
+                        "cache_hit": state.last_cache_hit,
+                        "cache_read_tokens": state.last_cache_read_tokens,
+                    }
+                )
                 return
 
             outcome = state.last_outcome
@@ -1521,8 +1565,16 @@ class HybridAgent(BaseAIAgent):
             ```
         """
         start_time = datetime.utcnow()
+        entered_busy = False
 
         try:
+            if self.state == self.state.__class__.ERROR:
+                yield {
+                    "type": "error",
+                    "error": "Agent is not ready: initialization failed or agent is in ERROR state",
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+                return
             try:
                 task_description = self._extract_task_description(task)
             except Exception as exc:
@@ -1535,7 +1587,8 @@ class HybridAgent(BaseAIAgent):
 
             self._merge_task_images(task, context)
 
-            self._transition_state(self.state.__class__.BUSY)
+            self._transition_state(AgentState.BUSY)
+            entered_busy = True
             self._current_task_id = task.get("task_id")
 
             yield {
@@ -1639,9 +1692,6 @@ class HybridAgent(BaseAIAgent):
                         tokens_used=result_event.get("total_tokens"),
                         tool_calls=result_event.get("tool_calls_count", 0),
                     )
-                    self._transition_state(self.state.__class__.ACTIVE)
-                    self._current_task_id = None
-                    self.last_active_at = datetime.utcnow()
                     yield result_event
                     yield {
                         "type": "completed",
@@ -1654,40 +1704,21 @@ class HybridAgent(BaseAIAgent):
                 initial_messages = await self._build_initial_messages_async(task_description, context, plugin_ctx)
 
             task_for_loop = effective_task_description(plugin_ctx, task_description)
+            plugin_ctx.plugin_state["task.compression_ctx"] = await self._build_tool_loop_compression_context_async(context)
 
-            from .integration.retry_policy import EnhancedRetryPolicy, ErrorClassifier
-
-            _retry_cfg = self._config.retry_policy
-            _policy = EnhancedRetryPolicy(
-                max_retries=_retry_cfg.max_retries,
-                base_delay=_retry_cfg.base_delay,
-                max_delay=_retry_cfg.max_delay,
-                exponential_base=_retry_cfg.exponential_factor,
-                jitter_factor=_retry_cfg.jitter_factor,
-            )
             stream_result_event: Optional[Dict[str, Any]] = None
-            for _attempt in range(_policy.max_retries + 1):
-                try:
-                    async for stream_event in self._tool_loop_streaming_with_plugins(
-                        task_for_loop,
-                        context,
-                        plugin_ctx,
-                        initial_messages=initial_messages,
-                    ):
-                        async for plugin_event in self._yield_pending_plugin_events(pending_plugin_events):
-                            yield plugin_event
-                        if stream_event.get("type") == "result":
-                            stream_result_event = stream_event
-                        else:
-                            yield stream_event
-                    break
-                except Exception as _exc:
-                    _error_type = ErrorClassifier.classify(_exc)
-                    if _attempt >= _policy.max_retries or not ErrorClassifier.is_retryable(_error_type):
-                        raise
-                    _delay = _policy.calculate_delay(_attempt, _error_type)
-                    logger.warning(f"Streaming attempt {_attempt + 1} failed " f"({_error_type.value}). Retrying in {_delay:.2f}s…")
-                    await asyncio.sleep(_delay)
+            async for stream_event in self._tool_loop_streaming_with_plugins(
+                task_for_loop,
+                context,
+                plugin_ctx,
+                initial_messages=initial_messages,
+            ):
+                async for plugin_event in self._yield_pending_plugin_events(pending_plugin_events):
+                    yield plugin_event
+                if stream_event.get("type") == "result":
+                    stream_result_event = stream_event
+                else:
+                    yield stream_event
 
             if stream_result_event is not None:
                 execution_time = (datetime.utcnow() - start_time).total_seconds()
@@ -1709,9 +1740,6 @@ class HybridAgent(BaseAIAgent):
                     tokens_used=formatted_result.get("total_tokens"),
                     tool_calls=formatted_result.get("tool_calls_count", 0),
                 )
-                self._transition_state(self.state.__class__.ACTIVE)
-                self._current_task_id = None
-                self.last_active_at = datetime.utcnow()
                 yield {
                     "type": "completed",
                     "success": task_success,
@@ -1722,19 +1750,16 @@ class HybridAgent(BaseAIAgent):
         except Exception as e:
             logger.error(f"Streaming task execution failed for {self.agent_id}: {e}")
 
-            # Update metrics for failure
             execution_time = (datetime.utcnow() - start_time).total_seconds()
             self.update_metrics(execution_time=execution_time, success=False)
-
-            # Transition to error state
-            self._transition_state(self.state.__class__.ERROR)
-            self._current_task_id = None
 
             yield {
                 "type": "error",
                 "error": str(e),
                 "timestamp": datetime.utcnow().isoformat(),
             }
+        finally:
+            self._release_task(entered_busy)
 
     async def process_message_streaming(self, message: str, sender_id: Optional[str] = None) -> AsyncGenerator[str, None]:
         """
@@ -1754,17 +1779,12 @@ class HybridAgent(BaseAIAgent):
             ```
         """
         try:
-            # Build task from message
             task = {
                 "description": message,
                 "task_id": f"msg_{datetime.utcnow().timestamp()}",
             }
-
-            # Stream task execution
-            async for event in self.execute_task_streaming(task, {"sender_id": sender_id}):
-                if event["type"] == "token":
-                    yield event["content"]
-
+            async for token in self._iter_user_stream_tokens(task, {"sender_id": sender_id}):
+                yield token
         except Exception as e:
             logger.error(f"Streaming message processing failed for {self.agent_id}: {e}")
             raise
@@ -1779,6 +1799,18 @@ class HybridAgent(BaseAIAgent):
                 "Use OpenAI-compatible clients: OpenAI, xAI, Anthropic, or Google Vertex."
             )
 
+    def _tool_loop_llm_extras(
+        self,
+        *,
+        tool_schemas_override: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        extras: Dict[str, Any] = {}
+        schemas = tool_schemas_override if tool_schemas_override is not None else self._tool_schemas
+        if schemas:
+            extras["tools"] = [{"type": "function", "function": s} for s in schemas]
+            extras["tool_choice"] = "auto"
+        return extras
+
     def _build_tool_loop_llm_kwargs(
         self,
         messages: List[LLMMessage],
@@ -1787,28 +1819,25 @@ class HybridAgent(BaseAIAgent):
         streaming: bool = False,
         tool_schemas_override: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
-        """Build kwargs for ``generate_text`` / ``stream_text`` in the tool loop.
-
-        Args:
-            tool_schemas_override: When provided, use these schemas instead of
-                ``self._tool_schemas`` (e.g. for DAWP nested runs that filter
-                out excluded tools — §4.5, D10).
-        """
-        kwargs: Dict[str, Any] = dict(
-            messages=messages,
-            model=self._config.llm_model,
-            temperature=self._config.temperature,
-            max_tokens=self._config.max_tokens,
-            context=context,
-        )
-        kwargs.update(self._config.get_llm_call_kwargs())
-        schemas = tool_schemas_override if tool_schemas_override is not None else self._tool_schemas
-        if schemas:
-            kwargs["tools"] = [{"type": "function", "function": s} for s in schemas]
-            kwargs["tool_choice"] = "auto"
-            if streaming:
-                kwargs["return_chunks"] = True
+        """Build kwargs for ``generate_text`` / ``stream_text`` in the tool loop."""
+        kwargs = self._build_llm_call_kwargs(messages, context, self._tool_loop_llm_extras(tool_schemas_override=tool_schemas_override))
+        if streaming:
+            kwargs["return_chunks"] = True
         return kwargs
+
+    async def _task_compression_context(
+        self,
+        context: Dict[str, Any],
+        plugin_ctx: Optional[AgentPluginContext] = None,
+    ) -> ToolLoopCompressionContext:
+        if plugin_ctx is not None:
+            existing = plugin_ctx.plugin_state.get("task.compression_ctx")
+            if isinstance(existing, ToolLoopCompressionContext):
+                return existing
+        built = await self._build_tool_loop_compression_context_async(context)
+        if plugin_ctx is not None:
+            plugin_ctx.plugin_state["task.compression_ctx"] = built
+        return built
 
     def _tool_loop_max_iterations_result(self, state: ToolLoopRunState) -> Dict[str, Any]:
         """Build the max-iterations result dict (sync path)."""
@@ -1821,6 +1850,8 @@ class HybridAgent(BaseAIAgent):
             "iterations": self._max_iterations,
             "tool_calls_count": state.tool_calls_count,
             "total_tokens": state.total_tokens,
+            "cache_hit": state.last_cache_hit,
+            "cache_read_tokens": state.last_cache_read_tokens,
         }
 
     def _build_tool_loop_compression_context(
@@ -1915,18 +1946,25 @@ class HybridAgent(BaseAIAgent):
         messages: List[LLMMessage],
         context: Dict[str, Any],
         plugin_ctx: Optional[AgentPluginContext] = None,
-    ) -> None:
-        """Run W8/W11 pre-LLM compression in-place on ``messages``."""
+        compression_ctx: Optional[ToolLoopCompressionContext] = None,
+    ) -> ToolLoopCompressionContext:
+        """Run W8/W11 pre-LLM compression in-place on ``messages``.
+
+        Pass ``compression_ctx`` when the caller already built it for this
+        iteration so the policy is resolved once.
+        """
         if self._auto_compact_state is not None:
             self._auto_compact_state.proactive_compact_used_this_iteration = False
 
-        compression_ctx = await self._build_tool_loop_compression_context_async(context)
+        if compression_ctx is None:
+            compression_ctx = await self._task_compression_context(context, plugin_ctx)
         compacted = await maybe_compact_before_llm(
             messages,
             compression_ctx=compression_ctx,
             plugin_ctx=plugin_ctx,
         )
         messages[:] = compacted
+        return compression_ctx
 
     async def _maybe_compact_after_tool_batch(
         self,
@@ -2306,7 +2344,7 @@ class HybridAgent(BaseAIAgent):
 
         if self._config.compact_after_tool_batch:
             batch_ctx = compression_ctx
-            if batch_ctx is None or not batch_ctx.enabled:
+            if batch_ctx is None:
                 batch_ctx = await self._build_tool_loop_compression_context_async(context or {})
             await self._maybe_compact_after_tool_batch(
                 messages,
@@ -2356,12 +2394,16 @@ class HybridAgent(BaseAIAgent):
         plugin_ctx: Optional[AgentPluginContext] = None,
     ) -> ToolLoopIterationOutcome:
         """Single non-streaming tool-loop iteration (LLM call + tool batch)."""
-        self._require_function_calling_when_tools_configured()
-        await self._apply_pre_llm_compression(messages, context, plugin_ctx=plugin_ctx)
-        compression_ctx = await self._build_tool_loop_compression_context_async(context)
-        kwargs = self._build_tool_loop_llm_kwargs(messages, context, streaming=False)
+        compression_ctx = await self._task_compression_context(context, plugin_ctx)
+        await self._apply_pre_llm_compression(
+            messages,
+            context,
+            plugin_ctx=plugin_ctx,
+            compression_ctx=compression_ctx,
+        )
+        extras = self._tool_loop_llm_extras()
         try:
-            response = await self.llm_client.generate_text(**kwargs)
+            response = await self._call_llm(messages, context, **extras)
         except Exception as exc:
             if plugin_ctx is not None:
                 await dispatch_prompt_too_long_hook(plugin_ctx, exc, iteration)
@@ -2370,8 +2412,7 @@ class HybridAgent(BaseAIAgent):
                 messages=messages,
                 compression_ctx=compression_ctx,
             ):
-                kwargs = self._build_tool_loop_llm_kwargs(messages, context, streaming=False)
-                response = await self.llm_client.generate_text(**kwargs)
+                response = await self._call_llm(messages, context, **self._tool_loop_llm_extras())
             else:
                 if plugin_ctx is not None:
                     await dispatch_llm_error_hook(plugin_ctx, exc, iteration)
@@ -2388,11 +2429,9 @@ class HybridAgent(BaseAIAgent):
         cache_creation_tokens = getattr(response, "cache_creation_tokens", None)
         cache_hit = getattr(response, "cache_hit", None)
         if cache_read_tokens is not None or cache_creation_tokens is not None or cache_hit is not None:
-            self.update_cache_metrics(
-                cache_read_tokens=cache_read_tokens,
-                cache_creation_tokens=cache_creation_tokens,
-                cache_hit=cache_hit,
-            )
+            status = self.record_prompt_cache(cache_read_tokens, cache_creation_tokens)
+            state.last_cache_hit = status["cache_hit"]
+            state.last_cache_read_tokens = status["cache_read_tokens"]
 
         state.steps.append(
             {
@@ -2427,6 +2466,8 @@ class HybridAgent(BaseAIAgent):
                 "iterations": iteration + 1,
                 "tool_calls_count": state.tool_calls_count,
                 "total_tokens": state.total_tokens,
+                "cache_hit": state.last_cache_hit,
+                "cache_read_tokens": state.last_cache_read_tokens,
             },
         )
 
@@ -2461,75 +2502,92 @@ class HybridAgent(BaseAIAgent):
         """
         from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
 
-        self._require_function_calling_when_tools_configured()
-        await self._apply_pre_llm_compression(messages, context, plugin_ctx=plugin_ctx)
-        compression_ctx = await self._build_tool_loop_compression_context_async(context)
-        kwargs = self._build_tool_loop_llm_kwargs(messages, context, streaming=True, tool_schemas_override=tool_schemas_override)
-        try:
-            stream_gen = self.llm_client.stream_text(**kwargs)
-        except Exception as exc:
-            if plugin_ctx is not None:
-                await dispatch_prompt_too_long_hook(plugin_ctx, exc, iteration)
-            if await maybe_reactive_compact_on_ptl(
-                exc,
-                messages=messages,
-                compression_ctx=compression_ctx,
-            ):
-                kwargs = self._build_tool_loop_llm_kwargs(
-                    messages,
-                    context,
-                    streaming=True,
-                    tool_schemas_override=tool_schemas_override,
-                )
-                stream_gen = self.llm_client.stream_text(**kwargs)
-            else:
-                if plugin_ctx is not None:
-                    await dispatch_llm_error_hook(plugin_ctx, exc, iteration)
-                raise
+        compression_ctx = await self._task_compression_context(context, plugin_ctx)
+        await self._apply_pre_llm_compression(
+            messages,
+            context,
+            plugin_ctx=plugin_ctx,
+            compression_ctx=compression_ctx,
+        )
+        extras = self._tool_loop_llm_extras(tool_schemas_override=tool_schemas_override)
 
         thought_tokens: List[str] = []
         tool_calls_from_stream = None
         content_thought_signature: Optional[str] = None
+        handed_to_upper = False
 
-        async for chunk in stream_gen:
-            if isinstance(chunk, StreamChunk):
-                if chunk.type == "thought" and chunk.content:
-                    if getattr(chunk, "thought_signature", None):
-                        content_thought_signature = chunk.thought_signature
-                    yield {
-                        "type": "thinking_token",
-                        "content": chunk.content,
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-                elif chunk.type == "token" and chunk.content:
-                    if getattr(chunk, "thought_signature", None):
-                        content_thought_signature = chunk.thought_signature
-                    thought_tokens.append(chunk.content)
+        async def _yield_stream_events() -> AsyncGenerator[Dict[str, Any], None]:
+            nonlocal tool_calls_from_stream, content_thought_signature, handed_to_upper
+            async for chunk in self._stream_llm(messages, context, **extras):
+                if isinstance(chunk, StreamChunk):
+                    if chunk.type == "thought" and chunk.content:
+                        if getattr(chunk, "thought_signature", None):
+                            content_thought_signature = chunk.thought_signature
+                        handed_to_upper = True
+                        yield {
+                            "type": "thinking_token",
+                            "content": chunk.content,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    elif chunk.type == "token" and chunk.content:
+                        if getattr(chunk, "thought_signature", None):
+                            content_thought_signature = chunk.thought_signature
+                        thought_tokens.append(chunk.content)
+                        handed_to_upper = True
+                        yield {
+                            "type": "token",
+                            "content": chunk.content,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    elif chunk.type == "tool_call" and chunk.tool_call:
+                        handed_to_upper = True
+                        yield {
+                            "type": "tool_call_delta",
+                            "tool_call": chunk.tool_call,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    elif chunk.type == "tool_calls" and chunk.tool_calls:
+                        tool_calls_from_stream = chunk.tool_calls
+                        yield {
+                            "type": "tool_calls_ready",
+                            "tool_calls": chunk.tool_calls,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    elif chunk.type == "usage":
+                        status = self.record_prompt_cache((chunk.usage or {}).get("cache_read_tokens"))
+                        state.last_cache_hit = status["cache_hit"]
+                        state.last_cache_read_tokens = status["cache_read_tokens"]
+                        yield {
+                            **status,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                else:
+                    thought_tokens.append(chunk)
+                    handed_to_upper = True
                     yield {
                         "type": "token",
-                        "content": chunk.content,
+                        "content": chunk,
                         "timestamp": datetime.utcnow().isoformat(),
                     }
-                elif chunk.type == "tool_call" and chunk.tool_call:
-                    yield {
-                        "type": "tool_call_delta",
-                        "tool_call": chunk.tool_call,
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-                elif chunk.type == "tool_calls" and chunk.tool_calls:
-                    tool_calls_from_stream = chunk.tool_calls
-                    yield {
-                        "type": "tool_calls_ready",
-                        "tool_calls": chunk.tool_calls,
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
+
+        try:
+            async for event in _yield_stream_events():
+                yield event
+        except Exception as exc:
+            if plugin_ctx is not None:
+                await dispatch_prompt_too_long_hook(plugin_ctx, exc, iteration)
+            if not handed_to_upper and await maybe_reactive_compact_on_ptl(
+                exc,
+                messages=messages,
+                compression_ctx=compression_ctx,
+            ):
+                extras = self._tool_loop_llm_extras(tool_schemas_override=tool_schemas_override)
+                async for event in _yield_stream_events():
+                    yield event
             else:
-                thought_tokens.append(chunk)
-                yield {
-                    "type": "token",
-                    "content": chunk,
-                    "timestamp": datetime.utcnow().isoformat(),
-                }
+                if plugin_ctx is not None:
+                    await dispatch_llm_error_hook(plugin_ctx, exc, iteration)
+                raise
 
         thought_raw = "".join(thought_tokens)
         state.steps.append(
@@ -2571,6 +2629,8 @@ class HybridAgent(BaseAIAgent):
                 "iterations": iteration + 1,
                 "tool_calls_count": state.tool_calls_count,
                 "total_tokens": state.total_tokens,
+                "cache_hit": state.last_cache_hit,
+                "cache_read_tokens": state.last_cache_read_tokens,
             },
         )
 

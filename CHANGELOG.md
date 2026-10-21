@@ -9,7 +9,13 @@ See also `docs/changelog.rst` for historical release notes.
 
 ## [Unreleased]
 
+### Changed
 
+- **Agent LLM call path:** one `finally` returns `BUSY` → `ACTIVE` after every task; model retry is a single layer (`_call_llm` / `_stream_llm`). Public method signatures are unchanged. Caller notes: [`docs/user/DOMAIN_AGENT/LLM_CALL_PATH_CHANGELOG.md`](docs/user/DOMAIN_AGENT/LLM_CALL_PATH_CHANGELOG.md).
+  - `process_message_streaming` raises `TaskExecutionError` on stream `error` (no longer an empty success).
+  - Failed tasks leave the agent `ACTIVE`; `ERROR` means initialize failed.
+  - ToolAgent last-tool failure returns `success: false` (no KeyError).
+  - `execute_with_recovery` `RETRY` runs the original task once; 429/529 retry inside that call.
 
 ## [2.1.3] - 2026-09-15
 

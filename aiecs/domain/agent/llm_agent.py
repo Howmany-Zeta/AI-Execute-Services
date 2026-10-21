@@ -350,9 +350,12 @@ class LLMAgent(BaseAIAgent):
             TaskExecutionError: If task execution fails
         """
         start_time = datetime.utcnow()
+        entered_busy = False
 
         try:
+            self._require_ready_for_task()
             self._transition_state(self.state.__class__.BUSY)
+            entered_busy = True
             self._current_task_id = task.get("task_id")
 
             inner = await self._execute_task_with_plugins(task, context)
@@ -365,34 +368,35 @@ class LLMAgent(BaseAIAgent):
                 tokens_used=inner.get("tokens_used"),
             )
 
-            self._transition_state(self.state.__class__.ACTIVE)
-            self._current_task_id = None
-            self.last_active_at = datetime.utcnow()
-
             return {
                 "success": True,
                 "output": inner.get("output"),
                 "provider": inner.get("provider"),
                 "model": inner.get("model"),
                 "tokens_used": inner.get("tokens_used"),
+                "cache_hit": inner.get("cache_hit", False),
+                "cache_read_tokens": inner.get("cache_read_tokens", 0),
                 "execution_time": execution_time,
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
+        except TaskExecutionError:
+            execution_time = (datetime.utcnow() - start_time).total_seconds()
+            self.update_metrics(execution_time=execution_time, success=False)
+            raise
         except Exception as e:
             logger.error(f"Task execution failed for {self.agent_id}: {e}")
 
             execution_time = (datetime.utcnow() - start_time).total_seconds()
             self.update_metrics(execution_time=execution_time, success=False)
 
-            self._transition_state(self.state.__class__.ERROR)
-            self._current_task_id = None
-
             raise TaskExecutionError(
                 f"Task execution failed: {str(e)}",
                 agent_id=self.agent_id,
                 task_id=task.get("task_id"),
             )
+        finally:
+            self._release_task(entered_busy)
 
     async def _execute_task_with_plugins(
         self,
@@ -424,14 +428,15 @@ class LLMAgent(BaseAIAgent):
                 plugin_ctx,
             )
 
-        response = await self.llm_client.generate_text(
-            messages=messages,
-            model=self._config.llm_model,
-            temperature=self._config.temperature,
-            max_tokens=self._config.max_tokens,
-            context=context,
-            **self._config.get_llm_call_kwargs(),
-        )
+        response = await self._call_llm(messages, context)
+
+        cache_read_tokens = getattr(response, "cache_read_tokens", None)
+        cache_creation_tokens = getattr(response, "cache_creation_tokens", None)
+        cache_hit = getattr(response, "cache_hit", None)
+        if cache_read_tokens is not None or cache_creation_tokens is not None or cache_hit is not None:
+            cache_status = self.record_prompt_cache(cache_read_tokens, cache_creation_tokens)
+        else:
+            cache_status = {"cache_hit": False, "cache_read_tokens": 0}
 
         inner: Dict[str, Any] = {
             "success": True,
@@ -439,6 +444,8 @@ class LLMAgent(BaseAIAgent):
             "provider": response.provider,
             "model": response.model,
             "tokens_used": getattr(response, "total_tokens", None),
+            "cache_hit": cache_status["cache_hit"],
+            "cache_read_tokens": cache_status["cache_read_tokens"],
         }
 
         inner = await run_post_task_phase_with_hooks(
@@ -572,15 +579,13 @@ class LLMAgent(BaseAIAgent):
             raise
 
     async def execute_task_streaming(self, task: Dict[str, Any], context: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
-        """
-        Execute a task with streaming LLM tokens.
-
-        Phase 3: uses legacy ``_build_messages`` (no plugin phases). Sync path to follow.
-        """
+        """Execute a task with streaming LLM tokens via the plugin message kernel."""
         start_time = datetime.utcnow()
+        entered_busy = False
+        stream_complete = False
 
         try:
-            # Extract task description
+            self._require_ready_for_task()
             task_description = task.get("description") or task.get("prompt") or task.get("task")
             if not task_description:
                 yield {
@@ -590,86 +595,113 @@ class LLMAgent(BaseAIAgent):
                 }
                 return
 
-            # Transition to busy state
             self._transition_state(self.state.__class__.BUSY)
+            entered_busy = True
             self._current_task_id = task.get("task_id")
 
-            # Yield status
             yield {
                 "type": "status",
                 "status": "started",
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
-            # Build messages
-            messages = self._build_messages(task_description, context)
-
-            # Stream LLM response
-            output_tokens = []
-            async for token in self.llm_client.stream_text(
-                messages=messages,
-                model=self._config.llm_model,
-                temperature=self._config.temperature,
-                max_tokens=self._config.max_tokens,
+            plugin_ctx = self._make_plugin_context(
+                task=task,
                 context=context,
-                **self._config.get_llm_call_kwargs(),
-            ):
-                output_tokens.append(token)
-                yield {
-                    "type": "token",
-                    "content": token,
-                    "timestamp": datetime.utcnow().isoformat(),
-                }
-
-            # Combine output
-            output = "".join(output_tokens)
-
-            # Store in conversation history if enabled
-            if self._config.memory_enabled:
-                self._conversation_history.append(LLMMessage(role="user", content=task_description))
-                self._conversation_history.append(LLMMessage(role="assistant", content=output))
-
-            # Calculate execution time
-            execution_time = (datetime.utcnow() - start_time).total_seconds()
-
-            # Update metrics
-            self.update_metrics(
-                execution_time=execution_time,
-                success=True,
-                tokens_used=None,  # Token count not available in streaming mode
+                task_description=task_description,
             )
+            self._apply_task_plugin_configs(task=task, context=context)
+            await prepare_and_dispatch_task_entry_hooks(plugin_ctx, task_description=task_description)
+            if self._plugin_manager is not None:
+                await self._plugin_manager.run_phase(PluginPhase.PRE_TASK, ctx=plugin_ctx)
 
-            # Transition back to active
-            self._transition_state(self.state.__class__.ACTIVE)
-            self._current_task_id = None
-            self.last_active_at = datetime.utcnow()
+            if self._should_use_legacy_messages(task, context):
+                messages = self._build_messages(task_description, context)
+            else:
+                messages = await self._build_messages_via_plugins(
+                    task_description,
+                    context,
+                    plugin_ctx,
+                )
 
-            # Yield final result
-            yield {
-                "type": "result",
+            from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
+
+            output_tokens: List[str] = []
+            cache_status: Dict[str, Any] = {"cache_hit": False, "cache_read_tokens": 0}
+            async for chunk in self._stream_llm(messages, context):
+                if isinstance(chunk, StreamChunk):
+                    if chunk.type == "token" and chunk.content:
+                        output_tokens.append(chunk.content)
+                        yield {
+                            "type": "token",
+                            "content": chunk.content,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    elif chunk.type == "usage":
+                        cache_status = self.record_prompt_cache((chunk.usage or {}).get("cache_read_tokens"))
+                        yield {
+                            **cache_status,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                elif isinstance(chunk, str) and chunk:
+                    output_tokens.append(chunk)
+                    yield {
+                        "type": "token",
+                        "content": chunk,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+
+            output = "".join(output_tokens)
+            stream_complete = True
+
+            inner: Dict[str, Any] = {
                 "success": True,
                 "output": output,
                 "provider": self.llm_client.provider_name,
+                "cache_hit": cache_status["cache_hit"],
+                "cache_read_tokens": cache_status["cache_read_tokens"],
+            }
+            if self._plugin_manager is not None:
+                inner = await run_post_task_phase_with_hooks(
+                    self._plugin_manager,
+                    plugin_ctx,
+                    inner,
+                )
+            elif self._config.memory_enabled:
+                self._conversation_history.append(LLMMessage(role="user", content=task_description))
+                self._conversation_history.append(LLMMessage(role="assistant", content=inner.get("output") or ""))
+
+            execution_time = (datetime.utcnow() - start_time).total_seconds()
+            self.update_metrics(
+                execution_time=execution_time,
+                success=True,
+                tokens_used=None,
+            )
+
+            yield {
+                "type": "result",
+                "success": True,
+                "output": inner.get("output"),
+                "provider": inner.get("provider", self.llm_client.provider_name),
                 "execution_time": execution_time,
+                "cache_hit": inner.get("cache_hit", cache_status["cache_hit"]),
+                "cache_read_tokens": inner.get("cache_read_tokens", cache_status["cache_read_tokens"]),
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
         except Exception as e:
+            if stream_complete:
+                raise
             logger.error(f"Streaming task execution failed for {self.agent_id}: {e}")
-
-            # Update metrics for failure
             execution_time = (datetime.utcnow() - start_time).total_seconds()
             self.update_metrics(execution_time=execution_time, success=False)
-
-            # Transition to error state
-            self._transition_state(self.state.__class__.ERROR)
-            self._current_task_id = None
-
             yield {
                 "type": "error",
                 "error": str(e),
                 "timestamp": datetime.utcnow().isoformat(),
             }
+        finally:
+            self._release_task(entered_busy)
 
     async def process_message_streaming(self, message: str, sender_id: Optional[str] = None) -> AsyncGenerator[str, None]:
         """
@@ -689,17 +721,12 @@ class LLMAgent(BaseAIAgent):
             ```
         """
         try:
-            # Build task from message
             task = {
                 "description": message,
                 "task_id": f"msg_{datetime.utcnow().timestamp()}",
             }
-
-            # Stream task execution
-            async for event in self.execute_task_streaming(task, {"sender_id": sender_id}):
-                if event["type"] == "token":
-                    yield event["content"]
-
+            async for token in self._iter_user_stream_tokens(task, {"sender_id": sender_id}):
+                yield token
         except Exception as e:
             logger.error(f"Streaming message processing failed for {self.agent_id}: {e}")
             raise

@@ -39,6 +39,8 @@ logger = logging.getLogger(__name__)
 class OpenRouterClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
     """OpenRouter provider client using OpenAI-compatible API"""
 
+    retries_generate_text = True
+
     def __init__(self) -> None:
         super().__init__("OpenRouter")
         self.settings = get_settings()

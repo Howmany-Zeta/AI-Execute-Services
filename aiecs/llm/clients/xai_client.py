@@ -39,6 +39,8 @@ logger = logging.getLogger(__name__)
 class XAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
     """xAI (Grok) provider client"""
 
+    retries_generate_text = True
+
     def __init__(self) -> None:
         super().__init__("xAI")
         self.settings = get_settings()

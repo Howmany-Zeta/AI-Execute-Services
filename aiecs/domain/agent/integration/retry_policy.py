@@ -11,10 +11,40 @@ Sophisticated retry logic with exponential backoff and error classification.
 import asyncio
 import random
 import logging
-from typing import Callable, Any
+from typing import Callable, Any, Iterator, Optional
 from enum import Enum
 
+from aiecs.llm.clients.base_client import RateLimitError
+
 logger = logging.getLogger(__name__)
+
+_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504, 529}
+_CLIENT_STATUS_CODES = {400, 401, 403, 404}
+
+
+def _exception_chain(error: BaseException) -> Iterator[BaseException]:
+    seen: set[int] = set()
+    current: Optional[BaseException] = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        yield current
+        nxt = current.__cause__ or current.__context__
+        current = nxt if isinstance(nxt, BaseException) else None
+
+
+def _http_status_code(exc: BaseException) -> Optional[int]:
+    for attr in ("status_code", "status", "http_status"):
+        value = getattr(exc, attr, None)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.isdigit():
+            return int(value)
+    response = getattr(exc, "response", None)
+    if response is not None:
+        value = getattr(response, "status_code", None)
+        if isinstance(value, int):
+            return value
+    return None
 
 
 class ErrorType(Enum):
@@ -42,26 +72,40 @@ class ErrorClassifier:
         Returns:
             ErrorType
         """
+        from aiecs.domain.context.compression.ptl import is_prompt_too_long_error
+
+        if is_prompt_too_long_error(error):
+            return ErrorType.CLIENT_ERROR
+
+        for exc in _exception_chain(error):
+            if isinstance(exc, RateLimitError):
+                return ErrorType.RATE_LIMIT
+            status = _http_status_code(exc)
+            if status == 429:
+                return ErrorType.RATE_LIMIT
+            if status in _RETRYABLE_STATUS_CODES:
+                return ErrorType.SERVER_ERROR
+            if status in _CLIENT_STATUS_CODES:
+                return ErrorType.CLIENT_ERROR
+
         error_str = str(error).lower()
         error_type_name = type(error).__name__.lower()
 
-        # Rate limit errors
         if "rate limit" in error_str or "429" in error_str:
             return ErrorType.RATE_LIMIT
 
-        # Timeout errors
         if "timeout" in error_str or "timed out" in error_str:
             return ErrorType.TIMEOUT
 
-        # Server errors (5xx)
+        if "overloaded" in error_str or "529" in error_str:
+            return ErrorType.SERVER_ERROR
+
         if any(code in error_str for code in ["500", "502", "503", "504"]):
             return ErrorType.SERVER_ERROR
 
-        # Client errors (4xx)
         if any(code in error_str for code in ["400", "401", "403", "404"]):
             return ErrorType.CLIENT_ERROR
 
-        # Network errors
         if any(term in error_type_name for term in ["connection", "network", "socket"]):
             return ErrorType.NETWORK_ERROR
 

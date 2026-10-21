@@ -2,11 +2,9 @@
 #  *  Copyright (c) IRETBL Corporation. All rights reserved.
 #  *  Licensed under the Apache-2.0. See License.txt in the project root for license information.
 #  *--------------------------------------------------------------------------------------------*/
-import asyncio
 import json
 import logging
 import os
-import hashlib
 import base64
 from typing import Dict, Any, Optional, List, AsyncGenerator, Union
 from google import genai
@@ -196,10 +194,12 @@ def _build_safety_block_error(
 
 
 class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
-    """Vertex AI provider client"""
+    """Vertex AI provider client.
 
-    # Redis key prefix for persisted CachedContent IDs
-    _REDIS_KEY_PREFIX = "vertex_ai:cached_content:"
+    Prompt caching is implicit: every request sends the same system instruction,
+    tools, and full contents so Vertex can match the prefix. This client does
+    not create or reference CachedContent.
+    """
 
     def __init__(self):
         super().__init__("Vertex")
@@ -212,9 +212,6 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             "part_counts": {},  # {part_count: frequency}
             "last_part_count": None,
         }
-        # In-memory cache for CachedContent objects (key: content hash, value: cached_content_id)
-        # Acts as L1 cache; Redis acts as L2 persistent cache across restarts
-        self._cached_content_cache: Dict[str, str] = {}
 
     def _init_client(self) -> genai.Client:
         """Lazy initialization of Vertex AI genai.Client with proper authentication"""
@@ -262,172 +259,6 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 raise ProviderNotAvailableError(f"Failed to initialize Vertex AI: {str(e)}")
 
         return self._client
-
-    async def _get_redis(self) -> Any:
-        """Lazily get the global Redis client. Returns None if unavailable."""
-        try:
-            from aiecs.infrastructure.persistence.redis_client import redis_client
-
-            return redis_client
-        except Exception:
-            return None
-
-    @staticmethod
-    def _is_cache_not_found_error(exc: Exception) -> bool:
-        """
-        Return True when *exc* looks like a Vertex AI 404 / cache-not-found error.
-
-        This covers the case where a CachedContent ID was retrieved from Redis
-        (or the in-memory dict) but the corresponding entry has already expired
-        on the Vertex AI side.
-        """
-        s = str(exc).lower()
-        return "404" in s or "not found" in s or "does not exist" in s
-
-    async def _invalidate_cached_content(self, cache_key: str) -> None:
-        """
-        Remove a stale CachedContent entry from both L1 (in-memory) and L2 (Redis).
-
-        Call this when Vertex AI returns a "not found" error for a cached_content_id
-        so that the next request recreates it instead of reusing the dead ID.
-        """
-        # L1: remove from in-memory dict
-        stale_id = self._cached_content_cache.pop(cache_key, None)
-
-        # L2: remove from Redis
-        redis = await self._get_redis()
-        if redis:
-            try:
-                redis_key = f"{self._REDIS_KEY_PREFIX}{cache_key}"
-                raw = await redis.get_client()
-                await raw.delete(redis_key)
-                self.logger.debug(f"Deleted stale CachedContent key from Redis: {redis_key}")
-            except Exception as e:
-                self.logger.warning(f"Redis delete failed for stale CachedContent key: {e}")
-
-        self.logger.info(f"Invalidated stale CachedContent (id={stale_id})")
-
-    def _generate_content_hash(self, content: str, tools: Optional[List[Any]] = None) -> str:
-        """Generate a hash for content and tools to use as cache key."""
-        hash_input = content
-        if tools:
-            # Include tools in the hash so different tool configurations get different cached contents
-            import json
-
-            tools_str = json.dumps([str(t) for t in tools], sort_keys=True)
-            hash_input = f"{content}|tools:{tools_str}"
-        return hashlib.md5(hash_input.encode("utf-8")).hexdigest()
-
-    async def _get_cached_content_id(self, cache_key: str, redis_key: str) -> Optional[str]:
-        """
-        Fast L1 + L2 lookup — never calls the Vertex AI API.
-
-        Returns the cached CachedContent ID if found in either the in-memory dict
-        (L1) or Redis (L2), and None otherwise.
-        """
-        # L1: in-memory dict
-        if cache_key in self._cached_content_cache:
-            cached_id = self._cached_content_cache[cache_key]
-            self.logger.debug(f"[L1] Using in-memory CachedContent: {cached_id}")
-            return cached_id
-
-        # L2: Redis
-        redis = await self._get_redis()
-        if redis:
-            try:
-                redis_cached_id: Optional[str] = await redis.get(redis_key)
-                if redis_cached_id:
-                    self._cached_content_cache[cache_key] = redis_cached_id  # backfill L1
-                    self.logger.debug(f"[L2] Using Redis-persisted CachedContent: {redis_cached_id}")
-                    return redis_cached_id
-            except Exception as redis_err:
-                self.logger.warning(f"Redis read failed for CachedContent key: {redis_err}")
-
-        return None
-
-    async def _create_and_store_cached_content(
-        self,
-        content: str,
-        model_name: str,
-        ttl: int,
-        tools: Optional[List[Any]],
-        cache_key: str,
-        redis_key: str,
-    ) -> Optional[str]:
-        """
-        Call the Vertex AI CachedContent API (L3) and persist the result to L1 + L2.
-
-        Designed to be awaited directly (generate_text) *or* scheduled as a
-        background task via asyncio.create_task (stream_text).
-
-        Returns the new CachedContent ID, or None on failure.
-        """
-        try:
-            client = self._init_client()
-
-            if tools:
-                self.logger.debug(f"Including {len(tools)} tools in cached content")
-
-            cache = await client.aio.caches.create(
-                model=model_name,
-                config=types.CreateCachedContentConfig(
-                    system_instruction=content,
-                    ttl=f"{ttl}s",
-                    tools=tools,
-                ),
-            )
-
-            cached_content_id: Optional[str] = cache.name
-            if cached_content_id:
-                # Backfill L1
-                self._cached_content_cache[cache_key] = cached_content_id
-                # Backfill L2 with matching TTL
-                redis = await self._get_redis()
-                if redis:
-                    try:
-                        await redis.set(redis_key, cached_content_id, ex=ttl)
-                        self.logger.debug(f"Persisted CachedContent to Redis (ttl={ttl}s): {cached_content_id}")
-                    except Exception as redis_err:
-                        self.logger.warning(f"Redis write failed for CachedContent, in-memory only: {redis_err}")
-                self.logger.info(f"Created CachedContent for prompt caching: {cached_content_id}")
-            return cached_content_id
-
-        except Exception as e:
-            self.logger.warning(f"Failed to create CachedContent (prompt caching disabled, " f"falling back to system_instruction): {str(e)}")
-            return None
-
-    async def _create_or_get_cached_content(
-        self,
-        content: str,
-        model_name: str,
-        ttl_seconds: Optional[int] = None,
-        tools: Optional[List[Any]] = None,
-    ) -> Optional[str]:
-        """
-        Create or get a CachedContent — **blocking** L1 → L2 → L3 lookup.
-
-        Suitable for non-streaming callers (generate_text) where an await before
-        the first token is acceptable.  For stream_text use _get_cached_content_id
-        + asyncio.create_task(_create_and_store_cached_content) instead so that
-        L3 creation never blocks the first yield.
-
-        Returns:
-            CachedContent resource name string, or None if caching fails.
-        """
-        if not content or not content.strip():
-            return None
-
-        ttl = ttl_seconds or 3600
-        cache_key = self._generate_content_hash(content, tools)
-        redis_key = f"{self._REDIS_KEY_PREFIX}{cache_key}"
-
-        # L1 + L2 fast path
-        cached_id = await self._get_cached_content_id(cache_key, redis_key)
-        if cached_id:
-            return cached_id
-
-        # L3: blocking Vertex AI API call
-        return await self._create_and_store_cached_content(content, model_name, ttl, tools, cache_key, redis_key)
 
     def _convert_messages_to_contents(self, messages: List[LLMMessage]) -> List[types.Content]:
         """
@@ -673,23 +504,18 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             max_tokens = model_config.default_params.max_tokens
 
         try:
-            # Extract system messages from messages if present
-            # AIECS 1.9.8: Support multiple system messages with selective caching
-            # - Messages with cache_control=True → cached as system_instruction
-            # - Messages without cache_control or cache_control=False → prepended to user messages
+            # cache_control selects where system text is sent. It does not create
+            # CachedContent. Marked messages stay in system_instruction; unmarked
+            # ones are prepended as [System Context] so the request prefix stays stable.
             cached_system_msgs = []
             non_cached_system_msgs = []
-            system_cache_control = None
             user_messages = []
 
             for msg in messages:
                 if msg.role == "system":
                     if msg.content:
-                        # Check if this message should be cached
                         if msg.cache_control:
                             cached_system_msgs.append(msg.content)
-                            if system_cache_control is None:
-                                system_cache_control = msg.cache_control
                         else:
                             non_cached_system_msgs.append(msg.content)
                 else:
@@ -708,8 +534,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             # Use explicit system_instruction parameter if provided, else use extracted system message
             final_system_instruction = system_instruction or system_msg
 
-            # Prepare tools for Function Calling BEFORE cached content creation
-            # so tools can be included in the cached content
+            # Tools travel with every request so the implicit-cache prefix matches.
             tools_for_api = None
             if tools or functions:
                 # Convert OpenAI format to Google format
@@ -721,19 +546,6 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 google_tools = self._convert_openai_to_google_format(tools_list)
                 if google_tools:
                     tools_for_api = google_tools
-
-            # Check if we should use CachedContent API for prompt caching
-            cached_content_id = None
-            if final_system_instruction and system_cache_control:
-                # Create or get CachedContent for the system instruction (and tools if provided)
-                # Extract TTL from cache_control if available (defaults to 3600 seconds)
-                ttl_seconds = getattr(system_cache_control, "ttl_seconds", None) or 3600
-                cached_content_id = await self._create_or_get_cached_content(
-                    content=final_system_instruction,
-                    model_name=model_name,
-                    ttl_seconds=ttl_seconds,
-                    tools=tools_for_api,
-                )
 
             # Convert messages to Vertex AI format
             contents: Union[str, List[types.Content]]
@@ -774,9 +586,8 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             # is unchanged.
             thinking_config = kwargs.pop("thinking_config", None)
 
-            # Build unified GenerateContentConfig.
-            # When cached_content is set, system_instruction and tools must be omitted
-            # because they are already baked into the cached content object.
+            # Always send system_instruction and tools. Implicit caching matches
+            # this prefix; omitting either side would change the request bytes.
             # top_p / top_k are only forwarded when explicitly supplied so that
             # each model can use its own API-side defaults when they are not set.
             _top_p = kwargs.pop("top_p", None)
@@ -785,9 +596,8 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             _gen_config_params: Dict[str, Any] = {
                 "temperature": temperature,
                 "max_output_tokens": max_tokens or 8192,
-                "system_instruction": final_system_instruction if not cached_content_id else None,
-                "tools": tools_for_api if not cached_content_id else None,
-                "cached_content": cached_content_id,
+                "system_instruction": final_system_instruction,
+                "tools": tools_for_api,
                 "safety_settings": safety_settings,
                 "thinking_config": thinking_config,
             }
@@ -799,41 +609,11 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 _gen_config_params["top_k"] = _top_k
             config = types.GenerateContentConfig(**_gen_config_params)
 
-            if cached_content_id:
-                self.logger.debug(f"Using CachedContent for prompt caching: {cached_content_id}")
-
-            try:
-                response = await client.aio.models.generate_content(
-                    model=model_name,
-                    contents=contents,  # type: ignore[arg-type]
-                    config=config,
-                )
-            except Exception as _cache_err:
-                # If Vertex AI reports that the CachedContent no longer exists
-                # (e.g. it expired on the Vertex side before our Redis key did),
-                # invalidate both caches and retry once without the cached ID.
-                if cached_content_id and self._is_cache_not_found_error(_cache_err):
-                    cache_key = self._generate_content_hash(final_system_instruction or "", tools_for_api)
-                    await self._invalidate_cached_content(cache_key)
-                    self.logger.warning(f"CachedContent not found on Vertex AI, invalidated stale entry and retrying: {cached_content_id}")
-                    config = types.GenerateContentConfig(
-                        temperature=config.temperature,
-                        max_output_tokens=config.max_output_tokens,
-                        top_p=config.top_p,
-                        top_k=config.top_k,
-                        system_instruction=final_system_instruction,
-                        tools=tools_for_api,  # type: ignore[arg-type]
-                        cached_content=None,
-                        safety_settings=config.safety_settings,
-                        thinking_config=config.thinking_config,
-                    )
-                    response = await client.aio.models.generate_content(
-                        model=model_name,
-                        contents=contents,  # type: ignore[arg-type]
-                        config=config,
-                    )
-                else:
-                    raise
+            response = await client.aio.models.generate_content(
+                model=model_name,
+                contents=contents,  # type: ignore[arg-type]
+                config=config,
+            )
 
             # Check for prompt-level safety blocks first
             if hasattr(response, "prompt_feedback"):
@@ -1053,23 +833,18 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             max_tokens = model_config.default_params.max_tokens
 
         try:
-            # Extract system messages from messages if present
-            # AIECS 1.9.8: Support multiple system messages with selective caching
-            # - Messages with cache_control=True → cached as system_instruction
-            # - Messages without cache_control or cache_control=False → prepended to user messages
+            # cache_control selects where system text is sent. It does not create
+            # CachedContent. Marked messages stay in system_instruction; unmarked
+            # ones are prepended as [System Context] so the request prefix stays stable.
             cached_system_msgs = []
             non_cached_system_msgs = []
-            system_cache_control = None
             user_messages = []
 
             for msg in messages:
                 if msg.role == "system":
                     if msg.content:
-                        # Check if this message should be cached
                         if msg.cache_control:
                             cached_system_msgs.append(msg.content)
-                            if system_cache_control is None:
-                                system_cache_control = msg.cache_control
                         else:
                             non_cached_system_msgs.append(msg.content)
                 else:
@@ -1093,8 +868,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             # Use explicit system_instruction parameter if provided, else use extracted system message
             final_system_instruction = system_instruction or system_msg
 
-            # Prepare tools for Function Calling BEFORE cached content creation
-            # so tools can be included in the cached content
+            # Tools travel with every request so the implicit-cache prefix matches.
             tools_for_api = None
             if tools or functions:
                 # Convert OpenAI format to Google format
@@ -1106,38 +880,6 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 google_tools = self._convert_openai_to_google_format(tools_list)
                 if google_tools:
                     tools_for_api = google_tools
-
-            # Check if we should use CachedContent API for prompt caching.
-            #
-            # Streaming design: we must NOT block the first yield on a slow L3
-            # (Vertex AI API) cache creation.
-            #
-            #  • L1/L2 hit  → await the fast lookup (dict / Redis, ~0-5 ms) and
-            #                  use the cached ID immediately.
-            #  • L3 miss    → schedule creation as a background task so streaming
-            #                  starts right away; the next request will hit L1/L2.
-            cached_content_id = None
-            if final_system_instruction and system_cache_control:
-                ttl_seconds = getattr(system_cache_control, "ttl_seconds", None) or 3600
-                _cache_key = self._generate_content_hash(final_system_instruction, tools_for_api)
-                _redis_key = f"{self._REDIS_KEY_PREFIX}{_cache_key}"
-
-                # Fast path: L1 + L2 only (no Vertex AI network call)
-                cached_content_id = await self._get_cached_content_id(_cache_key, _redis_key)
-
-                if not cached_content_id:
-                    # L3 miss: fire-and-forget background creation; stream immediately
-                    asyncio.create_task(
-                        self._create_and_store_cached_content(
-                            content=final_system_instruction,
-                            model_name=model_name,
-                            ttl=ttl_seconds,
-                            tools=tools_for_api,
-                            cache_key=_cache_key,
-                            redis_key=_redis_key,
-                        )
-                    )
-                    self.logger.debug("CachedContent not in L1/L2; streaming immediately, " "cache creation scheduled in background")
 
             # Convert messages to Vertex AI format
             stream_contents: Union[str, List[types.Content]]
@@ -1175,19 +917,15 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             # Extended thinking / reasoning support for Gemini Thinking models.
             thinking_config = kwargs.pop("thinking_config", None)
 
-            # Build unified GenerateContentConfig.
-            # When cached_content is set, system_instruction and tools must be omitted
-            # because they are already baked into the cached content object.
-            # top_p / top_k are only forwarded when explicitly supplied so that
-            # each model can use its own API-side defaults when they are not set.
+            # Always send system_instruction and tools. Implicit caching matches
+            # this prefix; omitting either side would change the request bytes.
             _stream_top_p = kwargs.pop("top_p", None)
             _stream_top_k = kwargs.pop("top_k", None)
             _stream_config_params: Dict[str, Any] = {
                 "temperature": temperature,
                 "max_output_tokens": max_tokens or 8192,
-                "system_instruction": final_system_instruction if not cached_content_id else None,
-                "tools": tools_for_api if not cached_content_id else None,
-                "cached_content": cached_content_id,
+                "system_instruction": final_system_instruction,
+                "tools": tools_for_api,
                 "safety_settings": safety_settings,
                 "thinking_config": thinking_config,
             }
@@ -1197,49 +935,14 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 _stream_config_params["top_k"] = _stream_top_k
             config = types.GenerateContentConfig(**_stream_config_params)
 
-            if cached_content_id:
-                self.logger.debug(f"Using CachedContent for prompt caching in streaming: {cached_content_id}")
-
-            try:
-                async for chunk in self._stream_text_with_function_calling(
-                    client=client,
-                    model_name=model_name,
-                    contents=stream_contents,
-                    config=config,
-                    return_chunks=return_chunks,
-                ):
-                    yield chunk
-            except Exception as _cache_err:
-                # If Vertex AI reports that the CachedContent no longer exists
-                # (e.g. it expired on the Vertex side before our Redis key did),
-                # invalidate both caches and retry the stream once without the cached ID.
-                # NOTE: this retry is safe only when no chunks have been yielded yet
-                # (a 404 from Vertex AI always surfaces before the first token).
-                if cached_content_id and self._is_cache_not_found_error(_cache_err):
-                    cache_key = self._generate_content_hash(final_system_instruction or "", tools_for_api)
-                    await self._invalidate_cached_content(cache_key)
-                    self.logger.warning(f"CachedContent not found on Vertex AI (streaming), invalidated stale entry and retrying: {cached_content_id}")
-                    fallback_config = types.GenerateContentConfig(
-                        temperature=config.temperature,
-                        max_output_tokens=config.max_output_tokens,
-                        top_p=config.top_p,
-                        top_k=config.top_k,
-                        system_instruction=final_system_instruction,
-                        tools=tools_for_api,  # type: ignore[arg-type]
-                        cached_content=None,
-                        safety_settings=config.safety_settings,
-                        thinking_config=config.thinking_config,
-                    )
-                    async for chunk in self._stream_text_with_function_calling(
-                        client=client,
-                        model_name=model_name,
-                        contents=stream_contents,
-                        config=fallback_config,
-                        return_chunks=return_chunks,
-                    ):
-                        yield chunk
-                else:
-                    raise
+            async for chunk in self._stream_text_with_function_calling(
+                client=client,
+                model_name=model_name,
+                contents=stream_contents,
+                config=config,
+                return_chunks=return_chunks,
+            ):
+                yield chunk
 
         except SafetyBlockError:
             # Re-raise safety block errors as-is

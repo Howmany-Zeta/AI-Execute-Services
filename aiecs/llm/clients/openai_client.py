@@ -28,8 +28,25 @@ from aiecs.config.config import get_settings
 logger = logging.getLogger(__name__)
 
 
+def _session_prompt_cache_key(context: Optional[Dict[str, Any]]) -> Optional[str]:
+    """OpenAI prompt-cache routing key. Only a non-empty session_id qualifies."""
+    if not context:
+        return None
+    session_id = context.get("session_id")
+    if session_id is None:
+        return None
+    key = str(session_id).strip()
+    return key or None
+
+
+def _prompt_cache_key_rejected(exc: BaseException) -> bool:
+    return "prompt_cache_key" in str(exc).lower()
+
+
 class OpenAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
     """OpenAI provider client"""
+
+    retries_generate_text = True
 
     def __init__(self) -> None:
         super().__init__("OpenAI")
@@ -88,10 +105,13 @@ class OpenAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
 
         # Get model name from config if not provided
         model = model or self._get_default_model() or "gpt-4-turbo"
+        call_kwargs = dict(kwargs)
+        cache_key = _session_prompt_cache_key(context)
+        if cache_key:
+            call_kwargs["prompt_cache_key"] = cache_key
 
         try:
-            # Use mixin method for Function Calling support
-            return await self._generate_text_with_function_calling(
+            return await self._generate_once(
                 client=client,
                 messages=messages,
                 model=model,
@@ -102,9 +122,9 @@ class OpenAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
                 tool_choice=tool_choice,
                 input_price=input_price,
                 output_price=output_price,
-                **kwargs,
+                call_kwargs=call_kwargs,
+                cache_key=cache_key,
             )
-
         except Exception as e:
             if "rate_limit" in str(e).lower():
                 raise RateLimitError(f"OpenAI rate limit exceeded: {str(e)}")
@@ -151,9 +171,13 @@ class OpenAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
 
         # Get model name from config if not provided
         model = model or self._get_default_model() or "gpt-4-turbo"
+        call_kwargs = dict(kwargs)
+        cache_key = _session_prompt_cache_key(context)
+        if cache_key:
+            call_kwargs["prompt_cache_key"] = cache_key
 
+        yielded = False
         try:
-            # Use mixin method for Function Calling support
             async for chunk in self._stream_text_with_function_calling(
                 client=client,
                 messages=messages,
@@ -164,13 +188,82 @@ class OpenAIClient(BaseLLMClient, OpenAICompatibleFunctionCallingMixin):
                 tools=tools,
                 tool_choice=tool_choice,
                 return_chunks=return_chunks,
-                **kwargs,
+                **call_kwargs,
             ):
+                yielded = True
                 yield chunk
         except Exception as e:
+            if cache_key and not yielded and _prompt_cache_key_rejected(e):
+                call_kwargs.pop("prompt_cache_key", None)
+                try:
+                    async for chunk in self._stream_text_with_function_calling(
+                        client=client,
+                        messages=messages,
+                        model=model,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        functions=functions,
+                        tools=tools,
+                        tool_choice=tool_choice,
+                        return_chunks=return_chunks,
+                        **call_kwargs,
+                    ):
+                        yield chunk
+                    return
+                except Exception as retry_exc:
+                    e = retry_exc
             if "rate_limit" in str(e).lower():
                 raise RateLimitError(f"OpenAI rate limit exceeded: {str(e)}")
             raise
+
+    async def _generate_once(
+        self,
+        *,
+        client: AsyncOpenAI,
+        messages: List[LLMMessage],
+        model: str,
+        temperature: float,
+        max_tokens: Optional[int],
+        functions: Optional[List[Dict[str, Any]]],
+        tools: Optional[List[Dict[str, Any]]],
+        tool_choice: Optional[Any],
+        input_price: Optional[float],
+        output_price: Optional[float],
+        call_kwargs: Dict[str, Any],
+        cache_key: Optional[str],
+    ) -> LLMResponse:
+        """One completion. If prompt_cache_key is rejected, retry once without it."""
+        try:
+            return await self._generate_text_with_function_calling(
+                client=client,
+                messages=messages,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                functions=functions,
+                tools=tools,
+                tool_choice=tool_choice,
+                input_price=input_price,
+                output_price=output_price,
+                **call_kwargs,
+            )
+        except Exception as e:
+            if not (cache_key and _prompt_cache_key_rejected(e)):
+                raise
+            call_kwargs.pop("prompt_cache_key", None)
+            return await self._generate_text_with_function_calling(
+                client=client,
+                messages=messages,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                functions=functions,
+                tools=tools,
+                tool_choice=tool_choice,
+                input_price=input_price,
+                output_price=output_price,
+                **call_kwargs,
+            )
 
     async def close(self):
         """Clean up resources"""

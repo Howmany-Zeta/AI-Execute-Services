@@ -386,14 +386,17 @@ class ToolAgent(BaseAIAgent):
         """
         start_time = datetime.utcnow()
         tool_name: Optional[str] = None
+        entered_busy = False
 
         try:
+            self._require_ready_for_task()
             task_description = task.get("description") or task.get("prompt") or task.get("task")
             use_llm_mode = self.llm_client is not None and self._tool_schemas and task_description and not task.get("tool")
 
             if use_llm_mode:
                 self._merge_task_images(task, context)
                 self._transition_state(self.state.__class__.BUSY)
+                entered_busy = True
                 self._current_task_id = task.get("task_id")
 
                 inner = await self._execute_task_with_plugins(task, context)
@@ -401,26 +404,31 @@ class ToolAgent(BaseAIAgent):
                 execution_time = (datetime.utcnow() - start_time).total_seconds()
                 self.update_metrics(
                     execution_time=execution_time,
-                    success=True,
+                    success=inner.get("success", True),
                     tokens_used=inner.get("tokens_used"),
                     tool_calls=inner.get("tool_calls_count", 0),
                 )
-                self._transition_state(self.state.__class__.ACTIVE)
-                self._current_task_id = None
-                self.last_active_at = datetime.utcnow()
 
                 return {
-                    "success": True,
+                    "success": inner.get("success", True),
                     "output": inner.get("output"),
                     "llm_response": inner.get("llm_response"),
                     "tool_results": inner.get("tool_results", []),
                     "tool_calls_count": inner.get("tool_calls_count", 0),
                     "execution_time": execution_time,
                     "timestamp": datetime.utcnow().isoformat(),
+                    "cache_hit": inner.get("cache_hit", False),
+                    "cache_read_tokens": inner.get("cache_read_tokens", 0),
                 }
 
             return await self._execute_direct_tool_task(task, context, start_time)
 
+        except TaskExecutionError:
+            execution_time = (datetime.utcnow() - start_time).total_seconds()
+            self.update_metrics(execution_time=execution_time, success=False)
+            if tool_name:
+                self._update_tool_stats(tool_name, success=False)
+            raise
         except Exception as e:
             logger.error(f"Task execution failed for {self.agent_id}: {e}")
             execution_time = (datetime.utcnow() - start_time).total_seconds()
@@ -429,14 +437,13 @@ class ToolAgent(BaseAIAgent):
             if tool_name:
                 self._update_tool_stats(tool_name, success=False)
 
-            self._transition_state(self.state.__class__.ERROR)
-            self._current_task_id = None
-
             raise TaskExecutionError(
                 f"Task execution failed: {str(e)}",
                 agent_id=self.agent_id,
                 task_id=task.get("task_id"),
             )
+        finally:
+            self._release_task(entered_busy)
 
     async def _execute_direct_tool_task(
         self,
@@ -449,6 +456,7 @@ class ToolAgent(BaseAIAgent):
 
         Documented behavior for Phase 3 plugin integration on non-LLM tasks.
         """
+        entered_busy = False
         tool_name: Optional[str] = None
         tool_name = task.get("tool")
         operation = task.get("operation")
@@ -469,79 +477,79 @@ class ToolAgent(BaseAIAgent):
         if not self._available_tools or tool_name not in self._available_tools:
             raise ToolAccessDeniedError(self.agent_id, tool_name)
 
-        task_description = str(task.get("description") or tool_name)
-        plugin_ctx = self._make_plugin_context(
-            task=task,
-            context=context,
-            task_description=task_description,
-        )
-        self._apply_task_plugin_configs(task=task, context=context)
-
-        await prepare_and_dispatch_task_entry_hooks(plugin_ctx, task_description=task_description)
-
-        if self._plugin_manager is not None:
-            await self._plugin_manager.run_phase(PluginPhase.PRE_TASK, ctx=plugin_ctx)
-
-        self._transition_state(self.state.__class__.BUSY)
-        self._current_task_id = task.get("task_id")
-
-        from aiecs.domain.agent.plugins.hooks.tool_dispatch import dispatch_tool_with_hooks
-
-        tool_call_id = task.get("task_id") or "direct_tool_call"
-
-        async def _execute() -> Any:
-            return await self._execute_tool(tool_name, operation, parameters)
-
-        hook_result = await dispatch_tool_with_hooks(
-            plugin_ctx,
-            tool_name=tool_name,
-            tool_input=parameters if isinstance(parameters, dict) else {},
-            tool_call_id=str(tool_call_id),
-            iteration=0,
-            batch_tool_call_count=1,
-            batch_index=0,
-            assistant_turn_committed=False,
-            offload=False,
-            execute_tool=_execute,
-        )
-        if hook_result.blocked or hook_result.error_message:
-            raise TaskExecutionError(
-                hook_result.error_message or hook_result.block_reason or f"Tool {tool_name} blocked",
-                agent_id=self.agent_id,
-                task_id=task.get("task_id"),
+        try:
+            task_description = str(task.get("description") or tool_name)
+            plugin_ctx = self._make_plugin_context(
+                task=task,
+                context=context,
+                task_description=task_description,
             )
-        result = hook_result.tool_output
+            self._apply_task_plugin_configs(task=task, context=context)
 
-        execution_time = (datetime.utcnow() - start_time).total_seconds()
-        self.update_metrics(execution_time=execution_time, success=True, tool_calls=1)
-        self._update_tool_stats(tool_name, success=True)
+            await prepare_and_dispatch_task_entry_hooks(plugin_ctx, task_description=task_description)
 
-        self._transition_state(self.state.__class__.ACTIVE)
-        self._current_task_id = None
-        self.last_active_at = datetime.utcnow()
+            if self._plugin_manager is not None:
+                await self._plugin_manager.run_phase(PluginPhase.PRE_TASK, ctx=plugin_ctx)
 
-        inner: Dict[str, Any] = {
-            "success": True,
-            "output": result,
-            "tool_used": tool_name,
-            "operation": operation,
-        }
+            self._transition_state(self.state.__class__.BUSY)
+            entered_busy = True
+            self._current_task_id = task.get("task_id")
 
-        if self._plugin_manager is not None:
-            inner = await run_post_task_phase_with_hooks(
-                self._plugin_manager,
+            from aiecs.domain.agent.plugins.hooks.tool_dispatch import dispatch_tool_with_hooks
+
+            tool_call_id = task.get("task_id") or "direct_tool_call"
+
+            async def _execute() -> Any:
+                return await self._execute_tool(tool_name, operation, parameters)
+
+            hook_result = await dispatch_tool_with_hooks(
                 plugin_ctx,
-                inner,
+                tool_name=tool_name,
+                tool_input=parameters if isinstance(parameters, dict) else {},
+                tool_call_id=str(tool_call_id),
+                iteration=0,
+                batch_tool_call_count=1,
+                batch_index=0,
+                assistant_turn_committed=False,
+                offload=False,
+                execute_tool=_execute,
             )
+            if hook_result.blocked or hook_result.error_message:
+                raise TaskExecutionError(
+                    hook_result.error_message or hook_result.block_reason or f"Tool {tool_name} blocked",
+                    agent_id=self.agent_id,
+                    task_id=task.get("task_id"),
+                )
+            result = hook_result.tool_output
 
-        return {
-            "success": True,
-            "output": inner.get("output"),
-            "tool_used": tool_name,
-            "operation": operation,
-            "execution_time": execution_time,
-            "timestamp": datetime.utcnow().isoformat(),
-        }
+            execution_time = (datetime.utcnow() - start_time).total_seconds()
+            self.update_metrics(execution_time=execution_time, success=True, tool_calls=1)
+            self._update_tool_stats(tool_name, success=True)
+
+            inner: Dict[str, Any] = {
+                "success": True,
+                "output": result,
+                "tool_used": tool_name,
+                "operation": operation,
+            }
+
+            if self._plugin_manager is not None:
+                inner = await run_post_task_phase_with_hooks(
+                    self._plugin_manager,
+                    plugin_ctx,
+                    inner,
+                )
+
+            return {
+                "success": True,
+                "output": inner.get("output"),
+                "tool_used": tool_name,
+                "operation": operation,
+                "execution_time": execution_time,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        finally:
+            self._release_task(entered_busy)
 
     async def _execute_task_with_plugins(
         self,
@@ -653,23 +661,24 @@ class ToolAgent(BaseAIAgent):
         plugin_ctx: AgentPluginContext | None = None,
     ) -> Dict[str, Any]:
         """One LLM Function Calling round + tool execution (legacy ToolAgent semantics)."""
-        from aiecs.domain.agent.plugins.hooks.tool_dispatch import dispatch_tool_with_hooks
-
         tool_calls_count = 0
         tool_results: List[Dict[str, Any]] = []
 
         tools = [{"type": "function", "function": schema} for schema in self._tool_schemas]
-        call_kwargs: Dict[str, Any] = dict(
-            messages=messages,
-            model=self._config.llm_model,
-            temperature=self._config.temperature,
-            max_tokens=self._config.max_tokens,
-            context=context,
+        response = await self._call_llm(
+            messages,
+            context,
+            tools=tools,
+            tool_choice="auto",
         )
-        call_kwargs.update(self._config.get_llm_call_kwargs())
-        call_kwargs["tools"] = tools
-        call_kwargs["tool_choice"] = "auto"
-        response = await self.llm_client.generate_text(**call_kwargs)  # type: ignore[union-attr]
+
+        cache_read_tokens = getattr(response, "cache_read_tokens", None)
+        cache_creation_tokens = getattr(response, "cache_creation_tokens", None)
+        cache_hit = getattr(response, "cache_hit", None)
+        if cache_read_tokens is not None or cache_creation_tokens is not None or cache_hit is not None:
+            cache_status = self.record_prompt_cache(cache_read_tokens, cache_creation_tokens)
+        else:
+            cache_status = {"cache_hit": False, "cache_read_tokens": 0}
 
         llm_response = response.content or ""
         response_tool_calls = getattr(response, "tool_calls", None)
@@ -689,45 +698,64 @@ class ToolAgent(BaseAIAgent):
                     }
                 ]
 
-            for index, tool_call in enumerate(calls_to_process):
-                func_name = "unknown"
-                tool_name: str = "unknown"
-                tool_call_id = tool_call.get("id") or f"call_{index}"
-                try:
-                    func_name = tool_call["function"]["name"]
-                    func_args = tool_call["function"]["arguments"]
-                    tool_name, operation = self._parse_function_name(func_name)
+            tool_results, tool_calls_count = await self._run_fc_tool_calls(
+                calls_to_process,
+                plugin_ctx,
+            )
 
-                    if isinstance(func_args, str):
-                        parameters = json.loads(func_args)
-                    else:
-                        parameters = func_args if func_args else {}
+        return self._fc_result_payload(
+            llm_response=llm_response,
+            tool_results=tool_results,
+            tool_calls_count=tool_calls_count,
+            tokens_used=getattr(response, "total_tokens", None),
+            cache_status=cache_status,
+        )
 
-                    async def _execute(
-                        _tool_name: str = tool_name,
-                        _operation: str | None = operation,
-                        _parameters: Dict[str, Any] = parameters,
-                    ) -> Any:
-                        return await self._execute_tool(_tool_name, _operation, _parameters)
+    async def _run_fc_tool_calls(
+        self,
+        calls_to_process: List[Dict[str, Any]],
+        plugin_ctx: AgentPluginContext | None = None,
+    ) -> tuple[List[Dict[str, Any]], int]:
+        from aiecs.domain.agent.plugins.hooks.tool_dispatch import dispatch_tool_with_hooks
 
-                    if plugin_ctx is not None:
-                        hook_result = await dispatch_tool_with_hooks(
-                            plugin_ctx,
-                            tool_name=tool_name,
-                            tool_input=parameters,
-                            tool_call_id=tool_call_id,
-                            iteration=0,
-                            batch_tool_call_count=len(calls_to_process),
-                            batch_index=index,
-                            assistant_turn_committed=False,
-                            offload=False,
-                            execute_tool=_execute,
-                        )
-                    else:
-                        tool_result = await self._execute_tool(tool_name, operation, parameters)
-                        hook_result = None
+        tool_results: List[Dict[str, Any]] = []
+        tool_calls_count = 0
+        for index, tool_call in enumerate(calls_to_process):
+            tool_name: str = "unknown"
+            operation = None
+            parameters: Dict[str, Any] = {}
+            tool_call_id = tool_call.get("id") or f"call_{index}"
+            try:
+                func_name = tool_call["function"]["name"]
+                func_args = tool_call["function"]["arguments"]
+                tool_name, operation = self._parse_function_name(func_name)
 
-                    if hook_result is not None and (hook_result.blocked or hook_result.error_message):
+                if isinstance(func_args, str):
+                    parameters = json.loads(func_args)
+                else:
+                    parameters = func_args if func_args else {}
+
+                async def _execute(
+                    _tool_name: str = tool_name,
+                    _operation: str | None = operation,
+                    _parameters: Dict[str, Any] = parameters,
+                ) -> Any:
+                    return await self._execute_tool(_tool_name, _operation, _parameters)
+
+                if plugin_ctx is not None:
+                    hook_result = await dispatch_tool_with_hooks(
+                        plugin_ctx,
+                        tool_name=tool_name,
+                        tool_input=parameters,
+                        tool_call_id=tool_call_id,
+                        iteration=0,
+                        batch_tool_call_count=len(calls_to_process),
+                        batch_index=index,
+                        assistant_turn_committed=False,
+                        offload=False,
+                        execute_tool=_execute,
+                    )
+                    if hook_result.blocked or hook_result.error_message:
                         error_content = hook_result.tool_content or hook_result.error_message or hook_result.block_reason
                         tool_calls_count += 1
                         tool_results.append(
@@ -740,38 +768,58 @@ class ToolAgent(BaseAIAgent):
                             }
                         )
                         continue
+                    tool_result = hook_result.tool_output
+                else:
+                    tool_result = await self._execute_tool(tool_name, operation, parameters)
 
-                    tool_result = hook_result.tool_output if hook_result is not None else tool_result
-                    tool_calls_count += 1
-                    self._update_tool_stats(tool_name, success=True)
+                tool_calls_count += 1
+                self._update_tool_stats(tool_name, success=True)
+                tool_results.append(
+                    {
+                        "tool": tool_name,
+                        "operation": operation,
+                        "parameters": parameters,
+                        "result": tool_result,
+                        "success": True,
+                    }
+                )
+            except Exception as e:
+                logger.error(f"Tool execution error: {e}")
+                tool_results.append(
+                    {
+                        "tool": tool_name,
+                        "error": str(e),
+                        "success": False,
+                    }
+                )
+        return tool_results, tool_calls_count
 
-                    tool_results.append(
-                        {
-                            "tool": tool_name,
-                            "operation": operation,
-                            "parameters": parameters,
-                            "result": tool_result,
-                            "success": True,
-                        }
-                    )
-
-                except Exception as e:
-                    logger.error(f"Tool execution error: {e}")
-                    tool_results.append(
-                        {
-                            "tool": tool_name,
-                            "error": str(e),
-                            "success": False,
-                        }
-                    )
-
+    def _fc_result_payload(
+        self,
+        *,
+        llm_response: str,
+        tool_results: List[Dict[str, Any]],
+        tool_calls_count: int,
+        tokens_used: Any,
+        cache_status: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        successful = [item for item in tool_results if item.get("success") and "result" in item]
+        any_failed = any(not item.get("success", True) for item in tool_results)
+        if successful:
+            output: Any = successful[-1]["result"]
+        elif tool_results:
+            output = tool_results[-1].get("error") or llm_response
+        else:
+            output = llm_response
         return {
-            "success": True,
-            "output": tool_results[-1]["result"] if tool_results else llm_response,
+            "success": not any_failed,
+            "output": output,
             "llm_response": llm_response,
             "tool_results": tool_results,
             "tool_calls_count": tool_calls_count,
-            "tokens_used": getattr(response, "total_tokens", None),
+            "tokens_used": tokens_used,
+            "cache_hit": cache_status["cache_hit"],
+            "cache_read_tokens": cache_status["cache_read_tokens"],
         }
 
     def _make_plugin_context(
@@ -1062,27 +1110,37 @@ class ToolAgent(BaseAIAgent):
         start_time = datetime.utcnow()
 
         try:
-            # Check if we should use LLM mode
-            task_description = task.get("description") or task.get("prompt") or task.get("task")
-            use_llm_mode = self.llm_client is not None and self._tool_schemas and task_description and not task.get("tool")
-
-            if not use_llm_mode:
-                # Direct mode - execute and yield result
-                result = await self.execute_task(task, context)
+            if self.state == self.state.__class__.ERROR:
                 yield {
-                    "type": "result",
-                    "success": result.get("success", True),
-                    "output": result.get("output"),
-                    "tool_used": result.get("tool_used"),
-                    "execution_time": result.get("execution_time"),
+                    "type": "error",
+                    "error": "Agent is not ready: initialization failed or agent is in ERROR state",
                     "timestamp": datetime.utcnow().isoformat(),
                 }
                 return
 
-            # Merge images from task payload into context (deduplicates merge logic).
-            self._merge_task_images(task, context)
+            task_description = task.get("description") or task.get("prompt") or task.get("task")
+            use_llm_mode = self.llm_client is not None and self._tool_schemas and task_description and not task.get("tool")
 
-            # LLM streaming mode
+            if not use_llm_mode:
+                try:
+                    result = await self.execute_task(task, context)
+                    yield {
+                        "type": "result",
+                        "success": result.get("success", True),
+                        "output": result.get("output"),
+                        "tool_used": result.get("tool_used"),
+                        "execution_time": result.get("execution_time"),
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                except Exception as exc:
+                    yield {
+                        "type": "error",
+                        "error": str(exc),
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                return
+
+            self._merge_task_images(task, context)
             async for event in self._execute_with_llm_streaming(task, context, start_time):
                 yield event
 
@@ -1090,9 +1148,6 @@ class ToolAgent(BaseAIAgent):
             logger.error(f"Streaming task execution failed for {self.agent_id}: {e}")
             execution_time = (datetime.utcnow() - start_time).total_seconds()
             self.update_metrics(execution_time=execution_time, success=False)
-            self._transition_state(self.state.__class__.ERROR)
-            self._current_task_id = None
-
             yield {
                 "type": "error",
                 "error": str(e),
@@ -1100,194 +1155,209 @@ class ToolAgent(BaseAIAgent):
             }
 
     async def _execute_with_llm_streaming(self, task: Dict[str, Any], context: Dict[str, Any], start_time: datetime) -> AsyncGenerator[Dict[str, Any], None]:
-        """Execute task using LLM Function Calling with streaming."""
-        task_description = self._extract_task_description(task)
-        tool_calls_count = 0
-        tool_results: List[Dict[str, Any]] = []
+        """Execute task using LLM Function Calling with streaming and plugin phases."""
+        entered_busy = False
+        stream_complete = False
+        try:
+            task_description = self._extract_task_description(task)
+            self._transition_state(self.state.__class__.BUSY)
+            entered_busy = True
+            self._current_task_id = task.get("task_id")
 
-        # Transition to busy state
-        self._transition_state(self.state.__class__.BUSY)
-        self._current_task_id = task.get("task_id")
-
-        yield {
-            "type": "started",
-            "timestamp": datetime.utcnow().isoformat(),
-        }
-
-        # Build messages
-        messages = self._build_messages(task_description, context)
-
-        # Convert schemas to tools format
-        tools = [{"type": "function", "function": schema} for schema in self._tool_schemas]
-
-        # Stream LLM response
-        response_tokens: List[str] = []
-        tool_calls_from_stream = None
-
-        # Import StreamChunk for type checking
-        from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
-
-        stream_kwargs: Dict[str, Any] = dict(
-            messages=messages,
-            model=self._config.llm_model,
-            temperature=self._config.temperature,
-            max_tokens=self._config.max_tokens,
-            context=context,
-        )
-        # Merge provider-specific parameters (top_p, top_k, thinking_config, reasoning_effort, etc.)
-        stream_kwargs.update(self._config.get_llm_call_kwargs())
-        stream_kwargs["tools"] = tools
-        stream_kwargs["tool_choice"] = "auto"
-        stream_kwargs["return_chunks"] = True
-        stream_gen = self.llm_client.stream_text(**stream_kwargs)  # type: ignore[union-attr]
-
-        async for chunk in stream_gen:
-            if isinstance(chunk, StreamChunk):
-                if chunk.type == "thought" and chunk.content:
-                    yield {
-                        "type": "thinking_token",
-                        "content": chunk.content,
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-                elif chunk.type == "token" and chunk.content:
-                    response_tokens.append(chunk.content)
-                    yield {
-                        "type": "token",
-                        "content": chunk.content,
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-                elif chunk.type == "tool_call" and chunk.tool_call:
-                    yield {
-                        "type": "tool_call_delta",
-                        "tool_call": chunk.tool_call,
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-                elif chunk.type == "tool_calls" and chunk.tool_calls:
-                    tool_calls_from_stream = chunk.tool_calls
-                    yield {
-                        "type": "tool_calls_ready",
-                        "tool_calls": chunk.tool_calls,
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-            else:
-                # Plain string token
-                response_tokens.append(chunk)
-                yield {
-                    "type": "token",
-                    "content": chunk,
-                    "timestamp": datetime.utcnow().isoformat(),
-                }
-
-        llm_response = "".join(response_tokens)
-
-        # Process tool calls if received
-        if tool_calls_from_stream:
-            for tool_call in tool_calls_from_stream:
-                # Initialise name variables so the except block always has valid values
-                # regardless of where inside the try block the exception is raised.
-                func_name = "unknown"
-                tool_name: str = "unknown"
-                try:
-                    func_name = tool_call["function"]["name"]
-                    func_args = tool_call["function"]["arguments"]
-
-                    tool_name, operation = self._parse_function_name(func_name)
-
-                    if isinstance(func_args, str):
-                        parameters = json.loads(func_args)
-                    else:
-                        parameters = func_args if func_args else {}
-
-                    # Yield tool call event
-                    yield {
-                        "type": "tool_call",
-                        "tool_name": tool_name,
-                        "operation": operation,
-                        "parameters": parameters,
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-
-                    # Execute tool
-                    tool_result = await self._execute_tool(tool_name, operation, parameters)
-                    tool_calls_count += 1
-                    self._update_tool_stats(tool_name, success=True)
-
-                    tool_results.append(
-                        {
-                            "tool": tool_name,
-                            "operation": operation,
-                            "parameters": parameters,
-                            "result": tool_result,
-                            "success": True,
-                        }
-                    )
-
-                    # Yield tool result event
-                    yield {
-                        "type": "tool_result",
-                        "tool_name": tool_name,
-                        "result": tool_result,
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-
-                except Exception as e:
-                    logger.error(f"Tool execution error: {e}")
-                    yield {
-                        "type": "tool_error",
-                        "tool_name": tool_name,
-                        "error": str(e),
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-                    tool_results.append(
-                        {
-                            "tool": tool_name,
-                            "error": str(e),
-                            "success": False,
-                        }
-                    )
-
-        # Calculate execution time
-        execution_time = (datetime.utcnow() - start_time).total_seconds()
-
-        # Update metrics
-        self.update_metrics(
-            execution_time=execution_time,
-            success=True,
-            tool_calls=tool_calls_count,
-        )
-
-        # Transition back to active
-        self._transition_state(self.state.__class__.ACTIVE)
-        self._current_task_id = None
-        self.last_active_at = datetime.utcnow()
-
-        # AIECS Fix: Ensure final response is streamed when tokens weren't received
-        # Some LLM providers (e.g., Vertex AI) don't stream tokens in function calling mode
-        # when the model decides not to call any tools. In this case, yield the complete
-        # response as a single token to ensure consumers receive the content.
-        tokens_were_streamed = len(response_tokens) > 0
-        if not tokens_were_streamed and tool_calls_count == 0 and llm_response:
-            # No tokens were streamed and no tools were called - yield response as token
-            logger.debug(f"Yielding unstreamed LLM response as fallback token ({len(llm_response)} chars)")
             yield {
-                "type": "token",
-                "content": llm_response,
+                "type": "started",
                 "timestamp": datetime.utcnow().isoformat(),
-                "is_fallback": True,  # Flag to indicate this is a fallback, not true streaming
             }
 
-        # Yield final result
-        yield {
-            "type": "result",
-            "success": True,
-            "output": tool_results[-1]["result"] if tool_results else llm_response,
-            "llm_response": llm_response,
-            "tool_results": tool_results,
-            "tool_calls_count": tool_calls_count,
-            "execution_time": execution_time,
-            "tokens_streamed": tokens_were_streamed,  # Add flag for debugging
-            "timestamp": datetime.utcnow().isoformat(),
-        }
+            plugin_ctx = self._make_plugin_context(
+                task=task,
+                context=context,
+                task_description=task_description,
+            )
+            self._apply_task_plugin_configs(task=task, context=context)
+            await prepare_and_dispatch_task_entry_hooks(plugin_ctx, task_description=task_description)
+
+            if self._plugin_manager is not None:
+                await self._plugin_manager.run_phase(PluginPhase.PRE_TASK, ctx=plugin_ctx)
+                short = await self._plugin_manager.run_phase(PluginPhase.PRE_MAIN_LOOP, ctx=plugin_ctx)
+                if isinstance(short, PluginShortCircuitResult):
+                    inner = await run_post_task_phase_with_hooks(self._plugin_manager, plugin_ctx, dict(short.result))
+                    execution_time = (datetime.utcnow() - start_time).total_seconds()
+                    yield {
+                        "type": "result",
+                        "success": inner.get("success", True),
+                        "output": inner.get("output"),
+                        "execution_time": execution_time,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                    return
+
+            if self._should_use_legacy_messages(task, context):
+                messages = self._build_messages(task_description, context)
+            else:
+                messages = await self._build_messages_via_plugins(task_description, context, plugin_ctx)
+
+            if self._plugin_manager is not None:
+                await self._plugin_manager.run_phase(
+                    PluginPhase.ON_ITERATION_START,
+                    ctx=plugin_ctx,
+                    iteration=0,
+                )
+
+            from aiecs.llm.clients.openai_compatible_mixin import StreamChunk
+
+            tools = [{"type": "function", "function": schema} for schema in self._tool_schemas]
+            response_tokens: List[str] = []
+            complete_text = ""
+            tool_calls_from_stream = None
+            cache_status: Dict[str, Any] = {"cache_hit": False, "cache_read_tokens": 0}
+
+            async for chunk in self._stream_llm(messages, context, tools=tools, tool_choice="auto"):
+                if isinstance(chunk, StreamChunk):
+                    if chunk.type == "thought" and chunk.content:
+                        yield {
+                            "type": "thinking_token",
+                            "content": chunk.content,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    elif chunk.type == "token" and chunk.content:
+                        response_tokens.append(chunk.content)
+                        yield {
+                            "type": "token",
+                            "content": chunk.content,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    elif chunk.type == "tool_call" and chunk.tool_call:
+                        yield {
+                            "type": "tool_call_delta",
+                            "tool_call": chunk.tool_call,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    elif chunk.type == "tool_calls" and chunk.tool_calls:
+                        tool_calls_from_stream = chunk.tool_calls
+                        yield {
+                            "type": "tool_calls_ready",
+                            "tool_calls": chunk.tool_calls,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    elif chunk.type == "usage":
+                        cache_status = self.record_prompt_cache((chunk.usage or {}).get("cache_read_tokens"))
+                        usage_text = chunk.content or (chunk.usage or {}).get("content") or (chunk.usage or {}).get("text")
+                        if usage_text:
+                            complete_text = str(usage_text)
+                        yield {
+                            **cache_status,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                elif isinstance(chunk, str) and chunk:
+                    response_tokens.append(chunk)
+                    yield {
+                        "type": "token",
+                        "content": chunk,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+
+            stream_complete = True
+            llm_response = "".join(response_tokens) or complete_text
+            tool_results: List[Dict[str, Any]] = []
+            tool_calls_count = 0
+            if tool_calls_from_stream:
+                tool_results, tool_calls_count = await self._run_fc_tool_calls(
+                    tool_calls_from_stream,
+                    plugin_ctx,
+                )
+                for item in tool_results:
+                    if item.get("success") and "result" in item:
+                        yield {
+                            "type": "tool_call",
+                            "tool_name": item.get("tool"),
+                            "operation": item.get("operation"),
+                            "parameters": item.get("parameters"),
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                        yield {
+                            "type": "tool_result",
+                            "tool_name": item.get("tool"),
+                            "result": item.get("result"),
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    else:
+                        yield {
+                            "type": "tool_error",
+                            "tool_name": item.get("tool"),
+                            "error": item.get("error"),
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+
+            inner = self._fc_result_payload(
+                llm_response=llm_response,
+                tool_results=tool_results,
+                tool_calls_count=tool_calls_count,
+                tokens_used=None,
+                cache_status=cache_status,
+            )
+            if self._plugin_manager is not None:
+                step = {
+                    "type": "fc",
+                    "iteration": 1,
+                    "tool_calls_count": tool_calls_count,
+                }
+                await self._plugin_manager.run_phase(
+                    PluginPhase.ON_ITERATION_END,
+                    ctx=plugin_ctx,
+                    iteration=0,
+                    step=step,
+                )
+                inner = await run_post_task_phase_with_hooks(
+                    self._plugin_manager,
+                    plugin_ctx,
+                    inner,
+                )
+
+            execution_time = (datetime.utcnow() - start_time).total_seconds()
+            self.update_metrics(
+                execution_time=execution_time,
+                success=inner.get("success", True),
+                tool_calls=tool_calls_count,
+            )
+
+            tokens_were_streamed = len(response_tokens) > 0
+            fallback_text = complete_text or inner.get("llm_response") or inner.get("output")
+            if not tokens_were_streamed and tool_calls_count == 0 and fallback_text:
+                logger.debug(f"Yielding unstreamed LLM response as fallback token ({len(str(fallback_text))} chars)")
+                yield {
+                    "type": "token",
+                    "content": str(fallback_text),
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "is_fallback": True,
+                }
+
+            yield {
+                "type": "result",
+                "success": inner.get("success", True),
+                "output": inner.get("output"),
+                "llm_response": inner.get("llm_response"),
+                "tool_results": inner.get("tool_results", []),
+                "tool_calls_count": tool_calls_count,
+                "execution_time": execution_time,
+                "tokens_streamed": tokens_were_streamed,
+                "cache_hit": inner.get("cache_hit", cache_status["cache_hit"]),
+                "cache_read_tokens": inner.get("cache_read_tokens", cache_status["cache_read_tokens"]),
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        except Exception as e:
+            if stream_complete:
+                raise
+            logger.error(f"Streaming task execution failed for {self.agent_id}: {e}")
+            execution_time = (datetime.utcnow() - start_time).total_seconds()
+            self.update_metrics(execution_time=execution_time, success=False)
+            yield {
+                "type": "error",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        finally:
+            self._release_task(entered_busy)
 
     async def process_message_streaming(self, message: str, sender_id: Optional[str] = None) -> AsyncGenerator[str, None]:
         """
@@ -1308,11 +1378,8 @@ class ToolAgent(BaseAIAgent):
         """
         try:
             task = {"description": message, "task_id": f"msg_{datetime.utcnow().timestamp()}"}
-
-            async for event in self.execute_task_streaming(task, {"sender_id": sender_id}):
-                if event["type"] == "token":
-                    yield event["content"]
-
+            async for token in self._iter_user_stream_tokens(task, {"sender_id": sender_id}):
+                yield token
         except Exception as e:
             logger.error(f"Streaming message processing failed for {self.agent_id}: {e}")
             raise

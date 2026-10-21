@@ -4,6 +4,18 @@ This directory contains comprehensive documentation for the AIECS Agent Domain m
 
 ## 📚 Documentation Files
 
+### 0. [LLM_CALL_PATH_CHANGELOG.md](./LLM_CALL_PATH_CHANGELOG.md) - Caller changelog (LLM call path)
+**Purpose:** What host code must know after the shortened agent model-call path  
+**Contents:** no signature migration; `process_message_streaming` now raises; failed tasks stay `ACTIVE`; ToolAgent `success: false`; recovery `RETRY` once  
+
+**Best for:** Existing callers upgrading in place
+
+### 0b. [IMPLICIT_CACHE_MIGRATION.md](./IMPLICIT_CACHE_MIGRATION.md) - Explicit cache → implicit cache
+**Purpose:** Caller migration after Vertex stops creating `CachedContent`  
+**Contents:** request prefix that implicit cache matches; `cache_hit` / `cache_read_tokens` on `execute_task`; `cache_status` on the stream; OpenAI `session_id` → `prompt_cache_key`
+
+**Best for:** Hosts that observed cache hits, Redis `vertex_ai:cached_content:*`, or Vertex `caches.create`
+
 ### 1. [AGENT_INTEGRATION.md](./AGENT_INTEGRATION.md) - Complete Integration Guide 📋
 **Purpose:** Comprehensive guide to all agent features and integration patterns  
 **Contents:**

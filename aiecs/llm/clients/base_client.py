@@ -166,6 +166,8 @@ class SafetyBlockError(LLMClientError):
 class BaseLLMClient(ABC):
     """Abstract base class for all LLM provider clients"""
 
+    retries_generate_text = False
+
     def __init__(self, provider_name: str):
         self.provider_name = provider_name
         self.logger = logging.getLogger(f"{__name__}.{provider_name}")
