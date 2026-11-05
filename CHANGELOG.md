@@ -10,6 +10,13 @@ See also `docs/changelog.rst` for historical release notes.
 ## [Unreleased]
 
 
+## [2.2.1] - 2026-11-06
+
+### Fixed
+
+- **Graphiti / Gemini structured output:** Vertex and Google AI now send `response_schema` with `application/json`, so the model must return an instance such as `EdgeDuplicate` instead of echoing the JSON Schema pasted into the prompt. A response that still does not match the model is rejected in the adapter.
+
+
 ## [2.2.0] - 2026-10-21
 
 ### Changed

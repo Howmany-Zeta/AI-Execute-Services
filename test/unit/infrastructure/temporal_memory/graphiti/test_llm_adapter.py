@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import types
 from typing import Any
@@ -218,6 +219,24 @@ def test_parse_structured_response_uses_pydantic_model() -> None:
     assert parsed == {"extracted_entities": ["Alice"]}
 
 
+def test_parse_structured_response_accepts_json_wrapped_in_prose() -> None:
+    class ExtractedEntities(BaseModel):
+        extracted_entities: list[str] = Field(default_factory=list)
+
+    parsed = llm_adapter._parse_structured_response('Result:\n{"extracted_entities": ["Alice"]}', ExtractedEntities)
+    assert parsed == {"extracted_entities": ["Alice"]}
+
+
+def test_parse_structured_response_rejects_schema_echo() -> None:
+    class EdgeDuplicate(BaseModel):
+        duplicate_facts: list[int]
+        contradicted_facts: list[int]
+
+    schema_json = json.dumps(EdgeDuplicate.model_json_schema())
+    with pytest.raises(ValueError, match="EdgeDuplicate"):
+        llm_adapter._parse_structured_response(schema_json, EdgeDuplicate)
+
+
 @pytest.mark.asyncio
 async def test_aiecs_graphiti_llm_client_generate_response_returns_dict(mock_graphiti_modules: None) -> None:
     class ExtractedEntities(BaseModel):
@@ -234,6 +253,7 @@ async def test_aiecs_graphiti_llm_client_generate_response_returns_dict(mock_gra
     async def _generate_text(*args: Any, **kwargs: Any) -> Any:
         _ = args
         assert kwargs.get("response_mime_type") == "application/json"
+        assert kwargs.get("response_schema") is ExtractedEntities
         response = MagicMock()
         response.content = '{"extracted_entities": ["Bob"]}'
         response.prompt_tokens = 3
@@ -253,3 +273,39 @@ async def test_aiecs_graphiti_llm_client_generate_response_returns_dict(mock_gra
     assert isinstance(result, dict)
     validated = ExtractedEntities(**result)
     assert validated.extracted_entities == ["Bob"]
+
+
+@pytest.mark.asyncio
+async def test_aiecs_graphiti_llm_client_rejects_schema_echo(mock_graphiti_modules: None) -> None:
+    class EdgeDuplicate(BaseModel):
+        duplicate_facts: list[int]
+        contradicted_facts: list[int]
+
+    class Message:
+        def __init__(self, role: str, content: str) -> None:
+            self.role = role
+            self.content = content
+
+    mock_client = MagicMock()
+    mock_client.provider_name = "Vertex"
+
+    async def _generate_text(*args: Any, **kwargs: Any) -> Any:
+        _ = args
+        assert kwargs.get("response_schema") is EdgeDuplicate
+        response = MagicMock()
+        response.content = json.dumps(EdgeDuplicate.model_json_schema())
+        response.prompt_tokens = 1
+        response.completion_tokens = 1
+        return response
+
+    mock_client.generate_text = _generate_text
+
+    from graphiti_core.llm_client.config import LLMConfig
+
+    llm = llm_adapter.AiecsGraphitiLLMClient(
+        LLMConfig(model="gemini-2.5-flash", small_model="gemini-2.5-flash"),
+        mock_client,
+    )
+
+    with pytest.raises(ValueError, match="EdgeDuplicate"):
+        await llm.generate_response([Message(role="user", content="hi")], response_model=EdgeDuplicate)

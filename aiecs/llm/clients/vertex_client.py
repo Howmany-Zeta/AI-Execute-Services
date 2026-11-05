@@ -593,6 +593,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             _top_p = kwargs.pop("top_p", None)
             _top_k = kwargs.pop("top_k", None)
             _response_mime_type = kwargs.pop("response_mime_type", None)
+            _response_schema = kwargs.pop("response_schema", None)
             _gen_config_params: Dict[str, Any] = {
                 "temperature": temperature,
                 "max_output_tokens": max_tokens or 8192,
@@ -601,8 +602,12 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 "safety_settings": safety_settings,
                 "thinking_config": thinking_config,
             }
+            if _response_schema is not None and _response_mime_type is None:
+                _response_mime_type = "application/json"
             if _response_mime_type is not None:
                 _gen_config_params["response_mime_type"] = _response_mime_type
+            if _response_schema is not None:
+                _gen_config_params["response_schema"] = _response_schema
             if _top_p is not None:
                 _gen_config_params["top_p"] = _top_p
             if _top_k is not None:

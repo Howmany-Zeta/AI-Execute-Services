@@ -100,27 +100,59 @@ def _extract_json_dict(content: str) -> dict[str, Any]:
     return {"content": content}
 
 
+def _validated_dump(response_model: type[Any], payload: str | dict[str, Any]) -> dict[str, Any]:
+    """Validate ``payload`` as ``response_model`` and return its field dict."""
+    if isinstance(payload, str):
+        validator = getattr(response_model, "model_validate_json", None)
+        if not callable(validator):
+            raise TypeError(f"{getattr(response_model, '__name__', response_model)} cannot validate JSON")
+        validated = validator(payload)
+    else:
+        validator = getattr(response_model, "model_validate", None)
+        if not callable(validator):
+            raise TypeError(f"{getattr(response_model, '__name__', response_model)} cannot validate a dict")
+        validated = validator(payload)
+    model_dump = getattr(validated, "model_dump", None)
+    if not callable(model_dump):
+        raise TypeError(f"{getattr(response_model, '__name__', response_model)} did not produce a model instance")
+    dumped = model_dump()
+    if not isinstance(dumped, dict):
+        raise TypeError(f"{getattr(response_model, '__name__', response_model)} dump was not an object")
+    return dumped
+
+
 def _parse_structured_response(content: str, response_model: type[Any] | None) -> dict[str, Any]:
+    if response_model is None:
+        return _extract_json_dict(content)
+
     text = _strip_json_fences(content)
-    if response_model is not None and text:
-        model_validate_json = getattr(response_model, "model_validate_json", None)
-        if callable(model_validate_json):
-            try:
-                validated = model_validate_json(text)
-                model_dump = getattr(validated, "model_dump", None)
-                if callable(model_dump):
-                    dumped = model_dump()
-                    if isinstance(dumped, dict):
-                        return dumped
-            except Exception:
-                logger.debug("Pydantic model_validate_json failed; falling back to JSON extraction", exc_info=True)
-    return _extract_json_dict(content)
+    last_error: Exception | None = None
+    if text:
+        try:
+            return _validated_dump(response_model, text)
+        except Exception as exc:
+            last_error = exc
+            logger.debug("Pydantic validation failed; falling back to JSON extraction", exc_info=True)
+
+    try:
+        return _validated_dump(response_model, _extract_json_dict(content))
+    except Exception as exc:
+        last_error = exc
+
+    name = getattr(response_model, "__name__", "response model")
+    logger.warning("Structured response did not match %s", name)
+    raise ValueError(f"Structured response did not match {name}") from last_error
 
 
-def _structured_output_kwargs(aiecs_client: Any) -> dict[str, Any]:
+def _structured_output_kwargs(aiecs_client: Any, response_model: type[Any] | None = None) -> dict[str, Any]:
     provider = (getattr(aiecs_client, "provider_name", None) or "").strip()
     if provider in ("Vertex", "GoogleAI"):
-        return {"response_mime_type": "application/json"}
+        # application/json only requires JSON. response_schema constrains the instance,
+        # so the model cannot echo the schema Graphiti appends to the prompt.
+        kwargs: dict[str, Any] = {"response_mime_type": "application/json"}
+        if response_model is not None:
+            kwargs["response_schema"] = response_model
+        return kwargs
     if provider in ("OpenAI", "OpenRouter", "xAI", "VertexMaaS"):
         return {"response_format": {"type": "json_object"}}
     return {}
@@ -311,7 +343,7 @@ class AiecsGraphitiLLMClient:
                 model = self._model_for_size(model_size)
                 llm_kwargs: dict[str, Any] = {}
                 if response_model is not None:
-                    llm_kwargs.update(_structured_output_kwargs(self._aiecs))
+                    llm_kwargs.update(_structured_output_kwargs(self._aiecs, response_model))
                     llm_kwargs.setdefault("temperature", 0.0)
 
                 response = await self._aiecs.generate_text(
