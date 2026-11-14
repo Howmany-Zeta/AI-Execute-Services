@@ -696,21 +696,26 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             if not content:
                 content = "[Response error: Cannot get the response text. Multiple content parts are not supported.]"
 
-            # Extract actual token usage from response.usage_metadata
-            prompt_tokens = 0
-            completion_tokens = 0
-            tokens_used = 0
+            # Extract actual token usage from response.usage_metadata.
+            # Leave token fields unset when provider usage is absent so callers
+            # do not submit character-length estimates to the ledger.
+            prompt_tokens = None
+            completion_tokens = None
+            tokens_used = None
+            prompt_text = " ".join(msg.content for msg in messages if msg.content)
+            cost_prompt = self._count_tokens_estimate(prompt_text)
+            cost_completion = self._count_tokens_estimate(content or "")
             if hasattr(response, "usage_metadata") and response.usage_metadata:
                 usage = response.usage_metadata
-                prompt_tokens = getattr(usage, "prompt_token_count", 0) or 0
-                completion_tokens = getattr(usage, "candidates_token_count", 0) or 0
-                tokens_used = getattr(usage, "total_token_count", 0) or (prompt_tokens + completion_tokens)
-            else:
-                # Fallback estimation if usage_metadata is unavailable
-                prompt_text = " ".join(msg.content for msg in messages if msg.content)
-                prompt_tokens = self._count_tokens_estimate(prompt_text)
-                completion_tokens = self._count_tokens_estimate(content or "")
-                tokens_used = prompt_tokens + completion_tokens
+                prompt_tokens = getattr(usage, "prompt_token_count", None)
+                completion_tokens = getattr(usage, "candidates_token_count", None)
+                tokens_used = getattr(usage, "total_token_count", None)
+                if prompt_tokens is not None:
+                    cost_prompt = prompt_tokens
+                if completion_tokens is not None:
+                    cost_completion = completion_tokens
+                if tokens_used is None and prompt_tokens is not None and completion_tokens is not None:
+                    tokens_used = prompt_tokens + completion_tokens
 
             # Extract cache metadata and thinking-token usage from response
             cache_read_tokens = None
@@ -726,7 +731,7 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 thinking_tokens = getattr(usage, "thoughts_token_count", None)
 
             # Compute cost: use caller-supplied prices when provided, else fall back to config.
-            cost = self._compute_cost(model_name, prompt_tokens, completion_tokens, input_price, output_price)
+            cost = self._compute_cost(model_name, cost_prompt, cost_completion, input_price, output_price)
 
             # Extract function calls from response if present
             function_calls = self._extract_function_calls_from_google_response(response)
@@ -774,15 +779,10 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
                 self.logger.warning(f"Vertex AI response issue: {str(e)}")
                 # Return a response indicating the issue
                 # Estimate prompt tokens from messages content
-                prompt_text = " ".join(msg.content for msg in messages if msg.content)
-                estimated_prompt_tokens = self._count_tokens_estimate(prompt_text)
                 return LLMResponse(
                     content="[Response unavailable due to content processing issues or safety filters]",
                     provider=self.provider_name,
                     model=model_name,
-                    tokens_used=estimated_prompt_tokens,
-                    prompt_tokens=estimated_prompt_tokens,
-                    completion_tokens=0,
                     cost_estimate=0.0,
                 )
             raise
@@ -1037,6 +1037,9 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
 
         embedding_model_name = model or "gemini-embedding-001"
 
+        from aiecs.llm.embedding_usage import stash_embedding_input_tokens
+
+        stash_embedding_input_tokens(None)
         try:
             result = await client.aio.models.embed_content(
                 model=embedding_model_name,
@@ -1044,13 +1047,22 @@ class VertexAIClient(BaseLLMClient, GoogleFunctionCallingMixin):
             )
 
             embeddings = []
+            total = 0
+            found = False
             for emb in result.embeddings or []:
                 embeddings.append(list(emb.values or []))
-
+                stats = getattr(emb, "statistics", None)
+                count = getattr(stats, "token_count", None) if stats is not None else None
+                if count is not None:
+                    found = True
+                    total += int(count)
+            if found:
+                stash_embedding_input_tokens(total)
             return embeddings
 
         except Exception as e:
             self.logger.error(f"Error generating embeddings with Vertex AI: {e}")
+            stash_embedding_input_tokens(None)
             # Return zero vectors as fallback so callers don't crash
             return [[0.0] * 768 for _ in texts]
 
