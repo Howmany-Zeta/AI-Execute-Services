@@ -43,6 +43,27 @@ _VERSION_PATTERN = re.compile(
 )
 
 
+def find_project_root(start: Path) -> Optional[Path]:
+    """Walk parents of start looking for pyproject.toml."""
+    current = start
+    while current != current.parent:
+        if (current / "pyproject.toml").exists():
+            return current
+        current = current.parent
+    return None
+
+
+def installed_version() -> str:
+    """Version of the aiecs package that is actually imported.
+
+    Publish smoke tests run ``aiecs-version --show`` from the wheel, which
+    lives under site-packages and has no pyproject.toml above it.
+    """
+    import aiecs
+
+    return aiecs.__version__
+
+
 @dataclass(frozen=True)
 class ParsedVersion:
     major: int
@@ -66,18 +87,21 @@ class ParsedVersion:
 class VersionManager:
     """Manages version numbers across AIECS project files"""
 
-    def __init__(self, project_root: Optional[Path] = None):
-        """Initialize the version manager with project root path"""
-        if project_root is None:
-            current = Path(__file__).parent
-            while current != current.parent:
-                if (current / "pyproject.toml").exists():
-                    project_root = current
-                    break
-                current = current.parent
+    def __init__(self, project_root: Optional[Path] = None, *, allow_missing_root: bool = False):
+        """Initialize the version manager with project root path.
 
-            if project_root is None:
+        ``allow_missing_root`` is for ``--show`` on an installed package, where
+        the module is not inside a source checkout.
+        """
+        if project_root is None:
+            project_root = find_project_root(Path(__file__).parent)
+
+        if project_root is None:
+            if not allow_missing_root:
                 raise RuntimeError("Could not find project root (pyproject.toml)")
+            self.project_root = None
+            self.files = {}
+            return
 
         self.project_root = project_root
         self.files = {
@@ -86,6 +110,11 @@ class VersionManager:
             "pyproject": project_root / "pyproject.toml",
             "changelog": project_root / "CHANGELOG.md",
         }
+
+    def _require_project_root(self) -> Path:
+        if self.project_root is None:
+            raise RuntimeError("Could not find project root (pyproject.toml)")
+        return self.project_root
 
     def get_current_version(self) -> str:
         """Get the current version from __init__.py"""
@@ -156,7 +185,7 @@ class VersionManager:
         )
 
         init_file.write_text(content, encoding="utf-8")
-        print(f'✓ Updated {init_file.relative_to(self.project_root)}: __version__ = "{new_version}"')
+        print(f'✓ Updated {init_file.relative_to(self._require_project_root())}: __version__ = "{new_version}"')
 
     def update_main_file(self, new_version: str) -> None:
         """Update version in aiecs/main.py"""
@@ -167,7 +196,7 @@ class VersionManager:
         content = re.sub(r'("version":\s*")([^"]+)(")', rf"\g<1>{new_version}\g<3>", content)
 
         main_file.write_text(content, encoding="utf-8")
-        print(f"✓ Updated {main_file.relative_to(self.project_root)}: FastAPI version and health check version")
+        print(f"✓ Updated {main_file.relative_to(self._require_project_root())}: FastAPI version and health check version")
 
     def update_pyproject_file(self, new_version: str) -> None:
         """Update version in pyproject.toml ([project] and [tool.poetry] sections)"""
@@ -197,9 +226,9 @@ class VersionManager:
 
         content = "\n".join(lines)
         pyproject_file.write_text(content, encoding="utf-8")
-        print(f"✓ Updated {pyproject_file.relative_to(self.project_root)}: project version")
+        print(f"✓ Updated {pyproject_file.relative_to(self._require_project_root())}: project version")
         if "tool.poetry" in updated_sections:
-            print(f"✓ Updated {pyproject_file.relative_to(self.project_root)}: poetry version")
+            print(f"✓ Updated {pyproject_file.relative_to(self._require_project_root())}: poetry version")
 
     def update_changelog_file(self, new_version: str, release_date: Optional[date] = None) -> None:
         """Promote [Unreleased] notes into a dated release section for new_version."""
@@ -229,7 +258,7 @@ class VersionManager:
 
         updated = content[: match.start()] + replacement + content[match.end() :]
         changelog_file.write_text(updated, encoding="utf-8")
-        print(f"✓ Updated {changelog_file.relative_to(self.project_root)}: added [{new_version}] release section")
+        print(f"✓ Updated {changelog_file.relative_to(self._require_project_root())}: added [{new_version}] release section")
 
     def update_version(self, new_version: str, *, update_changelog: bool = True, release_date: Optional[date] = None) -> None:
         """Update version in all files and optionally promote CHANGELOG [Unreleased]."""
@@ -248,9 +277,16 @@ class VersionManager:
         print(f"✓ Successfully updated version to {new_version} in all files!")
 
     def show_version(self) -> None:
-        """Show current version"""
+        """Show current version.
+
+        Inside a checkout this reads ``aiecs/__init__.py``. An installed wheel
+        has no project root, so the imported package version is used instead.
+        """
         try:
-            version = self.get_current_version()
+            if self.project_root is None:
+                version = installed_version()
+            else:
+                version = self.get_current_version()
             print(f"Current version: {version}")
         except Exception as e:
             print(f"Error getting current version: {e}", file=sys.stderr)
@@ -299,12 +335,15 @@ Examples:
     args = parser.parse_args()
 
     try:
-        manager = VersionManager()
         release_date = date.fromisoformat(args.release_date) if args.release_date else None
 
         if args.show:
-            manager.show_version()
-        elif args.version:
+            VersionManager(allow_missing_root=True).show_version()
+            return
+
+        manager = VersionManager()
+
+        if args.version:
             manager.update_version(args.version, update_changelog=not args.no_changelog, release_date=release_date)
         elif args.bump:
             current_version = manager.get_current_version()

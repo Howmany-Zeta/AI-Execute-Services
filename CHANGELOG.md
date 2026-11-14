@@ -10,6 +10,13 @@ See also `docs/changelog.rst` for historical release notes.
 ## [Unreleased]
 
 
+## [2.2.2] - 2026-11-14
+
+### Fixed
+
+- **aiecs-version:** `--show` reports the installed package version when the command runs from a wheel, so the PyPI publish smoke test no longer fails looking for `pyproject.toml`.
+
+
 ## [2.2.1] - 2026-11-06
 
 ### Fixed

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import sys
 from datetime import date
 from pathlib import Path
 
 import pytest
 
-from aiecs.scripts.aid.version_manager import VersionManager
+from aiecs.scripts.aid import version_manager
+from aiecs.scripts.aid.version_manager import VersionManager, find_project_root
 
 
 @pytest.fixture
@@ -93,3 +95,42 @@ def test_update_changelog_rejects_duplicate(version_project: Path) -> None:
     manager = VersionManager(version_project)
     with pytest.raises(ValueError, match="already contains section"):
         manager.update_changelog_file("2.0.0rc1")
+
+
+def test_find_project_root_walks_parents(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    nested = root / "aiecs" / "scripts" / "aid"
+    nested.mkdir(parents=True)
+    (root / "pyproject.toml").write_text('[project]\nname = "aiecs"\n', encoding="utf-8")
+    assert find_project_root(nested) == root
+
+
+def test_find_project_root_missing(tmp_path: Path) -> None:
+    nested = tmp_path / "site-packages" / "aiecs" / "scripts" / "aid"
+    nested.mkdir(parents=True)
+    assert find_project_root(nested) is None
+
+
+def test_show_version_without_project_root(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.setattr(version_manager, "find_project_root", lambda start: None)
+    monkeypatch.setattr(version_manager, "installed_version", lambda: "2.2.1")
+
+    VersionManager(allow_missing_root=True).show_version()
+
+    assert capsys.readouterr().out.strip() == "Current version: 2.2.1"
+
+
+def test_version_manager_requires_project_root_to_edit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(version_manager, "find_project_root", lambda start: None)
+    with pytest.raises(RuntimeError, match="pyproject.toml"):
+        VersionManager()
+
+
+def test_main_show_without_project_root(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.setattr(version_manager, "find_project_root", lambda start: None)
+    monkeypatch.setattr(version_manager, "installed_version", lambda: "2.2.1")
+    monkeypatch.setattr(sys, "argv", ["aiecs-version", "--show"])
+
+    version_manager.main()
+
+    assert capsys.readouterr().out.strip() == "Current version: 2.2.1"
