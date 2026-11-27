@@ -2129,6 +2129,7 @@ class HybridAgent(BaseAIAgent):
                                 {
                                     "type": "tool_result",
                                     "tool_name": tool_name,
+                                    "tool_call_id": tool_call_id,
                                     "result": rejection,
                                     "timestamp": datetime.utcnow().isoformat(),
                                 }
@@ -2252,6 +2253,7 @@ class HybridAgent(BaseAIAgent):
                             {
                                 "type": "tool_result",
                                 "tool_name": tool_name,
+                                "tool_call_id": tool_call_id,
                                 "result": tool_result,
                                 "timestamp": datetime.utcnow().isoformat(),
                             }

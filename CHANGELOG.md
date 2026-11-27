@@ -10,6 +10,13 @@ See also `docs/changelog.rst` for historical release notes.
 ## [Unreleased]
 
 
+## [2.2.3] - 2026-11-27
+
+### Fixed
+
+- **HybridAgent streaming:** `tool_result` events include `tool_call_id`, so clients can match each result to the tool call that produced it.
+
+
 ## [2.2.2] - 2026-11-14
 
 ### Fixed

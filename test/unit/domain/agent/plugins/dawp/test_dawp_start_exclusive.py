@@ -162,10 +162,10 @@ class TestDawpStartExclusive:
         )
         # Find the tool_result event for dawp_start
         tool_results = [e for e in events if e.get("type") == "tool_result"]
-        dawp_result = next(
-            (e["result"] for e in tool_results if _is_dawp_result(e)), None
-        )
-        assert dawp_result is not None, "dawp_start tool_result event must be emitted"
+        dawp_event = next((e for e in tool_results if _is_dawp_result(e)), None)
+        assert dawp_event is not None, "dawp_start tool_result event must be emitted"
+        assert dawp_event.get("tool_call_id") == "call_dawp"
+        dawp_result = dawp_event["result"]
         assert dawp_result.get("status") == "rejected"
         assert "D13" in dawp_result.get("reason", "")
 

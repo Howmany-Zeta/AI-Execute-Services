@@ -266,6 +266,7 @@ async def test_tool_loop_streaming_with_tool_calls(tool_loop_agent):
 
     assert len(tool_call_events) >= 1
     assert len(tool_result_events) >= 1
+    assert tool_result_events[0].get("tool_call_id") == "call_0"
     assert len(token_events) >= 1
     assert len(result_events) == 1
     assert result_events[0].get("success") is True
